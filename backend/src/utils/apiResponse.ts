@@ -49,11 +49,13 @@ export const apiResponse = {
     const userMessage = statusCode === 401 || code?.toUpperCase().startsWith('AUTH_') || code === 'SESSION_INVALID'
       ? 'Session expired. Please sign in again.'
       : message;
+    const reqId = (res as any)?.req?.id || res.getHeader('x-request-id') || undefined;
     return res.status(statusCode).json({
       success: false,
       message: userMessage,
       ...(code ? { code } : {}),
       ...(code ? { errorCode: code } : {}),
+      ...(reqId ? { requestId: String(reqId) } : {}),
       ...(details ? { details } : {}),
       instruction
     });

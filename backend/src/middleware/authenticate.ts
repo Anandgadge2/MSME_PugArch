@@ -186,6 +186,16 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     if (cachedUser.lockedUntil && new Date(cachedUser.lockedUntil) > new Date()) {
+      void auditLog({
+        actorUserId: cachedUser.id,
+        actorRole: cachedUser.role,
+        action: 'security.account_locked_attempt',
+        entityType: 'user',
+        entityId: cachedUser.id,
+        ipAddress: req.ip,
+        userAgent: req.headers['user-agent'],
+        metadata: { path: req.originalUrl, method: req.method, lockedUntil: cachedUser.lockedUntil }
+      });
       return apiResponse.error(res, 423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
     }
 

@@ -20,6 +20,7 @@
     "production:check": "node tools/production-readiness-check.mjs",
     "smoke:portal": "node tools/portal-smoke-test.mjs",
     "audit:deps": "npm audit --workspaces --audit-level=critical",
+    "security:audit": "npm audit --workspaces --audit-level=high",
     "security:check": "npm run typecheck && npm run prisma:validate && npm run lint:security && npm run test:security && npm run security:static && npm run production:check && npm run build && npm run audit:deps",
     "simulate:procurements": "npx tsx backend/src/scripts/simulate-all-procurements-1.5to2hr.ts"
   },

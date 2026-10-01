@@ -13,19 +13,39 @@ export const createApp = () => {
   app.use(cors(corsOptions));
   applySecurityMiddleware(app);
 
-  // Serve static uploads directory for local storage fallback
-  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
-  app.use('/org-logos', express.static(path.resolve(process.cwd(), 'uploads/org-logos')));
-  app.use('/banners', express.static(path.resolve(process.cwd(), 'uploads/banners')));
-  app.use('/products', express.static(path.resolve(process.cwd(), 'uploads/products')));
+  // Explicitly block direct unauthenticated access to sensitive documents and private uploads
+  app.use(['/uploads/documents', '/uploads/private'], (_req, res) => {
+    res.status(401).json({
+      success: false,
+      error: {
+        code: 'UNAUTHORIZED_ACCESS',
+        message: 'Direct static access to sensitive documents is prohibited. Please access files via authenticated /api/files endpoints.'
+      }
+    });
+  });
+
+  const staticAssetOptions = {
+    maxAge: '1d',
+    setHeaders: (res: express.Response) => {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+    }
+  };
+
+  // Serve static public uploads directory for local storage fallback
+  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads'), staticAssetOptions));
+  app.use('/org-logos', express.static(path.resolve(process.cwd(), 'uploads/org-logos'), staticAssetOptions));
+  app.use('/banners', express.static(path.resolve(process.cwd(), 'uploads/banners'), staticAssetOptions));
+  app.use('/products', express.static(path.resolve(process.cwd(), 'uploads/products'), staticAssetOptions));
+  app.use('/company-logos', express.static(path.resolve(process.cwd(), 'uploads/company-logos'), staticAssetOptions));
 
   // Serve category photos from frontend/public or uploads directory
   const frontendCategoryPhotos = path.resolve(process.cwd(), '../frontend/public/category-photos');
   const localCategoryPhotos = path.resolve(process.cwd(), 'uploads/category-photos');
   if (fs.existsSync(frontendCategoryPhotos)) {
-    app.use('/category-photos', express.static(frontendCategoryPhotos));
+    app.use('/category-photos', express.static(frontendCategoryPhotos, staticAssetOptions));
   } else if (fs.existsSync(localCategoryPhotos)) {
-    app.use('/category-photos', express.static(localCategoryPhotos));
+    app.use('/category-photos', express.static(localCategoryPhotos, staticAssetOptions));
   }
 
   // Serve inline transparent favicon to avoid browser 404s

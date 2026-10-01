@@ -7,7 +7,7 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { ACCOUNT_TYPE_IDS, DEFAULT_DYNAMIC_ROLE_TEMPLATES, RBAC_PERMISSION_CATALOG } from '../constants/dynamic-rbac.js';
-import { assertCanAssignRole, assertCanManageRole, ensureAssignablePermissions, getActivePermissionCodes, isMasterAdmin, userHasPermission, type RbacScope } from '../services/rbac.service.js';
+import { assertCanAssignRole, assertCanManageRole, ensureAssignablePermissions, getActivePermissionCodes, isMasterAdmin, userHasPermission, invalidateUserAuthCache, invalidateRoleMembersAuthCache, type RbacScope } from '../services/rbac.service.js';
 import { hashPassword } from '../services/password.service.js';
 import { sendSubUserInvitationEmail } from '../services/mail.service.js';
 import { env, getPublicPortalUrl } from '../config/env.js';
@@ -201,6 +201,7 @@ router.put('/rbac/roles/:id', asyncHandler(async (req, res) => {
     include: { permissions: { include: { permission: true } } }
   });
   await writeAudit(req, 'rbac.role.updated', 'rbacRole', id, { scope, permissionsChanged: Boolean(body.permissionCodes || body.permissionIds) });
+  void invalidateRoleMembersAuthCache(id);
   return apiResponse.success(res, updated);
 }));
 
@@ -211,6 +212,7 @@ router.delete('/rbac/roles/:id', asyncHandler(async (req, res) => {
   await assertCanManageScope(req, { scopeType: role.scopeType, scopeId: role.scopeId });
   const updated = await (prisma as any).rbacRole.update({ where: { id }, data: { status: 'ARCHIVED' } });
   await writeAudit(req, 'rbac.role.archived', 'rbacRole', id);
+  void invalidateRoleMembersAuthCache(id);
   return apiResponse.success(res, updated);
 }));
 
@@ -221,6 +223,7 @@ router.patch('/rbac/roles/:id/archive', asyncHandler(async (req, res) => {
   await assertCanManageScope(req, { scopeType: role.scopeType, scopeId: role.scopeId });
   const updated = await (prisma as any).rbacRole.update({ where: { id }, data: { status: 'ARCHIVED' } });
   await writeAudit(req, 'rbac.role.archived', 'rbacRole', id);
+  void invalidateRoleMembersAuthCache(id);
   return apiResponse.success(res, updated);
 }));
 
@@ -244,6 +247,7 @@ router.post('/rbac/roles/:id/permissions', asyncHandler(async (req, res) => {
   if (ids.length) await (prisma as any).rolePermission.createMany({ data: ids.map(permissionId => ({ roleId: id, permissionId, allowed: true })) });
   const updated = await (prisma as any).rbacRole.findUnique({ where: { id }, include: { permissions: { include: { permission: true } } } });
   await writeAudit(req, 'rbac.role.permissions_updated', 'rbacRole', id, { count: ids.length });
+  void invalidateRoleMembersAuthCache(id);
   return apiResponse.success(res, updated);
 }));
 
@@ -301,6 +305,7 @@ router.post('/rbac/users/:userId/roles', asyncHandler(async (req, res) => {
     ? await (prisma as any).userRole.update({ where: { id: existing.id }, data: assignmentData, include: { role: true } })
     : await (prisma as any).userRole.create({ data: assignmentData, include: { role: true } });
   await writeAudit(req, 'rbac.user_role.assigned', 'userRole', assignment.id, { userId, roleId: body.roleId, scope });
+  void invalidateUserAuthCache(userId);
   return apiResponse.created(res, assignment, 'Role assigned');
 }));
 
@@ -315,6 +320,7 @@ router.delete('/rbac/users/:userId/roles/:assignmentId', asyncHandler(async (req
   await assertCanManageScope(req, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   await (prisma as any).userRole.delete({ where: { id: assignmentId } });
   await writeAudit(req, 'rbac.user_role.removed', 'userRole', assignmentId, { userId });
+  void invalidateUserAuthCache(userId);
   return apiResponse.success(res, { id: assignmentId });
 }));
 
@@ -330,6 +336,7 @@ router.patch('/rbac/users/:userId/roles/:assignmentId/status', asyncHandler(asyn
   await assertCanManageScope(req, { scopeType: assignment.scopeType, scopeId: assignment.scopeId });
   const updated = await (prisma as any).userRole.update({ where: { id: assignmentId }, data: { isActive: body.isActive } });
   await writeAudit(req, 'rbac.user_role.status_updated', 'userRole', assignmentId, { userId, isActive: body.isActive });
+  void invalidateUserAuthCache(userId);
   return apiResponse.success(res, updated);
 }));
 

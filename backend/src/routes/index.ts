@@ -18,6 +18,8 @@ import bannerRoutes from './banner.routes.js';
 import disputeRoutes from './dispute.routes.js';
 import shgRoutes from './shg.routes.js';
 import procurementBidRoutes from '../modules/procurementBid/procurement-bid.routes.js';
+import { env } from '../config/env.js';
+import { isRedisReady, redis } from '../config/redis.js';
 import bidWizardRoutes from '../modules/procurementBid/bid-wizard.routes.js';
 import aadhaarKycRoutes from '../modules/kyc/aadhaar-kyc.routes.js';
 import { aiRoutes } from './ai.routes.js';
@@ -42,47 +44,72 @@ const createVersionedRouter = () => {
   const router = Router();
 
   router.get('/health', async (_req, res) => {
-  const checks = {
-    api: 'ok',
-    database: 'unknown',
-    coreTables: {} as Record<string, boolean>
-  };
-
-  try {
-    await prisma.$queryRaw`SELECT 1`;
-    checks.database = 'ok';
-
-    const coreModels: Record<string, string> = {
-      User: 'user',
-      Tender: 'tender',
-      PaymentTransaction: 'paymentTransaction',
-      EscrowAccount: 'escrowAccount'
+    const startDb = performance.now();
+    const checks: Record<string, any> = {
+      api: 'ok',
+      database: 'unknown',
+      dbLatencyMs: 0,
+      redis: { status: 'disabled', latencyMs: 0 },
+      prismaPool: {
+        connectionLimit: env.PRISMA_CONNECTION_LIMIT,
+        poolTimeout: env.PRISMA_POOL_TIMEOUT
+      },
+      uptimeSeconds: Math.floor(process.uptime()),
+      coreTables: {} as Record<string, boolean>
     };
-    for (const [name, modelKey] of Object.entries(coreModels)) {
-      try {
-        const delegate = (prisma as any)[modelKey];
-        if (delegate && typeof delegate.count === 'function') {
-          await delegate.count({ take: 1 });
-          checks.coreTables[name] = true;
-        } else {
+
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      checks.database = 'ok';
+      checks.dbLatencyMs = Math.round((performance.now() - startDb) * 100) / 100;
+
+      // Check Redis status and latency if configured
+      if (redis && isRedisReady()) {
+        try {
+          const startRedis = performance.now();
+          await redis.ping();
+          checks.redis = {
+            status: 'ok',
+            latencyMs: Math.round((performance.now() - startRedis) * 100) / 100
+          };
+        } catch {
+          checks.redis = { status: 'error', latencyMs: -1 };
+        }
+      } else if (env.CACHE_DRIVER === 'memory') {
+        checks.redis = { status: 'in-memory-cache', latencyMs: 0 };
+      }
+
+      const coreModels: Record<string, string> = {
+        User: 'user',
+        Tender: 'tender',
+        PaymentTransaction: 'paymentTransaction',
+        EscrowAccount: 'escrowAccount'
+      };
+      for (const [name, modelKey] of Object.entries(coreModels)) {
+        try {
+          const delegate = (prisma as any)[modelKey];
+          if (delegate && typeof delegate.count === 'function') {
+            await delegate.count({ take: 1 });
+            checks.coreTables[name] = true;
+          } else {
+            checks.coreTables[name] = false;
+          }
+        } catch {
           checks.coreTables[name] = false;
         }
-      } catch {
-        checks.coreTables[name] = false;
       }
-    }
 
-    return res.json({ success: true, checks });
-  } catch (error) {
-    console.error('[HealthCheck]', error);
-    checks.database = 'error';
-    return res.status(503).json({
-      success: false,
-      message: 'Database health check failed',
-      checks
-    });
-  }
-});
+      return res.json({ success: true, checks });
+    } catch (error) {
+      console.error('[HealthCheck]', error);
+      checks.database = 'error';
+      return res.status(503).json({
+        success: false,
+        message: 'Database health check failed',
+        checks
+      });
+    }
+  });
 
 router.get('/test', (_req, res) => res.json({ message: 'API working' }));
 

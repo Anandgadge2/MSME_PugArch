@@ -190,7 +190,7 @@ export const canAccessOrganization = async (req: Request, organizationId: number
       userId: req.user.id,
       isActive: true,
       scopeType: 'DISTRICT',
-      scopeId: targetDistrict,
+      scopeId: organization.district || targetDistrict,
       OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }]
     },
     select: { id: true }

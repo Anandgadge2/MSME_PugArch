@@ -190,20 +190,24 @@ if (missingCritical.length > 0) {
 const isTrueProduction = parsed.data.NODE_ENV === 'production' && process.env.VERCEL_ENV !== 'preview';
 
 if (isTrueProduction) {
-  if (parsed.data.JWT_SECRET && parsed.data.JWT_SECRET.length < 32) {
+  if (!parsed.data.JWT_SECRET || parsed.data.JWT_SECRET.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters in production');
   }
 
-  if (!parsed.data.JWT_ACCESS_SECRET || !parsed.data.JWT_REFRESH_SECRET) {
-    console.warn('[env] WARNING: JWT_ACCESS_SECRET and/or JWT_REFRESH_SECRET are not set in production. Falling back to JWT_SECRET. For optimal security, configure separate 32+ character secrets.');
-  } else {
-    if (
-      parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_REFRESH_SECRET ||
-      parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_SECRET ||
-      parsed.data.JWT_REFRESH_SECRET === parsed.data.JWT_SECRET
-    ) {
-      throw new Error('JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and JWT_SECRET must be distinct in production when configured');
-    }
+  if (!parsed.data.JWT_ACCESS_SECRET || parsed.data.JWT_ACCESS_SECRET.length < 32) {
+    throw new Error('JWT_ACCESS_SECRET must be explicitly configured and at least 32 characters in production');
+  }
+
+  if (!parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_REFRESH_SECRET.length < 32) {
+    throw new Error('JWT_REFRESH_SECRET must be explicitly configured and at least 32 characters in production');
+  }
+
+  if (
+    parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_REFRESH_SECRET ||
+    parsed.data.JWT_ACCESS_SECRET === parsed.data.JWT_SECRET ||
+    parsed.data.JWT_REFRESH_SECRET === parsed.data.JWT_SECRET
+  ) {
+    throw new Error('JWT_ACCESS_SECRET, JWT_REFRESH_SECRET, and JWT_SECRET must be completely distinct in production');
   }
 
   if (['debug', 'trace'].includes(parsed.data.LOG_LEVEL.toLowerCase())) {
