@@ -4418,6 +4418,8 @@ export interface ProcurementDetailUnifiedViewProps {
   contractDocument?: any;
   procurementData?: any;
   terms?: any;
+  termsAndConditions?: any;
+  eligibilityCriteria?: any;
   utilization?: any;
   purchaseOrders?: any[];
 }
@@ -11847,10 +11849,35 @@ export function ProcurementDetailUnifiedView(
                   <PropertyItem
                     label="Terms & Conditions"
                     value={cleanBuyerTerms(
-                      terms.termsAndConditions || terms.terms || payload.terms,
+                      props.termsAndConditions ||
+                        (props as any).terms ||
+                        (props.rawBid as any)?.termsAndConditions ||
+                        (props.rawBid?.technicalPacket as any)?.termsAndConditions ||
+                        (props.rawBid?.payload as any)?.termsAndConditions ||
+                        (props.procurementData as any)?.termsAndConditions ||
+                        terms.termsAndConditions ||
+                        terms.terms ||
+                        payload.terms,
                     )}
                     fullWidth
                   />
+                  {hasDetailData(
+                    props.eligibilityCriteria ||
+                      (props.rawBid as any)?.eligibilityCriteria ||
+                      (props.rawBid?.technicalPacket as any)?.basics?.eligibilityCriteria ||
+                      basics.eligibilityCriteria,
+                  ) && (
+                    <PropertyItem
+                      label="Eligibility Criteria"
+                      value={
+                        props.eligibilityCriteria ||
+                        (props.rawBid as any)?.eligibilityCriteria ||
+                        (props.rawBid?.technicalPacket as any)?.basics?.eligibilityCriteria ||
+                        basics.eligibilityCriteria
+                      }
+                      fullWidth
+                    />
+                  )}
                 </PropertyGrid>
               </DataCard>
 

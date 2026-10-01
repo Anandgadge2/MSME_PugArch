@@ -322,9 +322,174 @@ const withEffectiveStatus = async (auction: any) => {
  * everything without a second round trip.
  */
 const linkedRequirementSummary = async (auction: any) => {
-  if (!auction?.linkedRequirementId) return null;
+  if (!auction) return null;
+  const linkedBidId = auction.linkedBidId ? Number(auction.linkedBidId) : null;
+  const linkedReqId = auction.linkedRequirementId ? Number(auction.linkedRequirementId) : null;
+  const refNo = auction.referenceNo || null;
+
+  // 1. Try finding linked procurementBid
+  if (linkedBidId || refNo) {
+    const pBid = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          ...(linkedBidId ? [{ id: linkedBidId }] : []),
+          ...(refNo ? [{ bidNumber: refNo }, { referenceNumber: refNo }] : [])
+        ]
+      },
+      include: {
+        buyerOrganization: true,
+        buyer: { include: { buyerProfile: true } },
+        documents: true
+      }
+    }).catch(() => null);
+
+    if (pBid) {
+      const techPacket = (pBid.technicalPacket || {}) as any;
+      const basics = techPacket.basics || {};
+      const terms = techPacket.terms || {};
+      const schedule = techPacket.schedule || {};
+      const org = pBid.buyerOrganization || (pBid.buyer as any)?.buyerProfile?.organization;
+      const regAddr = org
+        ? [org.addressLine1, org.addressLine2, org.city, org.district, org.state, org.pincode].filter(Boolean).join(', ')
+        : null;
+
+      const items = (Array.isArray(pBid.items) && pBid.items.length > 0 ? pBid.items : null) ||
+        (Array.isArray(techPacket.items) && techPacket.items.length > 0 ? techPacket.items : null) ||
+        (Array.isArray(techPacket.boqTable) && techPacket.boqTable.length > 0 ? techPacket.boqTable : []) ||
+        [];
+
+      const boqTable = Array.isArray(pBid.boqTable) && pBid.boqTable.length > 0
+        ? pBid.boqTable
+        : (Array.isArray(techPacket.boqTable) ? techPacket.boqTable : []);
+
+      const termsList = Array.isArray(pBid.termsAndConditions) && pBid.termsAndConditions.length > 0
+        ? pBid.termsAndConditions
+        : (Array.isArray(terms.termsAndConditions) ? terms.termsAndConditions : (typeof terms === 'string' ? [terms] : []));
+
+      const eligList = Array.isArray(pBid.eligibilityCriteria) && pBid.eligibilityCriteria.length > 0
+        ? pBid.eligibilityCriteria
+        : (Array.isArray(basics.eligibilityCriteria) ? basics.eligibilityCriteria : []);
+
+      return {
+        id: pBid.id,
+        bidNumber: pBid.bidNumber,
+        requirementNumber: pBid.bidNumber,
+        title: pBid.title,
+        description: pBid.description || basics.description || '',
+        procurementMethod: pBid.procurementMethod || 'REVERSE_AUCTION',
+        canonicalMethod: pBid.procurementMethod,
+        status: pBid.status,
+        estimatedValue: pBid.estimatedValue,
+        category: pBid.category || basics.category || null,
+        deliveryLocation: pBid.deliveryLocation || basics.deliveryLocation || null,
+        paymentTerms: pBid.paymentTerms || terms.paymentTerms || basics.paymentTerms || null,
+        deliveryTerms: pBid.deliveryTerms || terms.deliveryTerms || basics.deliveryTerms || null,
+        items,
+        boqTable,
+        documents: pBid.documents || techPacket.documents || [],
+        requiredDocuments: pBid.requiredDocuments || techPacket.requiredDocs || techPacket.requiredDocuments || [],
+        termsAndConditions: termsList,
+        eligibilityCriteria: eligList,
+        consigneeDetails: Array.isArray(techPacket.consigneeDetails) ? techPacket.consigneeDetails : [],
+        approvalAuthority: pBid.approvalAuthority || techPacket.internal?.approvalAuthority || null,
+        justification: pBid.justification || techPacket.internal?.justification || null,
+        internalDetails: pBid.internalDetails || techPacket.internal || null,
+        payload: techPacket,
+        technicalPacket: techPacket,
+        bidStartDate: pBid.startDate || schedule.publishDate || null,
+        bidClosingDate: pBid.endDate || schedule.submissionDate || null,
+        buyerOrganization: org ? {
+          id: org.id,
+          organizationName: org.organizationName,
+          registeredAddress: regAddr,
+          city: org.city || null,
+          district: org.district || null,
+          state: org.state || null,
+          pincode: org.pincode || null
+        } : null,
+        buyer: pBid.buyer || null
+      };
+    }
+  }
+
+  // 2. Try finding linked buyerRequirement
+  if (linkedReqId || refNo) {
+    const buyerReq = await db.buyerRequirement.findFirst({
+      where: {
+        OR: [
+          ...(linkedReqId ? [{ id: linkedReqId }] : []),
+          ...(refNo ? [{ title: { contains: refNo } }] : [])
+        ]
+      },
+      include: {
+        buyerOrganization: true,
+        createdBy: { include: { buyerProfile: true } },
+        category: true
+      }
+    }).catch(() => null);
+
+    if (buyerReq) {
+      const payload = (buyerReq.payload || {}) as any;
+      const basics = payload.basics || {};
+      const terms = payload.terms || {};
+      const org = buyerReq.buyerOrganization;
+      const regAddr = org
+        ? [org.addressLine1, org.addressLine2, org.city, org.district, org.state, org.pincode].filter(Boolean).join(', ')
+        : null;
+
+      const items = Array.isArray(buyerReq.items) && buyerReq.items.length > 0
+        ? buyerReq.items
+        : (Array.isArray(payload.items) ? payload.items : (Array.isArray(payload.boqTable) ? payload.boqTable : []));
+
+      const boqTable = Array.isArray(payload.boqTable) ? payload.boqTable : [];
+      const termsList = Array.isArray(terms.termsAndConditions)
+        ? terms.termsAndConditions
+        : (buyerReq.terms ? [buyerReq.terms] : []);
+
+      return {
+        id: buyerReq.id,
+        requirementNumber: `REQ-${buyerReq.id}`,
+        title: buyerReq.title,
+        description: buyerReq.description || basics.description || '',
+        procurementMethod: 'REVERSE_AUCTION',
+        canonicalMethod: 'REVERSE_AUCTION',
+        status: buyerReq.status,
+        estimatedValue: buyerReq.estimatedValue || buyerReq.budgetMax || buyerReq.budgetMin,
+        category: buyerReq.category?.name || basics.category || null,
+        deliveryLocation: buyerReq.location || basics.deliveryLocation || null,
+        paymentTerms: buyerReq.paymentTerms || terms.paymentTerms || basics.paymentTerms || null,
+        deliveryTerms: buyerReq.deliveryTerms || terms.deliveryTerms || null,
+        items,
+        boqTable,
+        documents: Array.isArray(payload.documents) ? payload.documents : [],
+        requiredDocuments: buyerReq.requiredDocuments || payload.requiredDocs || [],
+        termsAndConditions: termsList,
+        eligibilityCriteria: Array.isArray(basics.eligibilityCriteria) ? basics.eligibilityCriteria : [],
+        consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
+        approvalAuthority: payload.internal?.approvalAuthority || null,
+        justification: payload.internal?.justification || null,
+        internalDetails: payload.internal || null,
+        payload,
+        bidStartDate: buyerReq.createdAt,
+        bidClosingDate: buyerReq.lastDate,
+        buyerOrganization: org ? {
+          id: org.id,
+          organizationName: org.organizationName,
+          registeredAddress: regAddr,
+          city: org.city || null,
+          district: org.district || null,
+          state: org.state || null,
+          pincode: org.pincode || null
+        } : null,
+        buyer: buyerReq.createdBy || null
+      };
+    }
+  }
+
+  // 3. Fallback to legacy requirement
+  if (!linkedReqId) return null;
   const requirement = await db.requirement.findUnique({
-    where: { id: auction.linkedRequirementId },
+    where: { id: linkedReqId },
     include: {
       items: true,
       category: true,
@@ -342,11 +507,12 @@ const linkedRequirementSummary = async (auction: any) => {
         }
       }
     }
-  });
+  }).catch(() => null);
   if (!requirement) return null;
   const payload = (requirement.payload || {}) as any;
   const basics = payload.basics || {};
   const tender = payload.tender || {};
+  const terms = payload.terms || {};
   const documents = Array.isArray(payload.documents) ? payload.documents : [];
   const org = requirement.organization;
   const registeredAddress = org
@@ -372,6 +538,7 @@ const linkedRequirementSummary = async (auction: any) => {
       unitOfMeasure: item.unitOfMeasure,
       estimatedUnitPrice: item.estimatedUnitPrice
     })),
+    boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : [],
     documents: documents.map((doc: any, idx: number) => ({
       id: doc.id || doc.fileAssetId || `req-doc-${idx + 1}`,
       name: doc.name || doc.fileName || `Tender Document ${idx + 1}`,
@@ -380,8 +547,16 @@ const linkedRequirementSummary = async (auction: any) => {
       url: doc.url || null,
       required: doc.required !== false
     })),
+    requiredDocuments: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : [],
+    termsAndConditions: Array.isArray(terms.termsAndConditions) ? terms.termsAndConditions : [],
+    eligibilityCriteria: Array.isArray(basics.eligibilityCriteria) ? basics.eligibilityCriteria : [],
     consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
-    paymentTerms: payload.terms?.paymentTerms || basics.paymentTerms || null,
+    paymentTerms: terms.paymentTerms || basics.paymentTerms || null,
+    deliveryTerms: terms.deliveryTerms || null,
+    approvalAuthority: payload.internal?.approvalAuthority || null,
+    justification: payload.internal?.justification || null,
+    internalDetails: payload.internal || null,
+    payload,
     bidStartDate: tender.bidStartDate || null,
     bidClosingDate: tender.bidClosingDate || null,
     buyerOrganization: org ? {

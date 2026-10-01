@@ -199,11 +199,21 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
 
   const linkedBidId = auction.data?.linkedBidId;
   const tenderId = auction.data?.tenderId;
+  const linkedRequirementId = auction.data?.linkedRequirementId;
+  const referenceNo = auction.data?.referenceNo;
+
+  const targetProcurementId = linkedBidId
+    ? String(linkedBidId)
+    : tenderId
+    ? `TENDER-${tenderId}`
+    : linkedRequirementId
+    ? String(linkedRequirementId)
+    : referenceNo || null;
 
   const linkedBid = useQuery({
-    queryKey: ['linked-bid', linkedBidId || tenderId],
-    queryFn: () => procurementBidApi.detail(String(linkedBidId || `TENDER-${tenderId}`)),
-    enabled: !!(auction.data && (linkedBidId || tenderId)),
+    queryKey: ['linked-bid', targetProcurementId],
+    queryFn: () => procurementBidApi.detail(targetProcurementId!),
+    enabled: !!(auction.data && targetProcurementId),
   });
 
   // Mutators
@@ -306,7 +316,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const linkedBidData: any = linkedBid.data || {};
 
   // Buyer Organization details (authentic registered location, distinct from delivery location)
-  const buyerOrg = (auctionData as any).buyerOrganization || reqData.buyerOrganization || reqData.organization || null;
+  const buyerOrg = (auctionData as any).buyerOrganization || reqData.buyerOrganization || reqData.organization || linkedBidData.buyerOrganization || null;
   const buyerRegisteredAddress = buyerOrg?.registeredAddress || null;
 
   // Resolved Line items
@@ -317,6 +327,106 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       ? linkedBidData.technicalPacket.items
       : []) ||
     [];
+
+  // Resolved BOQ Table
+  const resolvedBoqTable: any[] =
+    (Array.isArray(reqData.boqTable) && reqData.boqTable.length > 0 ? reqData.boqTable : null) ||
+    (Array.isArray(linkedBidData.boqTable) && linkedBidData.boqTable.length > 0 ? linkedBidData.boqTable : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.boqTable) && linkedBidData.technicalPacket.boqTable.length > 0
+      ? linkedBidData.technicalPacket.boqTable
+      : []) ||
+    [];
+
+  // Resolved Terms & Conditions
+  const resolvedTerms: any =
+    (Array.isArray(reqData.termsAndConditions) && reqData.termsAndConditions.length > 0 ? reqData.termsAndConditions : null) ||
+    (Array.isArray(linkedBidData.termsAndConditions) && linkedBidData.termsAndConditions.length > 0 ? linkedBidData.termsAndConditions : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.termsAndConditions) && linkedBidData.technicalPacket.termsAndConditions.length > 0
+      ? linkedBidData.technicalPacket.termsAndConditions
+      : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.terms?.termsAndConditions) && linkedBidData.technicalPacket.terms.termsAndConditions.length > 0
+      ? linkedBidData.technicalPacket.terms.termsAndConditions
+      : (reqData.termsAndConditions || linkedBidData.termsAndConditions || null));
+
+  // Resolved Eligibility Criteria
+  const resolvedEligibility: any =
+    (Array.isArray(reqData.eligibilityCriteria) && reqData.eligibilityCriteria.length > 0 ? reqData.eligibilityCriteria : null) ||
+    (Array.isArray(linkedBidData.eligibilityCriteria) && linkedBidData.eligibilityCriteria.length > 0 ? linkedBidData.eligibilityCriteria : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.basics?.eligibilityCriteria) && linkedBidData.technicalPacket.basics.eligibilityCriteria.length > 0
+      ? linkedBidData.technicalPacket.basics.eligibilityCriteria
+      : (reqData.eligibilityCriteria || linkedBidData.eligibilityCriteria || null));
+
+  // Resolved Required Documents
+  const resolvedRequiredDocuments: any =
+    (Array.isArray(reqData.requiredDocuments) && reqData.requiredDocuments.length > 0 ? reqData.requiredDocuments : null) ||
+    (Array.isArray(linkedBidData.requiredDocuments) && linkedBidData.requiredDocuments.length > 0 ? linkedBidData.requiredDocuments : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.requiredDocs) && linkedBidData.technicalPacket.requiredDocs.length > 0
+      ? linkedBidData.technicalPacket.requiredDocs
+      : (reqData.requiredDocuments || linkedBidData.requiredDocuments || []));
+
+  // Resolved Consignee Details
+  const resolvedConsigneeDetails: any[] =
+    (Array.isArray(reqData.consigneeDetails) && reqData.consigneeDetails.length > 0 ? reqData.consigneeDetails : null) ||
+    (Array.isArray(linkedBidData.consigneeDetails) && linkedBidData.consigneeDetails.length > 0 ? linkedBidData.consigneeDetails : null) ||
+    (Array.isArray(linkedBidData.technicalPacket?.consigneeDetails) && linkedBidData.technicalPacket.consigneeDetails.length > 0
+      ? linkedBidData.technicalPacket.consigneeDetails
+      : []) ||
+    [];
+
+  // Resolved Description
+  const resolvedDescription =
+    (auctionData.description && auctionData.description !== 'No description provided.' && auctionData.description !== '—' && !auctionData.description.toLowerCase().startsWith('reverse auction event'))
+      ? auctionData.description
+      : (reqData.description || linkedBidData.description || auctionData.description || '');
+
+  // Resolved Subject / Title
+  const resolvedSubject =
+    (auctionData.title && !auctionData.title.startsWith('RA-') && !auctionData.title.toLowerCase().startsWith('reverse auction'))
+      ? auctionData.title
+      : (reqData.title || linkedBidData.title || auctionData.title || 'Reverse Auction Sourcing');
+
+  // Resolved Delivery & Commercial Terms
+  const resolvedDeliveryLocation =
+    reqData.deliveryLocation ||
+    linkedBidData.deliveryLocation ||
+    (linkedBidData.technicalPacket as any)?.basics?.deliveryLocation ||
+    'As specified in auction terms';
+
+  const resolvedPaymentTerms =
+    reqData.paymentTerms ||
+    linkedBidData.paymentTerms ||
+    (linkedBidData.technicalPacket as any)?.terms?.paymentTerms ||
+    'Standard commercial payment terms';
+
+  const resolvedDeliveryTerms =
+    reqData.deliveryTerms ||
+    linkedBidData.deliveryTerms ||
+    (linkedBidData.technicalPacket as any)?.terms?.deliveryTerms ||
+    'Door delivery within contract period';
+
+  const resolvedCategory =
+    auctionData.category ||
+    reqData.category ||
+    linkedBidData.category ||
+    'General Sourcing';
+
+  const resolvedApprovalAuthority =
+    reqData.approvalAuthority ||
+    linkedBidData.approvalAuthority ||
+    (linkedBidData.technicalPacket as any)?.internal?.approvalAuthority ||
+    null;
+
+  const resolvedJustification =
+    reqData.justification ||
+    linkedBidData.justification ||
+    (linkedBidData.technicalPacket as any)?.internal?.justification ||
+    null;
+
+  const resolvedInternalDetails =
+    reqData.internalDetails ||
+    linkedBidData.internalDetails ||
+    (linkedBidData.technicalPacket as any)?.internal ||
+    null;
 
   // Resolved Documents
   const resolvedDocuments: DisplayDocument[] = [
@@ -666,27 +776,27 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           auctionData.auctionCode ||
           (auctionData.linkedRequirementId ? formatRefId('REQ', auctionData.linkedRequirementId) : `RA-${effectiveId}`)
         }
-        subject={auctionData.title || 'Reverse Auction Sourcing'}
+        subject={resolvedSubject}
         status={status}
-        buyerName={auctionData.buyerOrganizationName || 'Verified Buyer'}
-        contactPerson={auctionData.buyerOrganizationName || 'Procurement Officer'}
-        orgName={auctionData.buyerOrganizationName || 'Verified Buyer'}
+        buyerName={auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Verified Buyer'}
+        contactPerson={auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Procurement Officer'}
+        orgName={auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Verified Buyer'}
         buyerEmail={user?.role === 'buyer' ? user?.email : undefined}
         buyerMobile={user?.role === 'buyer' ? user?.mobile : undefined}
-        buyerAddress={buyerRegisteredAddress || undefined}
+        buyerAddress={buyerRegisteredAddress || reqData.deliveryLocation || undefined}
         buyer={{
-          name: auctionData.buyerOrganizationName || 'Verified Buyer',
+          name: auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Verified Buyer',
           email: user?.role === 'buyer' ? user?.email : undefined,
           mobile: user?.role === 'buyer' ? user?.mobile : undefined,
           buyerProfile: {
-            organizationName: auctionData.buyerOrganizationName || 'Verified Buyer',
-            address: buyerRegisteredAddress || undefined,
+            organizationName: auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Verified Buyer',
+            address: buyerRegisteredAddress || reqData.deliveryLocation || undefined,
             city: buyerOrg?.city,
             state: buyerOrg?.state,
             pincode: buyerOrg?.pincode,
           },
         }}
-        estimatedValue={auctionData.startPrice || reqData.estimatedValue}
+        estimatedValue={auctionData.startPrice || reqData.estimatedValue || linkedBidData.estimatedValue}
         discloseEstimatedCost={true}
         deadlineDate={auctionData.endTime}
         createdAt={(auctionData as any).createdAt || auctionData.startTime}
@@ -694,19 +804,30 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         submissionStartDate={auctionData.startTime ? formatDateTime(auctionData.startTime) : undefined}
         closingDate={auctionData.endTime ? formatDateTime(auctionData.endTime) : undefined}
         clarificationDate={reqData.clarificationDeadline ? formatDateTime(reqData.clarificationDeadline) : undefined}
-        category={auctionData.category || reqData.category || 'General Sourcing'}
+        category={resolvedCategory}
         procurementMethod="Reverse Auction"
-        buyingType={reqData.whatAreYouBuying || 'Goods / Products'}
-        deliveryLocation={reqData.deliveryLocation || 'As specified in auction terms'}
-        paymentTerms={reqData.paymentTerms || 'Standard commercial payment terms'}
-        deliveryTerms={reqData.deliveryTerms || 'Door delivery within contract period'}
-        description={auctionData.description || reqData.description}
+        buyingType={reqData.whatAreYouBuying || linkedBidData.procurementType || 'Goods / Products'}
+        deliveryLocation={resolvedDeliveryLocation}
+        paymentTerms={resolvedPaymentTerms}
+        deliveryTerms={resolvedDeliveryTerms}
+        description={resolvedDescription}
+        rawBid={linkedBidData?.rawBid || linkedBidData}
         payload={{
+          ...(linkedBidData.payload || linkedBidData.technicalPacket || {}),
+          ...(reqData.payload || reqData || {}),
           ...(auctionData.auctionConfig || {}),
           ...(auctionData.preBidStage || {}),
-          ...(reqData || {}),
+          ...(auctionData || {}),
         }}
         items={resolvedItems}
+        boqTable={resolvedBoqTable}
+        termsAndConditions={resolvedTerms}
+        eligibilityCriteria={resolvedEligibility}
+        requiredDocuments={resolvedRequiredDocuments}
+        consigneeDetails={resolvedConsigneeDetails}
+        approvalAuthority={resolvedApprovalAuthority}
+        justification={resolvedJustification}
+        internalDetails={resolvedInternalDetails}
         documents={resolvedDocuments}
         evaluationMethod={`${formatEnumLabel(auctionData.auctionType || 'ENGLISH_REVERSE')} (Dynamic Decrement: ${
           auctionData.minDecrementAmount
