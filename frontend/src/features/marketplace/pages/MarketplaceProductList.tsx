@@ -1,5 +1,5 @@
 'use client';
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
 import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus, ChevronDown } from 'lucide-react';
@@ -438,10 +438,10 @@ export default function MarketplaceProductList() {
         return getQuantity(itemId, isServices ? 'service' : 'product');
     };
 
-    const handleCartQuantityChange = (item: any, nextQuantity: number) => {
+    const handleCartQuantityChange = useCallback((item: any, nextQuantity: number) => {
         const itemType = isServices ? 'service' : 'product';
         updateCartItemQty(item.id, itemType, nextQuantity);
-    };
+    }, [isServices, updateCartItemQty]);
 
     const handleBuy = async (item: any) => {
         if (item.id < 0) {

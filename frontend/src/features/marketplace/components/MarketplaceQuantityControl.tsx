@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
@@ -25,135 +25,49 @@ export function MarketplaceQuantityControl({
     className = '',
     size = 'sm',
 }: MarketplaceQuantityControlProps) {
-    const [inputValue, setInputValue] = useState<string>(String(quantity > 0 ? quantity : 1));
-    const [isFocused, setIsFocused] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editValue, setEditValue] = useState<string>('');
 
-    const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const lastCommittedRef = useRef<number>(quantity);
-    const currentPropQtyRef = useRef<number>(quantity);
-    const pendingQtyRef = useRef<number | null>(null);
+    const displayValue = isEditing ? editValue : String(quantity > 0 ? quantity : 1);
 
-    // Keep prop ref updated and sync to input when not actively typing/focused
-    useEffect(() => {
-        currentPropQtyRef.current = quantity;
-        if (!isFocused) {
-            setInputValue(String(quantity > 0 ? quantity : 1));
-            lastCommittedRef.current = quantity;
-            pendingQtyRef.current = null;
-        }
-    }, [quantity, isFocused]);
+    const handleFocus = (e: React.FocusEvent<HTMLInputElement>) => {
+        setIsEditing(true);
+        setEditValue(String(quantity > 0 ? quantity : 1));
+        e.currentTarget.select();
+    };
 
-    // Commit quantity change to parent
-    const commitQuantity = useCallback((targetQty: number) => {
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-            debounceTimerRef.current = null;
-        }
-
-        const clamped = Math.max(min, Math.min(max, targetQty));
-        pendingQtyRef.current = null;
-
-        if (clamped > 0) {
-            setInputValue(String(clamped));
-        }
-
-        if (clamped !== lastCommittedRef.current) {
-            lastCommittedRef.current = clamped;
-            onChange(clamped);
-        }
-    }, [min, max, onChange]);
-
-    // Debounced commit helper
-    const scheduleCommit = useCallback((targetQty: number, delayMs = 350) => {
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-        }
-        pendingQtyRef.current = targetQty;
-        debounceTimerRef.current = setTimeout(() => {
-            commitQuantity(targetQty);
-        }, delayMs);
-    }, [commitQuantity]);
-
-    // Ensure pending changes flush if unmounting
-    useEffect(() => {
-        return () => {
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-                debounceTimerRef.current = null;
-            }
-            if (pendingQtyRef.current !== null && pendingQtyRef.current !== lastCommittedRef.current) {
-                onChange(pendingQtyRef.current);
-            }
-        };
-    }, [onChange]);
-
-    // Direct input typing handler
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (disabled) return;
-        const raw = e.target.value;
-        const cleaned = raw.replace(/\D/g, '');
+        const cleaned = e.target.value.replace(/\D/g, '');
+        setEditValue(cleaned);
+    };
 
-        if (cleaned === '') {
-            setInputValue('');
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-                debounceTimerRef.current = null;
-            }
-            pendingQtyRef.current = null;
+    const commitEdit = () => {
+        setIsEditing(false);
+        if (editValue === '') {
             return;
         }
 
-        let parsed = parseInt(cleaned, 10);
-        if (parsed > max) {
-            parsed = max;
-        }
+        const parsed = parseInt(editValue, 10);
+        if (!Number.isFinite(parsed)) return;
 
-        setInputValue(String(parsed));
-        scheduleCommit(parsed, 400);
+        const clamped = Math.max(min, Math.min(max, parsed));
+        if (clamped !== quantity) {
+            onChange(clamped);
+        }
     };
 
-    // Commit on blur
     const handleBlur = () => {
-        setIsFocused(false);
-        if (debounceTimerRef.current) {
-            clearTimeout(debounceTimerRef.current);
-            debounceTimerRef.current = null;
-        }
-
-        if (inputValue === '' || inputValue === '0') {
-            if (inputValue === '0' && min === 0) {
-                commitQuantity(0);
-            } else {
-                const fallback = currentPropQtyRef.current > 0 ? currentPropQtyRef.current : 1;
-                setInputValue(String(fallback));
-                commitQuantity(fallback);
-            }
-        } else {
-            const parsed = parseInt(inputValue, 10);
-            if (Number.isFinite(parsed) && parsed >= min) {
-                commitQuantity(parsed);
-            } else {
-                const fallback = currentPropQtyRef.current > 0 ? currentPropQtyRef.current : 1;
-                setInputValue(String(fallback));
-                commitQuantity(fallback);
-            }
-        }
+        commitEdit();
     };
 
-    // Keyboard navigation (Enter to commit, Escape to cancel, Arrows to increment/decrement)
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         if (e.key === 'Enter') {
             e.preventDefault();
             e.currentTarget.blur();
         } else if (e.key === 'Escape') {
             e.preventDefault();
-            const fallback = currentPropQtyRef.current > 0 ? currentPropQtyRef.current : 1;
-            setInputValue(String(fallback));
-            pendingQtyRef.current = null;
-            if (debounceTimerRef.current) {
-                clearTimeout(debounceTimerRef.current);
-                debounceTimerRef.current = null;
-            }
+            setIsEditing(false);
             e.currentTarget.blur();
         } else if (e.key === 'ArrowUp') {
             e.preventDefault();
@@ -164,28 +78,28 @@ export function MarketplaceQuantityControl({
         }
     };
 
-    // Increment (+)
     const handleIncrement = () => {
         if (disabled) return;
-        const current = parseInt(inputValue, 10) || currentPropQtyRef.current || 1;
+        const current = isEditing ? (parseInt(editValue, 10) || quantity || 1) : (quantity || 1);
         const next = Math.min(max, current + 1);
-        setInputValue(String(next));
-        scheduleCommit(next, 300);
+        if (isEditing) {
+            setEditValue(String(next));
+        }
+        if (next !== quantity) {
+            onChange(next);
+        }
     };
 
-    // Decrement (−)
     const handleDecrement = () => {
         if (disabled) return;
-        const current = parseInt(inputValue, 10) || currentPropQtyRef.current || 1;
+        const current = isEditing ? (parseInt(editValue, 10) || quantity || 1) : (quantity || 1);
         const next = current - 1;
-
-        if (next <= 0) {
-            // Drop to 0 immediately commits removal
-            pendingQtyRef.current = null;
-            commitQuantity(0);
-        } else {
-            setInputValue(String(next));
-            scheduleCommit(next, 300);
+        if (next < min) return;
+        if (isEditing) {
+            setEditValue(String(next));
+        }
+        if (next !== quantity) {
+            onChange(next);
         }
     };
 
@@ -222,12 +136,9 @@ export function MarketplaceQuantityControl({
                 pattern="[0-9]*"
                 aria-label={`Quantity of ${itemName}`}
                 title="Click to enter custom quantity"
-                value={inputValue}
+                value={displayValue}
                 onChange={handleInputChange}
-                onFocus={(e) => {
-                    setIsFocused(true);
-                    e.currentTarget.select();
-                }}
+                onFocus={handleFocus}
                 onBlur={handleBlur}
                 onKeyDown={handleKeyDown}
                 disabled={disabled}
@@ -241,7 +152,7 @@ export function MarketplaceQuantityControl({
                 type="button"
                 aria-label={`Increase quantity of ${itemName}`}
                 title="Increase quantity"
-                disabled={disabled || (parseInt(inputValue, 10) >= max)}
+                disabled={disabled || (quantity >= max)}
                 onClick={handleIncrement}
                 className={cn(
                     'rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700 active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed shrink-0',

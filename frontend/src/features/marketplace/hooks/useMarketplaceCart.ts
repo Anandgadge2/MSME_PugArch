@@ -37,6 +37,7 @@ export function useMarketplaceCart() {
     const updateCartItemMut = useUpdateCartItem();
     const removeCartItemMut = useRemoveCartItem();
     const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
+    const debounceUpdateTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
     if (isBuyer) {
         const dbItems = activeCartQuery.data?.items || [];
@@ -123,48 +124,67 @@ export function useMarketplaceCart() {
 
             const itemKey = `${type}-${itemId}`;
 
+            // Cancel any pending debounced mutation for this item
+            const existingTimer = debounceUpdateTimerRef.current.get(itemKey);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+                debounceUpdateTimerRef.current.delete(itemKey);
+            }
+
             if (qty <= 0) {
                 remove(itemId, type);
                 return;
             }
 
             if (mappedItem.dbCartItemId) {
+                // Optimistically update React Query cache immediately so UI reflects the new quantity instantly
+                qc.setQueryData<CartDto>(['cart', 'active'], (old) => {
+                    if (!old) return old;
+                    return {
+                        ...old,
+                        items: old.items.map(i => {
+                            const isTarget = (type === 'product' && i.productId === itemId) ||
+                                             (type === 'service' && i.serviceId === itemId) ||
+                                             i.id === mappedItem.dbCartItemId;
+                            return isTarget ? { ...i, quantity: qty } : i;
+                        })
+                    };
+                });
+
                 if (mappedItem.dbCartItemId < 0) {
                     // Item is optimistic (add request in flight).
-                    // Update cache immediately and save pending target quantity.
                     pendingUpdatesRef.current.set(itemKey, qty);
-                    qc.setQueryData<CartDto>(['cart', 'active'], (old) => {
-                        if (!old) return old;
-                        return {
-                            ...old,
-                            items: old.items.map(i => {
-                                const isTarget = (type === 'product' && i.productId === itemId) ||
-                                                 (type === 'service' && i.serviceId === itemId) ||
-                                                 i.id === mappedItem.dbCartItemId;
-                                return isTarget ? { ...i, quantity: qty } : i;
-                            })
-                        };
-                    });
                     return;
                 }
 
-                updateCartItemMut.mutate(
-                    { id: mappedItem.dbCartItemId, quantity: qty },
-                    {
-                        onSuccess: () => {
-                            api.invalidate('/api/cart');
-                        },
-                        onError: (err: any) => {
-                            toast.error(err?.message || 'Failed to update quantity');
+                // Debounce the backend network call by 300ms
+                const timer = setTimeout(() => {
+                    debounceUpdateTimerRef.current.delete(itemKey);
+                    updateCartItemMut.mutate(
+                        { id: mappedItem.dbCartItemId!, quantity: qty },
+                        {
+                            onSuccess: () => {
+                                api.invalidate('/api/cart');
+                            },
+                            onError: (err: any) => {
+                                toast.error(err?.message || 'Failed to update quantity');
+                            }
                         }
-                    }
-                );
+                    );
+                }, 300);
+                debounceUpdateTimerRef.current.set(itemKey, timer);
             }
         };
 
         const remove = (itemId: number, type: 'product' | 'service') => {
             const mappedItem = mappedItems.find(i => Number(i.id) === Number(itemId) && i.type === type);
             const itemKey = `${type}-${itemId}`;
+
+            const existingTimer = debounceUpdateTimerRef.current.get(itemKey);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+                debounceUpdateTimerRef.current.delete(itemKey);
+            }
             if (mappedItem?.dbCartItemId) {
                 if (mappedItem.dbCartItemId < 0) {
                     pendingUpdatesRef.current.set(itemKey, 0);
