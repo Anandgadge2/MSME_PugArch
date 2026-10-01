@@ -449,47 +449,63 @@ export function TechnicalEvaluationModal({
       : "",
   );
 
-  // Extract documents from all authentic sources
-  const docCandidates = [
-    participation.documents,
-    detailsData.documents,
-    respData.documents,
-    ackData.documents,
-    rawPart.documents,
+  const rawDocsList: any[] = [
+    ...(Array.isArray(participation.documents) ? participation.documents : []),
+    ...(Array.isArray(detailsData.documents) ? detailsData.documents : []),
+    ...(Array.isArray(respData.documents) ? respData.documents : []),
+    ...(Array.isArray(ackData.documents) ? ackData.documents : []),
+    ...(Array.isArray(rawPart.documents) ? rawPart.documents : []),
   ];
 
-  let rawDocs: any[] = [];
-  for (const cand of docCandidates) {
-    if (Array.isArray(cand) && cand.length > rawDocs.length) {
-      rawDocs = cand;
+  const seenDocKeys = new Set<string>();
+  const docs: any[] = [];
+  for (const d of rawDocsList) {
+    if (!d) continue;
+    const docName = String(d.documentName || d.fileName || d.name || "").trim();
+    const fileId = d.fileAssetId || d.fileId || (typeof d.id === "number" ? d.id : undefined);
+    const rawUrl = d.url || d.fileUrl || d.signedUrl || d.documentUrl || "";
+    const key = fileId ? `id-${fileId}` : rawUrl ? `url-${rawUrl.toLowerCase()}` : docName ? `name-${docName.toLowerCase()}` : `doc-${docs.length}`;
+    if (!seenDocKeys.has(key)) {
+      seenDocKeys.add(key);
+      docs.push(d);
     }
   }
 
-  const docs: any[] = rawDocs.filter((d: any) => Boolean(d));
+  const isFinancialDocument = (doc: any) => {
+    const category = String(doc.documentCategory || doc.category || doc.type || "").toUpperCase();
+    const name = String(doc.documentName || doc.name || doc.fileName || "").toLowerCase();
+    return (
+      category.includes("FINAN") ||
+      category.includes("PRICE") ||
+      category.includes("COMMERCIAL") ||
+      category.includes("COST") ||
+      category.includes("RATE_SCHEDULE") ||
+      name.includes("price") ||
+      name.includes("breakup") ||
+      name.includes("commercial") ||
+      name.includes("financial") ||
+      name.includes("rate schedule") ||
+      name.includes("cost schedule") ||
+      name.includes("boq rate") ||
+      name.includes("pricing") ||
+      name.includes("quotation sheet")
+    );
+  };
 
   // Two-packet seal: Filter out financial quotes / detailed price breakups during Stage 1
   const filteredDocs: any[] = docs.filter((doc: any) => {
     if (isSinglePacket || isFinancialStageOpened || isStage2Active) {
       return true;
     }
-    const category = String(doc.documentCategory || doc.category || doc.type || "").toUpperCase();
-    const name = String(doc.documentName || doc.name || doc.fileName || "").toLowerCase();
-    const isFinancialDoc =
-      category === "FINANCIAL_QUOTE" ||
-      category === "COMMERCIAL_BID" ||
-      category === "PRICE_SCHEDULE" ||
-      category === "FINANCIAL" ||
-      name.includes("price breakup") ||
-      name.includes("price schedule") ||
-      name.includes("commercial") ||
-      name.includes("financial quote") ||
-      name.includes("detailed price") ||
-      name.includes("boc") ||
-      name.includes("cost schedule");
-    return !isFinancialDoc;
+    return !isFinancialDocument(doc);
   });
 
   const handleViewAttachment = async (doc: any, docName: string) => {
+    if (!isSinglePacket && !isFinancialStageOpened && !isStage2Active && isFinancialDocument(doc)) {
+      toast.warning("Financial documents are sealed during Stage 1 technical scrutiny.");
+      return;
+    }
+
     const rawUrl =
       doc.url || doc.fileUrl || doc.signedUrl || doc.documentUrl || "";
     const urlMatchId = String(rawUrl).match(

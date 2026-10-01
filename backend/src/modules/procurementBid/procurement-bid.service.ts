@@ -1930,8 +1930,28 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
       }
       return allDocs;
     })().filter((doc: any) => {
-      if (!canSeeFin && (doc.documentCategory === 'FINANCIAL_QUOTE' || String(doc.documentName || '').toLowerCase().includes('price breakup'))) {
-        return false;
+      if (!canSeeFin) {
+        const cat = String(doc.documentCategory || doc.category || doc.type || '').toUpperCase();
+        const nm = String(doc.documentName || doc.fileName || doc.name || '').toLowerCase();
+        if (
+          cat.includes('FINAN') ||
+          cat.includes('PRICE') ||
+          cat.includes('COMMERCIAL') ||
+          cat.includes('COST') ||
+          cat.includes('RATE_SCHEDULE') ||
+          nm.includes('price') ||
+          nm.includes('breakup') ||
+          nm.includes('commercial') ||
+          nm.includes('financial') ||
+          nm.includes('cost schedule') ||
+          nm.includes('rate schedule') ||
+          nm.includes('price breakup') ||
+          nm.includes('boq rate') ||
+          nm.includes('pricing') ||
+          nm.includes('quotation sheet')
+        ) {
+          return false;
+        }
       }
       return true;
     }).map((doc: any) => ({

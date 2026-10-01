@@ -1966,6 +1966,7 @@ function RequiredDocumentsList({
         keyExtractor={(item: any, idx: number) =>
           String(item.id || item.fileAssetId || idx)
         }
+        mobileLayout="cards"
         showSrNo={true}
         srNoHeader="#"
         srNoWidth="w-12"
@@ -3270,7 +3271,7 @@ function LineItemsTable({
       {
         key: "name",
         header: "Item / Service Name",
-        width: "w-[28%]",
+        width: "w-[28%] min-w-[180px]",
         cell: (item, idx) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3309,7 +3310,7 @@ function LineItemsTable({
       {
         key: "spec",
         header: "Specifications / Scope",
-        width: "w-[24%]",
+        width: "w-[24%] min-w-[160px]",
         cell: (item) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3369,7 +3370,7 @@ function LineItemsTable({
       {
         key: "qty",
         header: ctx.isRateContractType ? "Est. Annual Qty & UOM" : "Qty & UOM",
-        width: ctx.isRateContractType ? "w-28" : "w-24",
+        width: ctx.isRateContractType ? "w-28 min-w-[110px]" : "w-24 min-w-[100px]",
         align: "center",
         cell: (item) => {
           const sp =
@@ -3435,7 +3436,7 @@ function LineItemsTable({
       {
         key: "rate",
         header: "Est. Unit Rate",
-        width: "w-24",
+        width: "w-24 min-w-[95px]",
         align: "right",
         cell: (item) => {
           if (!shouldShowCost) {
@@ -3484,7 +3485,7 @@ function LineItemsTable({
       {
         key: "hsn",
         header: "HSN / SAC",
-        width: "w-20",
+        width: "w-20 min-w-[80px]",
         align: "center",
         cell: (item) => {
           const sp =
@@ -3521,7 +3522,7 @@ function LineItemsTable({
       {
         key: "brand",
         header: "Brand & Policy",
-        width: "w-28",
+        width: "w-28 min-w-[110px]",
         cell: (item) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3601,7 +3602,7 @@ function LineItemsTable({
       {
         key: "docs",
         header: "Documents & Specs",
-        width: "w-36",
+        width: "w-36 min-w-[120px]",
         cell: (item, idx) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3692,6 +3693,7 @@ function LineItemsTable({
         data={list}
         columns={columns}
         keyExtractor={(item, idx) => String(item.id || item.itemId || idx)}
+        mobileLayout="cards"
         showSrNo={true}
         srNoHeader="#"
         srNoWidth="w-12"
@@ -3969,6 +3971,7 @@ function BoqTableList({
         data={list}
         columns={columns}
         keyExtractor={(item, idx) => String(item.srNo || item.id || idx)}
+        mobileLayout="cards"
         showSrNo={true}
         srNoHeader="Sr #"
         srNoWidth="w-12"
@@ -4146,6 +4149,7 @@ function TechnicalCriteriaTableList({ data }: { data: any }) {
         data={list}
         columns={technicalCriteriaColumns}
         keyExtractor={(item, idx) => String(item.id || idx)}
+        mobileLayout="cards"
         showSrNo={true}
         srNoHeader="#"
         srNoWidth="w-12"
@@ -4299,6 +4303,7 @@ function ConsigneeTableList({
           data={items}
           columns={consigneeColumns}
           keyExtractor={(item, idx) => String(item.id || idx)}
+          mobileLayout="cards"
           showSrNo={true}
           srNoHeader="#"
           srNoWidth="w-12"
@@ -13703,15 +13708,26 @@ export function extractQuotationDetails(
     respData.technicalScore ??
     participation.score;
 
-  // Documents
-  const docs: any[] =
-    Array.isArray(participation.documents) && participation.documents.length
-      ? participation.documents
-      : Array.isArray(respData.documents) && respData.documents.length
-        ? respData.documents
-        : Array.isArray(ackData.documents) && ackData.documents.length
-          ? ackData.documents
-          : [];
+  // Documents (Deduplicated across all candidate sources)
+  const rawDocsList: any[] = [
+    ...(Array.isArray(participation.documents) ? participation.documents : []),
+    ...(Array.isArray(respData.documents) ? respData.documents : []),
+    ...(Array.isArray(ackData.documents) ? ackData.documents : []),
+    ...(Array.isArray(participation.requestedDocuments) ? participation.requestedDocuments : []),
+  ];
+  const seenDocKeys = new Set<string>();
+  const docs: any[] = [];
+  for (const d of rawDocsList) {
+    if (!d) continue;
+    const docName = String(d.documentName || d.fileName || d.name || "").trim();
+    const fileId = d.fileAssetId || d.fileId || (typeof d.id === "number" ? d.id : undefined);
+    const rawUrl = d.url || d.fileUrl || d.signedUrl || d.documentUrl || "";
+    const key = fileId ? `id-${fileId}` : rawUrl ? `url-${rawUrl.toLowerCase()}` : docName ? `name-${docName.toLowerCase()}` : `doc-${docs.length}`;
+    if (!seenDocKeys.has(key)) {
+      seenDocKeys.add(key);
+      docs.push(d);
+    }
+  }
 
   return {
     lineItems,
@@ -13798,6 +13814,29 @@ export function SellerQuotationReviewModal({
   );
 
   const handleViewAttachment = async (doc: any, docName: string) => {
+    // If financials are sealed in Stage 1 technical scrutiny, block opening commercial/price files
+    if (isFinancialSealed) {
+      const c = String(doc.documentCategory || doc.documentType || doc.category || doc.type || "").toLowerCase();
+      const n = String(doc.documentName || doc.fileName || doc.name || docName || "").toLowerCase();
+      const isFin =
+        c.includes("finan") ||
+        c.includes("price") ||
+        c.includes("commercial") ||
+        c.includes("cost") ||
+        c.includes("rate_schedule") ||
+        n.includes("price") ||
+        n.includes("financial") ||
+        n.includes("commercial") ||
+        n.includes("cost schedule") ||
+        n.includes("rate schedule") ||
+        n.includes("price breakup") ||
+        n.includes("boq rate") ||
+        n.includes("pricing");
+      if (isFin) {
+        toast.warning("Financial documents and price breakups are sealed during Stage 1 technical scrutiny.");
+        return;
+      }
+    }
     const rawUrl =
       doc.url || doc.fileUrl || doc.signedUrl || doc.documentUrl || "";
     const urlMatchId = String(rawUrl).match(
@@ -14752,31 +14791,109 @@ export function SellerQuotationReviewModal({
 
             {/* Proposal Files & Attachments */}
             <div className="space-y-3">
-              <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-slate-500" /> Supplier Proposal Files &amp; Attachments
-              </h4>
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <FileText className="h-4 w-4 text-slate-500" /> Supplier Proposal Files &amp; Attachments
+                </h4>
+                {isFinancialSealed && (
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                    <Lock className="h-2.5 w-2.5 text-indigo-500" /> Stage 1: Financials Sealed
+                  </span>
+                )}
+              </div>
+
               {docs.length === 0 ? (
                 <p className="text-xs text-slate-400 font-semibold italic bg-slate-50 p-3 rounded-lg border border-dashed border-slate-200">
                   No file attachments uploaded with this quotation.
                 </p>
               ) : (
                 (() => {
-                  const techDocs = docs.filter((d: any) => {
-                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                  // Exclusive mutually-exclusive categorization to prevent duplicate document buckets
+                  const isFinancialDoc = (d: any) => {
+                    const c = String(d.documentCategory || d.documentType || d.category || d.type || "").toLowerCase();
                     const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
-                    return c.includes("tech") || c.includes("spec") || c.includes("compliance") || n.includes("tech") || n.includes("spec");
-                  });
-                  const finDocs = docs.filter((d: any) => {
-                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                    return (
+                      c.includes("finan") ||
+                      c.includes("price") ||
+                      c.includes("commercial") ||
+                      c.includes("cost") ||
+                      c.includes("rate_schedule") ||
+                      n.includes("price") ||
+                      n.includes("financial") ||
+                      n.includes("commercial") ||
+                      n.includes("cost schedule") ||
+                      n.includes("rate schedule") ||
+                      n.includes("price breakup") ||
+                      n.includes("boq rate") ||
+                      n.includes("pricing") ||
+                      n.includes("quotation sheet")
+                    );
+                  };
+
+                  const isTechnicalDoc = (d: any) => {
+                    if (isFinancialDoc(d)) return false;
+                    const c = String(d.documentCategory || d.documentType || d.category || d.type || "").toLowerCase();
                     const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
-                    return c.includes("finan") || c.includes("quote") || c.includes("price") || n.includes("price") || n.includes("quote") || n.includes("cost");
-                  });
-                  const boqDocs = docs.filter((d: any) => {
-                    const c = String(d.documentCategory || d.documentType || "").toLowerCase();
+                    return (
+                      c.includes("tech") ||
+                      c.includes("spec") ||
+                      c.includes("compliance") ||
+                      c.includes("catalog") ||
+                      c.includes("datasheet") ||
+                      n.includes("tech") ||
+                      n.includes("spec") ||
+                      n.includes("compliance") ||
+                      n.includes("catalog") ||
+                      n.includes("datasheet") ||
+                      n.includes("drawing") ||
+                      n.includes("brochure") ||
+                      n.includes("test report") ||
+                      n.includes("oem") ||
+                      n.includes("deviation")
+                    );
+                  };
+
+                  const isStatutoryDoc = (d: any) => {
+                    if (isFinancialDoc(d) || isTechnicalDoc(d)) return false;
+                    const c = String(d.documentCategory || d.documentType || d.category || d.type || "").toLowerCase();
                     const n = String(d.documentName || d.fileName || d.name || "").toLowerCase();
-                    return c.includes("boq") || c.includes("schedule") || n.includes("boq") || n.includes("sheet") || n.includes("excel");
-                  });
-                  const otherDocs = docs.filter((d: any) => !techDocs.includes(d) && !finDocs.includes(d) && !boqDocs.includes(d));
+                    return (
+                      c.includes("gst") ||
+                      c.includes("pan") ||
+                      c.includes("udyam") ||
+                      c.includes("msme") ||
+                      c.includes("registration") ||
+                      c.includes("bank") ||
+                      c.includes("statutory") ||
+                      n.includes("gst") ||
+                      n.includes("pan") ||
+                      n.includes("udyam") ||
+                      n.includes("msme") ||
+                      n.includes("registration") ||
+                      n.includes("cin") ||
+                      n.includes("incorporation") ||
+                      n.includes("bank") ||
+                      n.includes("mandate") ||
+                      n.includes("certificate")
+                    );
+                  };
+
+                  const finDocs: any[] = [];
+                  const techDocs: any[] = [];
+                  const statDocs: any[] = [];
+                  const otherDocs: any[] = [];
+
+                  for (const d of docs) {
+                    if (isFinancialDoc(d)) {
+                      finDocs.push(d);
+                    } else if (isTechnicalDoc(d)) {
+                      techDocs.push(d);
+                    } else if (isStatutoryDoc(d)) {
+                      statDocs.push(d);
+                    } else {
+                      otherDocs.push(d);
+                    }
+                  }
 
                   const renderDocItem = (doc: any, idx: number, iconColor: string) => {
                     const docName = doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
@@ -14815,30 +14932,70 @@ export function SellerQuotationReviewModal({
                           </div>
                         </div>
                       )}
+
+                      {/* Financial Proposals: Sealed during Stage 1 technical scrutiny */}
                       {finDocs.length > 0 && (
-                        <div className="space-y-1.5">
-                          <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
-                            Financial Proposals &amp; Detailed Quotations ({finDocs.length})
-                          </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {finDocs.map((d: any, i: number) => renderDocItem(d, i, "text-emerald-600"))}
+                        isFinancialSealed ? (
+                          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2 shadow-2xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1.5">
+                                <Lock className="h-3.5 w-3.5 text-indigo-600" />
+                                Financial Proposals &amp; Detailed Quotations ({finDocs.length})
+                              </span>
+                              <span className="inline-flex items-center gap-1 rounded bg-indigo-100 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-800">
+                                <Lock className="h-2.5 w-2.5 text-indigo-600" /> Sealed under Stage 2
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-indigo-900/80 font-medium">
+                              Commercial bids and detailed price breakups are sealed during Stage 1 Technical Scrutiny and will unlock only upon technical qualification.
+                            </p>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                              {finDocs.map((doc: any, idx: number) => {
+                                const docName = doc.documentName || doc.name || doc.fileName || `Price Breakup #${idx + 1}`;
+                                return (
+                                  <div key={idx} className="flex items-center justify-between rounded-lg border border-indigo-150 bg-white/90 p-2 text-xs">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <FileText className="h-4 w-4 text-indigo-400 shrink-0" />
+                                      <div className="min-w-0">
+                                        <p className="text-xs font-bold text-slate-700 truncate" title={docName}>{docName}</p>
+                                        <p className="text-[9.5px] text-indigo-600 font-bold uppercase">Commercial Bid Sealed</p>
+                                      </div>
+                                    </div>
+                                    <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 shrink-0">
+                                      <Lock className="h-2.5 w-2.5 text-slate-400" /> Sealed
+                                    </span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                        </div>
+                        ) : (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
+                              Financial Proposals &amp; Detailed Quotations ({finDocs.length})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                              {finDocs.map((d: any, i: number) => renderDocItem(d, i, "text-emerald-600"))}
+                            </div>
+                          </div>
+                        )
                       )}
-                      {boqDocs.length > 0 && (
+
+                      {statDocs.length > 0 && (
                         <div className="space-y-1.5">
                           <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">
-                            BOQ &amp; Rate Schedules ({boqDocs.length})
+                            Statutory &amp; Registration Documents ({statDocs.length})
                           </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {boqDocs.map((d: any, i: number) => renderDocItem(d, i, "text-purple-600"))}
+                            {statDocs.map((d: any, i: number) => renderDocItem(d, i, "text-purple-600"))}
                           </div>
                         </div>
                       )}
+
                       {otherDocs.length > 0 && (
                         <div className="space-y-1.5">
                           <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
-                            Statutory &amp; Compliance Attachments ({otherDocs.length})
+                            Other Attachments ({otherDocs.length})
                           </span>
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             {otherDocs.map((d: any, i: number) => renderDocItem(d, i, "text-slate-600"))}

@@ -132,6 +132,17 @@ export function DataTable<T>({
     return trimmed;
   }, [minWidth]);
 
+  const parsedMinWidth = useMemo(() => {
+    if (!minWidth) return '950px';
+    const match = minWidth.match(/min-w-\[(\d+px)\]/);
+    if (match) return match[1];
+    if (minWidth.includes('px')) {
+      const numMatch = minWidth.match(/\d+px/);
+      if (numMatch) return numMatch[0];
+    }
+    return '950px';
+  }, [minWidth]);
+
   // Group action columns vs standard content columns for card view
   const { contentColumns, actionColumns } = useMemo(() => {
     const content: ColumnDef<T>[] = [];
@@ -286,7 +297,7 @@ export function DataTable<T>({
                           </span>
                           <div
                             className={cn(
-                              "flex-1 min-w-0 text-right font-semibold text-slate-800 break-words",
+                              "flex-1 min-w-0 text-right font-semibold text-slate-800 break-words flex flex-col items-end justify-start",
                               col.cellClassName
                             )}
                           >
@@ -337,6 +348,7 @@ export function DataTable<T>({
         )}
       >
         <table
+          style={{ minWidth: parsedMinWidth }}
           className={cn(
             "w-full border-collapse text-left text-xs table-fixed",
             resolvedMinWidth,
