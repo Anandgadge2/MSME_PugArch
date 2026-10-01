@@ -2808,16 +2808,14 @@ export default function SubmitQuotationPage() {
             <h1 className="text-lg md:text-xl font-extrabold tracking-tight text-slate-900">
               {submitActionHeaderLabel}
             </h1>
-            <span className="inline-flex items-center rounded-md bg-indigo-50 px-2 py-0.5 text-[11px] font-bold tracking-wider text-indigo-700 border border-indigo-200">
-              {procurementTypeBadgeLabel}
-            </span>
-            <span className="font-mono font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded text-xs border border-slate-200">
-              {rfqNumber}
-            </span>
-            <span className="text-slate-300 hidden sm:inline">•</span>
-            <span className="text-xs md:text-sm font-semibold text-slate-800 truncate max-w-xs md:max-w-md" title={subject}>
-              {subject}
-            </span>
+            {subject ? (
+              <>
+                <span className="text-slate-300 hidden sm:inline" aria-hidden="true">•</span>
+                <span className="text-xs md:text-sm font-semibold text-slate-800 truncate max-w-xs md:max-w-md" title={subject}>
+                  {subject}
+                </span>
+              </>
+            ) : null}
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
