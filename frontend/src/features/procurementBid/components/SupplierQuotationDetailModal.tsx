@@ -716,16 +716,6 @@ export function SupplierQuotationDetailView({
             <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 px-3.5 text-xs font-black text-emerald-800 uppercase tracking-wide">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
             </span>
-          ) : onAcceptAndGeneratePo ? (
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => onAcceptAndGeneratePo(result)}
-              className="h-8.5 gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 text-xs font-black shadow-xs transition-colors cursor-pointer"
-            >
-              <Award className="h-3.5 w-3.5" />
-              <span>Award Contract</span>
-            </Button>
           ) : null}
         </div>
       </div>
