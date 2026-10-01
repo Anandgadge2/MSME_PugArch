@@ -130,3 +130,75 @@ export function formatRequirementNumber(
   return formatRefId(pfx, id, rawNum, method);
 }
 
+/**
+ * Strips accidental redundant prefixes like BID- or REQ- when followed by a canonical prefix.
+ * e.g., "BID-RC-2026-95656" -> "RC-2026-95656"
+ *       "BID-TND-2026-86615" -> "TND-2026-86615"
+ *       "REQ-RFQ-2026-47428" -> "RFQ-2026-47428"
+ */
+export function cleanCanonicalRefId(rawToken?: string | null): string {
+  if (!rawToken || typeof rawToken !== 'string') return '';
+  const trimmed = rawToken.trim();
+  // Strip redundant leading BID- or REQ- or ORD- if immediately followed by a canonical prefix
+  const cleaned = trimmed.replace(/^(?:BID|REQ|ORD|PRQ)-(?=(?:RC|TND|LTND|RFQ|RFP|RA|DP)-\d{4}-\d+)/i, '')
+    .replace(/^(?:BID|REQ|ORD|PRQ)-(?=(?:RC|TND|LTND|RFQ|RFP|RA|DP)-)/i, '');
+  return cleaned;
+}
+
+/**
+ * Extracts a concise, human-friendly geographical summary (City/District, State)
+ * to prevent massive legal industrial plant addresses from ballooning dashboard cards.
+ */
+export function formatLocationSummary(
+  location?: string | null,
+  district?: string | null,
+  state?: string | null,
+  city?: string | null
+): string {
+  const cleanCityOrDistrict = (city || district || '').trim();
+  const cleanState = (state || '').trim();
+
+  if (cleanCityOrDistrict && cleanState && cleanCityOrDistrict.toLowerCase() !== cleanState.toLowerCase()) {
+    return `${cleanCityOrDistrict}, ${cleanState}`;
+  }
+  if (cleanCityOrDistrict) return cleanCityOrDistrict;
+  if (cleanState) return cleanState;
+
+  if (!location || typeof location !== 'string') return 'All India';
+
+  const raw = location.trim();
+  if (raw.length === 0) return 'All India';
+
+  // If the string is already short and clean, use it
+  if (raw.length <= 32 && !raw.includes('PLOT') && !raw.includes('KHATA')) {
+    return raw;
+  }
+
+  // Common pattern in Indian addresses: "..., [City/District], [State] - [Pincode]"
+  const pinMatch = raw.match(/,\s*([A-Za-z\s]+),\s*([A-Za-z\s]+)(?:\s*-\s*\d{6})?$/i);
+  if (pinMatch) {
+    const c = pinMatch[1].trim();
+    const s = pinMatch[2].trim();
+    if (c.length > 2 && s.length > 2 && !c.toUpperCase().includes('PLOT') && !c.toUpperCase().includes('KHATA')) {
+      return `${c}, ${s}`;
+    }
+  }
+
+  // Alternative pattern: comma-separated segments. Take the last 2 non-empty segments
+  const parts = raw.split(',').map(p => p.trim().replace(/-\s*\d{6}$/, '').trim()).filter(Boolean);
+  if (parts.length >= 2) {
+    const last1 = parts[parts.length - 1];
+    const last2 = parts[parts.length - 2];
+    if (last1.length <= 25 && last2.length <= 25 && !last2.toUpperCase().includes('ROAD') && !last2.toUpperCase().includes('PLOT') && !last2.toUpperCase().includes('KHATA')) {
+      return `${last2}, ${last1}`;
+    }
+    if (last1.length <= 32 && !last1.toUpperCase().includes('PLOT') && !last1.toUpperCase().includes('KHATA')) {
+      return last1;
+    }
+  }
+
+  // Fallback: truncate cleanly
+  return raw.length > 32 ? `${raw.slice(0, 29)}...` : raw;
+}
+
+

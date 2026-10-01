@@ -405,8 +405,18 @@ export const normalizeBid = (raw: any): ProcurementBid => {
   const techDate = schedule.technicalOpeningDate || raw.technicalOpeningDate ? String(schedule.technicalOpeningDate || raw.technicalOpeningDate) : endDate;
   const finDate = schedule.financialOpeningDate || raw.financialOpeningDate ? String(schedule.financialOpeningDate || raw.financialOpeningDate) : endDate;
 
+  const authenticBidNumber = raw.bidNumber || raw.referenceNumber || String(raw.id || '');
+  const rawDistrict = raw.district || raw.buyerOrganization?.district || raw.buyer?.buyerProfile?.district || '';
+  const rawState = raw.state || raw.buyerOrganization?.state || raw.buyer?.buyerProfile?.state || '';
+  const rawCity = raw.city || raw.buyerOrganization?.city || raw.buyer?.buyerProfile?.city || '';
+  const rawLinkedAuctionCode = raw.linkedAuctionCode || raw.auctionCode || raw.reverseAuction?.auctionCode || null;
+  const rawLinkedAuctionId = raw.linkedAuctionId || raw.reverseAuction?.id || null;
+  const rawMethod = raw.procurementMethod || raw.method || raw.procurementType || raw.bidType || 'Open Bid';
+
   return {
-    id: raw.bidNumber || String(raw.id || ''),
+    id: authenticBidNumber,
+    bidNumber: authenticBidNumber,
+    referenceNumber: authenticBidNumber,
     buyerId: raw.buyerId,
     sourceModel,
     sourceId: linkedRequirementId || raw.id,
@@ -427,8 +437,15 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     departmentName: raw.departmentName || raw.buyer?.buyerProfile?.department || raw.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
     bidType: (raw.bidType || basics.whatAreYouBuying || 'Product') as ProcurementBid['bidType'],
     procurementType: raw.procurementType || raw.bidType || 'Open Bid',
+    procurementMethod: rawMethod,
+    method: rawMethod,
     category: category || 'General procurement',
-    location: [raw.district, raw.state].filter(Boolean).join(', ') || deliveryLocation || 'Location not specified',
+    location: [rawDistrict, rawState].filter(Boolean).join(', ') || deliveryLocation || 'Location not specified',
+    district: rawDistrict,
+    state: rawState,
+    city: rawCity,
+    linkedAuctionCode: rawLinkedAuctionCode,
+    linkedAuctionId: rawLinkedAuctionId,
     deliveryLocation: deliveryLocation || 'Delivery location not specified',
     quantity: quantity || 'Not specified',
     estimatedValue,

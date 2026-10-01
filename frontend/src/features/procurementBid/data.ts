@@ -58,6 +58,8 @@ export interface BidResultRow {
 
 export interface ProcurementBid {
   id: string;
+  bidNumber?: string;
+  referenceNumber?: string;
   sourceModel?: 'PROCUREMENT_BID' | 'TENDER' | string;
   sourceId?: number;
   buyerId?: number;
@@ -134,6 +136,13 @@ export interface ProcurementBid {
   internalDetails?: any;
   approvalAuthority?: string;
   justification?: string;
+  district?: string;
+  state?: string;
+  city?: string;
+  linkedAuctionCode?: string | null;
+  linkedAuctionId?: number | string | null;
+  procurementMethod?: string;
+  method?: string;
 }
 
 export interface ProcurementBidDocument {

@@ -26,17 +26,19 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { isShgUser } from '../../../lib/shg';
+import { cleanCanonicalRefId, formatLocationSummary, formatRefId } from '../../../utils/refIdUtils';
 
-type FilterTab = 'all' | 'tenders' | 'rfqs' | 'auctions';
+type FilterTab = 'all' | 'tenders' | 'rfqs' | 'rate-contracts' | 'auctions';
 
 interface OpportunityItem {
   id: string;
   refId: string;
   title: string;
-  type: 'Tender' | 'RFQ' | 'Reverse Auction';
+  type: 'Tender' | 'RFQ' | 'Rate Contract' | 'Reverse Auction';
   buyerName: string;
   department?: string;
   location: string;
+  fullLocation?: string;
   estimatedValue: number;
   closingDate: string;
   createdAt?: string;
@@ -56,11 +58,11 @@ export function LiveOpportunityRadar() {
     if (typeof window !== 'undefined') {
       const sp = new URLSearchParams(window.location.search);
       const urlTab = sp.get('tab') || sp.get('radarTab');
-      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+      if (urlTab && ['all', 'tenders', 'rfqs', 'rate-contracts', 'auctions'].includes(urlTab)) {
         return urlTab as FilterTab;
       }
       const saved = sessionStorage.getItem('dashboard_radar_tab');
-      if (saved && ['all', 'tenders', 'rfqs', 'auctions'].includes(saved)) {
+      if (saved && ['all', 'tenders', 'rfqs', 'rate-contracts', 'auctions'].includes(saved)) {
         return saved as FilterTab;
       }
     }
@@ -81,7 +83,7 @@ export function LiveOpportunityRadar() {
     const handlePopState = () => {
       const sp = new URLSearchParams(window.location.search);
       const urlTab = sp.get('tab') || sp.get('radarTab');
-      if (urlTab && ['all', 'tenders', 'rfqs', 'auctions'].includes(urlTab)) {
+      if (urlTab && ['all', 'tenders', 'rfqs', 'rate-contracts', 'auctions'].includes(urlTab)) {
         setActiveTab(urlTab as FilterTab);
       }
     };
@@ -116,7 +118,7 @@ export function LiveOpportunityRadar() {
     const rolePrefix = isShg ? '/shg' : '/seller';
     const now = new Date();
 
-    // 1. Process Bids (RFQs, Tenders, etc.)
+    // 1. Process Bids (RFQs, Tenders, Rate Contracts, etc.)
     if (data?.bids && data.bids.length > 0) {
       data.bids.forEach((bid: any, idx: number) => {
         const closing = bid.endDate ? new Date(bid.endDate) : null;
@@ -125,16 +127,56 @@ export function LiveOpportunityRadar() {
           ? (isExpired ? 0 : Math.max(1, Math.ceil((closing.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))))
           : 5;
         
-        const pType = String(bid.procurementType || bid.bidType || '').toUpperCase();
+        const pType = String(bid.procurementMethod || bid.procurementType || bid.bidType || bid.method || '').toUpperCase();
+        const rawRefToken = String(bid.bidNumber || bid.referenceNumber || bid.id || '').toUpperCase();
+
         const isAuction =
           pType === 'REVERSE_AUCTION' ||
           pType === 'AUCTION' ||
           pType.includes('AUCTION') ||
           bid.status === 'REVERSE_AUCTION_ACTIVE' ||
-          Boolean(bid.hasActiveReverseAuction);
-        const isRfq = pType === 'RFQ' || pType.includes('RFQ') || (!pType.includes('TENDER') && !isAuction);
+          Boolean(bid.hasActiveReverseAuction) ||
+          rawRefToken.startsWith('RA-');
+
+        const isRateContract =
+          !isAuction && (
+            rawRefToken.startsWith('RC-') ||
+            pType.includes('RATE_CONTRACT') ||
+            pType.includes('RATE-CONTRACT') ||
+            pType.includes('RATE CONTRACT') ||
+            pType === 'RC'
+          );
+
+        const isTender =
+          !isAuction && !isRateContract && (
+            rawRefToken.startsWith('TND-') ||
+            rawRefToken.startsWith('LTND-') ||
+            pType.includes('TENDER') ||
+            pType.includes('OPEN_TENDER')
+          );
+
+        const isRfq = !isAuction && !isRateContract && !isTender;
         
-        const type: OpportunityItem['type'] = isAuction ? 'Reverse Auction' : isRfq ? 'RFQ' : 'Tender';
+        const type: OpportunityItem['type'] = isAuction 
+          ? 'Reverse Auction' 
+          : isRateContract 
+          ? 'Rate Contract' 
+          : isTender 
+          ? 'Tender' 
+          : 'RFQ';
+
+        // Canonical ID derivation without double prefixes
+        let canonicalRef = cleanCanonicalRefId(bid.bidNumber || bid.referenceNumber || String(bid.id || ''));
+        if (!canonicalRef || canonicalRef.toLowerCase().startsWith('bid-') || /^\d+$/.test(canonicalRef)) {
+          const prefix = isRateContract ? 'RC' : isAuction ? 'RA' : isTender ? 'TND' : 'RFQ';
+          canonicalRef = formatRefId(prefix, bid.id || idx, canonicalRef, pType);
+        }
+
+        // Multi-stage lineage (e.g. RC-2026-43265 • RA-2026-22846)
+        const linkedAuction = bid.linkedAuctionCode || (bid.reverseAuction?.auctionCode);
+        if (linkedAuction && !canonicalRef.includes(linkedAuction)) {
+          canonicalRef = `${canonicalRef} • ${cleanCanonicalRefId(linkedAuction)}`;
+        }
 
         let actionHref = '';
         let actionLabel = '';
@@ -146,8 +188,11 @@ export function LiveOpportunityRadar() {
           actionHref = `${rolePrefix}/bids/submitted?bidId=${encodeURIComponent(String(bid.id))}`;
           actionLabel = 'Review Bid';
         } else if (type === 'Reverse Auction') {
-          actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(bid.auctionCode || bid.id))}/live`;
+          actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(bid.auctionCode || linkedAuction || bid.id))}/live`;
           actionLabel = isExpired ? 'View Results' : 'Join Auction';
+        } else if (type === 'Rate Contract') {
+          actionHref = `${rolePrefix}/procurement/rate-contract/${encodeURIComponent(String(bid.id))}`;
+          actionLabel = isExpired ? 'View Contract' : 'Quote Rate';
         } else if (type === 'RFQ') {
           actionHref = `${rolePrefix}/procurement/rfq/${encodeURIComponent(String(bid.id))}`;
           actionLabel = isExpired ? 'View Details' : 'Quote Now';
@@ -159,14 +204,18 @@ export function LiveOpportunityRadar() {
         const createdDate = bid.createdAt || bid.publishedAt || bid.startDate || null;
         const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
+        const rawLoc = bid.deliveryLocation || bid.location || [bid.district, bid.state].filter(Boolean).join(', ') || 'All India';
+        const cleanLoc = formatLocationSummary(rawLoc, bid.district, bid.state, bid.city);
+
         list.push({
           id: String(bid.id || `bid-${idx}`),
-          refId: bid.bidNumber || (bid.id ? `BID-${bid.id}` : `TND-${1000 + idx}`),
+          refId: canonicalRef,
           title: bid.title || 'Procurement Opportunity',
           type,
           buyerName: bid.buyerName || bid.organization?.organizationName || 'Verified Buyer',
           department: bid.departmentName || 'Procurement Division',
-          location: bid.deliveryLocation || bid.location || [bid.district, bid.state].filter(Boolean).join(', ') || 'National',
+          location: cleanLoc,
+          fullLocation: rawLoc,
           estimatedValue: Number(bid.estimatedValue || bid.budget || 0),
           closingDate: bid.endDate ? new Date(bid.endDate).toISOString().split('T')[0] : 'Open',
           createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
@@ -197,8 +246,8 @@ export function LiveOpportunityRadar() {
         const createdDate = auction.createdAt || auction.startTime || null;
         const isRecentlyCreated = createdDate ? (now.getTime() - new Date(createdDate).getTime()) < 7 * 24 * 60 * 60 * 1000 : false;
 
-        const auctionCode = auction.auctionCode || `RA-${auction.id}`;
-        const refNo = auction.referenceNo || auction.auctionConfig?.parentRefNumber;
+        const auctionCode = cleanCanonicalRefId(auction.auctionCode || formatRefId('RA', auction.id));
+        const refNo = cleanCanonicalRefId(auction.referenceNo || auction.auctionConfig?.parentRefNumber);
         const linkedBidId = auction.linkedBidId ? String(auction.linkedBidId) : null;
 
         // Check if a parent bid item already exists in the list
@@ -215,10 +264,16 @@ export function LiveOpportunityRadar() {
         if (existingBidIndex !== -1) {
           // Upgrade existing bid card into Live Reverse Auction card
           const existing = list[existingBidIndex];
+          const combinedRef = refNo && !existing.refId.includes(refNo)
+            ? `${refNo} • ${auctionCode}`
+            : existing.refId.includes(auctionCode)
+            ? existing.refId
+            : `${existing.refId} • ${auctionCode}`;
+
           list[existingBidIndex] = {
             ...existing,
             type: 'Reverse Auction',
-            refId: `${existing.refId} • ${auctionCode}`,
+            refId: combinedRef,
             title: existing.title.toLowerCase().includes('reverse auction')
               ? existing.title
               : `${existing.title} (Live Auction Stage)`,
@@ -231,6 +286,9 @@ export function LiveOpportunityRadar() {
             category: auction.category || existing.category,
           };
         } else {
+          const rawLoc = auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'All India';
+          const cleanLoc = formatLocationSummary(rawLoc, auction.district, auction.state, auction.city);
+
           list.push({
             id: `ra-${auction.id}`,
             refId: refNo ? `${refNo} • ${auctionCode}` : auctionCode,
@@ -238,7 +296,8 @@ export function LiveOpportunityRadar() {
             type: 'Reverse Auction',
             buyerName: auction.buyerOrganizationName || auction.buyerOrgName || auction.buyerOrganization?.organizationName || auction.buyerName || auction.buyerUser?.name || 'Verified Buyer',
             department: auction.departmentName || 'Procurement Division',
-            location: auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'National',
+            location: cleanLoc,
+            fullLocation: rawLoc,
             estimatedValue: Number(auction.currentLowestAmount || auction.startPrice || 0),
             closingDate: auction.endTime ? new Date(auction.endTime).toISOString().split('T')[0] : 'Open',
             createdAt: createdDate ? new Date(createdDate).toISOString() : undefined,
@@ -269,6 +328,7 @@ export function LiveOpportunityRadar() {
     if (activeTab === 'all') return opportunities;
     if (activeTab === 'tenders') return opportunities.filter(o => o.type === 'Tender');
     if (activeTab === 'rfqs') return opportunities.filter(o => o.type === 'RFQ');
+    if (activeTab === 'rate-contracts') return opportunities.filter(o => o.type === 'Rate Contract');
     if (activeTab === 'auctions') return opportunities.filter(o => o.type === 'Reverse Auction');
     return opportunities;
   }, [opportunities, activeTab]);
@@ -281,6 +341,7 @@ export function LiveOpportunityRadar() {
     all: opportunities.length,
     tenders: opportunities.filter(o => o.type === 'Tender').length,
     rfqs: opportunities.filter(o => o.type === 'RFQ').length,
+    'rate-contracts': opportunities.filter(o => o.type === 'Rate Contract').length,
     auctions: opportunities.filter(o => o.type === 'Reverse Auction').length
   }), [opportunities]);
 
@@ -289,6 +350,8 @@ export function LiveOpportunityRadar() {
     ? `${rolePrefix}/opportunities/open-tenders`
     : activeTab === 'rfqs'
     ? `${rolePrefix}/opportunities/rfqs`
+    : activeTab === 'rate-contracts'
+    ? `${rolePrefix}/opportunities/rate-contracts`
     : activeTab === 'auctions'
     ? `${rolePrefix}/opportunities/auctions`
     : `${rolePrefix}/opportunities`;
@@ -297,6 +360,8 @@ export function LiveOpportunityRadar() {
     ? 'View All Tenders'
     : activeTab === 'rfqs'
     ? 'View All RFQs'
+    : activeTab === 'rate-contracts'
+    ? 'View Rate Contracts'
     : activeTab === 'auctions'
     ? 'View All Auctions'
     : 'View All Opportunities';
@@ -341,10 +406,18 @@ export function LiveOpportunityRadar() {
 
       {/* ── Filter Tabs ── */}
       <div className="flex items-center gap-1.5 px-3.5 py-2 border-b border-slate-100 bg-white overflow-x-auto no-scrollbar" role="tablist" aria-label="Opportunity types">
-        {(['all', 'tenders', 'rfqs', 'auctions'] as FilterTab[]).map(tab => {
+        {(['all', 'tenders', 'rfqs', 'rate-contracts', 'auctions'] as FilterTab[]).map(tab => {
           const isActive = activeTab === tab;
           const count = countByTab[tab];
-          const label = tab === 'all' ? 'All Leads' : tab === 'tenders' ? 'Public Tenders' : tab === 'rfqs' ? 'Direct RFQs' : 'Reverse Auctions';
+          const label = tab === 'all' 
+            ? 'All Leads' 
+            : tab === 'tenders' 
+            ? 'Public Tenders' 
+            : tab === 'rfqs' 
+            ? 'Direct RFQs' 
+            : tab === 'rate-contracts'
+            ? 'Rate Contracts'
+            : 'Reverse Auctions';
           return (
             <button
               key={tab}
@@ -381,6 +454,8 @@ export function LiveOpportunityRadar() {
           <p className="text-xs font-bold text-slate-700">
             {activeTab === 'auctions' 
               ? 'No live reverse auctions right now.'
+              : activeTab === 'rate-contracts'
+              ? 'No active rate contracts found.'
               : activeTab === 'rfqs'
               ? 'No direct RFQs found.'
               : activeTab === 'tenders'
@@ -390,11 +465,13 @@ export function LiveOpportunityRadar() {
           <p className="text-[11px] text-slate-500 mt-0.5">
             {activeTab === 'auctions'
               ? 'Real-time dynamic reverse auctions and bidding events will appear here when scheduled by buyers.'
+              : activeTab === 'rate-contracts'
+              ? 'Long-term framework and rate contract opportunities will appear here in real time.'
               : activeTab === 'rfqs'
               ? 'Direct price quotation requests from buyer departments will appear here in real time.'
               : activeTab === 'tenders'
               ? 'Public competitive tenders matching your registered categories will appear here in real time.'
-              : 'New public tenders and buyer RFQs matching your business categories will appear here in real time.'}
+              : 'New public tenders, rate contracts, and buyer RFQs matching your business categories will appear here in real time.'}
           </p>
           <Link href={viewAllHref} className="mt-3 inline-block">
             <Button variant="outline" className="h-7 px-3 text-[10px] font-bold uppercase bg-white">
@@ -406,6 +483,7 @@ export function LiveOpportunityRadar() {
         <div className="p-2 sm:p-3 space-y-2">
           {displayedOpportunities.map((item) => {
             const isTender = item.type === 'Tender';
+            const isRateContract = item.type === 'Rate Contract';
             const isRfq = item.type === 'RFQ';
 
             return (
@@ -419,6 +497,8 @@ export function LiveOpportunityRadar() {
                     <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-wider border ${
                       isTender 
                         ? 'bg-blue-50 text-blue-700 border-blue-200' 
+                        : isRateContract
+                        ? 'bg-teal-50 text-teal-700 border-teal-200'
                         : isRfq 
                         ? 'bg-purple-50 text-purple-700 border-purple-200' 
                         : 'bg-amber-50 text-amber-700 border-amber-200'
@@ -455,7 +535,10 @@ export function LiveOpportunityRadar() {
                       <Building2 className="h-3 w-3 text-slate-400 shrink-0" />
                       {item.buyerName}
                     </span>
-                    <span className="flex items-center gap-1 font-medium text-slate-500">
+                    <span 
+                      className="flex items-center gap-1 font-medium text-slate-500 truncate max-w-[220px]"
+                      title={item.fullLocation || item.location}
+                    >
                       <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                       {item.location}
                     </span>
@@ -487,12 +570,8 @@ export function LiveOpportunityRadar() {
               </div>
             );
           })}
-
-        
         </div>
       )}
-
-     
     </section>
   );
 }

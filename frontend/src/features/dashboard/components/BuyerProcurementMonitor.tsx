@@ -24,6 +24,7 @@ import { Button } from '../../../components/ui/button';
 import { Badge } from '../../../components/ui/card';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
+import { cleanCanonicalRefId, formatLocationSummary, formatRefId, deriveMethodPrefix } from '../../../utils/refIdUtils';
 
 type FilterTab = 'all' | 'bidding' | 'evaluation' | 'awarded';
 
@@ -35,6 +36,7 @@ interface BuyerProcurementItem {
   category: string;
   department?: string;
   location: string;
+  fullLocation?: string;
   estimatedBudget: number;
   closingDate: string;
   daysLeft: number;
@@ -240,14 +242,29 @@ export function BuyerProcurementMonitor() {
         actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
       }
 
+      let displayBidNumber = cleanCanonicalRefId(bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || String(bid.id || ''));
+      if (!displayBidNumber || displayBidNumber.toLowerCase().startsWith('bid-req') || /^\d+$/.test(displayBidNumber)) {
+        const pfx = deriveMethodPrefix(rawMethod, displayBidNumber, 'RFQ');
+        displayBidNumber = formatRefId(pfx, bid.id || idx, displayBidNumber, rawMethod);
+      }
+
+      // Hybrid multi-stage linkage (e.g. RC-2026-43265 • RA-2026-22846)
+      if (isReverseAuctionStage && auctionTargetCode && !displayBidNumber.includes(String(auctionTargetCode))) {
+        displayBidNumber = `${displayBidNumber} • ${cleanCanonicalRefId(String(auctionTargetCode))}`;
+      }
+
+      const rawLocation = bid.deliveryLocation || bid.location || [bid.district, bid.state].filter(Boolean).join(', ') || 'All India';
+      const cleanLocation = formatLocationSummary(rawLocation, bid.district, bid.state, bid.city);
+
       return {
         id: `${bid.type || 'bid'}-${bid.id || idx}`,
-        bidNumber: bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || `BID-REQ-${10000 + idx}`,
+        bidNumber: displayBidNumber,
         title: bid.title || bid.name || bid.itemName || 'Procurement Requisition',
         type: typeLabel,
         category: bid.category?.name || bid.categoryName || bid.category || 'General Procurement',
         department: bid.department || (user?.organization as any)?.organizationName || 'Procurement Dept',
-        location: bid.deliveryLocation || bid.location || 'All India',
+        location: cleanLocation,
+        fullLocation: rawLocation,
         estimatedBudget: Number(bid.estimatedBudget || bid.estimatedValue || bid.totalBudget || bid.amount || 0),
         closingDate: closing ? new Date(closing).toISOString().split('T')[0] : 'Open',
         daysLeft,
@@ -493,8 +510,11 @@ export function BuyerProcurementMonitor() {
                       <Building2 className="h-3 w-3 text-slate-400" />
                       {item.department}
                     </span>
-                    <span className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3 text-slate-400" />
+                    <span 
+                      className="flex items-center gap-1 truncate max-w-[220px]"
+                      title={item.fullLocation || item.location}
+                    >
+                      <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                       {item.location}
                     </span>
                     <span className="text-slate-400">•</span>

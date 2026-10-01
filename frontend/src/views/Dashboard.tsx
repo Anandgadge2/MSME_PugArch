@@ -950,13 +950,50 @@ export default function Dashboard() {
             </div>
 
             {/* Right Column (35% on large screens) */}
-            <div className="lg:col-span-4 space-y-3.5">
+            <div className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-4 self-start">
               <BuyerUrgentActionsInbox />
               
               <BuyerSpendAndCompliance 
                 stats={analyticsData?.compliance}
                 granularity={analyticsGranularity}
               />
+
+              {/* Buyer Operations Quick Toolkit */}
+              <Card className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200/70">
+                <div className="bg-slate-50/50 px-3.5 py-2.5 border-b border-slate-100 flex items-center justify-between rounded-t-xl">
+                  <h3 className="text-[11px] font-bold uppercase text-slate-900 tracking-wide flex items-center gap-1.5">
+                    <Briefcase className="h-4 w-4 text-[#12335f]" />
+                    Procurement Operations
+                  </h3>
+                  <span className="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                    Quick Tools
+                  </span>
+                </div>
+                <CardContent className="p-3 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link href="/buyer/procurement/create" className="p-2.5 rounded-lg bg-slate-50 hover:bg-[#12335f] hover:text-white group transition border border-slate-100 block">
+                      <div className="flex items-center gap-1.5">
+                        <PlusCircle className="h-3.5 w-3.5 text-[#12335f] group-hover:text-white" />
+                        <span className="text-[10px] font-bold uppercase">New Notice</span>
+                      </div>
+                      <p className="text-[9px] text-slate-500 group-hover:text-blue-100 mt-0.5 truncate">Tender / RFQ / RC</p>
+                    </Link>
+                    <Link href="/seller/opportunities/auctions" className="p-2.5 rounded-lg bg-slate-50 hover:bg-[#12335f] hover:text-white group transition border border-slate-100 block">
+                      <div className="flex items-center gap-1.5">
+                        <Gavel className="h-3.5 w-3.5 text-amber-600 group-hover:text-amber-300" />
+                        <span className="text-[10px] font-bold uppercase">Live Floors</span>
+                      </div>
+                      <p className="text-[9px] text-slate-500 group-hover:text-blue-100 mt-0.5 truncate">Reverse Auction</p>
+                    </Link>
+                  </div>
+                  <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[10px]">
+                    <span className="text-slate-500 font-medium">Requisition Hub</span>
+                    <Link href="/buyer/my-procurements" className="text-[#12335f] font-bold hover:underline">
+                      Manage All Requisitions →
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
 
               {/* Compact Verification & Support Cards */}
               <div className="space-y-3">
@@ -1028,7 +1065,7 @@ export default function Dashboard() {
             </div>
 
             {/* Right Column (35% on large screens) */}
-            <div className="lg:col-span-4 space-y-3.5">
+            <div className="lg:col-span-4 space-y-3.5 lg:sticky lg:top-4 self-start">
               <UrgentActionsInbox />
               
               <SellerCreativeAnalytics 
