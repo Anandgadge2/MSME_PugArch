@@ -12,6 +12,7 @@ import { getPublicPortalUrl } from '../../config/env.js';
 import { maskSensitive } from '../../utils/maskSensitive.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
 import { getNextCanonicalSequence } from '../../services/sequence.service.js';
+import { filterSealedDocuments } from './procurement-sealing.utils.js';
 
 const db = prisma as any;
 
@@ -1928,33 +1929,8 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
           });
         }
       }
-      return allDocs;
-    })().filter((doc: any) => {
-      if (!canSeeFin) {
-        const cat = String(doc.documentCategory || doc.category || doc.type || '').toUpperCase();
-        const nm = String(doc.documentName || doc.fileName || doc.name || '').toLowerCase();
-        if (
-          cat.includes('FINAN') ||
-          cat.includes('PRICE') ||
-          cat.includes('COMMERCIAL') ||
-          cat.includes('COST') ||
-          cat.includes('RATE_SCHEDULE') ||
-          nm.includes('price') ||
-          nm.includes('breakup') ||
-          nm.includes('commercial') ||
-          nm.includes('financial') ||
-          nm.includes('cost schedule') ||
-          nm.includes('rate schedule') ||
-          nm.includes('price breakup') ||
-          nm.includes('boq rate') ||
-          nm.includes('pricing') ||
-          nm.includes('quotation sheet')
-        ) {
-          return false;
-        }
-      }
-      return true;
-    }).map((doc: any) => ({
+      return filterSealedDocuments(allDocs, canSeeFin);
+    })().map((doc: any) => ({
       id: doc.id,
       documentCategory: doc.documentCategory || 'TECHNICAL_PROPOSAL',
       documentName: doc.documentName || doc.name || doc.fileName || 'Attachment',

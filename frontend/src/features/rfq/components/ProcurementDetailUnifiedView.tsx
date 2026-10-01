@@ -74,6 +74,7 @@ import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
+import { deriveProcurementPrimaryAction } from "./procurementActionEngine";
 import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
 import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceRegistryModal";
 import { PackedOrderDialog } from "../../delivery/components/PackedOrderDialog";
@@ -8289,7 +8290,7 @@ export function ProcurementDetailUnifiedView(
         key: "action",
         header: "Action",
         align: "right",
-        width: "w-[24%]",
+        width: "w-[17%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
           const isQual =
@@ -8299,11 +8300,10 @@ export function ProcurementDetailUnifiedView(
             ts === "NOT_QUALIFIED" ||
             ts === "REJECTED" ||
             Boolean(participation.isDisqualified);
-          const isEvaluated = isQual || isDisq;
 
-          return (
-            <div className="flex items-center justify-end gap-1.5 flex-nowrap">
-              {isBuyerOrAdmin && (
+          if (isTwoPacketMode) {
+            return (
+              <div className="flex items-center justify-end">
                 <Button
                   type="button"
                   size="sm"
@@ -8314,7 +8314,7 @@ export function ProcurementDetailUnifiedView(
                       : undefined
                   }
                   className={cn(
-                    "h-7.5 px-2.5 gap-1 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
+                    "h-7.5 px-3 gap-1.5 text-[11px] font-bold border shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all",
                     isEvaluationReady
                       ? isQual
                         ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 cursor-pointer"
@@ -8327,11 +8327,11 @@ export function ProcurementDetailUnifiedView(
                     isEvaluationReady
                       ? isQual
                         ? isTechEvalCompleted
-                          ? "View technical evaluation record (Locked under Stage 2)"
-                          : "View or edit evaluation decision, score, and remarks"
+                          ? "View technical qualification audit record (Archived under Stage 2)"
+                          : "View or update qualification decision, score, and remarks"
                         : isDisq
-                          ? "View disqualification record"
-                          : "Evaluate technical proposal, compliance and eligibility (Qualify / Disqualify)"
+                          ? "View formal disqualification record and rejection remarks"
+                          : "Scrutinize technical proposal, compliance and eligibility (Qualify / Disqualify)"
                       : !isTechnicalOpeningReady
                         ? technicalDateFormatted
                           ? `Technical evaluation unlocks after scheduled opening on ${technicalDateFormatted}`
@@ -8351,16 +8351,24 @@ export function ProcurementDetailUnifiedView(
                     <Lock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   )}
                   <span>
-                    {isQual
-                      ? isTechEvalCompleted
-                        ? "View Evaluation"
-                        : "Edit Remarks"
-                      : isDisq
-                        ? "View Disqualification"
-                        : "Evaluate Bid"}
+                    {!isEvaluationReady
+                      ? "Locked until Opening"
+                      : isQual
+                        ? isTechEvalCompleted
+                          ? "View Evaluation Audit"
+                          : "Evaluation Audit / Edit"
+                        : isDisq
+                          ? "View Disqualification"
+                          : "Scrutinize Proposal"}
                   </span>
                 </Button>
-              )}
+              </div>
+            );
+          }
+
+          // Single packet workflow: direct quotation review
+          return (
+            <div className="flex items-center justify-end">
               <Button
                 type="button"
                 size="sm"
@@ -8371,24 +8379,24 @@ export function ProcurementDetailUnifiedView(
                     : undefined
                 }
                 className={cn(
-                  "h-7.5 px-2.5 gap-1 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap",
+                  "h-7.5 px-3 gap-1.5 text-[11px] font-bold shadow-2xs rounded-lg shrink-0 whitespace-nowrap transition-all",
                   isEvaluationReady
                     ? "border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                    : "bg-slate-200 text-slate-400 cursor-not-allowed opacity-75",
+                    : "border border-slate-200 bg-slate-100 text-slate-400 cursor-not-allowed opacity-75",
                 )}
                 title={
                   isEvaluationReady
                     ? "Review full quotation details, line item rates and compliance"
-                    : !isTechnicalOpeningReady
-                      ? technicalDateFormatted
-                        ? `Proposals remain sealed until scheduled technical opening on ${technicalDateFormatted}`
-                        : "Proposals remain sealed until scheduled technical opening"
-                      : "Quotation remains sealed until bidding closes"
+                    : "Quotation remains sealed until bidding closes"
                 }
               >
-                <Eye className="h-3.5 w-3.5 shrink-0" />
+                {isEvaluationReady ? (
+                  <Eye className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                ) : (
+                  <Lock className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                )}
                 <span>
-                  Review<span className="hidden xl:inline"> Quotation</span>
+                  {isEvaluationReady ? "Review Quotation" : "Sealed until Closing"}
                 </span>
               </Button>
             </div>
@@ -8677,6 +8685,66 @@ export function ProcurementDetailUnifiedView(
       : props.procurementType === "RATE_CONTRACT"
         ? "Submit Rate Quote"
         : "Submit Proposal";
+
+  const isContractSettled = fulfillmentPhase === "SETTLED" || statusUpper === "COMPLETED" || statusUpper === "SETTLED";
+
+  const isAwardAccepted = useMemo(() => {
+    return Boolean(
+      (activeAward && (activeAward.awardStatus === "ACCEPTED" || activeAward.status === "ACCEPTED")) ||
+      effectiveActiveOrder ||
+      isPOAccepted
+    );
+  }, [activeAward, effectiveActiveOrder, isPOAccepted]);
+
+  const primaryHighwayAction = useMemo(() => {
+    return deriveProcurementPrimaryAction({
+      isBuyer: isBuyerSide,
+      isCancelled: isCancelled,
+      isContractSettled: isContractSettled,
+      isBidAwarded: isBidAwarded,
+      isRateContract: isRateContractType,
+      isAwardAccepted: isAwardAccepted,
+      isBeforeSubmissionStart: isBeforeSubmissionStart,
+      isDeadlinePassed: isDeadlinePassed,
+      isBiddingClosed: isBiddingClosed,
+      isEvaluationReady: isEvaluationReady,
+      isSellerParticipated: isSellerParticipated,
+      hasSubmittedProposal: Boolean(props.hasSubmittedProposal),
+      submittedBidsCount: Math.max(props.participantsCount || 0, submittedParticipations.length),
+      technicalOpeningDate: technicalDateValue,
+      closingDate: closingDateValue || props.deadlineDate,
+      submissionStartDateFormatted: submissionStartDateFormatted,
+      closingDateFormatted: closingDateFormatted,
+      technicalDateFormatted: technicalDateFormatted,
+      submitButtonLabel: props.submitButtonLabel || defaultSubmitBtnLabel,
+      isReverseAuction: isReverseAuctionType || Boolean(linkedAuction)
+    });
+  }, [
+    isBuyerSide,
+    isCancelled,
+    isContractSettled,
+    isBidAwarded,
+    isRateContractType,
+    isAwardAccepted,
+    isBeforeSubmissionStart,
+    isDeadlinePassed,
+    isBiddingClosed,
+    isEvaluationReady,
+    isSellerParticipated,
+    props.hasSubmittedProposal,
+    props.participantsCount,
+    submittedParticipations.length,
+    technicalDateValue,
+    closingDateValue,
+    props.deadlineDate,
+    submissionStartDateFormatted,
+    closingDateFormatted,
+    technicalDateFormatted,
+    props.submitButtonLabel,
+    defaultSubmitBtnLabel,
+    isReverseAuctionType,
+    linkedAuction
+  ]);
 
   const handleDefaultPdfDownload = async () => {
     const toastId = toast.loading(`Preparing ${procurementTypeLabel} document...`);
@@ -9192,6 +9260,73 @@ export function ProcurementDetailUnifiedView(
             )}
             onSubmitClick={props.onSubmitClick}
             onViewQuotationClick={handleOpenMyQuotationModal}
+            onNavigateStage={(stageId) => {
+              if (stageId === 1) {
+                setActiveTab("clarifications");
+                const targetEl =
+                  document.getElementById("tabs-navigation-section") ||
+                  document.getElementById("tabpanel-clarifications");
+                if (targetEl) {
+                  targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                }
+              } else if (stageId === 2) {
+                if (effectiveActiveOrder) {
+                  setIsReceiptModalOpen(true);
+                } else if (isBuyerSide) {
+                  router.push("/buyer/orders");
+                } else {
+                  router.push("/seller/orders");
+                }
+              } else if (stageId === 3) {
+                if (activeGrn?.id) {
+                  router.push(`/grn/${activeGrn.id}`);
+                } else if (isBuyerSide && fulfillmentPhase === 'DELIVERED_PENDING_GRN' && !hasCreatedGrn) {
+                  setIsGrnCreateOpen(true);
+                } else {
+                  handleOpenDispatchDialog();
+                }
+              } else if (stageId === 4) {
+                const allInvoices = [
+                  ...(Array.isArray(effectiveActiveOrder?.invoices) ? effectiveActiveOrder.invoices : []),
+                  ...(Array.isArray(props.rawBid?.invoices) ? props.rawBid.invoices : [])
+                ];
+                const existingInv = allInvoices.find(
+                  (i: any) => !['CANCELLED', 'DRAFT'].includes(String(i.status || i.invoiceStatus || '').toUpperCase())
+                ) || (effectiveActiveOrder as any)?.invoice;
+
+                if (existingInv) {
+                  const invId = Number(existingInv.id) || (existingInv.invoiceId ? Number(existingInv.invoiceId) : null);
+                  setSelectedInvoiceModalId(invId);
+                  setSelectedInvoiceModalData({
+                    ...existingInv,
+                    buyer: existingInv.buyer || effectiveActiveOrder?.buyer || (props.rawBid as any)?.buyer,
+                    seller: existingInv.seller || effectiveActiveOrder?.seller || (props.rawBid as any)?.awardedSeller,
+                    purchaseOrder: existingInv.purchaseOrder || effectiveActiveOrder
+                  });
+                  setIsTaxInvoiceModalOpen(true);
+                  return;
+                }
+                if (isBuyerSide) {
+                  router.push("/buyer/invoices");
+                } else {
+                  setIsCreateInvoiceOpen(true);
+                }
+              } else if (stageId === 5) {
+                if (isBuyerSide) {
+                  if (fulfillmentPhase === 'GRN_APPROVED') {
+                    setIsPaymentModalOpen(true);
+                  } else {
+                    setIsViewPaymentProofOpen(true);
+                  }
+                } else {
+                  if (fulfillmentPhase === 'PAYMENT_SUBMITTED') {
+                    setIsConfirmSettlementOpen(true);
+                  } else {
+                    setIsViewPaymentProofOpen(true);
+                  }
+                }
+              }
+            }}
             onViewEvaluation={() => {
               setActiveTab("clarifications");
               const targetEl =
@@ -11037,43 +11172,34 @@ export function ProcurementDetailUnifiedView(
                     </span>
                   </Button>
                 )}
-                {!isBuyerOrAdmin &&
-                  !isSellerParticipated &&
-                  isBeforeSubmissionStart && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      aria-disabled="true"
-                      title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
-                      className="h-8 px-3.5 bg-sky-50 text-sky-800 border border-sky-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <Clock className="h-3.5 w-3.5 text-sky-600" />
-                      <span>
-                        Submission Opens{" "}
-                        {submissionStartDateFormatted
-                          ? `on ${submissionStartDateFormatted}`
-                          : "Soon"}
-                      </span>
-                    </Button>
-                  )}
-                {!isBuyerOrAdmin &&
-                  !isSellerParticipated &&
-                  !isBeforeSubmissionStart &&
-                  (isBiddingClosed || isDeadlinePassed) && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      aria-disabled="true"
-                      title={`The quotation submission deadline ended on ${closingDateFormatted || "the scheduled cutoff"}. New submissions are closed.`}
-                      className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
-                    >
-                      <Lock className="h-3.5 w-3.5 text-slate-400" />
-                      <span>Submission Window Closed</span>
-                    </Button>
-                  )}
-                {isBuyerOrAdmin && !isEvaluationReady && (
+                {/* Primary Action Anchor: Exclusively driven by primaryHighwayAction (SSOT) */}
+                {primaryHighwayAction.type === 'SELLER_AWAITING_WINDOW' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    title={`Submission opens on ${submissionStartDateFormatted || "the scheduled start date"}.`}
+                    className="h-8 px-3.5 bg-sky-50 text-sky-800 border border-sky-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-95 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-sky-600" />
+                    <span>{primaryHighwayAction.label}</span>
+                  </Button>
+                )}
+                {primaryHighwayAction.type === 'SELLER_WINDOW_CLOSED' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled
+                    aria-disabled="true"
+                    title={`The quotation submission deadline ended on ${closingDateFormatted || "the scheduled cutoff"}. New submissions are closed.`}
+                    className="h-8 px-3.5 bg-slate-100 text-slate-500 border border-slate-200 font-bold text-xs rounded-lg cursor-not-allowed opacity-90 flex items-center gap-1.5 shadow-2xs"
+                  >
+                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>{primaryHighwayAction.label}</span>
+                  </Button>
+                )}
+                {primaryHighwayAction.type === 'BUYER_SEALED_AWAITING_CLOSING' && (
                   <div
                     role="status"
                     title={`Quotations remain strictly sealed until ${displaySealedClosingDate}. Bid opening and proposal evaluation will automatically unlock then.`}
@@ -11081,7 +11207,7 @@ export function ProcurementDetailUnifiedView(
                   >
                     <Lock className="h-3.5 w-3.5 text-amber-700 shrink-0" aria-hidden="true" />
                     <span className="font-extrabold text-[11px] text-amber-950">
-                      Evaluation Opens at Closing
+                      {primaryHighwayAction.label}
                     </span>
                     {(technicalDateValue || closingDateValue || props.deadlineDate) && (
                       <span className="inline-flex items-center gap-1 pl-1.5 border-l border-amber-300/80 font-mono text-[10.5px] text-amber-800 font-extrabold">
@@ -11095,64 +11221,51 @@ export function ProcurementDetailUnifiedView(
                     )}
                   </div>
                 )}
-                {props.onSubmitClick &&
-                  (isBuyerOrAdmin
-                    ? isEvaluationReady
-                    : !props.hasSubmittedProposal &&
-                      !isBiddingClosed &&
-                      !isBeforeSubmissionStart) && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        if (isBuyerOrAdmin && isBidAwarded && linkedAuction?.id) {
-                          router.push(`/buyer/procurement/reverse-auction/${linkedAuction.id}/result`);
-                          return;
-                        }
-                        handleActionSubmit();
-                      }}
-                      className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-[#0b2447] hover:bg-[#12335f] cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                    >
-                      <span>
-                        {isBuyerOrAdmin && isBidAwarded
-                          ? linkedAuction
-                            ? "View Reverse Auction Outcome"
-                            : "View Awarded Results & Ranking"
-                          : props.submitButtonLabel || defaultSubmitBtnLabel}
-                      </span>
-                      <ArrowRight className="h-3 w-3" />
-                    </Button>
-                  )}
-                {isBuyerOrAdmin && isRateContractType && isBidAwarded && (
-                  (() => {
-                    const isAwardAccepted = Boolean(
-                      (activeAward && (activeAward.awardStatus === "ACCEPTED" || activeAward.status === "ACCEPTED")) ||
-                      effectiveActiveOrder ||
-                      isPOAccepted
-                    );
-                    if (!isAwardAccepted) {
-                      return (
-                        <div
-                          title="Call-Off PO will unlock once the awarded supplier formally confirms acceptance."
-                          className="h-8 px-3 text-amber-800 bg-amber-50 border border-amber-200 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs select-none"
-                        >
-                          <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
-                          <span>Award Offered (Awaiting Acceptance)</span>
-                        </div>
-                      );
-                    }
-                    return (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => setIsIssueCallOffModalOpen(true)}
-                        className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
-                      >
-                        <Truck className="h-3.5 w-3.5" />
-                        <span>+ Issue Call-Off Order</span>
-                      </Button>
-                    );
-                  })()
+                {primaryHighwayAction.type === 'BUYER_ISSUE_CALL_OFF' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setIsIssueCallOffModalOpen(true)}
+                    className="h-8 px-3.5 text-white text-xs font-bold rounded-lg bg-emerald-700 hover:bg-emerald-800 cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5"
+                  >
+                    <Truck className="h-3.5 w-3.5" />
+                    <span>{primaryHighwayAction.label}</span>
+                  </Button>
+                )}
+                {isBuyerOrAdmin && isRateContractType && isBidAwarded && !isAwardAccepted && (
+                  <div
+                    title="Call-Off PO will unlock once the awarded supplier formally confirms acceptance."
+                    className="h-8 px-3 text-amber-800 bg-amber-50 border border-amber-200 text-xs font-bold rounded-lg flex items-center gap-1.5 shadow-2xs select-none"
+                  >
+                    <Clock className="h-3.5 w-3.5 text-amber-600 animate-pulse" />
+                    <span>Award Offered (Awaiting Acceptance)</span>
+                  </div>
+                )}
+                {primaryHighwayAction.isExecutable && primaryHighwayAction.type !== 'BUYER_ISSUE_CALL_OFF' && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      if (isBuyerOrAdmin && isBidAwarded && linkedAuction?.id) {
+                        router.push(`/buyer/procurement/reverse-auction/${linkedAuction.id}/result`);
+                        return;
+                      }
+                      if (primaryHighwayAction.type === 'SELLER_VIEW_SUBMITTED') {
+                        handleOpenMyQuotationModal();
+                        return;
+                      }
+                      handleActionSubmit();
+                    }}
+                    className={cn(
+                      "h-8 px-3.5 text-white text-xs font-bold rounded-lg cursor-pointer shadow-sm active:scale-95 transition-all flex items-center gap-1.5",
+                      primaryHighwayAction.badgeTone === 'emerald'
+                        ? "bg-emerald-700 hover:bg-emerald-800"
+                        : "bg-[#0b2447] hover:bg-[#12335f]"
+                    )}
+                  >
+                    <span>{primaryHighwayAction.label}</span>
+                    <ArrowRight className="h-3 w-3" />
+                  </Button>
                 )}
               </div>
             </div>
@@ -12623,7 +12736,9 @@ export function ProcurementDetailUnifiedView(
                         </Button>
                       )}
                       {!isBidAwarded &&
-                        (allowsReverseAuction || isTwoPacketMode || isBiddingClosed || isEvaluationReady) &&
+                        !isTwoPacketMode &&
+                        allowsReverseAuction &&
+                        (isBiddingClosed || isEvaluationReady) &&
                         (!linkedAuction ||
                           (linkedAuction as any).auctionPlanned === true ||
                           ["DRAFT", "CANCELLED"].includes(
@@ -12658,11 +12773,7 @@ export function ProcurementDetailUnifiedView(
                             ) : (
                               <Lock className="h-3 w-3 text-slate-400" />
                             )}
-                            <span>
-                              {isTwoPacketMode
-                                ? "Launch Stage 2 Reverse Auction"
-                                : "Launch Dynamic Reverse Auction"}
-                            </span>
+                            <span>Start Reverse Auction</span>
                           </Button>
                         )}
                     </div>

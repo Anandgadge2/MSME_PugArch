@@ -1049,16 +1049,22 @@ export function ProcurementLifecycleStepper({
               role="listitem"
               title={`${stage.name}: ${stage.description}`}
               aria-current={isActive ? 'step' : undefined}
-              tabIndex={(stageAction.hasAction || Boolean(stageAction.onClick)) ? 0 : -1}
+              tabIndex={(stageAction.hasAction || Boolean(stageAction.onClick) || Boolean(onNavigateStage)) ? 0 : -1}
               onKeyDown={(e) => {
-                if ((stageAction.hasAction || stageAction.onClick) && (e.key === 'Enter' || e.key === ' ')) {
+                if ((stageAction.hasAction || stageAction.onClick || onNavigateStage) && (e.key === 'Enter' || e.key === ' ')) {
                   e.preventDefault();
-                  if (stageAction.onClick) stageAction.onClick();
+                  if (stageAction.onClick) {
+                    stageAction.onClick();
+                  } else if (onNavigateStage) {
+                    onNavigateStage(stage.id);
+                  }
                 }
               }}
               onClick={() => {
                 if (stageAction.onClick) {
                   stageAction.onClick();
+                } else if (onNavigateStage) {
+                  onNavigateStage(stage.id);
                 }
               }}
               className={cn(
@@ -1066,7 +1072,7 @@ export function ProcurementLifecycleStepper({
                 !showAllStagesMobile && !isActive ? 'hidden sm:flex' : 'flex',
                 !showAllStagesMobile && isActive && 'col-span-2 sm:col-span-1',
                 stage.id === 5 && 'col-span-2 lg:col-span-1',
-                (stageAction.hasAction || Boolean(stageAction.onClick)) ? 'cursor-pointer' : 'cursor-default',
+                (stageAction.hasAction || Boolean(stageAction.onClick) || Boolean(onNavigateStage)) ? 'cursor-pointer' : 'cursor-default',
                 'focus-visible:ring-2 focus-visible:ring-offset-1',
                 // Completed State: Distinct stage gradient background, colored border, and floating hover aura
                 isCompleted && cn(
@@ -1144,31 +1150,25 @@ export function ProcurementLifecycleStepper({
                 </span>
               </div>
 
-              {/* Row 2: Compact Action CTA Button or Clean State Pill */}
+              {/* Row 2: Milestone Status Pill with Highway Navigation Affordance */}
               <div className="pt-1 mt-1 border-t border-slate-100/80 group-data-[active=true]:border-white/10">
                 {stageAction.hasAction ? (
-                  <button
-                    type="button"
-                    aria-label={`${stage.name}: ${stageAction.actionLabel}`}
+                  <div
                     title={stageAction.actionHint}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (stageAction.onClick) stageAction.onClick();
-                    }}
                     className={cn(
-                      'w-full inline-flex items-center justify-center gap-1 rounded h-5.5 px-1 sm:px-1.5 text-[8.5px] sm:text-[9.5px] font-bold tracking-tight transition-all duration-200 cursor-pointer shadow-2xs active:scale-95 group/btn',
+                      'w-full inline-flex items-center justify-between rounded h-5.5 px-1.5 text-[8.5px] sm:text-[9.5px] font-bold tracking-tight transition-all duration-200 shadow-2xs',
                       stageAction.isPrimary
                         ? cn(theme.activeBtnBg, theme.activeBtnText)
                         : isCompleted
-                          ? cn(theme.completedBtnBg, theme.completedBtnBorder, theme.completedBtnText, 'border hover:scale-[1.01]')
+                          ? cn(theme.completedBtnBg, theme.completedBtnBorder, theme.completedBtnText, 'border')
                           : isActive
-                            ? 'bg-white hover:bg-slate-100 text-slate-950 font-black border border-white/60 shadow-md hover:scale-[1.01]'
-                            : 'bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 border border-slate-200 hover:scale-[1.01]'
+                            ? 'bg-white text-slate-950 font-black border border-white/60 shadow-md'
+                            : 'bg-white text-slate-700 border border-slate-200'
                     )}
                   >
                     <span className="truncate">{stageAction.actionLabel}</span>
-                    <ArrowUpRight className="h-2 w-2 shrink-0 opacity-75 group-hover/btn:translate-x-0.5 group-hover/btn:-translate-y-0.5 transition-transform" aria-hidden="true" />
-                  </button>
+                    <ArrowUpRight className="h-2.5 w-2.5 shrink-0 opacity-75 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" aria-hidden="true" />
+                  </div>
                 ) : (
                   <div
                     className={cn(

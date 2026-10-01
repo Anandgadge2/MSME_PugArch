@@ -43,10 +43,10 @@ export interface DeriveActionParams {
   submittedBidsCount: number;
   technicalOpeningDate?: Date | string | null;
   closingDate?: Date | string | null;
-  submissionStartDateFormatted?: string;
-  closingDateFormatted?: string;
-  technicalDateFormatted?: string;
-  submitButtonLabel?: string;
+  submissionStartDateFormatted?: string | null;
+  closingDateFormatted?: string | null;
+  technicalDateFormatted?: string | null;
+  submitButtonLabel?: string | null;
   isReverseAuction?: boolean;
 }
 
