@@ -15571,53 +15571,6 @@ export function SellerQuotationReviewModal({
               )}
             </div>
           </div>
-
-          {/* Modal Footer Actions */}
-          <div className="relative shrink-0 flex flex-wrap items-center justify-between border-t border-slate-200 bg-slate-50 px-6 py-3.5 gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={onClose}
-              className="border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
-            >
-              Close
-            </Button>
-
-            {isBuyer && (
-              <div className="flex items-center gap-2 flex-wrap">
-                {onOpenCompare && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      onClose();
-                      onOpenCompare();
-                    }}
-                    className="border-slate-300 bg-white text-slate-700 hover:bg-slate-100 font-bold text-xs cursor-pointer shadow-2xs"
-                  >
-                    <Scale className="h-3.5 w-3.5 mr-1.5 text-slate-500" />
-                    Compare Quotations
-                  </Button>
-                )}
-
-                {/* View Results & Award: Direct link to official Results & Commercial Ranking page */}
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    onClose();
-                    router.push(effectiveResultsUrl);
-                  }}
-                  className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
-                >
-                  <Trophy className="h-3.5 w-3.5 mr-1.5 text-emerald-600" />
-                  View Results &amp; Award
-                </Button>
-              </div>
-            )}
-          </div>
         </div>
       </FocusTrap>
 
