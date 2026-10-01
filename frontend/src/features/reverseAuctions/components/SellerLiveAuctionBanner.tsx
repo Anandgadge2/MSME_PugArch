@@ -102,9 +102,13 @@ export default function SellerLiveAuctionBanner({
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sept', 'Oct', 'Nov', 'Dec'];
       const month = months[d.getMonth()];
       const year = d.getFullYear();
-      const hh = String(d.getHours()).padStart(2, '0');
+      const hoursNum = d.getHours();
       const mm = String(d.getMinutes()).padStart(2, '0');
-      return `${day} ${month} ${year}, ${hh}:${mm} IST`;
+      const ampm = hoursNum >= 12 ? 'PM' : 'AM';
+      let h12 = hoursNum % 12;
+      if (h12 === 0) h12 = 12;
+      const hh = String(h12).padStart(2, '0');
+      return `${day} ${month} ${year}, ${hh}:${mm} ${ampm}`;
     } catch {
       return String(auction.startTime);
     }

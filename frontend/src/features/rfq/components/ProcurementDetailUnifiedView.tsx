@@ -345,7 +345,7 @@ function formatDateString(
   try {
     let s = typeof dateVal === "string" ? dateVal.trim() : dateVal;
     if (typeof s === "string") {
-      s = s.replace(/\bSept\b/i, "Sep");
+      s = s.replace(/\s*IST\b/i, "").replace(/\bSept\b/i, "Sep");
     }
     const d = new Date(s);
     if (isNaN(d.getTime())) return String(dateVal);
@@ -670,7 +670,7 @@ function parseDateValue(
   }
   let s = String(dateVal).trim();
   if (!s) return null;
-  s = s.replace(/\bSept\b/i, "Sep");
+  s = s.replace(/\s*IST\b/i, "").replace(/\bSept\b/i, "Sep");
   const d = new Date(s);
   if (isNaN(d.getTime())) return null;
   const isDateOnlyStr = /^\d{4}-\d{2}-\d{2}$/.test(s);

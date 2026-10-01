@@ -62,16 +62,24 @@ import { CancelProcurementModal } from '../../procurement/components/CancelProcu
 function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
   if (!dateVal) return null;
   try {
-    const d = new Date(dateVal);
+    let s = typeof dateVal === 'string' ? dateVal.trim() : dateVal;
+    if (typeof s === 'string') {
+      s = s.replace(/\s*IST\b/i, '').replace(/\bSept\b/i, 'Sep');
+    }
+    const d = new Date(s);
     if (isNaN(d.getTime())) return String(dateVal);
     const day = String(d.getDate()).padStart(2, '0');
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const month = months[d.getMonth()];
     const year = d.getFullYear();
     if (!includeTime) return `${day} ${month} ${year}`;
-    const hours = String(d.getHours()).padStart(2, '0');
+    const hoursNum = d.getHours();
     const minutes = String(d.getMinutes()).padStart(2, '0');
-    return `${day} ${month} ${year} ${hours}:${minutes} IST`;
+    const ampm = hoursNum >= 12 ? 'PM' : 'AM';
+    let h12 = hoursNum % 12;
+    if (h12 === 0) h12 = 12;
+    const hoursFormatted = String(h12).padStart(2, '0');
+    return `${day} ${month} ${year}, ${hoursFormatted}:${minutes} ${ampm}`;
   } catch {
     return String(dateVal);
   }
@@ -851,11 +859,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         discloseEstimatedCost={Boolean(rcData.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? payload.basics?.discloseEstimatedCost ?? false)}
         deadlineDate={periodEnd || rcData.deadlineDate}
         createdAt={periodStart || rcData.createdAt}
-        publishedDate={periodStart ? (formatDateString(periodStart) || undefined) : undefined}
-        submissionStartDate={schedule.submissionStartDate || rcData.startDate ? (formatDateString(schedule.submissionStartDate || rcData.startDate, true) || undefined) : undefined}
-        closingDate={periodEnd ? (formatDateString(periodEnd, true) || undefined) : undefined}
-        clarificationDate={(schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd) ? (formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd, true) || undefined) : undefined}
-        technicalDate={schedule.technicalOpeningDate ? (formatDateString(schedule.technicalOpeningDate, true) || undefined) : undefined}
+        publishedDate={periodStart || rcData.createdAt || rcData.publishedAt}
+        submissionStartDate={schedule.submissionStartDate || rcData.startDate}
+        closingDate={schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd}
+        clarificationDate={schedule.clarificationEndDate || schedule.clarificationDeadline || schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd}
+        technicalDate={schedule.technicalOpeningDate}
         category={rcData.categoryName}
         procurementMethod="Rate Contract"
         buyingType={basics.buyingType || 'Product'}
