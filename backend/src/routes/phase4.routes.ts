@@ -757,7 +757,7 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     tender = await db.tender.findUnique({
       where: { id: numericId },
       include: {
-        buyer: { include: { buyerProfile: true } },
+        buyer: { include: { buyerProfile: true, organization: true } },
         tenderItems: true,
         tenderDocuments: { include: { fileAsset: true } }
       }
@@ -767,7 +767,7 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     tender = await db.tender.findFirst({
       where: { tenderId: stringId },
       include: {
-        buyer: { include: { buyerProfile: true } },
+        buyer: { include: { buyerProfile: true, organization: true } },
         tenderItems: true,
         tenderDocuments: { include: { fileAsset: true } }
       }
@@ -780,7 +780,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
       bid = await db.procurementBid.findUnique({
         where: { id: numericId },
         include: {
-          buyer: { include: { buyerProfile: true } },
+          buyer: { include: { buyerProfile: true, organization: true } },
+          buyerOrganization: true,
           documents: true
         }
       });
@@ -789,7 +790,8 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
       bid = await db.procurementBid.findFirst({
         where: { bidNumber: stringId },
         include: {
-          buyer: { include: { buyerProfile: true } },
+          buyer: { include: { buyerProfile: true, organization: true } },
+          buyerOrganization: true,
           documents: true
         }
       });
@@ -798,6 +800,13 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
     if (bid) {
       const payload = (typeof bid.technicalPacket === 'object' && bid.technicalPacket ? (bid.technicalPacket as any) : {}) as any;
       const terms = payload.terms || {};
+      const resolvedOrgName =
+        bid.buyer?.organization?.organizationName ||
+        bid.buyerOrganization?.organizationName ||
+        bid.buyerOrganizationName ||
+        bid.buyer?.buyerProfile?.organizationName ||
+        'Verified Buyer';
+
       tender = {
         ...bid,
         id: bid.id,
@@ -825,18 +834,22 @@ const assertTenderAccess = async (req: AuthRequest, rawTenderId: number | string
         allowClarification: bid.allowClarification,
         packetType: bid.packetType,
         buyerId: bid.buyerId,
+        buyerOrganizationName: resolvedOrgName,
+        buyerOrganization: bid.buyerOrganization || bid.buyer?.organization || null,
         buyer: {
           id: bid.buyer?.id || bid.buyerId,
-          name: bid.buyer?.name || bid.buyerOrganizationName,
+          name: bid.buyer?.name || resolvedOrgName,
           email: bid.buyer?.email,
+          organization: bid.buyer?.organization || bid.buyerOrganization || null,
+          buyerOrganization: bid.buyerOrganization || bid.buyer?.organization || null,
           buyerProfile: {
             id: bid.buyer?.buyerProfile?.id || 1,
-            organizationName: bid.buyer?.buyerProfile?.organizationName || bid.buyerOrganizationName,
+            organizationName: resolvedOrgName,
             department: bid.buyer?.buyerProfile?.department,
-            contactPerson: bid.buyer?.buyerProfile?.contactPerson || bid.buyer?.name,
-            email: bid.buyer?.email,
-            phone: bid.buyer?.mobile,
-            address: bid.deliveryLocation
+            contactPerson: bid.buyer?.name || bid.buyer?.buyerProfile?.contactPerson || bid.buyer?.buyerProfile?.contactPersonName,
+            email: bid.buyer?.email || bid.buyer?.buyerProfile?.email || bid.buyer?.buyerProfile?.officialEmail,
+            phone: bid.buyer?.mobile || bid.buyer?.buyerProfile?.contactPersonMobile || bid.buyer?.buyerProfile?.officialPhone || bid.buyer?.buyerProfile?.mobile,
+            address: bid.buyer?.organization?.addressLine1 || bid.buyerOrganization?.addressLine1 || bid.buyer?.buyerProfile?.registeredAddress || bid.buyer?.buyerProfile?.officeAddress || bid.deliveryLocation
           }
         },
         tenderItems: [],

@@ -18,6 +18,11 @@ export interface ProcurementSocketEvent {
   status?: string;
   updatedBy?: string;
   timestamp?: string;
+  corrigendumNumber?: number;
+  newDeadline?: string;
+  revisedDeadlineStr?: string;
+  originalDeadlineStr?: string;
+  reason?: string;
 }
 
 let isProcurementWsSupported = true;
@@ -53,23 +58,48 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
     const handleQuotationEvent = (data: ProcurementSocketEvent) => {
       console.log(`[Realtime] Received procurement event for #${cleanId}:`, data);
 
-      // Invalidate all related procurement & quotation queries immediately
+      // Invalidate all related procurement, tender, & quotation queries immediately
       void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
       void queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       void queryClient.invalidateQueries({ queryKey: ['procurement-bids'] });
       void queryClient.invalidateQueries({ queryKey: ['buyer-procurements'] });
       void queryClient.invalidateQueries({ queryKey: ['buyerMyProcurements'] });
       void queryClient.invalidateQueries({ queryKey: ['marketplace-requirement'] });
+      void queryClient.invalidateQueries({ queryKey: ['marketplace-requirements'] });
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail-req'] });
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
       void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
       void queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-tender-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-tender-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-tender-raw-tender-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['limited-tender-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['limited-tender-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['limited-tender-raw-tender-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['rfp-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['rfp-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['seller-bids'] });
+      void queryClient.invalidateQueries({ queryKey: ['seller-procurement-events'] });
+      void queryClient.invalidateQueries({ queryKey: ['seller-opportunities'] });
+      void queryClient.invalidateQueries({ queryKey: ['seller-opportunities-list'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-live'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-participants'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-bids'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-result'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
+      void queryClient.invalidateQueries({ queryKey: ['navigation-counts'] });
+
+      // Dispatch browser-wide CustomEvents so active detail pages reload immediately without waiting for query intervals
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('procurement:realtime', { detail: data }));
+        if (data.type === 'CORRIGENDUM_ISSUED') {
+          window.dispatchEvent(new CustomEvent('procurement:corrigendum', { detail: data }));
+        }
+        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED') {
+          window.dispatchEvent(new CustomEvent('procurement:updated', { detail: data }));
+        }
+      }
 
       // If subscribed to global aggregated room 'all' (e.g. MyProcurementsPage), only sync queries, don't pop item toasts
       if (cleanId === 'all') return;
@@ -86,6 +116,18 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
               ? `A vendor submitted a quotation for ${priceFmt}. List refreshed automatically.`
               : 'A new quotation was just submitted and added to your view automatically.',
             duration: 5000,
+          });
+        });
+      } else if (data.type === 'CORRIGENDUM_ISSUED') {
+        const corrNum = data.corrigendumNumber || 1;
+        const deadlineDesc = data.revisedDeadlineStr
+          ? `Submission deadline extended to ${data.revisedDeadlineStr}.`
+          : 'Tender submission deadline has been extended.';
+        triggerDeduplicatedToast(`corrigendum-${cleanId}-${corrNum}`, () => {
+          toast.warning(`📢 Corrigendum Notice #${corrNum} Applied`, {
+            id: `corrigendum-${cleanId}-${corrNum}`,
+            description: `${deadlineDesc} All previous submissions remain securely sealed and valid. Opportunity details updated.`,
+            duration: 7000,
           });
         });
       } else if (data.type === 'TECHNICAL_EVALUATION_STARTED') {
@@ -142,6 +184,7 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
         'QUOTATION_SUBMITTED',
         'QUOTATION_STATUS_CHANGED',
         'PROCUREMENT_UPDATED',
+        'CORRIGENDUM_ISSUED',
         'PROCUREMENT_AWARDED',
         'BID_ACCEPTED',
         'BID_REJECTED',
@@ -232,6 +275,7 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
                 'QUOTATION_SUBMITTED',
                 'QUOTATION_STATUS_CHANGED',
                 'PROCUREMENT_UPDATED',
+                'CORRIGENDUM_ISSUED',
                 'PROCUREMENT_AWARDED',
                 'BID_ACCEPTED',
                 'BID_REJECTED',

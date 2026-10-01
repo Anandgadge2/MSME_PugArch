@@ -50,7 +50,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     )
   );
 
-  const { data: bidData, isLoading: isBidLoading, error: bidError } = useQuery({
+  const { data: bidData, isLoading: isBidLoading, error: bidError, refetch: refetchBid } = useQuery({
     queryKey: ['open-tender-bid-detail', requestId || activeOpenId, currentUser?.id],
     queryFn: () => procurementBidApi.detail((requestId || activeOpenId)!),
     enabled: !!(requestId || activeOpenId),
@@ -61,7 +61,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
-  const { data: reqData, isLoading: isReqLoading, error: reqError } = useQuery({
+  const { data: reqData, isLoading: isReqLoading, error: reqError, refetch: refetchReq } = useQuery({
     queryKey: ['open-tender-req-detail', targetReqId, currentUser?.id],
     queryFn: async () => {
       try {
@@ -81,7 +81,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     staleTime: 60_000,
   });
 
-  const { data: tenderData } = useQuery({
+  const { data: tenderData, refetch: refetchTender } = useQuery({
     queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId, currentUser?.id],
     queryFn: async () => {
       const candidates = [targetReqId, activeOpenId, requestId].filter(Boolean);
@@ -362,6 +362,9 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
         submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
         onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
+        onRefresh={async () => {
+          await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
+        }}
         onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
         cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
       />

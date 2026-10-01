@@ -434,7 +434,7 @@ const transformDraftToProcurementBidPayload = async (draft: any, buyerId: number
   return {
     title: step3.title,
     description: step3.shortDescription,
-    buyerOrganizationName: step2.organizationName || buyer?.organization?.organizationName || buyer?.buyerProfile?.organizationName,
+    buyerOrganizationName: buyer?.organization?.organizationName || step2.organizationName || buyer?.buyerProfile?.organizationName || 'Buyer Organization',
     buyerType: step2.ministry || buyer?.buyerProfile?.organizationType || 'Government / Department Buyer',
     category: step3.procurementCategory,
     bidType: BID_TYPE_LABELS[bidType],

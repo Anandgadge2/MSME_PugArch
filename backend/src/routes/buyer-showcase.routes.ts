@@ -108,13 +108,13 @@ router.get('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       city: profile.organization?.city || profile.city || null,
       state: profile.organization?.state || profile.state || null,
       pincode: profile.organization?.pincode || profile.pincode || null,
-      officialEmail: profile.officialEmail || profile.email || null,
-      officialPhone: profile.officialPhone || profile.mobile || null,
+      officialEmail: (req.user as any)?.email || profile.officialEmail || profile.email || null,
+      officialPhone: (req.user as any)?.mobile || profile.officialPhone || profile.mobile || null,
       website: profile.organization?.website || profile.website || null,
-      contactPersonName: profile.contactPersonName || profile.representativeName || null,
+      contactPersonName: profile.contactPersonName || (req.user as any)?.name || profile.representativeName || null,
       contactPersonDesignation: profile.contactPersonDesignation || profile.designation || null,
-      contactPersonMobile: profile.contactPersonMobile || profile.mobile || null,
-      contactPersonEmail: profile.contactPersonEmail || profile.email || null,
+      contactPersonMobile: (req.user as any)?.mobile || profile.contactPersonMobile || profile.mobile || null,
+      contactPersonEmail: profile.contactPersonEmail || (req.user as any)?.email || profile.email || null,
     };
 
     ok(res, enriched);
@@ -213,9 +213,47 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       }
     });
 
-    // Sync to OrganizationProfile if organization exists
+    // Synchronize contact person & phone/email to User account
+    const userUpdates: any = {};
+    if (body.contactPersonName) userUpdates.name = body.contactPersonName;
+    if (body.contactPersonMobile || body.officialPhone) userUpdates.mobile = body.contactPersonMobile || body.officialPhone;
+    if (body.officialEmail && isSensitiveChanged) userUpdates.email = body.officialEmail;
+    if (Object.keys(userUpdates).length > 0) {
+      try {
+        await db.user.update({
+          where: { id: userId(req) },
+          data: userUpdates
+        });
+      } catch (userErr) {
+        console.warn('[Showcase] User profile sync warning:', userErr);
+      }
+    }
+
+    // Sync to Organization and OrganizationProfile if organization exists
     const orgId = req.user?.organizationId || existing.organizationId;
     if (orgId) {
+      const orgUpdates: any = {};
+      if (body.organizationType) orgUpdates.organizationType = body.organizationType;
+      if (body.registrationNumber) orgUpdates.cinNumber = body.registrationNumber;
+      if (body.gstNumber && isSensitiveChanged) orgUpdates.gstin = body.gstNumber;
+      if (body.panNumber && isSensitiveChanged) orgUpdates.panNumber = body.panNumber;
+      if (body.address) orgUpdates.addressLine1 = body.address;
+      if (body.city) orgUpdates.city = body.city;
+      if (body.state) orgUpdates.state = body.state;
+      if (body.pincode) orgUpdates.pincode = body.pincode;
+      if (body.website) orgUpdates.website = body.website;
+
+      if (Object.keys(orgUpdates).length > 0) {
+        try {
+          await db.organization.update({
+            where: { id: orgId },
+            data: orgUpdates
+          });
+        } catch (orgErr) {
+          console.warn('[Showcase] Organization sync warning:', orgErr);
+        }
+      }
+
       if (body.logoUrl !== undefined || body.bannerUrl !== undefined) {
         const profileUpdate: any = {};
         if (body.logoUrl !== undefined) profileUpdate.logoUrl = body.logoUrl || null;
@@ -225,6 +263,22 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
           update: profileUpdate,
           create: { organizationId: orgId, ...profileUpdate }
         });
+      }
+
+      // Synchronize existing bids created by this buyer to use the authentic organization name
+      try {
+        const orgRecord = await db.organization.findUnique({
+          where: { id: orgId },
+          select: { organizationName: true }
+        });
+        if (orgRecord?.organizationName) {
+          await db.procurementBid.updateMany({
+            where: { buyerId: userId(req) },
+            data: { buyerOrganizationName: orgRecord.organizationName }
+          });
+        }
+      } catch (bidSyncErr) {
+        console.warn('[Showcase] Bid organization name sync warning:', bidSyncErr);
       }
 
       // Invalidate marketplace homepage caches

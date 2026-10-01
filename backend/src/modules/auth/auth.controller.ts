@@ -1625,17 +1625,51 @@ export const authController = {
         const resolvedPan = rawPan ? String(rawPan).trim().toUpperCase() : null;
 
         const updates: any = {};
-        if (!bp.gst && resolvedGst) updates.gst = resolvedGst;
-        if (!bp.gstMasked && resolvedGst) updates.gstMasked = maskGST(resolvedGst);
-        if (!bp.gstFingerprint && resolvedGst) updates.gstFingerprint = sha256(resolvedGst);
-        if (!bp.pan && resolvedPan) updates.pan = resolvedPan;
-        if (!bp.panMasked && resolvedPan) updates.panMasked = maskPAN(resolvedPan);
-        if (!bp.panFingerprint && resolvedPan) updates.panFingerprint = sha256(resolvedPan);
+        if (org.organizationName && bp.organizationName !== org.organizationName) {
+          updates.organizationName = org.organizationName;
+        }
+        if (org.organizationType && (bp.businessType !== org.organizationType || bp.organizationType !== org.organizationType)) {
+          updates.businessType = org.organizationType;
+          updates.organizationType = org.organizationType;
+        }
+        if (org.cinNumber && (bp.cin !== org.cinNumber || bp.registrationNumber !== org.cinNumber)) {
+          updates.cin = org.cinNumber;
+          updates.registrationNumber = org.cinNumber;
+        }
+        if (user.mobile && (bp.mobile !== user.mobile || bp.contactPersonMobile !== user.mobile)) {
+          updates.mobile = user.mobile;
+          updates.contactPersonMobile = user.mobile;
+          if (!bp.officialPhone) updates.officialPhone = user.mobile;
+        }
+        if (user.name && (bp.representativeName !== user.name || bp.contactPersonName !== user.name)) {
+          updates.representativeName = user.name;
+          updates.contactPersonName = user.name;
+        }
+        if (user.email && (bp.email !== user.email || !bp.officialEmail)) {
+          updates.email = user.email;
+          if (!bp.officialEmail) updates.officialEmail = user.email;
+          if (!bp.contactPersonEmail) updates.contactPersonEmail = user.email;
+        }
+        if (resolvedGst) {
+          if (bp.gst !== resolvedGst) updates.gst = resolvedGst;
+          if (bp.gstNumber !== resolvedGst) updates.gstNumber = resolvedGst;
+          if (!bp.gstMasked) updates.gstMasked = maskGST(resolvedGst);
+          if (!bp.gstFingerprint) updates.gstFingerprint = sha256(resolvedGst);
+        }
+        if (resolvedPan) {
+          if (bp.pan !== resolvedPan) updates.pan = resolvedPan;
+          if (bp.panNumber !== resolvedPan) updates.panNumber = resolvedPan;
+          if (!bp.panMasked) updates.panMasked = maskPAN(resolvedPan);
+          if (!bp.panFingerprint) updates.panFingerprint = sha256(resolvedPan);
+        }
         if (!bp.state && (org.state || reg.state)) updates.state = org.state || reg.state;
         if (!bp.district && (org.district || reg.district)) updates.district = org.district || reg.district;
         if (!bp.city && (org.city || reg.city)) updates.city = org.city || reg.city;
         if (!bp.pincode && (org.pincode || reg.pincode)) updates.pincode = org.pincode || reg.pincode;
-        if (!bp.registeredAddress && (org.addressLine1 || reg.address)) updates.registeredAddress = org.addressLine1 || reg.address;
+        if ((org.addressLine1 || reg.address) && (bp.registeredAddress !== (org.addressLine1 || reg.address) || !bp.address)) {
+          updates.registeredAddress = org.addressLine1 || reg.address;
+          if (!bp.address) updates.address = org.addressLine1 || reg.address;
+        }
         if (!bp.organizationId && (user.organizationId || org.id)) updates.organizationId = user.organizationId || org.id;
 
         if (Object.keys(updates).length > 0) {

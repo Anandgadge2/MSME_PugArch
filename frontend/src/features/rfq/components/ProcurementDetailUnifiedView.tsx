@@ -4438,6 +4438,8 @@ export interface ProcurementDetailUnifiedViewProps {
   onViewQuotationClick?: () => void;
   isSubmitDisabled?: boolean;
   onDownloadClick?: () => void;
+  /** Callback to refetch or refresh parent data when updates occur */
+  onRefresh?: () => void | Promise<void>;
   /** Override the ClarificationPanel kind (defaults to 'quote-request' for RFQ/RFP, 'requirement' for Rate Contract/Limited Tender) */
   clarificationKind?: "quote-request" | "requirement";
   /** Override the entity ID used for clarifications (defaults to props.id) */
@@ -4539,6 +4541,7 @@ export function ProcurementDetailUnifiedView(
       : props.id,
   );
   useProcurementRealtime(targetId);
+  useProcurementRealtime(props.id && String(props.id) !== targetId ? String(props.id) : undefined);
   useUserRealtime(currentUser?.id);
 
   const handleTimerExpiry = React.useCallback(() => {
@@ -4548,16 +4551,66 @@ export function ProcurementDetailUnifiedView(
     void queryClient.invalidateQueries({ queryKey: ["buyer-procurements"] });
     void queryClient.invalidateQueries({ queryKey: ["buyerMyProcurements"] });
     void queryClient.invalidateQueries({ queryKey: ["marketplace-requirement"] });
+    void queryClient.invalidateQueries({ queryKey: ["marketplace-requirements"] });
     void queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
     void queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
     void queryClient.invalidateQueries({ queryKey: ["rfq-detail"] });
     void queryClient.invalidateQueries({ queryKey: ["quote-requests"] });
     void queryClient.invalidateQueries({ queryKey: ["buyer-unified-participations"] });
+    void queryClient.invalidateQueries({ queryKey: ["open-tender-bid-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["open-tender-req-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["open-tender-raw-tender-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["limited-tender-bid-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["limited-tender-req-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["limited-tender-raw-tender-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["rfp-bid-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["rfp-req-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["seller-bids"] });
+    void queryClient.invalidateQueries({ queryKey: ["seller-procurement-events"] });
+    void queryClient.invalidateQueries({ queryKey: ["seller-opportunities"] });
     void queryClient.invalidateQueries({ queryKey: ["reverse-auction-live"] });
     void queryClient.invalidateQueries({ queryKey: ["reverse-auction-participants"] });
     void queryClient.invalidateQueries({ queryKey: ["reverse-auction-result"] });
     void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
-  }, [queryClient]);
+    if (props.onRefresh) {
+      try {
+        void props.onRefresh();
+      } catch (err) {
+        console.error('[ProcurementDetail] onRefresh error:', err);
+      }
+    }
+  }, [queryClient, props.onRefresh]);
+
+  // Listen for realtime corrigendum or procurement updates to trigger instant refresh on seller side
+  React.useEffect(() => {
+    const handleProcurementEvent = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const detail = customEvt.detail;
+      const matchId = String(props.id || '');
+      const matchDisplay = String(props.displayId || '');
+      const eventProcId = String(detail?.procurementId || detail?.bidId || '');
+      const eventReqId = String(detail?.requirementId || detail?.bidNumber || '');
+
+      const isRelevant =
+        !eventProcId ||
+        eventProcId === matchId ||
+        eventProcId === matchDisplay ||
+        eventReqId === matchId ||
+        eventReqId === matchDisplay ||
+        detail?.requirementId === 'all';
+
+      if (isRelevant) {
+        handleTimerExpiry();
+      }
+    };
+
+    window.addEventListener('procurement:corrigendum', handleProcurementEvent);
+    window.addEventListener('procurement:updated', handleProcurementEvent);
+    return () => {
+      window.removeEventListener('procurement:corrigendum', handleProcurementEvent);
+      window.removeEventListener('procurement:updated', handleProcurementEvent);
+    };
+  }, [props.id, props.displayId, handleTimerExpiry]);
   const userRoleStr = String(currentUser?.role || "").toLowerCase();
   const isBuyerOrAdmin =
     userRoleStr === "buyer" ||
@@ -6857,18 +6910,18 @@ export function ProcurementDetailUnifiedView(
 
   const buyerOrgName =
     firstPresent(
+      props.buyer?.organization?.organizationName,
+      (props.rawBid as any)?.buyerOrganization?.organizationName,
+      buyerOrg.organizationName,
+      (props.rawBid as any)?.buyerOrganizationName,
       props.orgName && props.orgName !== "—" && props.orgName !== "N/A"
         ? props.orgName
         : undefined,
-      (props.rawBid as any)?.buyerOrganizationName,
-      (props.rawBid as any)?.buyerOrganization?.organizationName,
       internal.orgName,
       basics.organizationName,
-      buyerOrg.organizationName,
+      props.buyer?.buyerProfile?.organizationName,
       buyerProfile.organizationName,
       buyerProfile.companyName,
-      props.buyer?.buyerProfile?.organizationName,
-      props.buyer?.organization?.organizationName,
     ) || "Buyer Organization";
 
   const isCandidateSameAsOrg = (candidate?: string | null) => {
@@ -6886,8 +6939,15 @@ export function ProcurementDetailUnifiedView(
   const contactPerson =
     firstPresent(
       // Specific representative / person names first
+      props.buyer?.name && !isCandidateSameAsOrg(props.buyer?.name)
+        ? props.buyer?.name
+        : undefined,
       buyerProfile.representativeName,
       props.buyer?.buyerProfile?.representativeName,
+      buyerProfile.contactPersonName &&
+        !isCandidateSameAsOrg(buyerProfile.contactPersonName)
+        ? buyerProfile.contactPersonName
+        : undefined,
       props.contactPerson && !isCandidateSameAsOrg(props.contactPerson)
         ? props.contactPerson
         : undefined,
@@ -6898,10 +6958,6 @@ export function ProcurementDetailUnifiedView(
         !isCandidateSameAsOrg(internal.contactPersonName)
         ? internal.contactPersonName
         : undefined,
-      buyerProfile.contactPersonName &&
-        !isCandidateSameAsOrg(buyerProfile.contactPersonName)
-        ? buyerProfile.contactPersonName
-        : undefined,
       buyerProfile.contactPerson &&
         !isCandidateSameAsOrg(buyerProfile.contactPerson)
         ? buyerProfile.contactPerson
@@ -6910,19 +6966,16 @@ export function ProcurementDetailUnifiedView(
         !isCandidateSameAsOrg(props.buyer?.buyerProfile?.contactPerson)
         ? props.buyer?.buyerProfile?.contactPerson
         : undefined,
-      props.buyerName && !isCandidateSameAsOrg(props.buyerName)
-        ? props.buyerName
-        : undefined,
       buyerOrg.contactPerson && !isCandidateSameAsOrg(buyerOrg.contactPerson)
         ? buyerOrg.contactPerson
-        : undefined,
-      props.buyer?.name && !isCandidateSameAsOrg(props.buyer?.name)
-        ? props.buyer?.name
         : undefined,
       buyerProfile.name && !isCandidateSameAsOrg(buyerProfile.name)
         ? buyerProfile.name
         : undefined,
       // Fallback to buyerName / contactPerson if no other person name
+      props.buyerName && !isCandidateSameAsOrg(props.buyerName)
+        ? props.buyerName
+        : undefined,
       props.buyerName &&
         props.buyerName !== "—" &&
         props.buyerName !== "N/A" &&
@@ -6943,12 +6996,14 @@ export function ProcurementDetailUnifiedView(
 
   const email =
     firstPresent(
+      props.buyer?.email,
       props.buyerEmail && props.buyerEmail !== "N/A" && props.buyerEmail !== ""
         ? props.buyerEmail
         : undefined,
+      buyerProfile.officialEmail,
       buyerProfile.representativeEmail,
       buyerProfile.email,
-      props.buyer?.email,
+      props.buyer?.buyerProfile?.officialEmail,
       props.buyer?.buyerProfile?.email,
       props.buyer?.buyerProfile?.contactPersonEmail,
       internal.email,
@@ -6959,16 +7014,18 @@ export function ProcurementDetailUnifiedView(
 
   const phone =
     firstPresent(
+      props.buyer?.mobile,
+      props.buyer?.phone,
       props.buyerMobile &&
         props.buyerMobile !== "N/A" &&
         props.buyerMobile !== ""
         ? props.buyerMobile
         : undefined,
+      buyerProfile.officialPhone,
+      buyerProfile.contactPersonMobile,
       buyerProfile.representativeMobile,
       buyerProfile.mobile,
       buyerProfile.phone,
-      props.buyer?.mobile,
-      props.buyer?.phone,
       props.buyer?.buyerProfile?.mobile,
       props.buyer?.buyerProfile?.phone,
       props.buyer?.buyerProfile?.contactPersonMobile,
@@ -6976,15 +7033,15 @@ export function ProcurementDetailUnifiedView(
       internal.phone,
       buyerOrg.mobile,
       buyerOrg.phone,
-      buyerProfile.contactPersonMobile,
     ) || "";
 
   const rawStreet =
-    buyerProfile.registeredAddress ||
+    buyerOrg.addressLine1 ||
     buyerOrg.registeredAddress ||
+    buyerProfile.registeredAddress ||
     buyerProfile.address ||
     buyerOrg.address;
-  const rawCity = buyerProfile.city || buyerOrg.city;
+  const rawCity = buyerOrg.city || buyerProfile.city;
   const rawDistrict = buyerProfile.district || buyerOrg.district;
   const rawState = buyerProfile.state || buyerOrg.state;
   const rawPin =
@@ -9271,6 +9328,9 @@ export function ProcurementDetailUnifiedView(
               onClick={async () => {
                 const toastId = toast.loading('Refreshing procurement details…');
                 try {
+                  if (props.onRefresh) {
+                    await props.onRefresh();
+                  }
                   await Promise.allSettled([
                     queryClient.refetchQueries({ queryKey: ['procurement-active-order'] }),
                     queryClient.refetchQueries({ queryKey: ['rfq-detail-bid'] }),

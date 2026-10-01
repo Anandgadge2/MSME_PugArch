@@ -304,25 +304,25 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
             designation: hasDraftPresetDesignation ? storedDraft.formData.designation : 'Others',
             customDesignation: !hasDraftPresetDesignation ? storedDraft.formData.designation : (storedDraft.formData.customDesignation || '')
         } : {}),
-        email: storedDraft?.formData?.email || data?.profile?.email || data?.user?.email || fallback.email,
-        organizationName: data?.profile?.organizationName || org.organizationName || seller.businessName || regDetails.businessName || data?.user?.name || fallback.organizationName,
-        businessType: data?.profile?.businessType || org.organizationType || seller.organizationType || resolvedBusinessType,
-        mobile: data?.profile?.mobile || seller.mobile || data?.user?.mobile || fallback.mobile,
-        representativeName: data?.profile?.representativeName || seller.nameAsInPan || data?.user?.name || fallback.representativeName,
-        officeZoneName: data?.profile?.officeZoneName || org.addressLine1 || regDetails.officeZoneName || fallback.officeZoneName,
+        email: data?.user?.email || storedDraft?.formData?.email || data?.profile?.email || fallback.email,
+        organizationName: org.organizationName || data?.profile?.organizationName || seller.businessName || regDetails.businessName || data?.user?.name || fallback.organizationName,
+        businessType: org.organizationType || data?.profile?.businessType || seller.organizationType || resolvedBusinessType,
+        mobile: data?.user?.mobile || data?.profile?.mobile || seller.mobile || fallback.mobile,
+        representativeName: data?.user?.name || data?.profile?.representativeName || seller.nameAsInPan || fallback.representativeName,
+        officeZoneName: org.addressLine1 || data?.profile?.officeZoneName || regDetails.officeZoneName || fallback.officeZoneName,
         aadhaarNumber: data?.profile?.aadhaarNumber || regDetails.aadhaarNumber || fallback.aadhaarNumber,
         aadhaarVerified: data?.profile?.aadhaarVerified || regDetails.isAadhaarVerified || fallback.aadhaarVerified,
-        gst: data?.profile?.gst || org.gstin || regDetails.gstin || fallback.gst,
-        pan: data?.profile?.pan || org.panNumber || regDetails.pan || fallback.pan,
+        gst: org.gstin || data?.profile?.gst || regDetails.gstin || fallback.gst,
+        pan: org.panNumber || data?.profile?.pan || regDetails.pan || fallback.pan,
 
-        state: findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')) || cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state,
+        state: findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || '')) || cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state,
         district: findMatchedDistrict(
-          findMatchedState(String(cleanPlaceholder(data?.profile?.state) || org.state || registrationState || fallback.state || '')),
-          String(cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district || '')
-        ) || cleanPlaceholder(data?.profile?.district) || org.district || registrationDistrict || fallback.district,
-        city: cleanPlaceholder(storedDraft?.formData?.city || data?.profile?.city || org.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
-        pincode: cleanPlaceholder(storedDraft?.formData?.pincode || data?.profile?.pincode || org.pincode || regDetails.pincode || fallback.pincode),
-        registeredAddress: cleanPlaceholder(storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || org.addressLine1 || regDetails.address || fallback.registeredAddress),
+          findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || '')),
+          String(cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district || '')
+        ) || cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district,
+        city: cleanPlaceholder(org.city || storedDraft?.formData?.city || data?.profile?.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+        pincode: cleanPlaceholder(org.pincode || storedDraft?.formData?.pincode || data?.profile?.pincode || regDetails.pincode || fallback.pincode),
+        registeredAddress: cleanPlaceholder(org.addressLine1 || storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || regDetails.address || fallback.registeredAddress),
     };
 };
 

@@ -2540,9 +2540,49 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
   const newEndDate = body.endDate ? new Date(body.endDate) : null;
   const oldEndDate = bid.endDate ? new Date(bid.endDate) : null;
   if (newEndDate && oldEndDate && newEndDate.getTime() > oldEndDate.getTime()) {
+    const notifiedSellerIds = new Set<number>();
     const participations = await db.procurementBidParticipation.findMany({
-      where: { bidId: bid.id }
+      where: { bidId: bid.id },
+      select: { sellerId: true }
     });
+    for (const p of participations) {
+      if (p.sellerId) notifiedSellerIds.add(p.sellerId);
+    }
+
+    const isLimited = (bid as any).visibility === 'LIMITED' || (bid as any).visibility === 'INVITED_SELLERS_ONLY';
+    if (isLimited) {
+      const technicalPacket = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+      const invitedOrgIds: number[] = (bid as any).invitedSellerOrgIds || technicalPacket.invitedSellerOrgIds || technicalPacket.rules?.invitedSellerOrgIds || [];
+      const invitedUserIds: number[] = (bid as any).invitedUserIds || technicalPacket.invitedUserIds || [];
+      if (invitedOrgIds.length > 0 || invitedUserIds.length > 0) {
+        const invitedUsers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any },
+            OR: [
+              ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+              ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+            ]
+          },
+          select: { id: true }
+        });
+        for (const u of invitedUsers) {
+          notifiedSellerIds.add(u.id);
+        }
+      }
+    } else {
+      const allActiveSellers = await db.user.findMany({
+        where: {
+          role: { in: ['seller', 'shg'] as any },
+          accountStatus: { not: 'BLOCKED' as any }
+        },
+        select: { id: true }
+      });
+      for (const u of allActiveSellers) {
+        notifiedSellerIds.add(u.id);
+      }
+    }
+
     const tenderRef = bid.bidNumber || bid.requirementNumber || `PRC-${bid.id}`;
     const noticeRef = `JSG-TND/${new Date().getFullYear()}/${bid.id}/EXT`;
     const originalDeadlineStr = formatIstDateTime(oldEndDate);
@@ -2577,9 +2617,9 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
       securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules.'
     });
 
-    for (const p of participations) {
+    for (const sellerId of notifiedSellerIds) {
       try {
-        await notificationService.notifyUser(p.sellerId, {
+        await notificationService.notifyUser(sellerId, {
           title: 'Submission Deadline Extended',
           message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}.`,
           type: 'tender.deadline_extended',
@@ -2591,8 +2631,41 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
           noticeRef
         }, ['in_app', 'email']);
       } catch (err) {
-        logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');
+        logger.warn({ err, sellerId }, 'Failed to send deadline extension notification');
       }
+    }
+
+    try {
+      const extEvent = {
+        type: 'CORRIGENDUM_ISSUED' as const,
+        procurementId: bid.id,
+        requirementId: bid.requirementNumber || bid.bidNumber || bid.id,
+        bidId: bid.id,
+        bidNumber: tenderRef,
+        corrigendumNumber: Number((updated as any)?.technicalPacket?.corrigendumCount || 1),
+        newDeadline: newEndDate.toISOString(),
+        revisedDeadlineStr,
+        originalDeadlineStr,
+        reason: 'Submission deadline extended',
+        status: updated.status,
+        timestamp: new Date().toISOString()
+      };
+      broadcastToProcurement(bid.id, extEvent);
+      broadcastToProcurement('all', extEvent);
+      broadcastToProcurement(bid.id, {
+        type: 'PROCUREMENT_UPDATED',
+        procurementId: bid.id,
+        status: updated.status,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement('all', {
+        type: 'PROCUREMENT_UPDATED',
+        procurementId: bid.id,
+        status: updated.status,
+        timestamp: new Date().toISOString()
+      });
+    } catch (bcErr) {
+      logger.warn({ bcErr, bidId: bid.id }, 'Failed to broadcast deadline extension');
     }
   }
 
@@ -2794,11 +2867,51 @@ export const extendBidSchedule = async (
 
   await procurementAudit(req, 'BID_SCHEDULE_EXTENDED', 'ProcurementBid', bid.id, changeSummary, bid);
 
-  // Notify all participating sellers without modifying their submission status
-  const participations = await db.procurementBidParticipation.findMany({
-    where: { bidId: bid.id }
-  });
+  // 1. Gather all seller recipients: participating sellers + all active Sellers & SHGs (public) or invited sellers (limited)
   const notifiedSellerIds = new Set<number>();
+  const participations = await db.procurementBidParticipation.findMany({
+    where: { bidId: bid.id },
+    select: { sellerId: true }
+  });
+  for (const p of participations) {
+    if (p.sellerId) notifiedSellerIds.add(p.sellerId);
+  }
+
+  const isLimited = (bid as any).visibility === 'LIMITED' || (bid as any).visibility === 'INVITED_SELLERS_ONLY';
+  if (isLimited) {
+    const technicalPacket = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+    const invitedOrgIds: number[] = (bid as any).invitedSellerOrgIds || technicalPacket.invitedSellerOrgIds || technicalPacket.rules?.invitedSellerOrgIds || [];
+    const invitedUserIds: number[] = (bid as any).invitedUserIds || technicalPacket.invitedUserIds || [];
+    if (invitedOrgIds.length > 0 || invitedUserIds.length > 0) {
+      const invitedUsers = await db.user.findMany({
+        where: {
+          role: { in: ['seller', 'shg'] as any },
+          accountStatus: { not: 'BLOCKED' as any },
+          OR: [
+            ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+            ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+          ]
+        },
+        select: { id: true }
+      });
+      for (const u of invitedUsers) {
+        notifiedSellerIds.add(u.id);
+      }
+    }
+  } else {
+    // Public tender corrigendum: Notify all active registered Sellers and SHGs
+    const allActiveSellers = await db.user.findMany({
+      where: {
+        role: { in: ['seller', 'shg'] as any },
+        accountStatus: { not: 'BLOCKED' as any }
+      },
+      select: { id: true }
+    });
+    for (const u of allActiveSellers) {
+      notifiedSellerIds.add(u.id);
+    }
+  }
+
   const corrigendumNumber = updatedTechnicalPacket?.corrigendumCount || 1;
   const tenderRef = bid.bidNumber || bid.requirementNumber || `PRC-${bid.id}`;
   const noticeRef = `JSG-CORR/${new Date().getFullYear()}/${bid.id}/${String(corrigendumNumber).padStart(2, '0')}`;
@@ -2852,11 +2965,10 @@ export const extendBidSchedule = async (
     securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules. Official nodal authorities will never ask for your authentication PIN or OTP.'
   });
 
-  for (const p of participations) {
-    if (notifiedSellerIds.has(p.sellerId)) continue;
-    notifiedSellerIds.add(p.sellerId);
+  // Dispatch Email & In-App notifications to all identified sellers
+  for (const sellerId of notifiedSellerIds) {
     try {
-      await notificationService.notifyUser(p.sellerId, {
+      await notificationService.notifyUser(sellerId, {
         title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
         message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}. Reason: ${reasonStr}`,
         type: 'tender.deadline_extended',
@@ -2868,8 +2980,59 @@ export const extendBidSchedule = async (
         noticeRef
       }, ['in_app', 'email']);
     } catch (err) {
-      logger.warn({ err, sellerId: p.sellerId }, 'Failed to send deadline extension notification');
+      logger.warn({ err, sellerId }, 'Failed to send deadline extension notification');
     }
+  }
+
+  // 2. Real-Time Broadcasts for Instant Seller Auto-Refresh
+  const corrigendumEvent = {
+    type: 'CORRIGENDUM_ISSUED' as const,
+    procurementId: bid.id,
+    requirementId: bid.requirementNumber || bid.bidNumber || bid.id,
+    bidId: bid.id,
+    bidNumber: tenderRef,
+    corrigendumNumber,
+    newDeadline: newClosingDate.toISOString(),
+    revisedDeadlineStr,
+    originalDeadlineStr,
+    reason: reasonStr,
+    status: updated.status,
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    broadcastToProcurement(bid.id, corrigendumEvent);
+    if (bid.bidNumber && String(bid.bidNumber) !== String(bid.id)) {
+      broadcastToProcurement(bid.bidNumber, corrigendumEvent);
+    }
+    if (bid.requirementNumber && String(bid.requirementNumber) !== String(bid.id)) {
+      broadcastToProcurement(bid.requirementNumber, corrigendumEvent);
+    }
+    broadcastToProcurement('all', corrigendumEvent);
+
+    const updateEvent = {
+      type: 'PROCUREMENT_UPDATED' as const,
+      procurementId: bid.id,
+      requirementId: bid.requirementNumber || bid.id,
+      status: updated.status,
+      timestamp: new Date().toISOString()
+    };
+    broadcastToProcurement(bid.id, updateEvent);
+    broadcastToProcurement('all', updateEvent);
+
+    for (const sellerId of notifiedSellerIds) {
+      broadcastToUser(sellerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.requirementNumber || bid.id,
+        status: 'CORRIGENDUM_ISSUED',
+        title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
+        message: `The submission deadline for "${bid.title}" has been extended to ${revisedDeadlineStr}.`,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr, bidId: bid.id }, 'Failed to broadcast corrigendum event');
   }
 
   return updated;

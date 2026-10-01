@@ -24,6 +24,7 @@ import { openFileAsset } from '../../../lib/files';
 import { PdfEngine } from '../../../lib/pdfEngine';
 import { api } from '../../../lib/api';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 
 // --- Types ---
 interface TenderDetail {
@@ -126,27 +127,58 @@ export default function TenderDetailPage() {
   const [tender, setTender] = useState<TenderDetail | null>(() => tenderRef ? peekApi<TenderDetail>(`/api/tenders/${tenderRef}`) : null);
   const [loading, setLoading] = useState(!tender);
 
-  useEffect(() => {
+  const fetchTenderDetails = React.useCallback(async () => {
     if (!tenderRef) {
       setLoading(false);
       return;
     }
 
-    const fetchTenderDetails = async () => {
-      try {
-        if (!tender) setLoading(true);
-        const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`, true);
-        setTender(data);
-      } catch (err: any) {
-        console.error(err);
-        if (!tender) toast.error('Failed to load tender details');
-      } finally {
-        setLoading(false);
+    try {
+      const data = await getApi<TenderDetail>(`/api/tenders/${tenderRef}`, true);
+      setTender(data);
+    } catch (err: any) {
+      console.error(err);
+      toast.error('Failed to load tender details');
+    } finally {
+      setLoading(false);
+    }
+  }, [tenderRef]);
+
+  useProcurementRealtime(tenderRef || tender?.id);
+
+  useEffect(() => {
+    fetchTenderDetails();
+  }, [fetchTenderDetails]);
+
+  // Instant Real-Time auto-refresh on extension corrigendum or tender update
+  useEffect(() => {
+    const handleAutoRefresh = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const detail = customEvt.detail;
+      const eventProcId = String(detail?.procurementId || detail?.bidId || '');
+      const eventReqId = String(detail?.requirementId || detail?.bidNumber || '');
+      const currentRef = String(tenderRef || '');
+      const currentId = String(tender?.id || '');
+
+      if (
+        !eventProcId ||
+        eventProcId === currentRef ||
+        eventProcId === currentId ||
+        eventReqId === currentRef ||
+        eventReqId === currentId ||
+        detail?.requirementId === 'all'
+      ) {
+        fetchTenderDetails();
       }
     };
 
-    fetchTenderDetails();
-  }, [tenderRef]);
+    window.addEventListener('procurement:corrigendum', handleAutoRefresh);
+    window.addEventListener('procurement:updated', handleAutoRefresh);
+    return () => {
+      window.removeEventListener('procurement:corrigendum', handleAutoRefresh);
+      window.removeEventListener('procurement:updated', handleAutoRefresh);
+    };
+  }, [tenderRef, tender?.id, fetchTenderDetails]);
 
   const formatCurrency = (val?: number) => {
     if (!val && val !== 0) return '—';
@@ -453,6 +485,7 @@ export default function TenderDetailPage() {
       submitButtonLabel={user?.role === 'buyer' || user?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
       onSubmitClick={user?.role === 'buyer' || user?.role === 'admin' ? () => router.push(`/bids/${tender.id || tenderRef}/results`) : handleParticipate}
       onViewQuotationClick={hasSubmittedProposal ? handleParticipate : undefined}
+      onRefresh={fetchTenderDetails}
     />
   );
 }

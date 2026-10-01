@@ -25,7 +25,8 @@ export type ProcurementSocketEvent =
   | { type: 'BID_REJECTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; timestamp: string }
   | { type: 'TECHNICAL_EVALUATION_STARTED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
   | { type: 'FINANCIAL_EVALUATION_STARTED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
-  | { type: 'L1_GENERATED'; requirementId?: number | string; procurementId?: number | string; l1Price?: number; timestamp: string };
+  | { type: 'L1_GENERATED'; requirementId?: number | string; procurementId?: number | string; l1Price?: number; timestamp: string }
+  | { type: 'CORRIGENDUM_ISSUED'; requirementId?: number | string; procurementId?: number | string; bidId?: number | string; bidNumber?: string; corrigendumNumber?: number; newDeadline?: string; revisedDeadlineStr?: string; originalDeadlineStr?: string; reason?: string; status?: string; timestamp: string };
 
 export type AuctionSocketEvent =
   | { type: 'REVERSE_AUCTION_BID'; auctionId: number | string; auctionCode?: string; currentLowest: number; minimumNextBid: number; sellerOrgId?: number | null; timestamp: string }

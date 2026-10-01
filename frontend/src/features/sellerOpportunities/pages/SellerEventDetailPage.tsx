@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { ProcurementDetailUnifiedView } from '../../rfq/components/ProcurementDetailUnifiedView';
 import { peekApi } from '../../shared/apiClient';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 
 interface PageProps {
   id: string;
@@ -64,9 +65,33 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       });
   }, [id]);
 
+  useProcurementRealtime(id);
+
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Instant Real-Time auto-refresh on extension corrigendum or bid update
+  useEffect(() => {
+    const handleAutoRefresh = (e: Event) => {
+      const customEvt = e as CustomEvent;
+      const detail = customEvt.detail;
+      const eventProcId = String(detail?.procurementId || detail?.bidId || '');
+      const eventReqId = String(detail?.requirementId || detail?.bidNumber || '');
+      const currentId = String(id || '');
+
+      if (!eventProcId || eventProcId === currentId || eventReqId === currentId || detail?.requirementId === 'all') {
+        loadData();
+      }
+    };
+
+    window.addEventListener('procurement:corrigendum', handleAutoRefresh);
+    window.addEventListener('procurement:updated', handleAutoRefresh);
+    return () => {
+      window.removeEventListener('procurement:corrigendum', handleAutoRefresh);
+      window.removeEventListener('procurement:updated', handleAutoRefresh);
+    };
+  }, [id, loadData]);
 
   // Is Two Packet Bid or RFP requiring technical qualification?
   const isTwoPacket = useMemo(() => {
@@ -236,6 +261,7 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       submitButtonLabel={isSubmitted ? 'Proposal Submitted' : 'Submit Proposal'}
       onSubmitClick={() => router.push(`/bids/${bid.id}/participate`)}
       onViewQuotationClick={isSubmitted ? () => router.push(`/bids/${bid.id}/participate`) : undefined}
+      onRefresh={loadData}
       rawBid={bid}
       rateContractConfig={
         (bid as any).rateContractConfig ||
