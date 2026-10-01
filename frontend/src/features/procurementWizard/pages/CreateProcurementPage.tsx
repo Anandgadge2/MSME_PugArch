@@ -4469,7 +4469,7 @@ function ItemDrawerOrModal({
                   )}
                 </Field>
 
-                <Field label="Est. Unit Rate (₹)">
+                <Field label={isService ? "Est. Service Fee / Benchmark Budget (₹)" : "Est. Unit Rate (₹)"}>
                   <div className="relative flex items-center">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <span className="text-xs sm:text-sm font-bold text-slate-400 select-none">
@@ -4479,7 +4479,7 @@ function ItemDrawerOrModal({
                     <input
                       type="text"
                       inputMode="decimal"
-                      aria-label="Estimated Unit Rate in Rupees"
+                      aria-label={isService ? "Estimated Service Fee in Rupees" : "Estimated Unit Rate in Rupees"}
                       value={formData.unitPrice ?? ''}
                       onChange={e => {
                         let val = e.target.value.replace(/[^0-9.]/g, '');
@@ -4505,9 +4505,14 @@ function ItemDrawerOrModal({
                         }
                       }}
                       className={cn(inputClass, "pl-8 sm:pl-8 font-bold")}
-                      placeholder="0"
+                      placeholder={isService ? "e.g. 500000 (leave 0 for open bid)" : "0"}
                     />
                   </div>
+                  {isService && (
+                    <p className="text-[10px] text-purple-800/90 font-medium mt-1">
+                      Department benchmark or ceiling budget (excl. GST). Leave blank or 0 if bidders should propose their price freely.
+                    </p>
+                  )}
                 </Field>
 
                 <Field label="GST Rate">
@@ -4529,7 +4534,7 @@ function ItemDrawerOrModal({
               <div className="mt-3 flex flex-wrap items-center justify-between rounded-xl bg-slate-50 border border-slate-200/90 px-4 py-2.5 text-xs">
                 <div className="flex items-center gap-4 text-slate-600">
                   <span className="text-[11px] font-semibold">
-                    Subtotal: <strong className="text-slate-900 font-extrabold">₹{baseSubtotal.toLocaleString('en-IN')}</strong>
+                    {isService ? 'Base Service Fee:' : 'Subtotal:'} <strong className="text-slate-900 font-extrabold">₹{baseSubtotal.toLocaleString('en-IN')}</strong>
                   </span>
                   {gstPct > 0 && (
                     <span className="text-[11px] font-semibold text-slate-500">
@@ -4538,7 +4543,9 @@ function ItemDrawerOrModal({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Line Total:</span>
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
+                    {isService ? 'Contract Total (Gross):' : 'Line Total:'}
+                  </span>
                   <span className="text-sm font-black text-[#12335f]">
                     ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </span>
@@ -5182,139 +5189,158 @@ function ItemsDetailsForm({
     });
   };
 
-  const procurementItemColumns: ColumnDef<any>[] = useMemo(() => [
-    {
-      key: 'type',
-      header: 'Type',
-      width: 'w-[7%] min-w-[85px]',
-      cell: (item: any) => (
-        <span className={cn(
-          "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider whitespace-nowrap shadow-3xs",
-          item.itemType === 'Service'
-            ? "border border-purple-200 bg-purple-50 text-purple-700"
-            : "border border-blue-200 bg-blue-50 text-blue-700"
-        )}>
-          {item.itemType || 'Product'}
-        </span>
-      )
-    },
-    {
-      key: 'name',
-      header: 'Item / Service Name',
-      width: 'w-[16%] min-w-[170px]',
-      cell: (item: any) => (
-        <div className="font-bold text-slate-900 text-xs leading-snug break-words line-clamp-2 max-w-full" title={item.name}>
-          {item.name || <span className="text-rose-500 italic font-normal">Unnamed Item</span>}
-        </div>
-      )
-    },
-    {
-      key: 'specifications',
-      header: 'Specifications / Scope',
-      width: 'w-[15%] min-w-[160px]',
-      cellClassName: 'text-slate-600 font-medium',
-      cell: (item: any) => {
-        const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
-        return (
-          <span className="line-clamp-2 text-xs leading-relaxed text-slate-600 break-words" title={descText || undefined}>
-            {descText ? descText : <span className="text-slate-400 italic">No description</span>}
-          </span>
-        );
-      }
-    },
-    {
-      key: 'quantity',
-      header: 'Qty & UOM',
-      width: 'w-[7%] min-w-[85px]',
-      align: 'center',
-      cell: (item: any) => (
-        <div className="whitespace-nowrap text-center">
-          <span className="font-extrabold text-slate-900 text-xs">{item.quantity}</span>{' '}
-          <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit || 'NOS'}</span>
-        </div>
-      )
-    },
-    {
-      key: 'rate',
-      header: whatBuying === 'Service' ? 'Est. Service Rate' : 'Est. Unit Rate',
-      width: 'w-[10%] min-w-[110px]',
-      align: 'right',
-      cellClassName: 'font-extrabold text-slate-900',
-      cell: (item: any) => {
-        const rate = Number(item.unitPrice || 0);
-        const gst = Number(item.gst ?? 18);
-        return rate > 0 ? (
-          <div className="text-right whitespace-nowrap">
-            <div className="font-extrabold text-slate-900 text-xs">₹{rate.toLocaleString('en-IN')}</div>
-            <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
-          </div>
-        ) : (
-          <div className="text-right whitespace-nowrap">
-            <span className="inline-flex items-center text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200" title="Rate will be quoted by bidders during bidding">
-              Quote in Bid
-            </span>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'total',
-      header: whatBuying === 'Service' ? 'Service Fee (Incl. GST)' : 'Line Total (Incl. GST)',
-      width: 'w-[11%] min-w-[125px]',
-      align: 'right',
-      cellClassName: 'font-extrabold text-slate-900',
-      cell: (item: any) => {
-        const qty = Number(item.quantity || 0);
-        const rate = Number(item.unitPrice || 0);
-        const gst = Number(item.gst ?? 18);
-        const base = qty * rate;
-        const total = base * (1 + gst / 100);
-        return total > 0 ? (
-          <div className="text-right whitespace-nowrap">
-            <div className="font-black text-[#12335f] text-xs">₹{Math.round(total).toLocaleString('en-IN')}</div>
-            <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
-          </div>
-        ) : (
-          <div className="text-right whitespace-nowrap">
-            <span className="text-slate-400 text-[11px] italic">TBD in Bidding</span>
-          </div>
-        );
-      }
-    },
-    {
-      key: 'hsn',
-      header: whatBuying === 'Service' ? 'SAC Code' : 'HSN / SAC',
-      width: 'w-[6%] min-w-[80px]',
-      align: 'center',
-      cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
-      cell: (item: any) => {
-        const code = item.hsn_sac_code || (item.itemType === 'Service' ? '9987' : '');
-        return code ? (
+  const procurementItemColumns: ColumnDef<any>[] = useMemo(() => {
+    const isServiceMode = whatBuying === 'Service';
+
+    const baseColumns: ColumnDef<any>[] = [
+      {
+        key: 'type',
+        header: 'Type',
+        width: isServiceMode ? 'w-[7%] min-w-[75px]' : 'w-[6%] min-w-[70px]',
+        cell: (item: any) => (
           <span className={cn(
-            "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-tight inline-block",
+            "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider whitespace-nowrap shadow-3xs",
             item.itemType === 'Service'
-              ? "bg-purple-50 text-purple-700 border border-purple-200"
-              : "bg-slate-100 text-slate-700 border border-slate-200"
+              ? "border border-purple-200 bg-purple-50 text-purple-700"
+              : "border border-blue-200 bg-blue-50 text-blue-700"
           )}>
-            {item.itemType === 'Service' && !String(code).startsWith('SAC') ? `SAC ${code}` : code}
+            {item.itemType || 'Product'}
           </span>
-        ) : (
-          <span className="text-slate-400">-</span>
-        );
-      }
-    },
-    {
-      key: 'brand',
-      header: whatBuying === 'Service' ? 'Contract Standard' : 'Brand & Policy',
-      width: 'w-[9%] min-w-[105px]',
-      cell: (item: any) => (
-        item.itemType === 'Service' ? (
-          <div className="min-w-0">
-            <span className="inline-flex items-center text-[9.5px] font-black uppercase text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded shadow-3xs whitespace-nowrap">
-              SOW / SLA
-            </span>
+        )
+      },
+      {
+        key: 'name',
+        header: isServiceMode ? 'Service Title' : 'Item / Product Name',
+        width: isServiceMode ? 'w-[18%] min-w-[170px]' : 'w-[16%] min-w-[160px]',
+        cell: (item: any) => (
+          <div className="font-bold text-slate-900 text-xs leading-snug break-words line-clamp-2 max-w-full" title={item.name}>
+            {item.name || <span className="text-rose-500 italic font-normal">{isServiceMode ? 'Unnamed Service' : 'Unnamed Item'}</span>}
           </div>
-        ) : (
+        )
+      },
+      {
+        key: 'specifications',
+        header: isServiceMode ? 'Scope & Deliverables' : 'Specifications / Scope',
+        width: isServiceMode ? 'w-[20%] min-w-[180px]' : 'w-[16%] min-w-[160px]',
+        cellClassName: 'text-slate-600 font-medium',
+        cell: (item: any) => {
+          const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
+          return (
+            <span className="line-clamp-2 text-xs leading-relaxed text-slate-600 break-words" title={descText || undefined}>
+              {descText ? descText : <span className="text-slate-400 italic">No description</span>}
+            </span>
+          );
+        }
+      },
+      {
+        key: 'quantity',
+        header: isServiceMode ? 'Billing Qty' : 'Qty & UOM',
+        width: isServiceMode ? 'w-[8%] min-w-[85px]' : 'w-[7%] min-w-[80px]',
+        align: 'center',
+        cell: (item: any) => (
+          <div className="whitespace-nowrap text-center">
+            <span className="font-extrabold text-slate-900 text-xs">{item.quantity}</span>{' '}
+            <span className="text-[10px] font-bold text-slate-500 uppercase">{item.unit || (isServiceMode ? 'SET' : 'NOS')}</span>
+          </div>
+        )
+      },
+      {
+        key: 'rate',
+        header: isServiceMode ? 'Est. Service Fee' : 'Est. Unit Rate',
+        width: isServiceMode ? 'w-[14%] min-w-[130px]' : 'w-[11%] min-w-[115px]',
+        align: 'right',
+        cellClassName: 'font-extrabold text-slate-900',
+        cell: (item: any) => {
+          const rate = Number(item.unitPrice || 0);
+          const gst = Number(item.gst ?? 18);
+          return rate > 0 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedItemForEdit(item);
+                setShowItemDrawer(true);
+              }}
+              className="text-right whitespace-nowrap group cursor-pointer inline-block"
+              title="Click to edit fee"
+            >
+              <div className="font-extrabold text-slate-900 text-xs group-hover:text-purple-700 transition-colors">
+                ₹{rate.toLocaleString('en-IN')}
+              </div>
+              <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
+            </button>
+          ) : (
+            <div className="text-right whitespace-nowrap">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedItemForEdit(item);
+                  setShowItemDrawer(true);
+                }}
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-black text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-3xs transition-all cursor-pointer whitespace-nowrap"
+                title="Click to set estimated benchmark fee for this service"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Set Fee</span>
+              </button>
+            </div>
+          );
+        }
+      },
+      {
+        key: 'total',
+        header: isServiceMode ? 'Total (Incl. GST)' : 'Line Total (Incl. GST)',
+        width: isServiceMode ? 'w-[13%] min-w-[125px]' : 'w-[12%] min-w-[120px]',
+        align: 'right',
+        cellClassName: 'font-extrabold text-slate-900',
+        cell: (item: any) => {
+          const qty = Number(item.quantity || 0);
+          const rate = Number(item.unitPrice || 0);
+          const gst = Number(item.gst ?? 18);
+          const base = qty * rate;
+          const total = base * (1 + gst / 100);
+          return total > 0 ? (
+            <div className="text-right whitespace-nowrap">
+              <div className="font-black text-[#12335f] text-xs">₹{Math.round(total).toLocaleString('en-IN')}</div>
+              <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
+            </div>
+          ) : (
+            <div className="text-right whitespace-nowrap">
+              <span className="text-slate-400 text-[11px] italic font-medium">Bidders to Quote</span>
+            </div>
+          );
+        }
+      },
+      {
+        key: 'hsn',
+        header: isServiceMode ? 'SAC Code' : 'HSN Code',
+        width: isServiceMode ? 'w-[8%] min-w-[80px]' : 'w-[7%] min-w-[75px]',
+        align: 'center',
+        cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
+        cell: (item: any) => {
+          const code = item.hsn_sac_code || (item.itemType === 'Service' ? '9987' : '');
+          return code ? (
+            <span className={cn(
+              "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-tight inline-block",
+              item.itemType === 'Service'
+                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                : "bg-slate-100 text-slate-700 border border-slate-200"
+            )}>
+              {item.itemType === 'Service' && !String(code).startsWith('SAC') ? `SAC ${code}` : code}
+            </span>
+          ) : (
+            <span className="text-slate-400">-</span>
+          );
+        }
+      },
+    ];
+
+    // Only include Brand & Policy column when buying Products
+    if (!isServiceMode) {
+      baseColumns.push({
+        key: 'brand',
+        header: 'Brand & Policy',
+        width: 'w-[9%] min-w-[100px]',
+        cell: (item: any) => (
           <div className="min-w-0">
             <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
               {item.brand_preference || 'Any Brand'}
@@ -5332,97 +5358,102 @@ function ItemsDetailsForm({
             </div>
           </div>
         )
-      )
-    },
-    {
-      key: 'documents',
-      header: 'Documents & Specs',
-      width: 'w-[12%] min-w-[130px]',
-      cell: (item: any) => {
-        const attachmentsList = item.attachments || [];
-        const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
-        const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+      });
+    }
 
-        return hasDocs ? (
-          <div className="flex items-center gap-1.5 whitespace-nowrap">
+    baseColumns.push(
+      {
+        key: 'documents',
+        header: isServiceMode ? 'SOW & Docs' : 'Docs & Specs',
+        width: isServiceMode ? 'w-[9%] min-w-[95px]' : 'w-[9%] min-w-[95px]',
+        cell: (item: any) => {
+          const attachmentsList = item.attachments || [];
+          const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
+          const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
+
+          return hasDocs ? (
+            <div className="flex items-center gap-1.5 whitespace-nowrap">
+              <button
+                type="button"
+                onClick={() => setQuickDocItem(item)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
+                title="Click to view all uploaded documents"
+                aria-label={`View ${docCount} documents for ${item.name || 'item'}`}
+              >
+                <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
+                <span>
+                  {docCount} file{docCount === 1 ? '' : 's'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickDocItem(item)}
+                className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
+                title="Add more documents"
+                aria-label={`Add more documents for ${item.name || 'item'}`}
+              >
+                <Plus className="h-3 w-3" aria-hidden="true" />
+              </button>
+            </div>
+          ) : (
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
-              title="Click to view all uploaded documents"
-              aria-label={`View ${docCount} documents for ${item.name || 'item'}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+              title="Attach specification or drawing"
+              aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
             >
-              <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
-              <span>
-                {docCount} file{docCount === 1 ? '' : 's'}
-              </span>
+              <FilePlus className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+              <span>+ Attach</span>
+            </button>
+          );
+        }
+      },
+      {
+        key: 'actions',
+        header: 'Actions',
+        width: isServiceMode ? 'w-[7%] min-w-[85px]' : 'w-[7%] min-w-[85px]',
+        align: 'right',
+        cell: (item: any) => (
+          <div className="flex items-center justify-end gap-1 whitespace-nowrap shrink-0">
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedItemForEdit(item);
+                setShowItemDrawer(true);
+              }}
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
+              title="Edit specifications and fee"
+              aria-label={`Edit ${item.name || 'line item'}`}
+            >
+              <Pencil className="h-3 w-3" aria-hidden="true" />
+              <span>Edit</span>
             </button>
             <button
               type="button"
-              onClick={() => setQuickDocItem(item)}
-              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
-              title="Add more documents"
-              aria-label={`Add more documents for ${item.name || 'item'}`}
+              onClick={() => handleDuplicateItem(item)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+              title="Duplicate line item"
+              aria-label={`Duplicate ${item.name || 'line item'}`}
             >
-              <Plus className="h-3 w-3" aria-hidden="true" />
+              <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => handleRemoveItem(item.id)}
+              className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
+              title="Delete line item"
+              aria-label={`Delete ${item.name || 'line item'}`}
+            >
+              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
             </button>
           </div>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setQuickDocItem(item)}
-            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
-            title="Attach specification or drawing"
-            aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
-          >
-            <FilePlus className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
-            <span>+ Attach Doc</span>
-          </button>
-        );
+        )
       }
-    },
-    {
-      key: 'actions',
-      header: 'Actions',
-      width: 'w-[10%] min-w-[115px]',
-      align: 'right',
-      cell: (item: any) => (
-        <div className="flex items-center justify-end gap-1 whitespace-nowrap shrink-0">
-          <button
-            type="button"
-            onClick={() => {
-              setSelectedItemForEdit(item);
-              setShowItemDrawer(true);
-            }}
-            className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
-            title="Edit specifications"
-            aria-label={`Edit ${item.name || 'line item'}`}
-          >
-            <Pencil className="h-3 w-3" aria-hidden="true" />
-            <span>Edit</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDuplicateItem(item)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
-            title="Duplicate line item"
-            aria-label={`Duplicate ${item.name || 'line item'}`}
-          >
-            <Copy className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRemoveItem(item.id)}
-            className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
-            title="Delete line item"
-            aria-label={`Delete ${item.name || 'line item'}`}
-          >
-            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
-          </button>
-        </div>
-      )
-    }
-  ], [handleDuplicateItem, handleRemoveItem]);
+    );
+
+    return baseColumns;
+  }, [whatBuying, handleDuplicateItem, handleRemoveItem]);
 
   // 1. BOQ Table Mode (for BOQ Sourced or Works Contracts)
   if (whatBuying === 'BOQ' || whatBuying === 'Works') {
@@ -6143,7 +6174,7 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth="min-w-[1180px]"
+        minWidth={whatBuying === 'Service' ? 'min-w-[1050px]' : 'min-w-[1240px]'}
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle={whatBuying === 'Service' ? "No service contract lines added yet" : "No product items added yet"}
@@ -6202,10 +6233,14 @@ function ItemsDetailsForm({
               </div>
 
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Base Value (Excl. GST)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  {whatBuying === 'Service' ? 'Base Service Fee' : 'Base Value (Excl. GST)'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-800">
-                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.baseValue)}
+                    {totals.baseValue > 0
+                      ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.baseValue)
+                      : <span className="text-slate-400 font-bold text-xs">To be Quoted</span>}
                   </span>
                   <span className="text-[10px] font-medium text-slate-400">Pre-tax</span>
                 </div>
@@ -6215,17 +6250,23 @@ function ItemsDetailsForm({
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Applicable GST (Taxes)</span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-purple-700">
-                    +{new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.gstAmount)}
+                    {totals.gstAmount > 0
+                      ? `+${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.gstAmount)}`
+                      : '+18% GST'}
                   </span>
                   <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Taxes</span>
                 </div>
               </div>
 
               <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">Total Est. Value (Gross)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">
+                  {whatBuying === 'Service' ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-base font-black text-[#12335f]">
-                    {new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.grossValue)}
+                    {totals.grossValue > 0
+                      ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.grossValue)
+                      : <span className="text-blue-900/80 font-black text-xs">Disclosed in Bid</span>}
                   </span>
                   <span className="text-[9.5px] font-black text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded uppercase">Incl. GST</span>
                 </div>
@@ -6234,7 +6275,37 @@ function ItemsDetailsForm({
 
             {/* Reconciliation Banner between Step 2 estimate & Schedule */}
             {draft.items.length > 0 && (
-              !isSynced ? (
+              totals.grossValue === 0 ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-purple-200 bg-purple-50/70 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-purple-950 font-semibold">
+                    <Info className="h-4 w-4 text-purple-700 shrink-0" />
+                    <span>
+                      {whatBuying === 'Service' ? (
+                        <>
+                          <strong>Price Discovery / Bidding Mode:</strong> Estimated service fee is ₹0 (Undisclosed). Qualified bidders will quote their commercial fee during bidding.
+                        </>
+                      ) : (
+                        <>
+                          <strong>Competitive Price Discovery:</strong> Line item rate is ₹0. Bidders will quote unit rates during bidding.
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      if (draft.items[0]) {
+                        setSelectedItemForEdit(draft.items[0]);
+                        setShowItemDrawer(true);
+                      }
+                    }}
+                    className="h-7.5 px-3 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shrink-0 whitespace-nowrap shadow-3xs cursor-pointer"
+                  >
+                    <IndianRupee className="h-3.5 w-3.5 mr-1" /> Set Estimated Benchmark Fee
+                  </Button>
+                </div>
+              ) : !isSynced ? (
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs">
                   <div className="flex items-center gap-2 text-amber-900 font-semibold">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />

@@ -401,7 +401,7 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     className={cn(
-                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap",
+                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap",
                       col.width,
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',
