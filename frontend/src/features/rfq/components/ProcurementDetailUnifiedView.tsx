@@ -12818,7 +12818,7 @@ export function ProcurementDetailUnifiedView(
 
                     {/* Action Buttons: Compare Quotes & Reverse Auction */}
                     <div className="flex flex-wrap items-center gap-2">
-                      {submittedParticipations.length >= 2 && (
+                      {submittedParticipations.length >= 2 && (!isTwoPacketMode || isFinancialOpeningReady) && (
                         <Button
                           type="button"
                           size="sm"
@@ -12829,17 +12829,11 @@ export function ProcurementDetailUnifiedView(
                               toast.warning(compareQuotationsDisabledReason || "Quotations cannot be compared yet.");
                               return;
                             }
-                            const allIds = submittedParticipations.map(
-                              (p: any) =>
-                                String(p.id || p.sellerId || p.sellerUserId),
-                            );
-                            if (submittedParticipations.length === 2) {
-                              setSelectedCompareIds(allIds);
-                              setIsComparisonModalOpen(true);
-                            } else {
-                              setSelectedCompareIds(allIds);
-                              setIsCompareChooserOpen(true);
-                            }
+                            const allIds = submittedParticipations
+                              .map((p: any) => String(p.id || p.sellerId || p.sellerUserId))
+                              .filter(Boolean);
+                            const targetParam = allIds.length > 0 ? `?ids=${encodeURIComponent(allIds.join(','))}` : '';
+                            router.push(`/bids/${targetId}/compare${targetParam}`);
                           }}
                           className={cn(
                             "h-7.5 gap-1.5 text-xs font-bold shadow-2xs rounded-lg px-3 transition-colors",
@@ -13237,12 +13231,11 @@ export function ProcurementDetailUnifiedView(
                     isBuyerSide || isBuyerOrAdmin
                       ? () => {
                           setSelectedQuotationForReview(null);
-                          setSelectedCompareIds(
-                            submittedParticipations.map((p: any) =>
-                              String(p.id || p.sellerId || p.sellerUserId),
-                            ),
-                          );
-                          setIsComparisonModalOpen(true);
+                          const allIds = submittedParticipations
+                            .map((p: any) => String(p.id || p.sellerId || p.sellerUserId))
+                            .filter(Boolean);
+                          const targetParam = allIds.length > 0 ? `?ids=${encodeURIComponent(allIds.join(','))}` : '';
+                          router.push(`/bids/${targetId}/compare${targetParam}`);
                         }
                       : undefined
                   }
@@ -13284,37 +13277,7 @@ export function ProcurementDetailUnifiedView(
                 />
               )}
 
-              {/* Select Quotations to Compare Modal */}
-              {isCompareChooserOpen && (
-                <SelectQuotationsToCompareModal
-                  isOpen={isCompareChooserOpen}
-                  onClose={() => setIsCompareChooserOpen(false)}
-                  participations={submittedParticipations}
-                  onConfirmCompare={(selectedIds) => {
-                    setSelectedCompareIds(selectedIds);
-                    setIsCompareChooserOpen(false);
-                    setIsComparisonModalOpen(true);
-                  }}
-                />
-              )}
 
-              {/* Quotation Comparison Matrix Modal Renderer */}
-              {isComparisonModalOpen && (
-                <QuotationComparisonModal
-                  isOpen={isComparisonModalOpen}
-                  onClose={() => setIsComparisonModalOpen(false)}
-                  participations={submittedParticipations}
-                  initialSelectedSellerIds={selectedCompareIds}
-                  procurementTitle={props.subject || props.procurementLabel}
-                  targetId={targetId}
-                  router={router}
-                  resultsPageUrl={resultsPageUrl}
-                  linkedAuction={linkedAuction}
-                  onSelectQuotationReview={(p) =>
-                    setSelectedQuotationForReview(p)
-                  }
-                />
-              )}
 
               {/* Start Reverse Auction Modal */}
               {isStartAuctionModalOpen && (

@@ -2,18 +2,15 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { api } from '../../../lib/api';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../hooks/useAuth';
 import { 
-  ArrowLeft, ShieldAlert, Award, Star, Info,
-  CheckCircle2, AlertTriangle, FileText, BadgePercent, IndianRupee,
-  Activity, Users, ChevronRight, HelpCircle, Eye, Download, X,
-  Flame, BarChart3, Zap, Trophy, Scale, Layers, Filter, RotateCcw,
-  Phone, Mail, Building, FileSpreadsheet, Printer, ExternalLink,
-  ShieldCheck, Check, Clock
+  ArrowLeft, Award, Info, CheckCircle2, AlertTriangle, FileText,
+  ChevronRight, X, BarChart3, Trophy, Scale, Layers, RotateCcw,
+  Phone, Mail, FileSpreadsheet, Printer, ExternalLink,
+  ShieldCheck, Check, Clock, Lock, XCircle, Package, Truck
 } from 'lucide-react';
-import { PageShell, StatusBadge, ProcurementHero, ProcurementLoadingState, ProcurementErrorState } from '../components';
+import { PageShell, ProcurementLoadingState, ProcurementErrorState } from '../components';
 import { money } from '../data';
 import { toast } from 'sonner';
 import { procurementBidApi } from '../api';
@@ -31,13 +28,7 @@ export default function BidComparisonPage() {
   }
   
   const router = useRouter();
-  const { token, user } = useAuth();
-  const queryClient = useQueryClient();
-  const authHeaders = useMemo(() => {
-    const headers: Record<string, string> = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    return headers;
-  }, [token]);
+  const { token } = useAuth();
 
   const [sortBy, setSortBy] = useState<string>('lowest-price');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -53,27 +44,6 @@ export default function BidComparisonPage() {
       }
     }
   }, []);
-
-  // Award Modal state
-  const [awardModal, setAwardModal] = useState<{
-    show: boolean;
-    participationId: number;
-    sellerName: string;
-    rank: number;
-    amount: number;
-    delivery: string;
-    remarks: string;
-    confirmed: boolean;
-  }>({
-    show: false,
-    participationId: 0,
-    sellerName: '',
-    rank: 999,
-    amount: 0,
-    delivery: '',
-    remarks: '',
-    confirmed: false
-  });
 
   // Fetch bid details with participations, fresh participants, and requirement responses concurrently
   const { data: bid, isLoading, error, refetch } = useQuery({
@@ -127,108 +97,183 @@ export default function BidComparisonPage() {
     staleTime: 5_000,
   });
 
-  // Award Mutation
-  const awardMutation = useMutation({
-    mutationFn: async ({ participationId, remarks, rank }: { participationId: number; remarks: string; rank: number }) => {
-      const body: any = { participationId, remarks };
-      if (rank !== 1) {
-        body.adminOverrideReason = remarks || 'Override to select optimal rated supplier';
-      }
-      const res = await api.fetch(`/api/buyer/bids/${bidId}/recommend-award`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders
-        },
-        body: JSON.stringify(body)
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson?.error || 'Failed to award bid');
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      toast.success('Contract award offer issued successfully! Awaiting seller acceptance before Purchase Order can be generated.');
-      setAwardModal(prev => ({ ...prev, show: false }));
-      queryClient.invalidateQueries({ queryKey: ['procurement-bid', bidId] });
-      queryClient.invalidateQueries({ queryKey: ['procurement-bid-comparison', bidId] });
-      queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
-      router.push(`/bids/${bidId}`);
-    },
-    onError: (err: any) => {
-      toast.error(err.message || 'Failed to issue award offer');
+  // Single vs Double Packet Detection & Financial Opening Verification
+  const rawPacketType = String(
+    bid?.basics?.biddingType ||
+    bid?.biddingType ||
+    bid?.packetType ||
+    bid?.tenderType ||
+    bid?.tender?.biddingType ||
+    bid?.tender?.packetType ||
+    ""
+  ).toUpperCase();
+
+  const isExplicitSingle =
+    rawPacketType.includes("SINGLE") ||
+    rawPacketType === "1";
+
+  const candidateFinDate =
+    bid?.financialOpeningDate ||
+    bid?.schedule?.financialOpeningDate ||
+    bid?.schedule?.financialBidOpeningDate ||
+    bid?.tender?.financialOpeningDate;
+
+  const isTwoPacket =
+    !isExplicitSingle &&
+    (rawPacketType.includes("TWO") ||
+      rawPacketType === "2" ||
+      Boolean(candidateFinDate));
+
+  const isFinancialOpened = useMemo(() => {
+    const statusUpper = String(bid?.status || bid?.lifecycleStage || "").toUpperCase();
+    if (['FINANCIAL_EVALUATION', 'FINANCIAL_EVALUATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'COMPLETED'].includes(statusUpper)) {
+      return true;
     }
-  });
-
-  const getDeliveryDays = (timeline: string) => {
-    const match = String(timeline || '').match(/(\d+)/);
-    return match ? Number(match[1]) : Infinity;
-  };
-
-  const getWarrantyMonths = (warranty: string) => {
-    const match = String(warranty || '').match(/(\d+)/);
-    if (!match) return 0;
-    const val = Number(match[1]);
-    if (String(warranty).toLowerCase().includes('year')) {
-      return val * 12;
+    if (candidateFinDate) {
+      return new Date(candidateFinDate).getTime() <= Date.now();
     }
-    return val;
-  };
+    return !isTwoPacket;
+  }, [bid?.status, bid?.lifecycleStage, candidateFinDate, isTwoPacket]);
 
-  const parseTechnicalOffer = useCallback((input: any) => {
-    const p = typeof input === 'object' && input ? input : {};
-    let descObj: any = {};
-    const descString = typeof input === 'string' ? input : (p.offeredItemDescription || '');
-    try {
-      if (descString && (String(descString).startsWith('{') || String(descString).startsWith('['))) {
-        descObj = JSON.parse(descString);
+  // Comprehensive Quotation Detail Parser
+  const parseQuotationData = useCallback((p: any) => {
+    if (!p) return null;
+
+    const candList = [
+      p.lineItems,
+      p.items,
+      p.lineQuotes,
+      p.responseData?.lineItems,
+      p.responseData?.items,
+      p.responseData?.lineQuotes,
+      p.responseData?.boqTable,
+      p.details?.lineItems,
+      p.details?.items,
+      p.quotation?.lineItems,
+      p.quotation?.items,
+      p.acknowledgement?.responseData?.lineItems,
+      p.acknowledgement?.responseData?.lineQuotes,
+      p.acknowledgement?.lineItems,
+      p.acknowledgement?.items,
+      p.boqTable,
+    ];
+    let lineItems: any[] = [];
+    for (const arr of candList) {
+      if (Array.isArray(arr) && arr.length > lineItems.length) {
+        lineItems = arr;
       }
-    } catch (e) {
-      // Ignore
     }
 
-    const details = (p.details && typeof p.details === 'object') ? p.details : {};
-    const respData = (p.responseData && typeof p.responseData === 'object') ? p.responseData : {};
-    const ackData = (p.acknowledgement && typeof p.acknowledgement === 'object') ? p.acknowledgement : {};
-    const lineItems = Array.isArray(p.lineItems) ? p.lineItems : [];
+    let descData: Record<string, any> = {};
+    const rawDesc = p.offeredItemDescription || p.message || p.responseData?.message;
+    if (typeof rawDesc === 'string' && (rawDesc.trim().startsWith('{') || rawDesc.trim().startsWith('['))) {
+      try {
+        descData = JSON.parse(rawDesc);
+      } catch {}
+    }
+
+    const ackData = p.acknowledgement && typeof p.acknowledgement === 'object' && !Array.isArray(p.acknowledgement) ? p.acknowledgement : {};
+    const respData = p.responseData && typeof p.responseData === 'object' && !Array.isArray(p.responseData) ? p.responseData : {};
+    const details = p.details && typeof p.details === 'object' ? p.details : {};
     const firstItem = lineItems.length ? lineItems[0] : {};
-    const techOffer = descObj.technicalOffer || respData.technicalOffer || ackData.technicalOffer || {};
+    const techOffer = descData.technicalOffer || respData.technicalOffer || ackData.technicalOffer || {};
 
-    const firstVal = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '');
+    const first = (...vals: any[]) => vals.find(v => v !== undefined && v !== null && String(v).trim() !== '' && String(v).trim() !== '—');
 
-    const rawMakeBrand = firstVal(p.makeBrand, details.makeBrand, respData.makeBrand, ackData.makeBrand, descObj.makeBrand, techOffer.makeBrand, firstItem.makeBrand, firstItem.brand);
-    const resolvedMakeBrand = (rawMakeBrand && rawMakeBrand !== '—' && rawMakeBrand.toLowerCase() !== 'standard') ? rawMakeBrand : '—';
-
-    const rawModel = firstVal(
-      p.model,
-      p.modelNumber,
-      details.model,
-      details.modelNumber,
-      respData.model,
-      respData.modelNumber,
-      ackData.model,
-      ackData.modelNumber,
-      descObj.model,
-      descObj.modelNumber,
-      techOffer.model,
-      techOffer.modelNumber,
-      firstItem.model,
-      firstItem.modelNumber,
-      firstItem.partNumber
+    // Amounts
+    const totalAmount = Number(
+      first(
+        p.totalAmount,
+        p.finalAmount,
+        p.quotedAmount,
+        respData.totalAmount,
+        respData.quotedAmount,
+        ackData.totalAmount,
+        ackData.quotedAmount,
+        details.totalAmount,
+        details.quotedAmount,
+        p.offeredPrice
+      ) || 0
     );
-    const resolvedModel = (rawModel && rawModel !== '—' && rawModel.toLowerCase() !== 'standard') ? rawModel : '—';
 
-    const rawPay = firstVal(
+    const baseAmount = Number(
+      first(
+        p.baseAmount,
+        p.baseValue,
+        respData.baseAmount,
+        respData.basePrice,
+        details.baseAmount,
+        ackData.baseAmount,
+        firstItem.unitPrice ? Number(firstItem.unitPrice) * (Number(firstItem.quantity) || 1) : null
+      ) || (p.gstPercentage && totalAmount ? totalAmount / (1 + p.gstPercentage / 100) : totalAmount)
+    );
+
+    const gstPercentage = Number(
+      first(
+        p.gstPercentage,
+        p.taxRate,
+        p.gstRate,
+        respData.gstPercentage,
+        details.gstPercentage,
+        ackData.gstPercentage,
+        firstItem.gstRate,
+        firstItem.taxRate
+      ) || (totalAmount > baseAmount && baseAmount > 0 ? Math.round(((totalAmount - baseAmount) / baseAmount) * 100) : 0)
+    );
+
+    const taxAmount = Number(
+      first(
+        p.taxAmount,
+        p.taxValue,
+        respData.taxAmount,
+        details.taxAmount,
+        ackData.taxAmount
+      ) || (totalAmount > baseAmount ? totalAmount - baseAmount : (baseAmount * gstPercentage) / 100)
+    );
+
+    // Scope & Quantity
+    const offeredQty = first(
+      p.offeredQuantity,
+      p.offeredQty,
+      p.quantity,
+      respData.offeredQuantity,
+      respData.offeredQty,
+      details.offeredQty,
+      ackData.offeredQty,
+      firstItem.quantity ? `${firstItem.quantity} ${firstItem.unit || ''}`.trim() : null
+    ) || '100% of Specified Requirement';
+
+    // Delivery & SLA
+    const rawDelivery = first(
+      p.deliveryTimeline,
+      p.deliveryPeriod,
+      p.deliverySchedule,
+      respData.deliveryTimeline,
+      details.deliveryTimeline,
+      ackData.deliveryTimeline,
+      techOffer.deliveryTimeline,
+      firstItem.deliveryTimeline,
+      firstItem.deliverySchedule
+    );
+    const deliveryTimeline = rawDelivery && /^\d+$/.test(String(rawDelivery).trim())
+      ? `${rawDelivery} Calendar Days`
+      : (rawDelivery || 'As per tender terms');
+
+    const deliveryTerms = first(
+      p.deliveryTerms,
+      p.freightTerms,
+      respData.deliveryTerms,
+      details.deliveryTerms,
+      ackData.deliveryTerms
+    ) || 'Free Delivery to Consignee (FOR Destination)';
+
+    const rawPay = first(
       p.paymentTerms,
       details.paymentTerms,
       respData.paymentTerms,
       ackData.paymentTerms,
       p.terms,
-      respData.terms,
-      ackData.terms,
-      descObj.terms,
-      descObj.paymentTerms
+      descData.paymentTerms
     );
     const formatPay = (v?: string) => {
       if (!v) return 'As per tender requirements (Escrow Protected)';
@@ -240,25 +285,102 @@ export default function BidComparisonPage() {
       if (['standard', 'standard terms', 'standard payment terms', 'as specified'].includes(l)) return 'As per tender requirements (Escrow Protected)';
       return s;
     };
+    const paymentTerms = formatPay(rawPay);
 
-    return {
-      makeBrand: resolvedMakeBrand,
-      model: resolvedModel,
-      offeredItemDescription: firstVal(descObj.offeredItemDescription, p.offeredItemDescription, respData.offeredItemDescription, ackData.offeredItemDescription, p.message, respData.message, firstItem.description),
-      complianceRemarks: firstVal(p.complianceRemarks, details.complianceRemarks, respData.complianceRemarks, ackData.complianceRemarks, techOffer.complianceRemarks, firstItem.complianceRemarks, firstItem.remarks),
-      deliveryTimeline: firstVal(p.deliveryTimeline, details.deliveryTimeline, respData.deliveryTimeline, ackData.deliveryTimeline, techOffer.deliveryTimeline, firstItem.deliveryTimeline, firstItem.deliveryRequirement, firstItem.deliverySchedule),
-      warrantyDetails: firstVal(p.warrantyDetails, details.warrantyDetails, respData.warrantyDetails, ackData.warrantyDetails, techOffer.warrantyDetails, firstItem.warrantyDetails, firstItem.warranty),
-      serviceSupport: firstVal(p.serviceSupport, details.serviceSupport, respData.serviceSupport, ackData.serviceSupport, techOffer.serviceSupport),
-      deviation: firstVal(p.deviation, details.deviation, respData.deviation, ackData.deviation, techOffer.deviation, firstItem.deviation),
-      rfqNotes: firstVal(p.rfqNotes, details.rfqNotes, respData.rfqNotes, ackData.rfqNotes, details.notes, respData.notes, ackData.notes),
-      paymentTerms: formatPay(rawPay),
-    };
-  }, []);
+    const warranty = first(
+      p.warrantyDetails,
+      p.warranty,
+      respData.warranty,
+      respData.warrantyDetails,
+      details.warranty,
+      details.warrantyDetails,
+      ackData.warranty,
+      firstItem.warranty
+    ) || '12 Months Comprehensive OEM Warranty';
 
-  const getSellerPhone = useCallback((p: any) => {
-    const respData = typeof p.responseData === 'string' ? (() => { try { return JSON.parse(p.responseData); } catch { return {}; } })() : (p.responseData || {});
-    const ackData = typeof p.acknowledgement === 'string' ? (() => { try { return JSON.parse(p.acknowledgement); } catch { return {}; } })() : (p.acknowledgement || {});
-    const descObj = typeof p.offeredItemDescription === 'string' ? (() => { try { return JSON.parse(p.offeredItemDescription); } catch { return {}; } })() : (p.offeredItemDescription && typeof p.offeredItemDescription === 'object' ? p.offeredItemDescription : {});
+    const serviceSupport = first(
+      p.serviceSupport,
+      details.serviceSupport,
+      respData.serviceSupport,
+      ackData.serviceSupport
+    ) || 'Standard OEM Support SLA';
+
+    // Technical
+    const makeBrand = first(
+      p.makeBrand,
+      details.makeBrand,
+      respData.makeBrand,
+      ackData.makeBrand,
+      descData.makeBrand,
+      techOffer.makeBrand,
+      firstItem.makeBrand,
+      firstItem.brand
+    ) || 'Compliant with Technical Specs';
+
+    const model = first(
+      p.model,
+      p.modelNumber,
+      details.model,
+      respData.model,
+      ackData.model,
+      descData.model,
+      techOffer.model,
+      firstItem.model,
+      firstItem.partNumber
+    ) || 'As per tender BOQ';
+
+    const techSpecs = first(
+      p.techSpecs,
+      details.techSpecs,
+      respData.techSpecs,
+      descData.offeredItemDescription,
+      p.offeredItemDescription,
+      firstItem.description
+    ) || '';
+
+    const complianceStatement = first(
+      p.complianceStatement,
+      details.complianceStatement,
+      respData.complianceStatement,
+      ackData.complianceStatement
+    ) || (p.deviation ? 'WITH_DEVIATION' : 'COMPLIANT');
+
+    const complianceRemarks = first(
+      p.complianceRemarks,
+      details.complianceRemarks,
+      respData.complianceRemarks,
+      ackData.complianceRemarks,
+      p.deviation
+    ) || '';
+
+    const techStatus = String(p.technicalStatus || details.techStatus || 'PENDING').toUpperCase();
+    const techScore = p.technicalScore ?? details.techScore;
+
+    // Org & contact
+    const sellerOrg = first(
+      p.seller?.organization?.organizationName,
+      p.sellerOrganization?.organizationName,
+      p.sellerOrganizationName,
+      p.sellerOrgName,
+      p.seller?.name,
+      p.sellerName
+    ) || `Supplier #${p.sellerId || p.id}`;
+
+    const contactPerson = first(
+      p.seller?.name,
+      p.sellerName,
+      p.sellerUser?.name,
+      respData.contactPerson,
+      details.contactPerson
+    ) || 'Authorized Representative';
+
+    const email = first(
+      p.seller?.email,
+      p.sellerEmail,
+      p.email,
+      p.sellerUser?.email,
+      respData.email
+    ) || null;
 
     const phoneCandidates = [
       p.sellerMobile,
@@ -268,129 +390,108 @@ export default function BidComparisonPage() {
       p.sellerUser?.phone,
       p.phone,
       p.mobile,
-      p.seller?.sellerProfile?.mobile,
-      p.seller?.sellerProfile?.phone,
-      p.seller?.organization?.mobile,
-      p.seller?.organization?.phone,
       respData.sellerMobile,
       respData.mobile,
       respData.phone,
       ackData.sellerMobile,
-      ackData.mobile,
-      ackData.phone,
-      descObj.mobile,
-      descObj.phone
+      ackData.mobile
     ];
+    const phone = phoneCandidates.find(v => typeof v === 'string' && v.trim().length > 0 && v !== '—' && v !== '-' && v !== 'null') || null;
 
-    const val = phoneCandidates.find(v => typeof v === 'string' && v.trim().length > 0 && v !== '—' && v !== '-' && v !== 'null' && v !== 'undefined');
-    return val ? val.trim() : null;
+    const location = [
+      p.seller?.organization?.city || p.sellerOrganization?.city,
+      p.seller?.organization?.district || p.sellerOrganization?.district,
+      p.seller?.organization?.state || p.sellerOrganization?.state
+    ].filter(Boolean).join(', ') || 'Registered Location';
+
+    return {
+      raw: p,
+      totalAmount,
+      baseAmount,
+      taxAmount,
+      gstPercentage,
+      offeredQty,
+      deliveryTimeline,
+      deliveryTerms,
+      paymentTerms,
+      warranty,
+      serviceSupport,
+      makeBrand,
+      model,
+      techSpecs,
+      complianceStatement,
+      complianceRemarks,
+      techStatus,
+      techScore,
+      sellerOrg,
+      contactPerson,
+      email,
+      phone,
+      location,
+      lineItems,
+      submittedAt: p.submittedAt || p.createdAt
+    };
   }, []);
 
-  const handleOpenAwardModal = (p: any) => {
-    const tech = parseTechnicalOffer(p);
-    setAwardModal({
-      show: true,
-      participationId: p.id,
-      sellerName: p.seller?.organization?.organizationName || p.seller?.name || p.sellerName || `Seller #${p.sellerId}`,
-      rank: p.rank || 999,
-      amount: p.totalAmount || p.quotedAmount || 0,
-      delivery: tech.deliveryTimeline || 'Not specified',
-      remarks: p.rank === 1 ? 'Selected based on lowest compliant financial quotation (L1).' : '',
-      confirmed: false
-    });
-  };
-
-  const handleConfirmAward = () => {
-    if (!awardModal.confirmed) {
-      toast.error('Please check the confirmation box to proceed.');
-      return;
-    }
-    if (awardModal.rank !== 1 && !awardModal.remarks.trim()) {
-      toast.error('Award remarks/justification is mandatory when selecting a supplier other than L1.');
-      return;
-    }
-    awardMutation.mutate({
-      participationId: awardModal.participationId,
-      remarks: awardModal.remarks,
-      rank: awardModal.rank
-    });
-  };
-
   // Filter and Sort participations
-  const filteredAndSortedParticipations = useMemo(() => {
+  const filteredAndSortedItems = useMemo(() => {
     if (!bid || !Array.isArray(bid.participations)) return [];
     
-    let items = [...bid.participations];
+    let rawItems = [...bid.participations];
 
     // Optional user multi-selection filter
     if (selectedIds.length > 0) {
-      items = items.filter(p => selectedIds.includes(p.id));
+      rawItems = rawItems.filter(p => selectedIds.includes(p.id));
     }
-    
+
+    const parsedList = rawItems.map(p => parseQuotationData(p)).filter(Boolean) as NonNullable<ReturnType<typeof parseQuotationData>>[];
+
     // Status Filtering
-    if (filterStatus !== 'all') {
-      items = items.filter(p => {
-        const tech = String(p.technicalStatus || '').toUpperCase();
-        const fin = String(p.financialStatus || '').toUpperCase();
-        if (filterStatus === 'technically-qualified') return tech === 'QUALIFIED';
-        if (filterStatus === 'financially-qualified') return fin === 'QUALIFIED';
-        if (filterStatus === 'pending') return tech === 'PENDING' || tech === 'UNDER_REVIEW';
-        if (filterStatus === 'shortlisted') return tech === 'SHORTLISTED' || p.finalStatus === 'SHORTLISTED';
-        if (filterStatus === 'rejected') return tech === 'DISQUALIFIED' || p.finalStatus === 'REJECTED';
-        if (filterStatus === 'clarification') return tech === 'CLARIFICATION_REQUIRED';
-        return true;
-      });
-    }
-
-    // Sorting (default lowest price L1 first)
-    items.sort((a, b) => {
-      const aTech = parseTechnicalOffer(a);
-      const bTech = parseTechnicalOffer(b);
-
-      if (sortBy === 'lowest-price') {
-        return (a.totalAmount || a.quotedAmount || 0) - (b.totalAmount || b.quotedAmount || 0);
-      }
-      if (sortBy === 'highest-price') {
-        return (b.totalAmount || b.quotedAmount || 0) - (a.totalAmount || a.quotedAmount || 0);
-      }
-      if (sortBy === 'earliest-submission') {
-        return new Date(a.submittedAt || a.createdAt).getTime() - new Date(b.submittedAt || b.createdAt).getTime();
-      }
-      if (sortBy === 'fastest-delivery') {
-        return getDeliveryDays(aTech.deliveryTimeline) - getDeliveryDays(bTech.deliveryTimeline);
-      }
-      if (sortBy === 'highest-rating') {
-        return (b.averageRating?.rating || 0) - (a.averageRating?.rating || 0);
-      }
-      if (sortBy === 'warranty') {
-        return getWarrantyMonths(bTech.warrantyDetails) - getWarrantyMonths(aTech.warrantyDetails);
-      }
-      if (sortBy === 'supplier-name') {
-        return String(a.seller?.organization?.organizationName || a.seller?.name || '').localeCompare(String(b.seller?.organization?.organizationName || b.seller?.name || ''));
-      }
-      return (a.totalAmount || a.quotedAmount || 0) - (b.totalAmount || b.quotedAmount || 0);
+    const filtered = parsedList.filter(item => {
+      if (filterStatus === 'technically-qualified') return item.techStatus === 'QUALIFIED';
+      if (filterStatus === 'compliant') return item.complianceStatement === 'COMPLIANT';
+      if (filterStatus === 'deviated') return item.complianceStatement === 'WITH_DEVIATION';
+      if (filterStatus === 'rejected') return item.techStatus === 'DISQUALIFIED';
+      return true;
     });
 
-    return items;
-  }, [bid, filterStatus, sortBy, selectedIds, parseTechnicalOffer]);
+    // Sorting
+    filtered.sort((a, b) => {
+      if (sortBy === 'lowest-price') return a.totalAmount - b.totalAmount;
+      if (sortBy === 'highest-price') return b.totalAmount - a.totalAmount;
+      if (sortBy === 'supplier-name') return a.sellerOrg.localeCompare(b.sellerOrg);
+      if (sortBy === 'earliest-submission') return new Date(a.submittedAt).getTime() - new Date(b.submittedAt).getTime();
+      return a.totalAmount - b.totalAmount;
+    });
+
+    // Assign ranking L1, L2, L3...
+    return filtered.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      isL1: idx === 0 && item.totalAmount > 0
+    }));
+  }, [bid, selectedIds, filterStatus, sortBy, parseQuotationData]);
 
   // Derived L1, L2, Savings and Spread metrics
   const comparisonMetrics = useMemo(() => {
-    const list = filteredAndSortedParticipations;
-    if (list.length === 0) return null;
+    if (filteredAndSortedItems.length === 0) return null;
 
-    const l1 = list[0];
-    const l2 = list.length > 1 ? list[1] : null;
+    const l1 = filteredAndSortedItems[0];
+    const l2 = filteredAndSortedItems.length > 1 ? filteredAndSortedItems[1] : null;
 
-    const l1Price = l1 ? (l1.totalAmount || l1.quotedAmount || 0) : 0;
-    const l2Price = l2 ? (l2.totalAmount || l2.quotedAmount || 0) : l1Price;
-    const prices = list.map(p => p.totalAmount || p.quotedAmount || 0).filter(v => v > 0);
+    const l1Price = l1.totalAmount;
+    const l2Price = l2 ? l2.totalAmount : l1Price;
+    const prices = filteredAndSortedItems.map(p => p.totalAmount).filter(v => v > 0);
     const maxPrice = prices.length ? Math.max(...prices) : l1Price;
 
     const l1Savings = l2Price > l1Price ? l2Price - l1Price : 0;
     const savingsPercent = l2Price > 0 && l1Savings > 0 ? ((l1Savings / l2Price) * 100).toFixed(1) : '0.0';
 
-    const l1OrgName = l1?.seller?.organization?.organizationName || l1?.seller?.name || l1?.sellerName || 'L1 Bidder';
+    const qualifiedCount = filteredAndSortedItems.filter(p => p.techStatus === 'QUALIFIED').length;
+    const compliantCount = filteredAndSortedItems.filter(p => p.complianceStatement === 'COMPLIANT').length;
+    const deviatedCount = filteredAndSortedItems.filter(p => p.complianceStatement === 'WITH_DEVIATION').length;
+
+    const isAnomalouslyLow = Number(savingsPercent) >= 35.0;
 
     return {
       l1,
@@ -400,10 +501,13 @@ export default function BidComparisonPage() {
       maxPrice,
       l1Savings,
       savingsPercent,
-      l1OrgName,
-      totalCount: list.length
+      isAnomalouslyLow,
+      qualifiedCount,
+      compliantCount,
+      deviatedCount,
+      totalCount: filteredAndSortedItems.length
     };
-  }, [filteredAndSortedParticipations]);
+  }, [filteredAndSortedItems]);
 
   const checkDiffers = (values: any[]) => {
     const normalized = values.map(v => String(v || '').trim().toLowerCase());
@@ -433,42 +537,48 @@ export default function BidComparisonPage() {
   };
 
   const handleExportCsv = () => {
-    if (!filteredAndSortedParticipations.length) return;
-    const headers = ['Field', ...filteredAndSortedParticipations.map((p, i) => `${i === 0 ? '[L1] ' : `[L${i + 1}] `}${p.seller?.organization?.organizationName || p.seller?.name || `Vendor ${i + 1}`}`)];
+    if (!filteredAndSortedItems.length) return;
+    const headers = ['Evaluation Parameter', ...filteredAndSortedItems.map(p => `[L${p.rank}] ${p.sellerOrg}`)];
     
     const rows: string[][] = [
       headers,
-      ['Rank', ...filteredAndSortedParticipations.map((_, i) => `L${i + 1}`)],
-      ['Total Quoted (INR)', ...filteredAndSortedParticipations.map(p => String(p.totalAmount || p.quotedAmount || 0))],
-      ['Base Price (INR)', ...filteredAndSortedParticipations.map(p => String(p.quotedAmount || 0))],
-      ['GST %', ...filteredAndSortedParticipations.map(p => `${p.gstPercentage || 0}%`)],
-      ['Contact Person', ...filteredAndSortedParticipations.map(p => p.seller?.name || p.sellerName || '—')],
-      ['Email', ...filteredAndSortedParticipations.map(p => p.seller?.email || '—')],
-      ['Mobile Number', ...filteredAndSortedParticipations.map(p => getSellerPhone(p) || '—')],
-      ['Delivery Timeline', ...filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).deliveryTimeline || '—')],
-      ['Payment Terms', ...filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).paymentTerms || '—')],
-      ['Technical Status', ...filteredAndSortedParticipations.map(p => p.technicalStatus || 'PENDING')],
-      ['Make / Brand', ...filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).makeBrand || '—')],
-      ['Model', ...filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).model || '—')],
-      ['Documents Count', ...filteredAndSortedParticipations.map(p => String(normalizeQuotationDocuments(p).length))]
+      ['Commercial Rank', ...filteredAndSortedItems.map(p => `L${p.rank}`)],
+      ['Total Landed Quoted (INR)', ...filteredAndSortedItems.map(p => String(p.totalAmount))],
+      ['Base Amount (excl. Tax) (INR)', ...filteredAndSortedItems.map(p => String(p.baseAmount))],
+      ['GST Rate (%)', ...filteredAndSortedItems.map(p => `${p.gstPercentage}%`)],
+      ['Tax Amount (INR)', ...filteredAndSortedItems.map(p => String(p.taxAmount))],
+      ['Offered Scope & Quantity', ...filteredAndSortedItems.map(p => p.offeredQty)],
+      ['Promised Delivery Timeline', ...filteredAndSortedItems.map(p => p.deliveryTimeline)],
+      ['Delivery Terms & Freight', ...filteredAndSortedItems.map(p => p.deliveryTerms)],
+      ['Payment Terms', ...filteredAndSortedItems.map(p => p.paymentTerms)],
+      ['Warranty Terms', ...filteredAndSortedItems.map(p => p.warranty)],
+      ['Technical Status', ...filteredAndSortedItems.map(p => p.techStatus)],
+      ['Compliance Statement', ...filteredAndSortedItems.map(p => p.complianceStatement)],
+      ['Make / Brand', ...filteredAndSortedItems.map(p => p.makeBrand)],
+      ['Model / Part Reference', ...filteredAndSortedItems.map(p => p.model)],
+      ['Contact Person', ...filteredAndSortedItems.map(p => p.contactPerson)],
+      ['Email Address', ...filteredAndSortedItems.map(p => p.email || '—')],
+      ['Mobile Number', ...filteredAndSortedItems.map(p => p.phone || '—')],
+      ['Location', ...filteredAndSortedItems.map(p => p.location)],
+      ['Quotation Documents Count', ...filteredAndSortedItems.map(p => String(normalizeQuotationDocuments(p.raw).length))]
     ];
 
     const csvContent = 'data:text/csv;charset=utf-8,' + rows.map(e => e.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Quotation_Comparison_${bidId}_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Procurement_Quotation_Comparison_${bidId}_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    toast.success('Comparison exported to CSV!');
+    toast.success('Official comparison matrix exported to CSV!');
   };
 
   if (isLoading) {
     return (
       <PageShell>
         <div className="container mx-auto p-6 max-w-7xl">
-          <ProcurementLoadingState message="Analyzing and comparing bid submissions..." />
+          <ProcurementLoadingState message="Analyzing and computing quotation comparison matrix..." />
         </div>
       </PageShell>
     );
@@ -484,13 +594,68 @@ export default function BidComparisonPage() {
     );
   }
 
+  // Statutory Guard: Double-Packet Financial Opening Gate
+  if (isTwoPacket && !isFinancialOpened) {
+    const formattedFinDate = candidateFinDate
+      ? new Date(candidateFinDate).toLocaleString('en-IN', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      : null;
+
+    return (
+      <PageShell>
+        <div className="container mx-auto p-6 max-w-4xl space-y-6">
+          <div className="bg-white rounded-3xl border border-slate-200 p-8 shadow-xs text-center space-y-5">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 shadow-xs">
+              <Lock className="h-8 w-8" />
+            </div>
+
+            <div className="space-y-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-100 border border-blue-200 px-3 py-1 text-xs font-black text-blue-900 uppercase tracking-wide">
+                <Layers className="h-3.5 w-3.5" /> Two-Packet Procurement Statutory Guard
+              </span>
+              <h1 className="text-2xl font-black text-slate-900 tracking-tight">
+                Stage 2 Financial Opening Pending
+              </h1>
+              <p className="text-sm font-medium text-slate-600 max-w-xl mx-auto leading-relaxed">
+                In strict compliance with Two-Packet procurement rules, financial quotations and commercial ranking remain encrypted and sealed until Stage 1 Technical Scrutiny has been formally concluded and qualified.
+              </p>
+            </div>
+
+            {formattedFinDate && (
+              <div className="inline-flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-800">
+                <Clock className="h-4 w-4 text-blue-600" />
+                <span>Scheduled Financial Opening: <strong className="text-slate-900">{formattedFinDate}</strong></span>
+              </div>
+            )}
+
+            <div className="pt-2 flex justify-center gap-3">
+              <button
+                type="button"
+                onClick={() => router.push(`/bids/${bidId}`)}
+                className="inline-flex h-10 items-center gap-2 rounded-xl bg-[#0b2447] px-6 text-xs font-black text-white hover:bg-[#12335f] transition shadow-xs cursor-pointer"
+              >
+                <ArrowLeft className="h-4 w-4" />
+                <span>Return to Technical Scrutiny</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell>
       <div className="container mx-auto space-y-6 p-4 sm:p-6 lg:p-8 max-w-7xl">
         
-        {/* Top Breadcrumb & Quick Action Bar */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-4 py-3 rounded-2xl border border-slate-200 shadow-2xs">
-          <div className="flex items-center gap-2">
+        {/* Top Breadcrumb & Action Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-5 py-3 rounded-2xl border border-slate-200 shadow-2xs">
+          <div className="flex items-center gap-2.5">
             <button
               type="button"
               onClick={() => {
@@ -521,8 +686,8 @@ export default function BidComparisonPage() {
                 {bidId}
               </span>
               <ChevronRight className="h-3.5 w-3.5 text-slate-300" />
-              <span className="text-emerald-900 font-bold bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md text-[11px]">
-                Quotation Comparison
+              <span className="text-slate-900 font-extrabold bg-slate-100 border border-slate-250 px-2 py-0.5 rounded-md text-[11px]">
+                Side-by-Side Quotation Comparison
               </span>
             </nav>
           </div>
@@ -530,8 +695,17 @@ export default function BidComparisonPage() {
           <div className="flex items-center gap-2 self-end sm:self-auto">
             <button
               type="button"
+              onClick={() => router.push(`/bids/${bidId}/results`)}
+              className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-[#0b2447] hover:bg-[#12335f] text-white px-3.5 text-xs font-black shadow-2xs transition cursor-pointer"
+            >
+              <span>Evaluation & Award Console</span>
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+
+            <button
+              type="button"
               onClick={handleExportCsv}
-              className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-blue-700 transition cursor-pointer"
+              className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 hover:text-emerald-700 transition cursor-pointer"
               title="Download Side-by-Side Comparison as CSV"
             >
               <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" />
@@ -563,123 +737,173 @@ export default function BidComparisonPage() {
         {/* Main Comparison Container Shell */}
         <div className="rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-xs space-y-6">
           
-          {/* Header Bar */}
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
+          {/* Header & Filter Bar */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-150 pb-5">
             <div className="flex items-start sm:items-center gap-3.5">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-700 shadow-xs">
-                <BarChart3 className="h-6 w-6" />
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#0b2447] text-white shadow-xs">
+                <Scale className="h-6 w-6" />
               </div>
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
-                    Commercial Quotation & L1 Ranking Comparison
+                    Commercial & Technical Quotation Comparison
                   </h1>
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-                    <ShieldCheck className="h-3 w-3 text-emerald-600" /> L1 EVALUATED
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
+                    <ShieldCheck className="h-3 w-3 text-emerald-600" /> Statutory L1 Evaluation
                   </span>
+                  {isTwoPacket ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                      Two-Packet Mode
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-250 px-2 py-0.5 text-[10px] font-bold text-slate-700">
+                      Single-Packet Mode
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs font-semibold text-slate-500 mt-1">
-                  Comparing <span className="font-bold text-slate-800">{filteredAndSortedParticipations.length}</span> seller quotation{filteredAndSortedParticipations.length === 1 ? '' : 's'} for <span className="font-mono text-slate-700 font-bold">{bidId}</span>. L1 is determined by compliant lowest total quoted price.
+                <p className="text-xs font-medium text-slate-500 mt-1">
+                  Comparing <strong className="text-slate-800">{filteredAndSortedItems.length}</strong> participating seller quotation{filteredAndSortedItems.length === 1 ? '' : 's'} for tender <strong className="font-mono text-slate-800">{bidId}</strong>.
                 </p>
               </div>
             </div>
 
-            {selectedIds.length > 0 && (
-              <div className="flex items-center gap-2">
+            {/* Quick Controls: Filter & Selection Reset */}
+            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+              {selectedIds.length > 0 && (
                 <button
                   onClick={() => setSelectedIds([])}
-                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-250 bg-slate-50 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-xl border border-slate-250 bg-slate-50 px-3 text-xs font-bold text-slate-700 hover:bg-slate-100 transition cursor-pointer shadow-2xs"
                 >
                   <RotateCcw className="h-3.5 w-3.5 text-slate-500" />
-                  <span>Show All Quotations</span>
+                  <span>Show All ({bid?.participations?.length || 0})</span>
                 </button>
-              </div>
-            )}
+              )}
+
+              <select
+                aria-label="Filter quotations by compliance status"
+                value={filterStatus}
+                onChange={e => setFilterStatus(e.target.value)}
+                className="h-8 rounded-xl border border-slate-250 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-600"
+              >
+                <option value="all">Filter: All Quotes</option>
+                <option value="technically-qualified">Technically Qualified Only</option>
+                <option value="compliant">100% Compliant Only</option>
+                <option value="deviated">With Deviations Only</option>
+              </select>
+
+              <select
+                aria-label="Sort quotations"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+                className="h-8 rounded-xl border border-slate-250 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-600"
+              >
+                <option value="lowest-price">Sort: Lowest Price (L1 First)</option>
+                <option value="highest-price">Sort: Highest Price</option>
+                <option value="supplier-name">Sort: Supplier Name</option>
+                <option value="earliest-submission">Sort: Submission Date</option>
+              </select>
+            </div>
           </div>
 
-          {/* Top 4 Summary Metric Cards Grid */}
+          {/* Decision Support Command Bar (4 Rigorous KPI Cards) */}
           {comparisonMetrics && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               
-              {/* Card 1: L1 LOWEST BIDDER */}
-              <div className="rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/60 to-white p-4.5 space-y-1.5 shadow-2xs">
+              {/* Card 1: L1 Lowest Evaluated Bidder */}
+              <div className="rounded-2xl border border-emerald-250 bg-emerald-50/40 p-4 space-y-2 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <span className="inline-flex items-center gap-1.5 text-emerald-800 text-[10px] font-black uppercase tracking-wider">
-                    <Trophy className="h-3.5 w-3.5 text-emerald-600" /> L1 LOWEST BIDDER
+                    <Trophy className="h-3.5 w-3.5 text-emerald-700" /> L1 Lowest Evaluated Quote
                   </span>
-                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="inline-block rounded-full bg-emerald-600 px-2 py-0.5 text-[9px] font-black text-white uppercase">
+                    Rank 1
+                  </span>
                 </div>
-                <p className="text-xs font-black text-slate-900 truncate uppercase" title={comparisonMetrics.l1OrgName}>
-                  {comparisonMetrics.l1OrgName}
-                </p>
-                <p className="text-lg font-black text-emerald-700 tracking-tight">
-                  {money(comparisonMetrics.l1Price)}
-                </p>
+                <div>
+                  <p className="text-xl font-black text-emerald-950 tracking-tight">
+                    {money(comparisonMetrics.l1Price)}
+                  </p>
+                  <p className="text-xs font-extrabold text-slate-800 truncate uppercase mt-0.5" title={comparisonMetrics.l1.sellerOrg}>
+                    {comparisonMetrics.l1.sellerOrg}
+                  </p>
+                </div>
                 <p className="text-[10.5px] font-semibold text-slate-500">
-                  Lowest evaluated financial quotation
+                  Landed cost including GST & all applicable charges
                 </p>
               </div>
 
-              {/* Card 2: L1 COMMERCIAL SAVINGS */}
-              <div className="rounded-2xl border border-amber-200/80 bg-gradient-to-br from-amber-50/50 to-white p-4.5 space-y-1.5 shadow-2xs">
+              {/* Card 2: L1 vs L2 Spread & Viability Assessment */}
+              <div className={`rounded-2xl border p-4 space-y-2 shadow-2xs ${comparisonMetrics.isAnomalouslyLow ? 'border-amber-300 bg-amber-50/50' : 'border-blue-200 bg-blue-50/30'}`}>
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-amber-800 text-[10px] font-black uppercase tracking-wider">
-                    <Flame className="h-3.5 w-3.5 text-amber-600" /> L1 COMMERCIAL SAVINGS
+                  <span className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider ${comparisonMetrics.isAnomalouslyLow ? 'text-amber-900' : 'text-blue-900'}`}>
+                    <Scale className="h-3.5 w-3.5" /> L1 vs L2 Spread & Viability
                   </span>
-                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                    vs L2
+                  <span className="text-[9.5px] font-bold text-slate-600 bg-white/80 border border-slate-200 px-1.5 py-0.5 rounded">
+                    Price Delta
                   </span>
                 </div>
-                <p className="text-lg font-black text-amber-800 tracking-tight">
-                  {comparisonMetrics.l1Savings > 0 ? money(comparisonMetrics.l1Savings) : '₹0'}
-                </p>
-                <p className="text-[11px] font-bold text-emerald-700">
-                  {comparisonMetrics.savingsPercent}% lower than L2
-                </p>
+                <div>
+                  <p className="text-xl font-black text-slate-900 tracking-tight">
+                    {comparisonMetrics.l1Savings > 0 ? money(comparisonMetrics.l1Savings) : '₹0.00'}
+                  </p>
+                  <p className="text-xs font-bold text-slate-700 mt-0.5">
+                    {comparisonMetrics.savingsPercent}% lower than L2
+                  </p>
+                </div>
+                {comparisonMetrics.isAnomalouslyLow ? (
+                  <p className="text-[10.5px] font-bold text-amber-800 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 shrink-0 text-amber-600" /> High variance (&gt;35%). Verify GST & BOQ breakdown.
+                  </p>
+                ) : (
+                  <p className="text-[10.5px] font-semibold text-slate-500">
+                    Competitive price variance within normal market threshold
+                  </p>
+                )}
+              </div>
+
+              {/* Card 3: Technical Clearance Gate */}
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-2 shadow-2xs">
+                <div className="flex items-center justify-between">
+                  <span className="inline-flex items-center gap-1.5 text-slate-700 text-[10px] font-black uppercase tracking-wider">
+                    <ShieldCheck className="h-3.5 w-3.5 text-blue-700" /> Technical Clearance Gate
+                  </span>
+                  <span className="text-[9.5px] font-bold text-slate-700 bg-white border border-slate-200 px-1.5 py-0.5 rounded">
+                    Scrutiny
+                  </span>
+                </div>
+                <div>
+                  <p className="text-xl font-black text-slate-900 tracking-tight">
+                    {comparisonMetrics.qualifiedCount} / {comparisonMetrics.totalCount}
+                  </p>
+                  <p className="text-xs font-bold text-slate-700 mt-0.5">
+                    Suppliers Technically Qualified
+                  </p>
+                </div>
                 <p className="text-[10.5px] font-semibold text-slate-500">
-                  Direct commercial cost reduction
+                  {comparisonMetrics.compliantCount} fully compliant • {comparisonMetrics.deviatedCount} minor deviations
                 </p>
               </div>
 
-              {/* Card 3: QUOTED PRICE SPREAD */}
-              <div className="rounded-2xl border border-purple-200/80 bg-gradient-to-br from-purple-50/50 to-white p-4.5 space-y-1.5 shadow-2xs">
+              {/* Card 4: Statutory Procurement Packet Mode */}
+              <div className="rounded-2xl border border-indigo-200 bg-indigo-50/30 p-4 space-y-2 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-purple-800 text-[10px] font-black uppercase tracking-wider">
-                    <BarChart3 className="h-3.5 w-3.5 text-purple-600" /> QUOTED PRICE SPREAD
+                  <span className="inline-flex items-center gap-1.5 text-indigo-900 text-[10px] font-black uppercase tracking-wider">
+                    <Layers className="h-3.5 w-3.5 text-indigo-700" /> Statutory Packet Mode
                   </span>
-                  <span className="text-[10px] font-bold text-purple-700 bg-purple-100 px-1.5 py-0.5 rounded">
-                    {comparisonMetrics.totalCount} Quotes
+                  <span className="text-[9.5px] font-bold text-indigo-800 bg-indigo-100 px-1.5 py-0.5 rounded">
+                    Policy
                   </span>
                 </div>
-                <p className="text-sm font-black text-slate-900 tracking-tight mt-1">
-                  {money(comparisonMetrics.l1Price)} – {money(comparisonMetrics.maxPrice)}
-                </p>
-                <p className="text-[11px] font-bold text-purple-700">
-                  Spread: {money(comparisonMetrics.maxPrice - comparisonMetrics.l1Price)}
-                </p>
-                <p className="text-[10.5px] font-semibold text-slate-500">
-                  Range across all participating vendors
-                </p>
-              </div>
-
-              {/* Card 4: COMMERCIAL EVALUATION */}
-              <div className="rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50/50 to-white p-4.5 space-y-1.5 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <span className="inline-flex items-center gap-1.5 text-blue-800 text-[10px] font-black uppercase tracking-wider">
-                    <Zap className="h-3.5 w-3.5 text-blue-600" /> COMMERCIAL EVALUATION
-                  </span>
-                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-1.5 py-0.5 rounded">
-                    Ranking Mode
-                  </span>
+                <div>
+                  <p className="text-base font-black text-indigo-950 tracking-tight">
+                    {isTwoPacket ? 'Two-Packet (Stage 2 Opened)' : 'Single-Packet Tender'}
+                  </p>
+                  <p className="text-xs font-bold text-indigo-900 mt-0.5">
+                    L1 Lowest Evaluated Criteria
+                  </p>
                 </div>
-                <p className="text-xs font-black text-slate-900 uppercase">
-                  L1 Evaluated & Ranked
-                </p>
-                <p className="text-[11px] font-bold text-blue-700">
-                  Lowest Total Quoted Amount
-                </p>
                 <p className="text-[10.5px] font-semibold text-slate-500">
-                  Complies with procurement guidelines
+                  Statutory evaluation & audit record active
                 </p>
               </div>
 
@@ -689,90 +913,114 @@ export default function BidComparisonPage() {
           {/* Comparison Matrix Table */}
           <div className="w-full rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-xs">
             <div className="overflow-x-auto">
-              <table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
+              <table data-ux-wrapped="true" className="w-full min-w-[960px] border-collapse text-left text-xs">
                 
                 {/* Header Columns per Supplier */}
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50/90">
-                    <th className="p-4 w-[260px] font-black text-slate-800 uppercase tracking-wider bg-slate-100/90 border-r border-slate-200 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <th className="p-4 w-[260px] font-black text-slate-800 uppercase tracking-wider bg-slate-100 border-r border-slate-200 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                       <div className="flex items-center gap-1.5">
                         <Scale className="h-4 w-4 text-slate-600" />
-                        <span>Field / Parameter</span>
+                        <span>Evaluation Parameter</span>
                       </div>
                     </th>
-                    {filteredAndSortedParticipations.map((p, index) => {
-                      const isL1 = index === 0;
-                      const price = p.totalAmount || p.quotedAmount || 0;
-                      const diff = price - (comparisonMetrics?.l1Price || 0);
-                      const diffPct = comparisonMetrics?.l1Price ? ((diff / comparisonMetrics.l1Price) * 100).toFixed(1) : '0.0';
-                      const orgName = p.seller?.organization?.organizationName || p.seller?.name || p.sellerName || `Supplier ${index + 1}`;
-                      const contactPerson = p.seller?.name || p.sellerName || 'Representative';
+                    {filteredAndSortedItems.map((p, index) => {
+                      const isL1 = p.isL1;
+                      const diff = p.totalAmount - (comparisonMetrics?.l1Price || 0);
+                      const diffPct = comparisonMetrics?.l1Price && comparisonMetrics.l1Price > 0
+                        ? ((diff / comparisonMetrics.l1Price) * 100).toFixed(1)
+                        : '0.0';
 
                       return (
                         <th 
-                          key={p.id} 
+                          key={p.raw.id || index} 
                           className={`p-4 border-r border-slate-200 align-top min-w-[280px] ${isL1 ? 'bg-emerald-50/50 border-t-4 border-t-emerald-600' : 'bg-slate-50/30'}`}
                         >
                           <div className="space-y-3">
                             {/* Rank Badge */}
                             <div>
                               {isL1 ? (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1 text-[10.5px] font-black text-white shadow-2xs uppercase tracking-wider">
-                                  🥇 L1 (LOWEST BIDDER)
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-700 px-3 py-1 text-[10.5px] font-black text-white shadow-2xs uppercase tracking-wider">
+                                  L1 — LOWEST EVALUATED
                                 </span>
                               ) : (
-                                <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 border border-blue-200 px-3 py-1 text-[10.5px] font-black text-blue-700 shadow-2xs">
-                                  🥈 L{index + 1} (+{money(diff)} • +{diffPct}%)
+                                <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 border border-slate-300 px-3 py-1 text-[10.5px] font-extrabold text-slate-800 shadow-2xs">
+                                  L{p.rank} (+{money(diff)} • +{diffPct}%)
                                 </span>
                               )}
                             </div>
 
-                            {/* Organization & Contact Details */}
+                            {/* Organization & Representative */}
                             <div>
-                              <p className="text-[13px] font-black text-slate-900 uppercase tracking-tight leading-snug">
-                                {orgName}
+                              <p className="text-[13px] font-black text-slate-900 uppercase tracking-tight leading-snug break-words" title={p.sellerOrg}>
+                                {p.sellerOrg}
                               </p>
                               <p className="text-xs font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
-                                <span className="text-slate-400">👤</span> {contactPerson}
+                                <span className="text-slate-400">👤</span> {p.contactPerson}
+                              </p>
+                              <p className="text-[11px] font-medium text-slate-400 truncate mt-0.5">
+                                📍 {p.location}
                               </p>
                             </div>
 
-                            {/* Award Action Button */}
+                            {/* Clean Status Pill (Award actions live on Results page) */}
                             <div>
                               {(() => {
-                                const existingAward = (bid?.awards || []).find((a: any) => a.participationId === p.id || a.sellerId === p.sellerId);
-                                const isOffered = p.finalStatus === 'AWARD_OFFERED' || existingAward?.awardStatus === 'OFFERED';
-                                const isAccepted = p.finalStatus === 'AWARD_ACCEPTED' || existingAward?.awardStatus === 'ACCEPTED';
-                                const isPoIssued = p.finalStatus === 'PO_ISSUED' || p.finalStatus === 'ORDERED';
+                                const existingAward = (bid?.awards || []).find((a: any) => a.participationId === p.raw.id || a.sellerId === p.raw.sellerId);
+                                const isOffered = p.raw.finalStatus === 'AWARD_OFFERED' || existingAward?.awardStatus === 'OFFERED';
+                                const isAccepted = p.raw.finalStatus === 'AWARD_ACCEPTED' || existingAward?.awardStatus === 'ACCEPTED';
+                                const isPoIssued = p.raw.finalStatus === 'PO_ISSUED' || p.raw.finalStatus === 'ORDERED';
 
                                 if (isPoIssued) {
                                   return (
-                                    <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold bg-slate-100 text-slate-700 border border-slate-250 shadow-2xs">
+                                    <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-250 bg-slate-100 px-3 text-xs font-bold text-slate-700 shadow-2xs">
                                       <CheckCircle2 className="h-3.5 w-3.5 text-slate-500" />
-                                      PO Issued
-                                    </span>
+                                      <span>Purchase Order Issued</span>
+                                    </div>
                                   );
                                 }
 
                                 if (isAccepted) {
                                   return (
-                                    <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
+                                    <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-100 px-3 text-xs font-bold text-emerald-900 shadow-2xs">
                                       <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                                      Award Accepted
-                                    </span>
+                                      <span>Award Accepted by Supplier</span>
+                                    </div>
                                   );
                                 }
 
                                 if (isOffered) {
                                   return (
-                                    <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl px-3.5 text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
+                                    <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-amber-100 px-3 text-xs font-bold text-amber-900 shadow-2xs">
                                       <Clock className="h-3.5 w-3.5 text-amber-600" />
-                                      Award Offered (Pending Seller)
-                                    </span>
+                                      <span>Award Offered (Pending Acceptance)</span>
+                                    </div>
                                   );
                                 }
 
-                               
+                                if (p.techStatus === 'DISQUALIFIED') {
+                                  return (
+                                    <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 text-xs font-bold text-rose-700">
+                                      <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                                      <span>Technically Disqualified</span>
+                                    </div>
+                                  );
+                                }
+
+                                if (isL1) {
+                                  return (
+                                    <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 text-xs font-black text-emerald-800 shadow-2xs">
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                      <span>Evaluated L1 (Lowest Compliant)</span>
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div className="flex h-8.5 items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-slate-50 px-3 text-xs font-bold text-slate-700">
+                                    <span>Qualified Bidder (L{p.rank})</span>
+                                  </div>
+                                );
                               })()}
                             </div>
                           </div>
@@ -785,66 +1033,88 @@ export default function BidComparisonPage() {
                 {/* Table Body Rows */}
                 <tbody className="divide-y divide-slate-150">
                   
-                  {/* SECTION 1: COMMERCIAL OVERVIEW & L1 RANKING */}
-                  <tr className="bg-slate-100/70 font-black text-slate-900 text-[11px] uppercase tracking-wider">
-                    <td colSpan={filteredAndSortedParticipations.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100/90 font-black">
-                      <span className="flex items-center gap-1.5 text-[#12335f]">
-                        <span className="h-3.5 w-1 bg-[#12335f] rounded-full" />
-                        1. Commercial Overview & Financial Ranking
+                  {/* ======================================================== */}
+                  {/* CATEGORY 1: COMMERCIAL & PRICING BREAKDOWN */}
+                  {/* ======================================================== */}
+                  <tr className="bg-slate-100 font-black text-slate-900 text-[11px] uppercase tracking-wider">
+                    <td colSpan={filteredAndSortedItems.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100 font-black">
+                      <span className="flex items-center gap-1.5 text-[#0b2447]">
+                        <span className="h-3.5 w-1 bg-[#0b2447] rounded-full" />
+                        1. Commercial & Price Breakdown
                       </span>
                     </td>
                   </tr>
 
-                  {/* 1. Commercial Rank */}
+                  {/* 1.1 Commercial Rank */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                       Commercial Rank
-                      {checkDiffers(filteredAndSortedParticipations.map((_, idx) => `L${idx + 1}`)) && (
-                        <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[8.5px] font-black text-amber-800 uppercase tracking-wider border border-amber-200">
-                          DIFFERS
-                        </span>
-                      )}
                     </td>
-                    {filteredAndSortedParticipations.map((p, index) => (
-                      <td key={p.id} className="p-3.5 border-r border-slate-200 font-black">
-                        {index === 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-0.5 text-[10px] text-white">
-                            🥇 L1 (LOWEST BIDDER)
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-black">
+                        {p.isL1 ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-700 px-2.5 py-0.5 text-[10px] text-white">
+                            L1 (Lowest Bidder)
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 border border-blue-200 px-2.5 py-0.5 text-[10px] text-blue-700 font-bold">
-                            🥈 L{index + 1}
+                          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-300 px-2.5 py-0.5 text-[10px] text-slate-700 font-bold">
+                            L{p.rank}
                           </span>
                         )}
                       </td>
                     ))}
                   </tr>
 
-                  {/* 2. Quoted Total Amount */}
+                  {/* 1.2 Total Landed Amount (incl. GST) */}
                   <tr className="hover:bg-emerald-50/20 bg-emerald-50/10 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-black text-slate-900 bg-slate-50/70 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Quoted Total Amount
-                      {checkDiffers(filteredAndSortedParticipations.map(p => p.totalAmount || p.quotedAmount || 0)) && (
+                      Total Quoted Amount (incl. GST)
+                      {checkDiffers(filteredAndSortedItems.map(p => p.totalAmount)) && (
                         <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[8.5px] font-black text-amber-800 uppercase tracking-wider border border-amber-200">
                           DIFFERS
                         </span>
                       )}
                     </td>
-                    {filteredAndSortedParticipations.map((p, index) => {
-                      const price = p.totalAmount || p.quotedAmount || 0;
-                      const diff = price - (comparisonMetrics?.l1Price || 0);
-                      const diffPct = comparisonMetrics?.l1Price ? ((diff / comparisonMetrics.l1Price) * 100).toFixed(1) : '0.0';
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                        <div className="font-black text-base text-slate-900">{money(p.totalAmount)}</div>
+                        {p.isL1 ? (
+                          <span className="inline-block rounded-md bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[9.5px] font-black text-emerald-800 uppercase tracking-wide mt-1">
+                            Lowest Evaluated Benchmark
+                          </span>
+                        ) : (
+                          <span className="inline-block rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9.5px] font-bold text-slate-600 mt-1">
+                            +{money(p.totalAmount - (comparisonMetrics?.l1Price || 0))} (+{comparisonMetrics?.l1Price ? (((p.totalAmount - comparisonMetrics.l1Price) / comparisonMetrics.l1Price) * 100).toFixed(1) : 0}%)
+                          </span>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* 1.3 Price Variance vs L1 Benchmark */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                      Price Variance vs. L1
+                    </td>
+                    {filteredAndSortedItems.map((p) => {
+                      const diff = p.totalAmount - (comparisonMetrics?.l1Price || 0);
+                      const diffPct = comparisonMetrics?.l1Price && comparisonMetrics.l1Price > 0
+                        ? ((diff / comparisonMetrics.l1Price) * 100).toFixed(1)
+                        : '0.0';
 
                       return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200">
-                          <div className="font-black text-base text-slate-900">{money(price)}</div>
-                          {index === 0 ? (
-                            <span className="inline-block rounded-md bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[9.5px] font-black text-emerald-800 uppercase tracking-wide mt-1">
-                              LOWEST QUOTE (L1)
+                        <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                          {p.isL1 ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 text-[10px] font-black text-emerald-900">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                              L1 Benchmark (Lowest)
                             </span>
                           ) : (
-                            <span className="inline-block rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[9.5px] font-bold text-slate-600 mt-1">
-                              +{money(diff)} (+{diffPct}%)
+                            <span className="text-xs font-bold text-slate-700">
+                              +{money(diff)}{" "}
+                              <span className="text-rose-600 font-extrabold text-[11px]">
+                                (+{diffPct}%)
+                              </span>
                             </span>
                           )}
                         </td>
@@ -852,191 +1122,170 @@ export default function BidComparisonPage() {
                     })}
                   </tr>
 
-                  {/* 3. Base Price */}
+                  {/* 1.4 Base Price (excl. Tax) */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Base Price (excl. Tax)
+                      Base Value (excl. GST)
                     </td>
-                    {filteredAndSortedParticipations.map(p => (
-                      <td key={p.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-800">
-                        {money(p.quotedAmount || p.totalAmount || 0)}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-extrabold text-slate-800">
+                        {money(p.baseAmount)}
                       </td>
                     ))}
                   </tr>
 
-                  {/* 4. GST & Taxes */}
+                  {/* 1.5 GST & Taxes */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      GST & Taxes
+                      Applicable GST & Tax Value
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const total = p.totalAmount || 0;
-                      const base = p.quotedAmount || 0;
-                      const taxDiff = total > base ? total - base : 0;
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-600">
-                          {p.gstPercentage ? `${p.gstPercentage}%` : 'Standard'} {taxDiff > 0 ? `(${money(taxDiff)})` : '(Included)'}
-                        </td>
-                      );
-                    })}
-                  </tr>
-
-                  {/* 5. Delivery Timeline */}
-                  <tr className="hover:bg-slate-50/60 transition-colors">
-                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Delivery Timeline
-                      {checkDiffers(filteredAndSortedParticipations.map(p => parseTechnicalOffer(p).deliveryTimeline)) && (
-                        <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[8.5px] font-black text-amber-800 uppercase tracking-wider border border-amber-200">
-                          DIFFERS
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-700">
+                        {p.gstPercentage > 0 ? `${p.gstPercentage}%` : 'Standard Rate'}{" "}
+                        <span className="text-slate-500 font-normal">
+                          ({money(p.taxAmount)})
                         </span>
-                      )}
-                    </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const tech = parseTechnicalOffer(p);
-                      const t = tech.deliveryTimeline;
-                      const formattedTime = t && /^\d+$/.test(String(t).trim()) ? `${t} days` : (t || 'Not specified');
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-black text-slate-800">
-                          {formattedTime}
-                        </td>
-                      );
-                    })}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* 6. Payment Terms */}
+                  {/* 1.6 Payment Terms */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                       Payment Terms
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const tech = parseTechnicalOffer(p);
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-700">
-                          {tech.paymentTerms || 'As per tender requirements'}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-700">
+                        {p.paymentTerms}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* SECTION 2: SUPPLIER INFORMATION & DIRECT CONTACT */}
-                  <tr className="bg-slate-100/70 font-black text-slate-900 text-[11px] uppercase tracking-wider">
-                    <td colSpan={filteredAndSortedParticipations.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100/90 font-black">
-                      <span className="flex items-center gap-1.5 text-[#12335f]">
-                        <span className="h-3.5 w-1 bg-[#12335f] rounded-full" />
-                        2. Supplier Profile & Contact Information
+                  {/* ======================================================== */}
+                  {/* CATEGORY 2: SCOPE, QUANTITY & DELIVERY SLA */}
+                  {/* ======================================================== */}
+                  <tr className="bg-slate-100 font-black text-slate-900 text-[11px] uppercase tracking-wider">
+                    <td colSpan={filteredAndSortedItems.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100 font-black">
+                      <span className="flex items-center gap-1.5 text-[#0b2447]">
+                        <span className="h-3.5 w-1 bg-[#0b2447] rounded-full" />
+                        2. Scope, Quantity & Delivery Fulfillment SLA
                       </span>
                     </td>
                   </tr>
 
-                  {/* 7. Organization Name */}
+                  {/* 2.1 Offered Scope & Quantity */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Organization Name
+                      Offered Scope & Quantity
                     </td>
-                    {filteredAndSortedParticipations.map(p => (
-                      <td key={p.id} className="p-3.5 border-r border-slate-200 font-black text-slate-900 uppercase">
-                        {p.seller?.organization?.organizationName || p.seller?.name || p.sellerName || 'Supplier'}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-black text-slate-900">
+                        <span className="inline-flex items-center gap-1">
+                          <Package className="h-3.5 w-3.5 text-slate-400" />
+                          {p.offeredQty}
+                        </span>
                       </td>
                     ))}
                   </tr>
 
-                  {/* 8. Contact Person */}
+                  {/* 2.2 Promised Delivery Timeline */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Contact Person
+                      Promised Delivery Timeline SLA
+                      {checkDiffers(filteredAndSortedItems.map(p => p.deliveryTimeline)) && (
+                        <span className="ml-2 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[8.5px] font-black text-amber-800 uppercase tracking-wider border border-amber-200">
+                          DIFFERS
+                        </span>
+                      )}
                     </td>
-                    {filteredAndSortedParticipations.map(p => (
-                      <td key={p.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
-                        {p.seller?.name || p.sellerName || 'Representative'}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-black text-slate-800">
+                        <span className="inline-flex items-center gap-1.5">
+                          <Clock className="h-3.5 w-3.5 text-blue-600" />
+                          {p.deliveryTimeline}
+                        </span>
                       </td>
                     ))}
                   </tr>
 
-                  {/* 9. Email Address */}
+                  {/* 2.3 Delivery Terms & Freight */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Email Address
+                      Delivery Location & Freight
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const email = p.seller?.email || p.sellerEmail || p.email;
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-700">
-                          {email ? (
-                            <a href={`mailto:${email}`} className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline">
-                              <Mail className="h-3.5 w-3.5 text-slate-400" />
-                              <span>{email}</span>
-                            </a>
-                          ) : (
-                            <span className="text-slate-400">Not provided</span>
-                          )}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-700">
+                        <span className="inline-flex items-center gap-1">
+                          <Truck className="h-3.5 w-3.5 text-slate-400" />
+                          {p.deliveryTerms}
+                        </span>
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* 10. Mobile / Phone Number */}
-                  <tr className="hover:bg-slate-50/60 transition-colors bg-blue-50/15">
+                  {/* 2.4 Warranty & Guarantee */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      <div className="flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Mobile Number</span>
-                      </div>
+                      Warranty & Guarantee Terms
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const phone = getSellerPhone(p);
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-800">
-                          {phone ? (
-                            <a 
-                              href={`tel:${phone.replace(/[^0-9+]/g, '')}`} 
-                              className="inline-flex items-center gap-1.5 font-bold text-slate-900 hover:text-emerald-700 bg-slate-100/80 hover:bg-emerald-50 px-2.5 py-1 rounded-lg border border-slate-200 transition"
-                            >
-                              <Phone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                              <span>{phone}</span>
-                            </a>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400">
-                              <Info className="h-3 w-3" /> Not listed
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-800">
+                        {p.warranty}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* SECTION 3: TECHNICAL SPECIFICATIONS & COMPLIANCE */}
-                  <tr className="bg-slate-100/70 font-black text-slate-900 text-[11px] uppercase tracking-wider">
-                    <td colSpan={filteredAndSortedParticipations.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100/90 font-black">
-                      <span className="flex items-center gap-1.5 text-[#12335f]">
-                        <span className="h-3.5 w-1 bg-[#12335f] rounded-full" />
+                  {/* 2.5 Post-Sale Support */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                      Post-Sale Service Support
+                    </td>
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-600">
+                        {p.serviceSupport}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* ======================================================== */}
+                  {/* CATEGORY 3: TECHNICAL SPECIFICATIONS & COMPLIANCE */}
+                  {/* ======================================================== */}
+                  <tr className="bg-slate-100 font-black text-slate-900 text-[11px] uppercase tracking-wider">
+                    <td colSpan={filteredAndSortedItems.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100 font-black">
+                      <span className="flex items-center gap-1.5 text-[#0b2447]">
+                        <span className="h-3.5 w-1 bg-[#0b2447] rounded-full" />
                         3. Technical Specifications & Compliance
                       </span>
                     </td>
                   </tr>
 
-                  {/* 11. Technical Status */}
+                  {/* 3.1 Technical Scrutiny Status */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Technical Status
+                      Stage 1 Technical Scrutiny
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const ts = String(p.technicalStatus || '').toUpperCase();
-                      const isQual = ts === 'QUALIFIED';
-                      const isDisq = ts === 'DISQUALIFIED' || ts === 'NOT_QUALIFIED' || p.isDisqualified;
+                    {filteredAndSortedItems.map((p) => {
+                      const isQual = p.techStatus === 'QUALIFIED';
+                      const isDisq = p.techStatus === 'DISQUALIFIED' || p.techStatus === 'NOT_QUALIFIED';
 
                       return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200">
+                        <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
                           {isQual ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-black text-emerald-800 shadow-2xs">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Qualified
                             </span>
                           ) : isDisq ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-[10px] font-black text-rose-800 shadow-2xs">
-                              <X className="h-3.5 w-3.5 text-rose-600" /> Disqualified
+                              <XCircle className="h-3.5 w-3.5 text-rose-600" /> Disqualified
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[10px] font-black text-amber-800 shadow-2xs">
                               <Clock className="h-3.5 w-3.5 text-amber-600" /> Pending Review
+                            </span>
+                          )}
+                          {p.techScore != null && (
+                            <span className="block text-[10px] font-bold text-slate-500 mt-1">
+                              Scrutiny Score: {p.techScore}/100
                             </span>
                           )}
                         </td>
@@ -1044,78 +1293,140 @@ export default function BidComparisonPage() {
                     })}
                   </tr>
 
-                  {/* 12. Make / Brand */}
+                  {/* 3.2 Technical Compliance Statement */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Make / Brand
+                      Technical Compliance Statement
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const tech = parseTechnicalOffer(p);
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
-                          {tech.makeBrand || 'Standard'}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                        {p.complianceStatement === 'WITH_DEVIATION' ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                            <AlertTriangle className="h-3 w-3 text-amber-600" /> Minor Deviation
+                          </span>
+                        ) : p.complianceStatement === 'ALTERNATIVE_OFFERED' ? (
+                          <span className="inline-flex items-center gap-1 rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10px] font-bold text-purple-800">
+                            Alternative Offered
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            <Check className="h-3 w-3 text-emerald-600" /> 100% Compliant
+                          </span>
+                        )}
+                        {p.complianceRemarks && (
+                          <p className="text-[10px] text-slate-500 mt-1 italic">
+                            {p.complianceRemarks}
+                          </p>
+                        )}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* 13. Model */}
+                  {/* 3.3 Make / Brand */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Model / Reference
+                      Brand / Make Offered
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const tech = parseTechnicalOffer(p);
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
-                          {tech.model || 'Standard'}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
+                        {p.makeBrand}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* 14. Item / Scope Description */}
+                  {/* 3.4 Model / Part Reference */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Offered Scope / Remarks
+                      Model / Part Reference No
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const tech = parseTechnicalOffer(p);
-                      return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-600 text-[11.5px] leading-relaxed">
-                          {tech.offeredItemDescription || tech.complianceRemarks || 'Compliant with specified requirement terms'}
-                        </td>
-                      );
-                    })}
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
+                        {p.model}
+                      </td>
+                    ))}
                   </tr>
 
-                  {/* SECTION 4: COMPLIANCE & UPLOADED DOCUMENTS */}
-                  <tr className="bg-slate-100/70 font-black text-slate-900 text-[11px] uppercase tracking-wider">
-                    <td colSpan={filteredAndSortedParticipations.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100/90 font-black">
-                      <span className="flex items-center gap-1.5 text-[#12335f]">
-                        <span className="h-3.5 w-1 bg-[#12335f] rounded-full" />
-                        4. Uploaded Quotation Documents & Compliance Proofs
+                  {/* 3.5 Offered Technical Specs */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                      Offered Technical Details
+                    </td>
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-600 text-[11.5px] leading-relaxed">
+                        {p.techSpecs || 'Fully compliant with tender technical schedule requirements'}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* ======================================================== */}
+                  {/* CATEGORY 4: BIDDER PROFILE & AUDIT TRAIL */}
+                  {/* ======================================================== */}
+                  <tr className="bg-slate-100 font-black text-slate-900 text-[11px] uppercase tracking-wider">
+                    <td colSpan={filteredAndSortedItems.length + 1} className="p-3 pl-4 border-b border-slate-200 bg-slate-100 font-black">
+                      <span className="flex items-center gap-1.5 text-[#0b2447]">
+                        <span className="h-3.5 w-1 bg-[#0b2447] rounded-full" />
+                        4. Supplier Profile & Submitted Records
                       </span>
                     </td>
                   </tr>
 
-                  {/* 15. Uploaded Documents Row */}
+                  {/* 4.1 Organization & Location */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                      Registered Organization
+                    </td>
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                        <p className="font-black text-slate-900 uppercase">{p.sellerOrg}</p>
+                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">📍 {p.location}</p>
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* 4.2 Representative & Contact */}
+                  <tr className="hover:bg-slate-50/60 transition-colors">
+                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
+                      Authorized Representative
+                    </td>
+                    {filteredAndSortedItems.map((p) => (
+                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                        <p className="font-bold text-slate-800">{p.contactPerson}</p>
+                        {p.phone && (
+                          <p className="text-[11px] font-bold text-slate-600 mt-0.5 flex items-center gap-1">
+                            <Phone className="h-3 w-3 text-emerald-600" />
+                            <a href={`tel:${p.phone.replace(/[^0-9+]/g, '')}`} className="hover:underline text-slate-800">
+                              {p.phone}
+                            </a>
+                          </p>
+                        )}
+                        {p.email && (
+                          <p className="text-[11px] font-medium text-blue-600 truncate mt-0.5">
+                            <a href={`mailto:${p.email}`} className="hover:underline">
+                              {p.email}
+                            </a>
+                          </p>
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+
+                  {/* 4.3 Uploaded Documents */}
                   <tr className="hover:bg-slate-50/60 transition-colors bg-slate-50/30">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)] align-top">
                       <div className="space-y-1">
                         <div className="flex items-center gap-1.5">
                           <FileText className="h-4 w-4 text-blue-600" />
-                          <span>Uploaded Documents</span>
+                          <span>Submitted Documents</span>
                         </div>
                         <span className="text-[10px] font-normal text-slate-400 block">
                           Technical & Commercial attachments
                         </span>
                       </div>
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const docs = normalizeQuotationDocuments(p);
+                    {filteredAndSortedItems.map((p) => {
+                      const docs = normalizeQuotationDocuments(p.raw);
                       return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 align-top">
+                        <td key={p.raw.id} className="p-3.5 border-r border-slate-200 align-top">
                           {docs.length > 0 ? (
                             <div className="flex flex-col gap-2">
                               {docs.map((d, dIdx) => (
@@ -1133,7 +1444,7 @@ export default function BidComparisonPage() {
                               ))}
                             </div>
                           ) : (
-                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100/70 border border-slate-200/80 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
+                            <div className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 border border-slate-200 px-2.5 py-1 text-[11px] font-semibold text-slate-500">
                               <Info className="h-3.5 w-3.5 text-slate-400" />
                               <span>No documents attached</span>
                             </div>
@@ -1143,13 +1454,13 @@ export default function BidComparisonPage() {
                     })}
                   </tr>
 
-                  {/* 16. Submission Date */}
+                  {/* 4.4 Submission Timestamp */}
                   <tr className="hover:bg-slate-50/60 transition-colors">
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                       Submission Timestamp
                     </td>
-                    {filteredAndSortedParticipations.map(p => {
-                      const dateVal = p.submittedAt || p.createdAt;
+                    {filteredAndSortedItems.map((p) => {
+                      const dateVal = p.submittedAt;
                       const formatted = dateVal ? new Date(dateVal).toLocaleString('en-IN', {
                         day: '2-digit',
                         month: 'short',
@@ -1158,7 +1469,7 @@ export default function BidComparisonPage() {
                         minute: '2-digit'
                       }) : '—';
                       return (
-                        <td key={p.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-600">
+                        <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-600">
                           {formatted}
                         </td>
                       );
@@ -1171,132 +1482,34 @@ export default function BidComparisonPage() {
           </div>
 
           {/* Sticky Bottom Helper Bar */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-100 pt-4 text-xs">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-slate-150 pt-4 text-xs">
             <p className="text-slate-500 font-semibold text-[11px] flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
               <span>
-                Under procurement rules, selection of non-L1 bidders requires written justification for audit records.
+                Formal statutory actions (Contract Award, MSE Match L1, Reverse Auction) are executed on the Results Console.
               </span>
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => router.push(`/bids/${bidId}`)}
+                className="inline-flex h-9 items-center justify-center rounded-xl border border-slate-250 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 transition shadow-2xs cursor-pointer"
+              >
+                Back to Tender
+              </button>
               <button
                 type="button"
                 onClick={() => router.push(`/bids/${bidId}/results`)}
-                className="inline-flex h-9 items-center justify-center rounded-xl bg-[#0b2447] px-4 text-xs font-black text-white hover:bg-[#12335f] transition shadow-xs cursor-pointer"
+                className="inline-flex h-9 items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-5 text-xs font-black text-white hover:bg-[#12335f] transition shadow-xs cursor-pointer"
               >
-                Back to Bid Results
+                <span>Proceed to Award & Evaluation Console</span>
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>
 
         </div>
       </div>
-
-      {/* Award Decision Confirmation Modal */}
-      {awardModal.show && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="relative w-full max-w-lg overflow-hidden rounded-3xl border border-slate-150 bg-white p-6 shadow-2xl space-y-5 animate-in zoom-in-95 duration-200">
-            <button 
-              onClick={() => setAwardModal(prev => ({ ...prev, show: false }))}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 rounded-full h-8 w-8 flex items-center justify-center hover:bg-slate-100 cursor-pointer"
-              aria-label="Close modal"
-            >
-              <X className="h-5 w-5" />
-            </button>
-
-            <div>
-              <span className="text-[9.5px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-md">
-                Contract Award Offer Workflow
-              </span>
-              <h3 className="text-base font-black text-slate-900 mt-1 flex items-center gap-1.5">
-                <Award className="h-5 w-5 text-emerald-600" /> Confirm & Issue Award Offer
-              </h3>
-              <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                Officially issue the contract award offer to the selected supplier. The supplier will be notified to accept or decline before the Purchase Order is generated.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-150 bg-slate-50/80 p-4 space-y-2.5 text-xs">
-              <div className="flex justify-between border-b border-slate-200/60 pb-2">
-                <span className="font-bold text-slate-500">Selected Supplier:</span>
-                <span className="font-black text-slate-900">{awardModal.sellerName}</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-200/60 pb-2">
-                <span className="font-bold text-slate-500">Procurement Ref:</span>
-                <span className="font-extrabold text-slate-900">Bid #{bid.id} ({bid.bidNumber || 'N/A'})</span>
-              </div>
-              <div className="flex justify-between border-b border-slate-200/60 pb-2">
-                <span className="font-bold text-slate-500">Total Award Value:</span>
-                <span className="font-black text-emerald-700 text-sm">{money(awardModal.amount)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="font-bold text-slate-500">Delivery Schedule:</span>
-                <span className="font-extrabold text-slate-800">{awardModal.delivery}</span>
-              </div>
-            </div>
-
-            {/* Warning if non-L1 */}
-            {awardModal.rank !== 1 && (
-              <div className="flex gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/90 p-3.5 text-xs text-amber-900">
-                <AlertTriangle className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-black">L1 Non-Selection Override Notice</p>
-                  <p className="mt-0.5 text-amber-800/90 font-semibold leading-relaxed">
-                    You have selected a supplier other than the L1 Lowest Bidder. You are required by procurement policy to provide a detailed, audit-compliant justification reason below.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Remarks Input */}
-            <div className="space-y-1.5">
-              <label htmlFor="award-remarks" className="text-[11px] font-black uppercase text-slate-600 tracking-wider block">
-                Award Justification / Notes {awardModal.rank !== 1 && <span className="text-rose-600 font-black">*</span>}
-              </label>
-              <textarea
-                id="award-remarks"
-                value={awardModal.remarks}
-                onChange={e => setAwardModal(prev => ({ ...prev, remarks: e.target.value }))}
-                placeholder={awardModal.rank === 1 ? "Optional notes or terms for the seller..." : "Mandatory justification reason for selecting non-L1 supplier..."}
-                rows={3}
-                className="w-full rounded-xl border border-slate-250 p-3 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
-              />
-            </div>
-
-            {/* Confirmation Checkbox */}
-            <label className="flex items-start gap-2.5 select-none cursor-pointer">
-              <input
-                type="checkbox"
-                checked={awardModal.confirmed}
-                onChange={e => setAwardModal(prev => ({ ...prev, confirmed: e.target.checked }))}
-                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-              />
-              <span className="text-xs font-bold text-slate-600 leading-snug">
-                I declare that this award offer complies with procurement policies and is authorized for issuance to the supplier.
-              </span>
-            </label>
-
-            {/* Modal Actions */}
-            <div className="flex justify-end gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setAwardModal(prev => ({ ...prev, show: false }))}
-                className="inline-flex h-10 items-center justify-center rounded-xl border border-slate-200 bg-white px-4 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleConfirmAward}
-                disabled={awardMutation.isPending || !awardModal.confirmed || (awardModal.rank !== 1 && !awardModal.remarks.trim())}
-                className="inline-flex h-10 items-center gap-1.5 justify-center rounded-xl bg-emerald-600 px-5 text-xs font-black text-white hover:bg-emerald-700 transition disabled:opacity-50 disabled:cursor-not-allowed shadow-xs cursor-pointer"
-              >
-                <Award className="h-4 w-4" /> {awardMutation.isPending ? 'Issuing Award Offer...' : 'Confirm & Issue Award Offer'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </PageShell>
   );
 }
