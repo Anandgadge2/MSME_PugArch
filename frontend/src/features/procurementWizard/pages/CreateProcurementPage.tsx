@@ -1931,7 +1931,13 @@ export default function CreateProcurementPage() {
           return false;
         }
         if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) {
-          toast.error('Technical opening date must be after submission deadline.');
+          const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
+          const subDateOnly = d.schedule.submissionDate.split('T')[0];
+          if (techDateOnly < subDateOnly) {
+            toast.error(`Technical opening date (${techDateOnly}) is earlier than submission deadline (${subDateOnly}).`);
+          } else {
+            toast.error('Technical opening time must be after submission deadline.');
+          }
           return false;
         }
       }
@@ -1941,7 +1947,13 @@ export default function CreateProcurementPage() {
           return false;
         }
         if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) {
-          toast.error('Financial opening date must be after technical envelope opening.');
+          const finDateOnly = d.schedule.financialOpeningDate.split('T')[0];
+          const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
+          if (finDateOnly < techDateOnly) {
+            toast.error(`Financial opening date (${finDateOnly}) is earlier than technical opening date (${techDateOnly}).`);
+          } else {
+            toast.error('Financial opening time must be after technical envelope opening.');
+          }
           return false;
         }
       }
@@ -6433,6 +6445,16 @@ function ScheduleStepForm({
             ...c.approval,
             workflow: 'Two-Stage (Technical + Financial)'
           };
+          const subMs = nextSchedule.submissionDate ? new Date(nextSchedule.submissionDate).getTime() : NaN;
+          if (!isNaN(subMs)) {
+            if (!nextSchedule.technicalOpeningDate || new Date(nextSchedule.technicalOpeningDate).getTime() <= subMs) {
+              nextSchedule.technicalOpeningDate = toDateTimeLocal(new Date(subMs + 15 * 60000));
+            }
+            const techMs = new Date(nextSchedule.technicalOpeningDate).getTime();
+            if (!nextSchedule.financialOpeningDate || new Date(nextSchedule.financialOpeningDate).getTime() <= techMs) {
+              nextSchedule.financialOpeningDate = toDateTimeLocal(new Date(techMs + 15 * 60000));
+            }
+          }
         }
       }
       if (key === 'validityDays' || key === 'submissionDate') {
@@ -6445,6 +6467,33 @@ function ScheduleStepForm({
               nextSchedule.bidValidityDate = new Date(d.getTime() + days * 86400000).toISOString().slice(0, 10);
             }
           } catch {}
+        }
+      }
+      if (key === 'submissionDate' && val) {
+        const subMs = new Date(val).getTime();
+        if (!isNaN(subMs)) {
+          if (nextSchedule.technicalOpeningDate) {
+            const techMs = new Date(nextSchedule.technicalOpeningDate).getTime();
+            if (techMs <= subMs) {
+              nextSchedule.technicalOpeningDate = toDateTimeLocal(new Date(subMs + 15 * 60000));
+            }
+          }
+          if (nextSchedule.financialOpeningDate && nextSchedule.technicalOpeningDate) {
+            const finMs = new Date(nextSchedule.financialOpeningDate).getTime();
+            const techMs = new Date(nextSchedule.technicalOpeningDate).getTime();
+            if (finMs <= techMs) {
+              nextSchedule.financialOpeningDate = toDateTimeLocal(new Date(techMs + 15 * 60000));
+            }
+          }
+        }
+      }
+      if (key === 'technicalOpeningDate' && val) {
+        const techMs = new Date(val).getTime();
+        if (!isNaN(techMs) && nextSchedule.financialOpeningDate) {
+          const finMs = new Date(nextSchedule.financialOpeningDate).getTime();
+          if (finMs <= techMs) {
+            nextSchedule.financialOpeningDate = toDateTimeLocal(new Date(techMs + 15 * 60000));
+          }
         }
       }
       return { ...c, schedule: nextSchedule, approval: nextApproval };
@@ -6658,14 +6707,26 @@ function ScheduleStepForm({
       warnings.push('Submission closing date must be schedule after submission start date.');
     }
   }
-  if (draft.basics.isTechnicalEvaluationNeeded && draft.schedule.technicalOpeningDate && draft.schedule.submissionDate) {
+  if ((draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && draft.schedule.technicalOpeningDate && draft.schedule.submissionDate) {
     if (new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)) {
-      warnings.push('Technical opening date must be after submission deadline.');
+      const techDateOnly = draft.schedule.technicalOpeningDate.split('T')[0];
+      const subDateOnly = draft.schedule.submissionDate.split('T')[0];
+      if (techDateOnly < subDateOnly) {
+        warnings.push(`Technical opening date (${techDateOnly}) is earlier than submission deadline (${subDateOnly}).`);
+      } else {
+        warnings.push('Technical opening time must be after submission deadline.');
+      }
     }
   }
   if (isTwoPacket && draft.schedule.financialOpeningDate && draft.schedule.technicalOpeningDate) {
     if (new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)) {
-      warnings.push('Financial opening date must be after technical envelope opening.');
+      const finDateOnly = draft.schedule.financialOpeningDate.split('T')[0];
+      const techDateOnly = draft.schedule.technicalOpeningDate.split('T')[0];
+      if (finDateOnly < techDateOnly) {
+        warnings.push(`Financial opening date (${finDateOnly}) is earlier than technical opening date (${techDateOnly}).`);
+      } else {
+        warnings.push('Financial opening time must be after technical envelope opening.');
+      }
     }
   }
 
@@ -7047,6 +7108,7 @@ function ScheduleStepForm({
         <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
           <DateTimePicker
             id="submission-start-datetime"
+            min={todayDateTime}
             value={draft.schedule.submissionStartDate || ''}
             onChange={val => updateSchedule('submissionStartDate', val)}
             error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}
@@ -7057,6 +7119,7 @@ function ScheduleStepForm({
         <Field label="Submission End Date (Deadline)" required error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}>
           <DateTimePicker
             id="submission-end-datetime"
+            min={draft.schedule.submissionStartDate || todayDateTime}
             value={draft.schedule.submissionDate || ''}
             onChange={val => updateSchedule('submissionDate', val)}
             error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
@@ -7089,35 +7152,111 @@ function ScheduleStepForm({
           />
         </Field>
 
-        {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (
-          <Field label="Technical Opening Date" required error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}>
-            <DateTimePicker
-              id="technical-opening-datetime"
-              value={draft.schedule.technicalOpeningDate || ''}
-              onChange={val => updateSchedule('technicalOpeningDate', val)}
-              error={fieldError(showErrors && (!draft.schedule.technicalOpeningDate || new Date(draft.schedule.technicalOpeningDate) <= new Date(draft.schedule.submissionDate)), 'Technical opening must be after submission deadline.')}
-              placeholder="Select technical opening date & time"
-            />
-            <p className="text-[10px] text-slate-500 font-semibold mt-1">
-              Technical envelope unlocking date. Must be after submission closing.
-            </p>
-          </Field>
-        )}
+        {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (() => {
+          const isTechInvalid = Boolean(
+            !draft.schedule.technicalOpeningDate ||
+            (draft.schedule.submissionDate && new Date(draft.schedule.technicalOpeningDate).getTime() <= new Date(draft.schedule.submissionDate).getTime())
+          );
+          const getTechError = () => {
+            if (!draft.schedule.technicalOpeningDate) return 'Technical opening date & time is required.';
+            const techMs = new Date(draft.schedule.technicalOpeningDate).getTime();
+            const subMs = new Date(draft.schedule.submissionDate).getTime();
+            if (isNaN(techMs) || isNaN(subMs)) return 'Please select a valid technical opening date & time.';
+            if (techMs <= subMs) {
+              const techDateOnly = draft.schedule.technicalOpeningDate.split('T')[0];
+              const subDateOnly = draft.schedule.submissionDate.split('T')[0];
+              if (techDateOnly < subDateOnly) {
+                return `Technical opening (${techDateOnly}) is earlier than submission deadline (${subDateOnly}). Please choose a date on or after the deadline.`;
+              }
+              return 'Technical opening time must be after submission deadline.';
+            }
+            return '';
+          };
+          return (
+            <Field label="Technical Opening Date" required error={fieldError(showErrors && isTechInvalid, getTechError())}>
+              <DateTimePicker
+                id="technical-opening-datetime"
+                min={draft.schedule.submissionDate}
+                value={draft.schedule.technicalOpeningDate || ''}
+                onChange={val => updateSchedule('technicalOpeningDate', val)}
+                error={fieldError(showErrors && isTechInvalid, getTechError())}
+                placeholder="Select technical opening date & time"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-1.5 mt-1">
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  Technical envelope unlocking date. Must be after submission closing.
+                </p>
+                {draft.schedule.submissionDate && isTechInvalid && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const subMs = new Date(draft.schedule.submissionDate).getTime();
+                      if (!isNaN(subMs)) {
+                        updateSchedule('technicalOpeningDate', toDateTimeLocal(new Date(subMs + 15 * 60000)));
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition border border-blue-200 cursor-pointer"
+                  >
+                    ⚡ Auto-align: Set to 15m after deadline
+                  </button>
+                )}
+              </div>
+            </Field>
+          );
+        })()}
 
-        {isTwoPacket && (
-          <Field label="Financial Opening Date" required error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}>
-            <DateTimePicker
-              id="financial-opening-datetime"
-              value={draft.schedule.financialOpeningDate || ''}
-              onChange={val => updateSchedule('financialOpeningDate', val)}
-              error={fieldError(showErrors && (!draft.schedule.financialOpeningDate || new Date(draft.schedule.financialOpeningDate) <= new Date(draft.schedule.technicalOpeningDate)), 'Financial opening must be after technical opening.')}
-              placeholder="Select financial opening date & time"
-            />
-            <p className="text-[10px] text-slate-500 font-semibold mt-1">
-              Financial envelope unlocking date for technically qualified bidders. Must be after technical opening.
-            </p>
-          </Field>
-        )}
+        {isTwoPacket && (() => {
+          const isFinInvalid = Boolean(
+            !draft.schedule.financialOpeningDate ||
+            (draft.schedule.technicalOpeningDate && new Date(draft.schedule.financialOpeningDate).getTime() <= new Date(draft.schedule.technicalOpeningDate).getTime())
+          );
+          const getFinError = () => {
+            if (!draft.schedule.financialOpeningDate) return 'Financial opening date & time is required for Two Packet flow.';
+            const finMs = new Date(draft.schedule.financialOpeningDate).getTime();
+            const techMs = new Date(draft.schedule.technicalOpeningDate).getTime();
+            if (isNaN(finMs) || isNaN(techMs)) return 'Please select a valid financial opening date & time.';
+            if (finMs <= techMs) {
+              const finDateOnly = draft.schedule.financialOpeningDate.split('T')[0];
+              const techDateOnly = draft.schedule.technicalOpeningDate.split('T')[0];
+              if (finDateOnly < techDateOnly) {
+                return `Financial opening (${finDateOnly}) is earlier than technical opening (${techDateOnly}).`;
+              }
+              return 'Financial opening time must be after technical opening.';
+            }
+            return '';
+          };
+          return (
+            <Field label="Financial Opening Date" required error={fieldError(showErrors && isFinInvalid, getFinError())}>
+              <DateTimePicker
+                id="financial-opening-datetime"
+                min={draft.schedule.technicalOpeningDate || draft.schedule.submissionDate}
+                value={draft.schedule.financialOpeningDate || ''}
+                onChange={val => updateSchedule('financialOpeningDate', val)}
+                error={fieldError(showErrors && isFinInvalid, getFinError())}
+                placeholder="Select financial opening date & time"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-1.5 mt-1">
+                <p className="text-[10px] text-slate-500 font-semibold">
+                  Financial envelope unlocking date for technically qualified bidders. Must be after technical opening.
+                </p>
+                {draft.schedule.technicalOpeningDate && isFinInvalid && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const techMs = new Date(draft.schedule.technicalOpeningDate).getTime();
+                      if (!isNaN(techMs)) {
+                        updateSchedule('financialOpeningDate', toDateTimeLocal(new Date(techMs + 15 * 60000)));
+                      }
+                    }}
+                    className="inline-flex items-center gap-1 text-[11px] font-black text-blue-700 bg-blue-50 hover:bg-blue-100 px-2 py-0.5 rounded-md transition border border-blue-200 cursor-pointer"
+                  >
+                    ⚡ Auto-align: Set to 15m after technical opening
+                  </button>
+                )}
+              </div>
+            </Field>
+          );
+        })()}
       </div>
 
       {/* ── Live Reverse Auction (e-RA) Configuration ── */}

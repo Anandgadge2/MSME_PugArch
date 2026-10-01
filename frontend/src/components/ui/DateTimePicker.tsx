@@ -194,9 +194,19 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const pad = (n: number) => String(n).padStart(2, '0');
     const todayIsoDate = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
 
+    const minDateStr = min ? (min.includes('T') ? min.split('T')[0] : min) : undefined;
+    const maxDateStr = max ? (max.includes('T') ? max.split('T')[0] : max) : undefined;
+    const isTodayDisabled = Boolean((minDateStr && todayIsoDate < minDateStr) || (maxDateStr && todayIsoDate > maxDateStr));
+
+    const defaultDateStr = parsed.date || (minDateStr && minDateStr > todayIsoDate ? minDateStr : todayIsoDate);
+
     const [viewYear, setViewYear] = React.useState<number>(() => {
       if (parsed.date) {
         const y = parseInt(parsed.date.slice(0, 4), 10);
+        if (Number.isFinite(y)) return y;
+      }
+      if (minDateStr && minDateStr > todayIsoDate) {
+        const y = parseInt(minDateStr.slice(0, 4), 10);
         if (Number.isFinite(y)) return y;
       }
       return today.getFullYear();
@@ -205,6 +215,10 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
     const [viewMonth, setViewMonth] = React.useState<number>(() => {
       if (parsed.date) {
         const m = parseInt(parsed.date.slice(5, 7), 10) - 1;
+        if (Number.isFinite(m) && m >= 0 && m <= 11) return m;
+      }
+      if (minDateStr && minDateStr > todayIsoDate) {
+        const m = parseInt(minDateStr.slice(5, 7), 10) - 1;
         if (Number.isFinite(m) && m >= 0 && m <= 11) return m;
       }
       return today.getMonth();
@@ -246,8 +260,13 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
         const m = parseInt(parsed.date.slice(5, 7), 10) - 1;
         if (Number.isFinite(y)) setViewYear(y);
         if (Number.isFinite(m) && m >= 0 && m <= 11) setViewMonth(m);
+      } else if (minDateStr && minDateStr > todayIsoDate) {
+        const y = parseInt(minDateStr.slice(0, 4), 10);
+        const m = parseInt(minDateStr.slice(5, 7), 10) - 1;
+        if (Number.isFinite(y)) setViewYear(y);
+        if (Number.isFinite(m) && m >= 0 && m <= 11) setViewMonth(m);
       }
-    }, [parsed.date]);
+    }, [parsed.date, minDateStr, todayIsoDate]);
 
     // Fixed portal coordinate calculation
     const updatePosition = React.useCallback(() => {
@@ -343,7 +362,7 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       nextMinute: string,
       nextPeriod: 'AM' | 'PM'
     ) => {
-      const activeDate = nextDate || parsed.date || todayIsoDate;
+      const activeDate = nextDate || defaultDateStr;
       const newIso = toIsoDateTime(activeDate, nextHour12, nextMinute, nextPeriod);
       onChange(newIso);
     };
@@ -359,22 +378,26 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
 
     const handleHourChange = (hourStr: string) => {
       const sanitized = pad(Math.min(12, Math.max(1, parseInt(hourStr || '1', 10))));
-      handleUpdate(parsed.date || todayIsoDate, sanitized, parsed.minute, parsed.period);
+      handleUpdate(parsed.date || defaultDateStr, sanitized, parsed.minute, parsed.period);
     };
 
     const handleMinuteChange = (minStr: string) => {
       const sanitized = pad(Math.min(59, Math.max(0, parseInt(minStr || '0', 10))));
-      handleUpdate(parsed.date || todayIsoDate, parsed.hour12, sanitized, parsed.period);
+      handleUpdate(parsed.date || defaultDateStr, parsed.hour12, sanitized, parsed.period);
     };
 
     const handlePeriodToggle = (period: 'AM' | 'PM') => {
-      handleUpdate(parsed.date || todayIsoDate, parsed.hour12, parsed.minute, period);
+      handleUpdate(parsed.date || defaultDateStr, parsed.hour12, parsed.minute, period);
     };
 
     const handleSetNow = () => {
       if (mode === 'date') {
-        onChange(todayIsoDate);
+        onChange(isTodayDisabled && minDateStr ? minDateStr : todayIsoDate);
         setIsOpen(false);
+        return;
+      }
+      if (isTodayDisabled && minDateStr) {
+        onChange(min || `${minDateStr}T10:00`);
         return;
       }
       const n = new Date();
@@ -447,10 +470,6 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
       md: 'h-10 px-3 py-2 text-xs font-semibold rounded-xl',
       lg: 'h-11 sm:h-12 px-3.5 py-2.5 text-xs sm:text-sm font-bold rounded-xl',
     };
-
-    const minDateStr = min ? (min.includes('T') ? min.split('T')[0] : min) : undefined;
-    const maxDateStr = max ? (max.includes('T') ? max.split('T')[0] : max) : undefined;
-    const isTodayDisabled = Boolean((minDateStr && todayIsoDate < minDateStr) || (maxDateStr && todayIsoDate > maxDateStr));
 
     return (
       <div ref={containerRef} className={cn('relative w-full min-w-0 space-y-1', className)}>
@@ -738,6 +757,36 @@ export const DateTimePicker = React.forwardRef<HTMLDivElement, DateTimePickerPro
                     </button>
                   </div>
                 </div>
+                {min && min.includes('T') && defaultDateStr === minDateStr && (
+                  (() => {
+                    const curIso = toIsoDateTime(defaultDateStr, parsed.hour12, parsed.minute, parsed.period);
+                    if (curIso <= min) {
+                      const minP = parseValueTo12Hr(min);
+                      return (
+                        <div className="mt-2 flex items-center justify-between text-[11px] font-bold text-amber-800 bg-amber-50 rounded-lg p-1.5 border border-amber-200">
+                          <span>Time must be after {minP.hour12}:{minP.minute} {minP.period}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const d = new Date(min);
+                              if (!isNaN(d.getTime())) {
+                                const adj = new Date(d.getTime() + 15 * 60000);
+                                const h = adj.getHours();
+                                const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+                                const p = h >= 12 ? 'PM' : 'AM';
+                                handleUpdate(defaultDateStr, pad(h12), pad(adj.getMinutes()), p);
+                              }
+                            }}
+                            className="text-blue-700 underline hover:text-blue-900 cursor-pointer ml-1 font-black shrink-0"
+                          >
+                            Set +15m
+                          </button>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()
+                )}
               </div>
             )}
 
