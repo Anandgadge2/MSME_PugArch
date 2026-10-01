@@ -8116,7 +8116,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "supplier",
         header: "Supplier Organization",
-        width: "w-[18%]",
+        width: "w-[19%]",
         cell: (participation, idx) => {
           const sellerOrgName =
             participation.sellerOrgName ||
@@ -8162,7 +8162,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "amount",
         header: "Quoted Amount (INR)",
-        width: "w-[12%]",
+        width: "w-[11%]",
         cell: (participation) => {
           if (!isEvaluationReady) {
             return (
@@ -8309,7 +8309,7 @@ export function ProcurementDetailUnifiedView(
       {
         key: "status",
         header: "Lifecycle & Award Status",
-        width: "w-[12%]",
+        width: "w-[14%]",
         cell: (participation) => {
           const isAuctionWinner = Boolean(
             linkedAuction &&
@@ -8417,7 +8417,7 @@ export function ProcurementDetailUnifiedView(
         key: "action",
         header: "Action",
         align: "right",
-        width: "w-[17%]",
+        width: "w-[22%]",
         cell: (participation) => {
           const ts = String(participation.technicalStatus || "").toUpperCase();
           const isQual =
@@ -13179,7 +13179,7 @@ export function ProcurementDetailUnifiedView(
                         )
                       }
                       showSrNo={false}
-                      minWidth="min-w-[1150px]"
+                      minWidth="min-w-[1300px]"
                       emptyTitle={
                         isRfqType
                           ? "No seller quotations submitted yet"
