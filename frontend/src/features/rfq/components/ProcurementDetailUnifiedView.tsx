@@ -8482,8 +8482,8 @@ export function ProcurementDetailUnifiedView(
                       ? "Locked until Opening"
                       : isQual
                         ? isTechEvalCompleted
-                          ? "View Evaluation Audit"
-                          : "Evaluation Audit / Edit"
+                          ? "View Evaluation"
+                          : "Edit Evaluation"
                         : isDisq
                           ? "View Disqualification"
                           : "Evaluate Bid"}
