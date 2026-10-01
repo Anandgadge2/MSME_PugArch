@@ -354,17 +354,10 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
-            {canOfferAward && (
-              <Button
-                onClick={() => {
-                  setSelectedParticipantForAward(lowestEvaluated);
-                  setAwardActionType('recommend');
-                }}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider h-10 px-5 shadow-sm"
-              >
-                <Award className="mr-2 h-4 w-4" /> Issue Contract Award Offer
-              </Button>
-            )}
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200 shadow-2xs">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
+              <span>Evaluation Concluded</span>
+            </span>
           </div>
         </div>
       </div>
@@ -677,11 +670,12 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 <Button
                   onClick={() => {
                     setSelectedParticipantForAward(highlightedParticipant);
+                    setIsPriceMatchMode(false);
                     setAwardActionType('recommend');
                   }}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-sm"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider px-5 py-2.5 shadow-sm flex items-center gap-1.5 transition-transform active:scale-95"
                 >
-                  <Award className="mr-1.5 h-3.5 w-3.5" /> Issue Award Offer to This Bidder
+                  <Award className="h-4 w-4" /> Issue Contract Award Offer (L1)
                 </Button>
               </div>
             )}
@@ -723,11 +717,11 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-black uppercase tracking-wider text-slate-600">
                   <th scope="col" className="py-3 px-4 w-20">Rank</th>
                   <th scope="col" className="py-3 px-4">Participant Organization</th>
-                  <th scope="col" className="py-3 px-4 text-right">Final Bid Amount</th>
-                  <th scope="col" className="py-3 px-4 text-right">Decrement vs Baseline</th>
-                  <th scope="col" className="py-3 px-4">Qualification Status</th>
+                  <th scope="col" className="py-3 px-4 text-right w-44">Final Bid Amount</th>
+                  <th scope="col" className="py-3 px-4 text-right w-52">Decrement vs Baseline</th>
+                  <th scope="col" className="py-3 px-4 w-36">Qualification Status</th>
                   {canRecommendAward && (
-                    <th scope="col" className="py-3 px-4 text-right w-44">Discretionary Award</th>
+                    <th scope="col" className="py-3 px-4 text-right w-56">Award Selection</th>
                   )}
                 </tr>
               </thead>
@@ -738,8 +732,14 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                   const isL2 = rankNumber === 2;
                   const isL3 = rankNumber === 3;
                   const bidAmount = Number(row.lastBidAmount || 0);
-                  const diff = startPrice > 0 && bidAmount > 0 ? startPrice - bidAmount : 0;
-                  const diffPercent = startPrice > 0 && diff > 0 ? ((diff / startPrice) * 100).toFixed(1) : null;
+                  const initialQuote = Number(row.initialQuoteTotal || row.initialQuoteAmount || 0);
+                  const baselinePrice = startPrice > 0 ? startPrice : Number((auction as any)?.basePrice || 0);
+                  const diffFromBaseline = baselinePrice > 0 && bidAmount > 0 ? baselinePrice - bidAmount : 0;
+                  const diffPctFromBaseline = baselinePrice > 0
+                    ? ((Math.abs(diffFromBaseline) / baselinePrice) * 100).toFixed(1)
+                    : '0.0';
+                  const diffFromInitial = initialQuote > 0 && bidAmount > 0 ? initialQuote - bidAmount : 0;
+
                   const isAlreadyAwarded = Boolean(
                     row.isAwarded ||
                     (auction?.winnerSellerId && (row.sellerUserId === auction.winnerSellerId || row.sellerOrgId === auction.winnerSellerId)) ||
@@ -798,19 +798,54 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
                       {/* Decrement vs Baseline */}
                       <td className="py-3.5 px-4 text-right font-mono">
-                        {diff > 0 ? (
+                        {baselinePrice > 0 && bidAmount > 0 ? (
+                          diffFromBaseline > 0.005 ? (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="font-bold text-emerald-700">
+                                -{formatCurrency(diffFromBaseline)}
+                              </span>
+                              <span className="text-[10px] font-semibold text-emerald-800">
+                                (-{diffPctFromBaseline}%)
+                              </span>
+                            </div>
+                          ) : Math.abs(diffFromBaseline) <= 0.005 ? (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="font-bold text-slate-700">
+                                ₹0.00
+                              </span>
+                              <span className="text-[10px] font-semibold text-slate-500">
+                                0.0% · At Baseline
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="inline-flex flex-col items-end">
+                              <span className="font-bold text-slate-700">
+                                +{formatCurrency(Math.abs(diffFromBaseline))}
+                              </span>
+                              <span className="text-[10px] font-semibold text-amber-700">
+                                +{diffPctFromBaseline}% vs Baseline
+                              </span>
+                              {diffFromInitial > 0 && (
+                                <span className="text-[9px] font-medium text-emerald-700">
+                                  (-{formatCurrency(diffFromInitial)} from quote)
+                                </span>
+                              )}
+                            </div>
+                          )
+                        ) : diffFromInitial > 0 ? (
                           <div className="inline-flex flex-col items-end">
                             <span className="font-bold text-emerald-700">
-                              -{formatCurrency(diff)}
+                              -{formatCurrency(diffFromInitial)}
                             </span>
-                            {diffPercent && (
-                              <span className="text-[10px] font-semibold text-emerald-800">
-                                ({diffPercent}%)
-                              </span>
-                            )}
+                            <span className="text-[10px] font-semibold text-emerald-800">
+                              (-{((diffFromInitial / initialQuote) * 100).toFixed(1)}% from quote)
+                            </span>
                           </div>
                         ) : (
-                          <span className="text-slate-400">—</span>
+                          <div className="inline-flex flex-col items-end">
+                            <span className="font-bold text-slate-600">₹0.00</span>
+                            <span className="text-[10px] font-semibold text-slate-400">0.0% · No decrement</span>
+                          </div>
                         )}
                       </td>
 
@@ -821,7 +856,7 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                         </span>
                       </td>
 
-                      {/* Action Column for Managers: Can Award ANY Participant */}
+                      {/* Action Column for Managers: Clean Discretionary Choices */}
                       {canRecommendAward && (
                         <td className="py-3.5 px-4 text-right">
                           {purchaseOrder || (['AWARDED', 'COMPLETED'].includes(status) && purchaseOrder) ? (
@@ -841,21 +876,22 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                               <Clock className="h-3 w-3" /> Offer Awaiting Acceptance
                             </span>
                           ) : canOfferAward ? (
-                            <div className="flex items-center gap-1.5 flex-wrap">
+                            <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               {isL1 ? (
                                 <Button
                                   size="sm"
-                                  variant="primary"
+                                  variant="outline"
                                   onClick={() => {
                                     setSelectedParticipantForAward(row);
                                     setIsPriceMatchMode(false);
                                     setAwardActionType('recommend');
                                   }}
                                   disabled={awardMutation.isPending || generatePoMutation.isPending}
-                                  className="h-8 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                                  className="h-8 text-xs font-bold border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 shadow-2xs gap-1"
+                                  title="Offer contract award to L1 lowest evaluated bidder"
                                 >
-                                  <Award className="mr-1 h-3.5 w-3.5" />
-                                  Offer Award L1
+                                  <Award className="h-3.5 w-3.5 text-indigo-600" />
+                                  Award L1
                                 </Button>
                               ) : (
                                 <>
@@ -868,10 +904,10 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                                       setAwardActionType('recommend');
                                     }}
                                     disabled={awardMutation.isPending || generatePoMutation.isPending}
-                                    className="h-8 text-xs font-bold border-blue-300 text-blue-700 hover:bg-blue-50 shadow-2xs"
+                                    className="h-8 text-xs font-bold border-blue-300 text-blue-700 hover:bg-blue-50 shadow-2xs gap-1"
                                     title="Send counter-offer inviting supplier to match L1 lowest price"
                                   >
-                                    <Target className="mr-1 h-3.5 w-3.5 text-blue-600" />
+                                    <Target className="h-3.5 w-3.5 text-blue-600" />
                                     Match L1
                                   </Button>
                                   <Button
@@ -883,10 +919,10 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                                       setAwardActionType('recommend');
                                     }}
                                     disabled={awardMutation.isPending || generatePoMutation.isPending}
-                                    className="h-8 text-xs font-bold border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                    className="h-8 text-xs font-bold border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs gap-1"
                                     title="Award directly at higher quoted price with required justification"
                                   >
-                                    <Award className="mr-1 h-3.5 w-3.5" />
+                                    <Award className="h-3.5 w-3.5 text-slate-600" />
                                     Award L{rankNumber}
                                   </Button>
                                 </>
