@@ -5291,11 +5291,27 @@ export function ProcurementDetailUnifiedView(
   const handleGeneratePOFromBanner = async (awardId: string) => {
     try {
       setIsIssuingPOFromBanner(true);
-      const res: any = await procurementBidApi.generatePO(targetId, { awardId });
+      const isReverseAuction =
+        props.procurementType === "REVERSE_AUCTION" ||
+        String(targetId).toUpperCase().startsWith("RA-") ||
+        Boolean(linkedAuction);
+
+      let created: any = null;
+      if (isReverseAuction) {
+        const auctionIdToUse = linkedAuction?.id || targetId;
+        const res = await reverseAuctionApi.acceptAndGeneratePo(auctionIdToUse, {
+          participantId: activeAward?.participationId ? Number(activeAward.participationId) : undefined,
+          remarks: "Purchase Order issued from Procurement Highway"
+        });
+        created = res?.purchaseOrder || res;
+      } else {
+        const res: any = await procurementBidApi.generatePO(targetId, { awardId });
+        created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
+      }
+
       toast.success(
         "Purchase Order issued successfully! Non-selected bidders notified.",
       );
-      const created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
       if (created && (created.id || created.poNumber)) {
         setLocalCreatedOrder(created);
       }
@@ -5303,6 +5319,7 @@ export function ProcurementDetailUnifiedView(
       queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
       queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
       queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
+      queryClient.refetchQueries({ queryKey: ["reverse-auction"] });
     } catch (err: any) {
       toast.error(err.message || "Failed to issue Purchase Order.");
     } finally {
@@ -5390,6 +5407,7 @@ export function ProcurementDetailUnifiedView(
         if (Array.isArray(res.participants)) return res.participants;
         if (Array.isArray(res.participations)) return res.participations;
         if (Array.isArray(res.results)) return res.results;
+        if (Array.isArray(res.bids)) return res.bids;
         if (Array.isArray(res.items)) return res.items;
         if (res.data) return extractArray(res.data);
         return [];
@@ -5403,12 +5421,14 @@ export function ProcurementDetailUnifiedView(
         const sId =
           r.sellerUserId ||
           r.sellerId ||
+          r.sellerOrgId ||
           r.seller?.id ||
           r.sellerUser?.id ||
           r.id;
         const sellerOrgName =
           r.sellerOrgName ||
           r.sellerOrganization?.organizationName ||
+          r.sellerOrganizationName ||
           r.seller?.organization?.organizationName ||
           r.seller?.sellerProfile?.organizationName ||
           r.sellerProfile?.organizationName ||
@@ -5432,6 +5452,7 @@ export function ProcurementDetailUnifiedView(
           sellerUserId: sId,
           sellerOrganizationId:
             r.sellerOrganizationId ||
+            r.sellerOrgId ||
             r.sellerOrganization?.id ||
             r.seller?.organizationId ||
             r.seller?.organization?.id,
@@ -5455,11 +5476,14 @@ export function ProcurementDetailUnifiedView(
           submissionStatus:
             r.status === "SHORTLISTED" || r.status === "ACCEPTED" || r.status === "QUALIFIED"
               ? "SUBMITTED"
-              : r.submissionStatus || r.status || (r.offeredPrice || r.quotedAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
-          status: r.status || r.submissionStatus || (r.offeredPrice || r.quotedAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
+              : r.submissionStatus || r.status || (r.offeredPrice || r.quotedAmount || r.lastBidAmount || r.initialQuoteAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
+          status: r.status || r.submissionStatus || (r.offeredPrice || r.quotedAmount || r.lastBidAmount || r.initialQuoteAmount || r.totalAmount ? "SUBMITTED" : "INVITED"),
           quotedAmount: Number(
             r.offeredPrice ||
               r.quotedAmount ||
+              r.lastBidAmount ||
+              r.initialQuoteAmount ||
+              r.amount ||
               r.totalAmount ||
               r.totalPrice ||
               0,
@@ -5467,6 +5491,9 @@ export function ProcurementDetailUnifiedView(
           totalAmount: Number(
             r.offeredPrice ||
               r.quotedAmount ||
+              r.lastBidAmount ||
+              r.initialQuoteAmount ||
+              r.amount ||
               r.totalAmount ||
               r.totalPrice ||
               0,
@@ -5550,17 +5577,31 @@ export function ProcurementDetailUnifiedView(
       );
 
       for (const idToken of idsToTry) {
-        const candidateResults = await Promise.allSettled([
-          getApi(
-            `/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`,
-            true,
-          ),
-          procurementBidApi.detail(idToken),
-          getApi(
-            `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
-            true,
-          ),
-        ]);
+        const isAuctionToken =
+          props.procurementType === "REVERSE_AUCTION" ||
+          String(idToken).toUpperCase().startsWith("RA-");
+
+        const candidateResults = await Promise.allSettled(
+          isAuctionToken
+            ? [
+                reverseAuctionApi.participants(idToken).catch(() => null),
+                reverseAuctionApi.bids(idToken).catch(() => null),
+                props.linkedAuction
+                  ? Promise.resolve(props.linkedAuction)
+                  : reverseAuctionApi.get(idToken).catch(() => null),
+              ]
+            : [
+                getApi(
+                  `/api/buyer/procurement-bids/${encodeURIComponent(idToken)}/participants`,
+                  true,
+                ).catch(() => null),
+                procurementBidApi.detail(idToken).catch(() => null),
+                getApi(
+                  `/api/buyer/requirements/${encodeURIComponent(idToken)}/responses`,
+                  true,
+                ).catch(() => null),
+              ],
+        );
 
         const candidateLists: any[][] = [];
         for (const r of candidateResults) {

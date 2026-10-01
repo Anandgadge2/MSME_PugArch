@@ -3710,7 +3710,7 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
         ].filter(Boolean) as string[]));
         const candidateIds = Array.from(new Set([id].filter(i => i > 0 && i <= 2147483647)));
 
-        const [linkedBuyerReq, linkedLegacyReq, linkedBid] = await Promise.all([
+        const [linkedBuyerReq, linkedLegacyReq, linkedBid, linkedAuction] = await Promise.all([
             db.buyerRequirement.findFirst({
                 where: {
                     OR: [
@@ -3739,12 +3739,40 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
                     ]
                 },
                 select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
+            }).catch(() => null),
+            db.auction.findFirst({
+                where: {
+                    OR: [
+                        ...(candidateIds.length ? [{ id: { in: candidateIds } }] : []),
+                        ...(candidateNumbers.length ? [
+                            { auctionCode: { in: candidateNumbers } },
+                            { referenceNo: { in: candidateNumbers } }
+                        ] : [])
+                    ]
+                },
+                select: { id: true, auctionCode: true, referenceNo: true, title: true, createdByUserId: true, buyerOrgId: true, linkedRequirementId: true, linkedBidId: true, status: true }
             }).catch(() => null)
         ]);
 
         let resolvedBuyerReq = linkedBuyerReq;
         let resolvedLegacyReq = linkedLegacyReq;
         let resolvedBid = linkedBid;
+        let resolvedAuction = linkedAuction;
+
+        if (resolvedAuction && !resolvedBuyerReq && !resolvedBid) {
+            if (resolvedAuction.linkedRequirementId) {
+                resolvedBuyerReq = await db.buyerRequirement.findUnique({
+                    where: { id: Number(resolvedAuction.linkedRequirementId) },
+                    select: { id: true, title: true, createdById: true, buyerOrganizationId: true, status: true, lastDate: true }
+                }).catch(() => null);
+            }
+            if (resolvedAuction.linkedBidId) {
+                resolvedBid = await db.procurementBid.findUnique({
+                    where: { id: Number(resolvedAuction.linkedBidId) },
+                    select: { id: true, bidNumber: true, title: true, buyerId: true, buyerOrganizationId: true, technicalPacket: true, status: true }
+                }).catch(() => null);
+            }
+        }
 
         if (resolvedBid && !resolvedBuyerReq) {
             const rawPkt = resolvedBid.technicalPacket;
@@ -3780,7 +3808,7 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
             }).catch(() => null);
         }
 
-        if (!resolvedBuyerReq && !resolvedLegacyReq && !resolvedBid) {
+        if (!resolvedBuyerReq && !resolvedLegacyReq && !resolvedBid && !resolvedAuction) {
             return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
         }
 
@@ -3791,7 +3819,8 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
             const isOwner = (
                 (resolvedBuyerReq && (resolvedBuyerReq.createdById === userId || (userOrgId && resolvedBuyerReq.buyerOrganizationId === userOrgId))) ||
                 (resolvedLegacyReq && (resolvedLegacyReq.buyerId === userId || (userOrgId && resolvedLegacyReq.organizationId === userOrgId))) ||
-                (resolvedBid && (resolvedBid.buyerId === userId || (userOrgId && resolvedBid.buyerOrganizationId === userOrgId)))
+                (resolvedBid && (resolvedBid.buyerId === userId || (userOrgId && resolvedBid.buyerOrganizationId === userOrgId))) ||
+                (resolvedAuction && (resolvedAuction.createdByUserId === userId || (userOrgId && resolvedAuction.buyerOrgId === userOrgId)))
             );
             if (!isOwner) {
                 return apiResponse.error(res, 403, 'You do not have permission to view responses for this requirement.', 'FORBIDDEN');
@@ -3883,6 +3912,62 @@ router.get(['/buyer/requirements/:id/responses', '/marketplace/requirements/:id/
                     page,
                     pageSize,
                     totalPages: Math.ceil(mappedParticipations.length / pageSize)
+                });
+            }
+        }
+
+        if (responses.length === 0 && resolvedAuction) {
+            const auctionParts = await db.auctionParticipant.findMany({
+                where: { auctionId: resolvedAuction.id },
+                orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }]
+            }).catch(() => []);
+
+            if (auctionParts.length > 0) {
+                const orgIds = Array.from(new Set(auctionParts.map((p: any) => p.sellerOrgId).filter(Boolean)));
+                const orgs = await db.organization.findMany({
+                    where: { id: { in: orgIds as number[] } }
+                }).catch(() => []);
+                const orgMap = new Map<number, any>(orgs.map((o: any) => [o.id, o]));
+
+                const mappedAuctionParts = auctionParts.map((p: any) => {
+                    const org: any = p.sellerOrgId ? orgMap.get(p.sellerOrgId) : null;
+                    return {
+                        id: p.id,
+                        requirementId: resolvedAuction?.id,
+                        sellerUserId: p.sellerUserId,
+                        sellerName: org?.organizationName || `Supplier #${p.id}`,
+                        sellerEmail: '',
+                        sellerPhone: '',
+                        sellerOrganization: org ? { organizationName: org.organizationName } : null,
+                        offeredPrice: Number(p.lastBidAmount || p.initialQuoteAmount || 0),
+                        offeredQuantity: 1,
+                        deliveryTimeline: 'Standard',
+                        makeBrand: null,
+                        model: null,
+                        technicalStatus: 'QUALIFIED',
+                        financialStatus: 'EVALUATED',
+                        finalStatus: p.status === 'ACCEPTED' ? 'AWARDED' : 'SUBMITTED',
+                        rank: p.currentRank ? `L${p.currentRank}` : null,
+                        status: p.status || 'SUBMITTED',
+                        responseData: {},
+                        documents: [],
+                        createdAt: p.invitedAt || p.createdAt,
+                        updatedAt: p.updatedAt,
+                        sellerUser: null
+                    };
+                });
+
+                return ok(res, {
+                    requirement: decorateRequirement({
+                        id: resolvedAuction.id,
+                        referenceNumber: resolvedAuction.auctionCode || `RA-${resolvedAuction.id}`,
+                        title: resolvedAuction.title || 'Reverse Auction'
+                    }),
+                    responses: mappedAuctionParts,
+                    total: mappedAuctionParts.length,
+                    page,
+                    pageSize,
+                    totalPages: Math.ceil(mappedAuctionParts.length / pageSize)
                 });
             }
         }

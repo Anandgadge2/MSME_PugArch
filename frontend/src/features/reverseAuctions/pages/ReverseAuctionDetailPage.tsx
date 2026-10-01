@@ -206,6 +206,13 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const tenderId = auction.data?.tenderId;
   const linkedRequirementId = auction.data?.linkedRequirementId;
   const referenceNo = auction.data?.referenceNo || (auction.data?.linkedRequirement as any)?.bidNumber || auction.data?.linkedRequirement?.requirementNumber;
+  const candidateRefNo =
+    referenceNo &&
+    !String(referenceNo).toUpperCase().startsWith('RA-') &&
+    referenceNo !== auction.data?.auctionCode &&
+    referenceNo !== `RA-${effectiveId}`
+      ? referenceNo
+      : null;
 
   const targetProcurementId = linkedBidId
     ? String(linkedBidId)
@@ -213,7 +220,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     ? `TENDER-${tenderId}`
     : linkedRequirementId
     ? String(linkedRequirementId)
-    : referenceNo || null;
+    : candidateRefNo;
 
   const linkedBid = useQuery({
     queryKey: ['linked-bid', targetProcurementId],

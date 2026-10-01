@@ -5108,6 +5108,85 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     );
   }
 
+  // Handle Reverse Auction PO generation if invoked for an auction entity
+  if (bid.sourceModel === 'AUCTION' || String(bidId).toUpperCase().startsWith('RA-')) {
+    const rawAuctionId = bid.auctionId || bid.sourceId || Number(String(bidId).replace(/^RA-/i, ''));
+    const auction = await db.auction.findFirst({
+      where: {
+        OR: [
+          ...(Number.isFinite(rawAuctionId) && rawAuctionId > 0 ? [{ id: rawAuctionId }] : []),
+          { auctionCode: String(bidId) },
+          { referenceNo: String(bidId) }
+        ]
+      }
+    });
+
+    if (auction) {
+      const winner = body?.awardId
+        ? await db.auctionParticipant.findFirst({ where: { id: Number(body.awardId), auctionId: auction.id } })
+        : (await db.auctionParticipant.findFirst({ where: { auctionId: auction.id, currentRank: 1 } }) ||
+           await db.auctionParticipant.findFirst({ where: { auctionId: auction.id } }));
+
+      if (!winner) {
+        throw new ApiError(400, 'No qualifying participant found for this auction', 'NO_WINNER_FOUND');
+      }
+
+      const winningAmount = winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice || 0;
+      let sellerUserId = winner.sellerUserId;
+      if (!sellerUserId && winner.sellerOrgId) {
+        const sellerUser = await db.user.findFirst({ where: { organizationId: winner.sellerOrgId } });
+        if (sellerUser) sellerUserId = sellerUser.id;
+      }
+      if (!sellerUserId) sellerUserId = winner.sellerOrgId || 1;
+
+      const buyerId = req.user?.id || auction.createdByUserId;
+      const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      let po = await db.purchaseOrder.findFirst({
+        where: {
+          OR: [
+            { title: { contains: `Reverse Auction ${auction.auctionCode || auction.id}` } },
+            { notes: { contains: `auctionId:${auction.id}` } }
+          ]
+        },
+        include: { invoices: true, grns: true }
+      });
+
+      if (!po) {
+        po = await db.purchaseOrder.create({
+          data: {
+            poNumber,
+            buyerId,
+            sellerId: sellerUserId,
+            title: `Purchase Order - Reverse Auction ${auction.auctionCode || auction.id} (${auction.title || 'Official Award'})`,
+            amount: winningAmount,
+            status: 'pending_acceptance',
+            poStatus: 'ISSUED',
+            notes: `[Reverse Auction Sourcing] Generated from auctionId:${auction.id}. Participant #${winner.id}.`,
+            terms: 'Standard Government E-Marketplace Payment Terms.'
+          },
+          include: { invoices: true, grns: true }
+        });
+
+        await db.auction.update({
+          where: { id: auction.id },
+          data: {
+            winnerSellerId: sellerUserId,
+            finalizedAt: new Date(),
+            status: 'AWARDED',
+            statusEnum: 'AWARDED'
+          }
+        }).catch(() => null);
+      }
+
+      return {
+        purchaseOrder: po,
+        reused: false,
+        alreadyIssued: false
+      };
+    }
+  }
+
   const isMasterOrAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
   const allowedStatuses = isMasterOrAdmin 
     ? ['ACCEPTED', 'ADMIN_APPROVED', 'OFFERED', 'RECOMMENDED'] 
