@@ -21,6 +21,20 @@ export interface ReverseAuctionSocketEvent {
 
 let isAuctionWsSupported = true;
 
+const lastAuctionToastTimes = new Map<string, number>();
+
+const triggerDeduplicatedAuctionToast = (
+  dedupeKey: string,
+  toastFn: () => void,
+  cooldownMs = 4000
+) => {
+  const now = Date.now();
+  const lastTime = lastAuctionToastTimes.get(dedupeKey) || 0;
+  if (now - lastTime < cooldownMs) return;
+  lastAuctionToastTimes.set(dedupeKey, now);
+  toastFn();
+};
+
 export const useReverseAuctionRealtime = (
   auctionId: string | number | undefined | null,
   canonicalCode?: string
@@ -73,17 +87,23 @@ export const useReverseAuctionRealtime = (
           ? `₹${Number(data.currentLowest).toLocaleString('en-IN')}`
           : null;
         if (priceFmt) {
-          toast.info(`Leading Bid Lowered: ${priceFmt}`, {
-            description: data.minimumNextBid
-              ? `Next maximum permitted bid is ₹${Number(data.minimumNextBid).toLocaleString('en-IN')}. Live board refreshed.`
-              : 'The live auction board and standings have been updated.',
-            duration: 4000
+          triggerDeduplicatedAuctionToast(`auction-bid-${cleanId}-${data.currentLowest}`, () => {
+            toast.info(`Leading Bid Lowered: ${priceFmt}`, {
+              id: `auction-bid-${cleanId}`,
+              description: data.minimumNextBid
+                ? `Next maximum permitted bid is ₹${Number(data.minimumNextBid).toLocaleString('en-IN')}. Live board refreshed.`
+                : 'The live auction board and standings have been updated.',
+              duration: 4000
+            });
           });
         }
       } else if (data.type === 'REVERSE_AUCTION_UPDATED' || data.type === 'REVERSE_AUCTION_STATUS_CHANGED') {
-        toast.info('Auction Status Changed', {
-          description: `Auction status moved to ${data.status || 'UPDATED'}.`,
-          duration: 3500
+        triggerDeduplicatedAuctionToast(`auction-status-${cleanId}`, () => {
+          toast.info('Auction Status Changed', {
+            id: `auction-status-${cleanId}`,
+            description: `Auction status moved to ${data.status || 'UPDATED'}.`,
+            duration: 3500
+          });
         });
       }
     };

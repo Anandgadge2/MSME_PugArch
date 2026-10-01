@@ -22,6 +22,20 @@ export interface ProcurementSocketEvent {
 
 let isProcurementWsSupported = true;
 
+const lastProcurementToastTimes = new Map<string, number>();
+
+const triggerDeduplicatedToast = (
+  dedupeKey: string,
+  toastFn: () => void,
+  cooldownMs = 4000
+) => {
+  const now = Date.now();
+  const lastTime = lastProcurementToastTimes.get(dedupeKey) || 0;
+  if (now - lastTime < cooldownMs) return;
+  lastProcurementToastTimes.set(dedupeKey, now);
+  toastFn();
+};
+
 export const useProcurementRealtime = (procurementId: string | number | undefined | null) => {
   const [status, setStatus] = useState<WebSocketStatus>('DISCONNECTED');
   const queryClient = useQueryClient();
@@ -57,52 +71,49 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-result'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
 
+      // If subscribed to global aggregated room 'all' (e.g. MyProcurementsPage), only sync queries, don't pop item toasts
+      if (cleanId === 'all') return;
+
       if (data.type === 'QUOTATION_SUBMITTED') {
         const priceFmt = data.offeredPrice
           ? `₹${Number(data.offeredPrice).toLocaleString('en-IN')}`
           : null;
 
-        toast.success('New Quotation Submitted!', {
-          description: priceFmt
-            ? `A vendor submitted a quotation for ${priceFmt}. List refreshed automatically.`
-            : 'A new quotation was just submitted and added to your view automatically.',
-          duration: 5000,
-        });
-      } else if (data.type === 'PROCUREMENT_AWARDED') {
-        const amtFmt = (data as any)?.awardedAmount
-          ? ` at ₹${Number((data as any).awardedAmount).toLocaleString('en-IN')}`
-          : '';
-        toast.success('🏆 Contract Award Offered!', {
-          description: `Contract award offer issued${amtFmt}. Data synchronized.`,
-          duration: 5000,
-        });
-      } else if (data.type === 'BID_ACCEPTED') {
-        toast.success('✅ Contract Award Accepted!', {
-          description: 'The supplier has accepted the award offer. PO can now be issued.',
-          duration: 5000,
-        });
-      } else if (data.type === 'BID_REJECTED') {
-        toast.warning('Award Offer Declined', {
-          description: 'The award offer was declined by the supplier. Status updated.',
-          duration: 5000,
+        triggerDeduplicatedToast(`quote-sub-${cleanId}-${data.responseId || ''}`, () => {
+          toast.success('New Quotation Submitted!', {
+            id: `quote-sub-${cleanId}-${data.responseId || ''}`,
+            description: priceFmt
+              ? `A vendor submitted a quotation for ${priceFmt}. List refreshed automatically.`
+              : 'A new quotation was just submitted and added to your view automatically.',
+            duration: 5000,
+          });
         });
       } else if (data.type === 'TECHNICAL_EVALUATION_STARTED') {
-        toast.info('📋 Technical Evaluation Started', {
-          description: 'Technical evaluation window is active.',
-          duration: 4000,
+        triggerDeduplicatedToast(`tech-eval-${cleanId}`, () => {
+          toast.info('📋 Technical Evaluation Started', {
+            id: `tech-eval-${cleanId}`,
+            description: 'Technical evaluation window is active.',
+            duration: 4000,
+          });
         });
       } else if (data.type === 'FINANCIAL_EVALUATION_STARTED' || data.type === 'L1_GENERATED') {
         const l1Fmt = (data as any)?.l1Price
           ? ` (L1 Benchmark: ₹${Number((data as any).l1Price).toLocaleString('en-IN')})`
           : '';
-        toast.info('💰 Financial Bids Opened', {
-          description: `Commercial envelopes unsealed and L1 standings computed${l1Fmt}.`,
-          duration: 5000,
+        triggerDeduplicatedToast(`fin-eval-${cleanId}`, () => {
+          toast.info('💰 Financial Bids Opened', {
+            id: `fin-eval-${cleanId}`,
+            description: `Commercial envelopes unsealed and L1 standings computed${l1Fmt}.`,
+            duration: 5000,
+          });
         });
       } else if (data.type === 'QUOTATION_STATUS_CHANGED') {
-        toast.info('Quotation Status Updated', {
-          description: `Status changed to ${data.status || 'UPDATED'}.`,
-          duration: 4000,
+        triggerDeduplicatedToast(`quote-status-${cleanId}-${data.responseId || data.status || ''}`, () => {
+          toast.info('Quotation Status Updated', {
+            id: `quote-status-${cleanId}-${data.responseId || data.status || ''}`,
+            description: `Status changed to ${data.status || 'UPDATED'}.`,
+            duration: 4000,
+          });
         });
       }
     };

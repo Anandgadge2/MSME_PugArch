@@ -4539,8 +4539,6 @@ export function ProcurementDetailUnifiedView(
       : props.id,
   );
   useProcurementRealtime(targetId);
-  useProcurementRealtime(props.id && String(props.id) !== targetId ? props.id : null);
-  useProcurementRealtime(props.displayId && String(props.displayId) !== targetId ? props.displayId : null);
   useUserRealtime(currentUser?.id);
 
   const handleTimerExpiry = React.useCallback(() => {

@@ -933,6 +933,11 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   };
 
   useEffect(() => {
+    if (!user) {
+      setNotifications([]);
+      return;
+    }
+
     const fetchNotifications = async () => {
       if (authLoading || !user || !authToken) return;
       try {
@@ -965,7 +970,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
       clearInterval(pollTimer);
       window.removeEventListener('notifications:updated', handleUpdate);
     };
-  }, [authToken, user, authLoading]);
+  }, [authToken, user?.id, authLoading]);
 
   useEffect(() => {
     if (authLoading || !user || !authToken) return;
@@ -1053,7 +1058,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
         clearTimeout(retryTimeout);
       }
     };
-  }, [authToken]);
+  }, [authToken, user?.id, authLoading]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

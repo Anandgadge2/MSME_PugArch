@@ -50,6 +50,7 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
       invalidateAll();
       const amtStr = data.awardedAmount ? ` for ₹${Number(data.awardedAmount).toLocaleString('en-IN')}` : '';
       toast.success('🏆 Contract Award Received!', {
+        id: `award-received-${data.auctionId || data.procurementId || 'award'}`,
         description: `You have received a new contract award offer${amtStr}. Review and confirm to proceed.`,
         duration: 7000,
       });
@@ -59,6 +60,7 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
       if (!isMounted) return;
       invalidateAll();
       toast.info('Procurement Status Updated', {
+        id: `bid-status-${data.procurementId || data.requirementId || 'status'}`,
         description: data.status ? `Status updated to ${data.status}.` : 'Your procurement dashboard has been refreshed.',
         duration: 5000,
       });

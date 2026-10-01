@@ -308,47 +308,75 @@ export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent)
   logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
 };
 
+const recentBroadcastKeys = new Map<string, number>();
+
+// Clean up stale keys periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [k, timestamp] of recentBroadcastKeys.entries()) {
+    if (now - timestamp > 10000) recentBroadcastKeys.delete(k);
+  }
+}, 30000);
+
 export const broadcastToProcurement = (procurementId: number | string, event: ProcurementSocketEvent) => {
   const cleanId = String(procurementId).trim();
+  if (!cleanId) return;
+
+  // Deduplicate rapid duplicate broadcasts for identical event on same procurement within 1.5s
+  const canonicalId = (event as any).procurementId || (event as any).requirementId || cleanId;
+  const dedupeKey = `proc:${canonicalId}:${event.type}:${(event as any).status || ''}:${(event as any).responseId || ''}`;
+  const now = Date.now();
+  const lastTime = recentBroadcastKeys.get(dedupeKey) || 0;
+  if (now - lastTime < 1500) {
+    return;
+  }
+  recentBroadcastKeys.set(dedupeKey, now);
+
   // Always push to Pusher if configured (serverless compatible)
   void publishProcurementEvent(cleanId, event);
 
   const roomId = `procurement:${cleanId}`;
   const room = rooms.get(roomId);
-  const allRoom = rooms.get('procurement:all');
+  const allRoom = cleanId !== 'all' ? rooms.get('procurement:all') : null;
   
   const message = JSON.stringify(event);
   let sentCount = 0;
+  const sentSockets = new Set<AuthenticatedWebSocket>();
 
-  if (room) {
-    room.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message);
-        sentCount++;
-      }
-    });
-  }
+  [room, allRoom].forEach((targetRoom) => {
+    if (targetRoom) {
+      targetRoom.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN && !sentSockets.has(client)) {
+          client.send(message);
+          sentSockets.add(client);
+          sentCount++;
+        }
+      });
+    }
+  });
 
-  if (allRoom) {
-    allRoom.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN && (!room || !room.has(client))) {
-        client.send(message);
-        sentCount++;
-      }
-    });
-  }
-
-  logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId} (and procurement:all)`);
+  logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
 };
 
 export const broadcastToAuction = (auctionId: number | string, event: AuctionSocketEvent) => {
   const cleanId = String(auctionId).trim();
+  if (!cleanId) return;
+
+  // Deduplicate rapid duplicate broadcasts for identical auction event within 1.5s
+  const dedupeKey = `auction:${cleanId}:${event.type}:${(event as any).status || ''}:${(event as any).currentLowest || ''}`;
+  const now = Date.now();
+  const lastTime = recentBroadcastKeys.get(dedupeKey) || 0;
+  if (now - lastTime < 1500) {
+    return;
+  }
+  recentBroadcastKeys.set(dedupeKey, now);
+
   void publishAuctionEvent(cleanId, event);
 
   const roomId = `auction:${cleanId}`;
   const room = rooms.get(roomId);
   const codeRoom = (event as any).auctionCode ? rooms.get(`auction:${String((event as any).auctionCode).trim()}`) : null;
-  const allRoom = rooms.get('auction:all');
+  const allRoom = cleanId !== 'all' ? rooms.get('auction:all') : null;
 
   const message = JSON.stringify(event);
   let sentCount = 0;
@@ -370,9 +398,20 @@ export const broadcastToAuction = (auctionId: number | string, event: AuctionSoc
 };
 
 export const broadcastToUser = (userId: number, event: UserSocketEvent) => {
-  void publishUserEvent(userId, event);
+  const numUserId = Number(userId);
+  if (!numUserId || isNaN(numUserId)) return;
 
-  const roomId = `user:${userId}`;
+  const dedupeKey = `user:${numUserId}:${event.type}:${(event as any).status || ''}:${(event as any).procurementId || ''}:${(event as any).auctionId || ''}`;
+  const now = Date.now();
+  const lastTime = recentBroadcastKeys.get(dedupeKey) || 0;
+  if (now - lastTime < 1500) {
+    return;
+  }
+  recentBroadcastKeys.set(dedupeKey, now);
+
+  void publishUserEvent(numUserId, event);
+
+  const roomId = `user:${numUserId}`;
   const room = rooms.get(roomId);
   if (!room) return;
 

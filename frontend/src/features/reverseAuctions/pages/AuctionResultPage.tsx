@@ -359,17 +359,6 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 <Award className="mr-2 h-4 w-4" /> Issue Contract Award Offer
               </Button>
             )}
-            {canGeneratePo && (
-              <Button
-                onClick={() => {
-                  setSelectedParticipantForAward(winningParticipant || highlightedParticipant);
-                  setAwardActionType('generate_po');
-                }}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider h-10 px-5 shadow-sm"
-              >
-                <Receipt className="mr-2 h-4 w-4" /> Generate Official Purchase Order
-              </Button>
-            )}
           </div>
         </div>
       </div>
@@ -690,17 +679,11 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 </Button>
               </div>
             )}
-            {canGeneratePo && (
+            {isAwardAccepted && !purchaseOrder && (
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
-                <Button
-                  onClick={() => {
-                    setSelectedParticipantForAward(winningParticipant || highlightedParticipant);
-                    setAwardActionType('generate_po');
-                  }}
-                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider px-4 py-2.5 shadow-sm"
-                >
-                  <Receipt className="mr-1.5 h-3.5 w-3.5" /> Generate Official PO for This Bidder
-                </Button>
+                <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-100 text-emerald-950 font-black text-xs border border-emerald-300 shadow-xs">
+                  <CheckCircle2 className="h-4 w-4 text-emerald-700" /> Award Accepted (PO Issuance Pending)
+                </span>
               </div>
             )}
           </div>
@@ -844,23 +827,9 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                               <span className="text-slate-400 text-xs font-semibold">—</span>
                             )
                           ) : row.isAwardAccepted ? (
-                            isManager && !purchaseOrder ? (
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedParticipantForAward(row);
-                                  setAwardActionType('generate_po');
-                                }}
-                                disabled={generatePoMutation.isPending}
-                                className="h-8 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white"
-                              >
-                                <Receipt className="mr-1 h-3.5 w-3.5" /> Generate PO
-                              </Button>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-black text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-200 shadow-xs">
-                                <CheckCircle2 className="h-3 w-3" /> Award Accepted
-                              </span>
-                            )
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-200 shadow-xs">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Award Accepted (PO Issuance Pending)
+                            </span>
                           ) : row.isAwardOffered ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-xs">
                               <Clock className="h-3 w-3" /> Offer Awaiting Acceptance
