@@ -349,6 +349,182 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       : []) ||
     [];
 
+  // Authentic Seller Participation Resolution (Zero Mock Fallback)
+  const effectiveSellerParticipation = useMemo(() => {
+    if (!user) return null;
+    const uid = String(user.id || '');
+    const oid = String(user.organizationId || user.organization?.id || user.sellerProfile?.organizationId || '');
+
+    // 1. Matched participant in reverse auction participants list
+    const participantFromList = participants.find((p: any) =>
+      p.isCurrentViewer ||
+      (oid && String(p.sellerOrgId) === oid) ||
+      (uid && String(p.sellerUserId) === uid)
+    ) || null;
+
+    // 2. Base participant from auction query / summary query
+    const basePart = participantFromList || myParticipant;
+
+    // 3. Linked participation from parent tender/procurement bid
+    const rawLinkedParts = linkedBidData?.participations || [];
+    const matchedLinkedPart = Array.isArray(rawLinkedParts)
+      ? rawLinkedParts.find((p: any) => {
+          const pUid = String(p.sellerId || p.sellerUserId || p.seller?.id || '');
+          const pOid = String(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || '');
+          return (uid && pUid === uid) || (oid && pOid === oid);
+        }) || null
+      : null;
+
+    if (!basePart && !matchedLinkedPart) return null;
+
+    // 4. Seller's bids in this reverse auction
+    const myAuctionBids = Array.isArray(auctionData?.bids)
+      ? (auctionData.bids as any[]).filter((b: any) =>
+          b.isMyBid ||
+          (uid && String(b.sellerId) === uid) ||
+          (oid && String(b.sellerOrgId) === oid)
+        )
+      : [];
+    const myLowestAuctionBid = myAuctionBids.length > 0
+      ? [...myAuctionBids].sort((a, b) => Number(a.amount || a.bidAmount || 0) - Number(b.amount || b.bidAmount || 0))[0]
+      : null;
+
+    const ack = (matchedLinkedPart?.acknowledgement && typeof matchedLinkedPart.acknowledgement === 'object' && !Array.isArray(matchedLinkedPart.acknowledgement))
+      ? (matchedLinkedPart.acknowledgement as Record<string, any>)
+      : (basePart?.acknowledgement && typeof basePart.acknowledgement === 'object' && !Array.isArray(basePart.acknowledgement))
+        ? (basePart.acknowledgement as Record<string, any>)
+        : {};
+
+    const quotedVal = Number(
+      myLowestAuctionBid?.amount ||
+      myLowestAuctionBid?.bidAmount ||
+      basePart?.lastBidAmount ||
+      basePart?.initialQuoteTotal ||
+      basePart?.initialQuoteAmount ||
+      matchedLinkedPart?.totalAmount ||
+      matchedLinkedPart?.quotedAmount ||
+      matchedLinkedPart?.offeredPrice ||
+      basePart?.quotedAmount ||
+      basePart?.totalAmount ||
+      0
+    );
+
+    const initialVal = Number(
+      basePart?.initialQuoteTotal ||
+      basePart?.initialQuoteAmount ||
+      matchedLinkedPart?.totalAmount ||
+      matchedLinkedPart?.quotedAmount ||
+      quotedVal
+    );
+
+    const allCandidateDocs = [
+      ...(Array.isArray(basePart?.documents) ? basePart.documents : []),
+      ...(Array.isArray(basePart?.qualificationDocuments) ? basePart.qualificationDocuments : []),
+      ...(Array.isArray(matchedLinkedPart?.documents) ? matchedLinkedPart.documents : []),
+      ...(Array.isArray(ack.documents) ? ack.documents : []),
+    ];
+    const uniqueDocsMap = new Map<string, any>();
+    for (const d of allCandidateDocs) {
+      if (!d) continue;
+      const key = String(d.fileAssetId || d.id || d.url || d.fileUrl || d.fileName || d.name || '');
+      if (key && !uniqueDocsMap.has(key)) {
+        uniqueDocsMap.set(key, d);
+      }
+    }
+    const resolvedDocs = Array.from(uniqueDocsMap.values());
+
+    return {
+      ...(matchedLinkedPart || {}),
+      ...(basePart || {}),
+      _isFromUserParticipation: true,
+      id: basePart?.id || matchedLinkedPart?.id,
+      sellerOrgId: Number(user.organizationId || basePart?.sellerOrgId || matchedLinkedPart?.sellerOrganizationId || 0),
+      sellerUserId: Number(user.id || basePart?.sellerUserId || matchedLinkedPart?.sellerId || 0),
+      quotedAmount: quotedVal,
+      totalAmount: quotedVal,
+      offeredPrice: quotedVal,
+      initialQuoteAmount: initialVal,
+      initialQuoteTotal: initialVal,
+      lastBidAmount: basePart?.lastBidAmount || myLowestAuctionBid?.amount || quotedVal,
+      deliveryTimeline:
+        basePart?.deliveryTimeline ||
+        matchedLinkedPart?.deliveryTimeline ||
+        ack.deliveryTimeline ||
+        (matchedLinkedPart?.deliveryDays ? `${matchedLinkedPart.deliveryDays} Days` : null) ||
+        reqData.deliveryTimeline ||
+        linkedBidData.deliveryTimeline ||
+        'As per specifications',
+      paymentTerms:
+        basePart?.paymentTerms ||
+        matchedLinkedPart?.paymentTerms ||
+        ack.paymentTerms ||
+        ack.terms ||
+        reqData.paymentTerms ||
+        linkedBidData.paymentTerms ||
+        'As per tender terms',
+      documents: resolvedDocs,
+      lineItems: (Array.isArray(basePart?.lineItems) && basePart.lineItems.length > 0)
+        ? basePart.lineItems
+        : (Array.isArray(matchedLinkedPart?.lineItems) && matchedLinkedPart.lineItems.length > 0)
+          ? matchedLinkedPart.lineItems
+          : (Array.isArray(ack.lineItems) && ack.lineItems.length > 0)
+            ? ack.lineItems
+            : resolvedItems,
+      acknowledgement: ack,
+      makeBrand: basePart?.makeBrand || matchedLinkedPart?.makeBrand || ack.makeBrand || null,
+      model: basePart?.model || matchedLinkedPart?.model || ack.model || null,
+      submittedAt: basePart?.qualificationSubmittedAt || basePart?.submittedAt || matchedLinkedPart?.submittedAt || basePart?.createdAt || auctionData?.startTime,
+    };
+  }, [participants, myParticipant, linkedBidData?.participations, linkedBidData.deliveryTimeline, linkedBidData.paymentTerms, auctionData?.bids, auctionData?.startTime, user, reqData.deliveryTimeline, reqData.paymentTerms, resolvedItems]);
+
+  // Clarification window closure logic:
+  // In public procurement & reverse auctions, clarification queries are pre-bid only.
+  // The clarification window closes when:
+  // 1. Auction is live, scheduled, paused, closed, completed, awarded, or cancelled.
+  // 2. The bid submission deadline has elapsed (from linked bid, requirement, or auction).
+  // 3. The explicit clarification deadline has elapsed.
+  // 4. The seller has submitted qualification proposal and evaluation is concluded/in-flight.
+  const isClarificationClosed = useMemo(() => {
+    if (isAuctionClosed || isAuctionCancelled) return true;
+    if (['LIVE', 'SCHEDULED', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARDED', 'AWARD_RECOMMENDED'].includes(status)) {
+      return true;
+    }
+    const now = Date.now();
+    // Auction end time
+    if (auctionData.endTime && new Date(auctionData.endTime).getTime() < now) {
+      return true;
+    }
+    // Linked Bid deadlines
+    const bidDeadline = linkedBidData.endDate ? new Date(linkedBidData.endDate).getTime() : 0;
+    if (bidDeadline > 0 && bidDeadline < now) return true;
+    const bidClarDeadline = linkedBidData.clarificationEndDate ? new Date(linkedBidData.clarificationEndDate).getTime() : 0;
+    if (bidClarDeadline > 0 && bidClarDeadline < now) return true;
+
+    // Linked Requirement deadlines
+    const reqDeadline = reqData.bidSubmissionEnd ? new Date(reqData.bidSubmissionEnd).getTime() : 0;
+    if (reqDeadline > 0 && reqDeadline < now) return true;
+    const reqClarDeadline = reqData.clarificationDeadline ? new Date(reqData.clarificationDeadline).getTime() : 0;
+    if (reqClarDeadline > 0 && reqClarDeadline < now) return true;
+
+    // If seller has joined/submitted proposal and bid submission is closed
+    if (hasJoined && (myStatus === 'QUALIFIED' || myStatus === 'TECHNICALLY_QUALIFIED' || myStatus === 'DISQUALIFIED')) {
+      return true;
+    }
+
+    return false;
+  }, [
+    isAuctionClosed,
+    isAuctionCancelled,
+    status,
+    auctionData.endTime,
+    linkedBidData.endDate,
+    linkedBidData.clarificationEndDate,
+    reqData.bidSubmissionEnd,
+    reqData.clarificationDeadline,
+    hasJoined,
+    myStatus,
+  ]);
+
   // Resolved Terms & Conditions
   const resolvedTerms: any =
     (Array.isArray(reqData.termsAndConditions) && reqData.termsAndConditions.length > 0 ? reqData.termsAndConditions : null) ||
@@ -854,7 +1030,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         participations={participants}
         participantsCount={participants.length}
         hasSubmittedProposal={hasJoined}
-        ownParticipation={myParticipant}
+        ownParticipation={effectiveSellerParticipation || myParticipant}
         linkedAuction={auctionData}
         onAuctionBidSubmitted={() => invalidate()}
         sellerAuctionActions={sellerAuctionActions}
@@ -863,7 +1039,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           <AuctionClarificationPanel
             auctionId={effectiveId}
             role={isSeller ? 'seller' : 'buyer'}
-            closed={['CLOSED', 'COMPLETED', 'CANCELLED'].includes(status)}
+            closed={isClarificationClosed}
           />
         }
         isSubmitDisabled={(isAuctionClosed || isAuctionCancelled) && !hasJoined}

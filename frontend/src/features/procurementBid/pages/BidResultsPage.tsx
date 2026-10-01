@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft
+  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft, Radio
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -43,6 +43,7 @@ export default function BidResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedResult, setSelectedResult] = useState<any | null>(null);
+  const [linkedAuction, setLinkedAuction] = useState<any | null>(null);
 
   // View mode state (default to List as requested)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
@@ -140,6 +141,7 @@ export default function BidResultsPage() {
   }, [bid]);
 
   const isReverseAuction = React.useMemo(() => {
+    if (linkedAuction) return true;
     if (!bid) return String(bidId).toUpperCase().startsWith('RA-') || String(bidId).toUpperCase().startsWith('AUCTION-');
     const b: any = bid;
     return (
@@ -149,9 +151,12 @@ export default function BidResultsPage() {
       b.bidType === 'Reverse Auction' ||
       b.procurementType === 'Reverse Auction' ||
       b.procurementMethod === 'REVERSE_AUCTION' ||
-      Boolean(b.isReverseAuction)
+      Boolean(b.isReverseAuction) ||
+      Boolean(b.hasReverseAuction) ||
+      Boolean(b.linkedAuction) ||
+      Boolean(b.rawAuction)
     );
-  }, [bid, bidId]);
+  }, [bid, bidId, linkedAuction]);
 
   const isTechEvalCompleted = React.useMemo(() => {
     if (isCompletingTechEvalSuccess) return true;
@@ -273,7 +278,39 @@ export default function BidResultsPage() {
     Boolean(activeAward)
   );
 
+  const isReverseAuctionConcluded = React.useMemo(() => {
+    const rawAuctionStatus = String(
+      linkedAuction?.status ||
+      linkedAuction?.statusEnum ||
+      (bid as any)?.rawAuction?.status ||
+      (bid as any)?.auctionStatus ||
+      (bid as any)?.reverseAuction?.status ||
+      ''
+    ).toUpperCase();
+    if (['CLOSED', 'COMPLETED', 'CONCLUDED', 'FINALIZED', 'AWARD_ACCEPTED', 'AWARDED'].includes(rawAuctionStatus)) {
+      return true;
+    }
+    const rawStage = String((bid as any)?.lifecycleStage || (bid as any)?.status || '').toUpperCase();
+    if (rawStage.includes('AUCTION_CONCLUDED') || rawStage.includes('AUCTION_COMPLETED')) {
+      return true;
+    }
+    return false;
+  }, [linkedAuction, bid]);
+
+  const isReverseAuctionActive = React.useMemo(() => {
+    const rawAuctionStatus = String(
+      linkedAuction?.status ||
+      linkedAuction?.statusEnum ||
+      (bid as any)?.rawAuction?.status ||
+      (bid as any)?.auctionStatus ||
+      (bid as any)?.reverseAuction?.status ||
+      ''
+    ).toUpperCase();
+    return ['ACTIVE', 'LIVE', 'IN_PROGRESS', 'OPEN', 'EXTENDED', 'PAUSED'].includes(rawAuctionStatus);
+  }, [linkedAuction, bid]);
+
   const hasLinkedAuction = React.useMemo(() => {
+    if (linkedAuction) return true;
     const rawType = String(bid?.bidType || '').toUpperCase();
     const rawMethod = String((bid as any)?.procurementMethod || bid?.procurementType || '').toUpperCase();
     const rawBidId = String(bidId || '').toUpperCase();
@@ -289,7 +326,7 @@ export default function BidResultsPage() {
       Boolean((bid as any)?.rawAuction) ||
       Boolean((bid as any)?.auctionId)
     );
-  }, [bid, bidId]);
+  }, [bid, bidId, linkedAuction]);
 
   const isCurrentReverseAuction = hasLinkedAuction;
 
@@ -567,28 +604,22 @@ export default function BidResultsPage() {
     setError('');
 
     try {
-      const isReverseAuctionBid = String(bidId || '').toUpperCase().startsWith('RA-');
-
-      // Execute primary bid detail fetch and fallback endpoints concurrently in parallel!
+      // Execute primary bid detail fetch, fallback endpoints, and linked reverse auction concurrently in parallel!
+      // Auctions link to tenders/bids via referenceNo, auctionCode, or linkedBidId
       const promises: Promise<any>[] = [
         procurementBidApi.getBidResults(bidId),
         getApi(`/api/buyer/requirements/${encodeURIComponent(bidId)}/responses`, true),
         getApi(`/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/participants`, true),
+        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}/result`, true),
+        getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}`, true),
       ];
-
-      if (isReverseAuctionBid) {
-        promises.push(
-          getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}/result`, true),
-          getApi(`/api/reverse-auctions/${encodeURIComponent(bidId)}`, true)
-        );
-      }
 
       const results = await Promise.allSettled(promises);
       const bidRes = results[0];
       const fallbackRes1 = results[1];
       const fallbackRes2 = results[2];
-      const raResultRes: PromiseSettledResult<any> = isReverseAuctionBid && results[3] ? results[3] : { status: 'rejected', reason: null };
-      const raDetailRes: PromiseSettledResult<any> = isReverseAuctionBid && results[4] ? results[4] : { status: 'rejected', reason: null };
+      const raResultRes: PromiseSettledResult<any> = results[3];
+      const raDetailRes: PromiseSettledResult<any> = results[4];
 
       let data: any = bidRes.status === 'fulfilled' ? bidRes.value : null;
 
@@ -803,8 +834,12 @@ export default function BidResultsPage() {
       // Reverse Auction Outcome handling: If reverse auction data is available, map or merge it
       const raResultVal: any = raResultRes.status === 'fulfilled' ? raResultRes.value : null;
       const raDetailVal: any = raDetailRes.status === 'fulfilled' ? raDetailRes.value : null;
-      const raAuction = raResultVal?.auction || raDetailVal || {};
+      const raAuction = raResultVal?.auction || raDetailVal?.auction || (raDetailVal && (raDetailVal.id || raDetailVal.auctionCode) ? raDetailVal : null) || {};
       const raRanking = Array.isArray(raResultVal?.ranking) ? raResultVal.ranking : [];
+
+      if (raAuction && (raAuction.id || raAuction.auctionCode)) {
+        setLinkedAuction(raAuction);
+      }
 
       if (raRanking.length > 0) {
         if (!data || !Array.isArray(data.results) || data.results.length === 0) {

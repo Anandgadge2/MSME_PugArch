@@ -893,18 +893,115 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
         authorized = true;
       }
       if (req.user.role === 'seller' || req.user.role === 'shg') {
-        myParticipant = await db.auctionParticipant.findFirst({
+        const foundParticipant = await db.auctionParticipant.findFirst({
           where: {
             auctionId: id,
             OR: [
               ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
               ...(req.user.id ? [{ sellerUserId: req.user.id }] : [])
             ]
+          },
+          include: {
+            qualificationDocuments: true
           }
         });
-        if (myParticipant) {
+        if (foundParticipant) {
           hasJoined = true;
           authorized = true;
+
+          // Find seller's lowest valid bid in this auction if any
+          const myBestBid = await db.auctionBid.findFirst({
+            where: {
+              auctionId: id,
+              isValid: true,
+              OR: [
+                ...(req.user.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
+                ...(req.user.id ? [{ sellerId: req.user.id }] : [])
+              ]
+            },
+            orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }]
+          });
+
+          // Resolve linked procurement participation if auction originated from a procurement
+          let linkedParticipation: any = null;
+          let parentBidId = auction.linkedBidId || null;
+          if (!parentBidId && (auction.referenceNo || (auction.auctionConfig as any)?.parentRefNumber)) {
+            const ref = auction.referenceNo || (auction.auctionConfig as any)?.parentRefNumber;
+            const cleanRef = String(ref).trim();
+            const foundBid = await db.procurementBid.findFirst({
+              where: {
+                OR: [
+                  { bidNumber: cleanRef },
+                  { bidNumber: cleanRef.replace(/^RA-/, 'RFQ-') },
+                  { bidNumber: cleanRef.replace(/^RA-/, 'TEN-') },
+                  { bidNumber: cleanRef.replace(/^RA-/, 'TND-') },
+                  { bidNumber: cleanRef.replace(/^RA-/, 'RC-') }
+                ]
+              },
+              select: { id: true }
+            });
+            if (foundBid) parentBidId = foundBid.id;
+          }
+
+          if (parentBidId) {
+            linkedParticipation = await db.procurementBidParticipation.findFirst({
+              where: {
+                bidId: parentBidId,
+                OR: [
+                  ...(req.user.organizationId ? [{ seller: { organizationId: req.user.organizationId } }] : []),
+                  ...(req.user.id ? [{ sellerId: req.user.id }] : [])
+                ]
+              },
+              include: { documents: true }
+            });
+          }
+
+          const ack = (linkedParticipation?.acknowledgement && typeof linkedParticipation.acknowledgement === 'object' && !Array.isArray(linkedParticipation.acknowledgement))
+            ? linkedParticipation.acknowledgement as any
+            : {};
+
+          const quotedVal = Number(
+            myBestBid?.amount ||
+            myBestBid?.bidAmount ||
+            foundParticipant.lastBidAmount ||
+            foundParticipant.initialQuoteTotal ||
+            foundParticipant.initialQuoteAmount ||
+            linkedParticipation?.totalAmount ||
+            linkedParticipation?.quotedAmount ||
+            linkedParticipation?.offeredPrice ||
+            0
+          );
+
+          const initialVal = Number(
+            foundParticipant.initialQuoteTotal ||
+            foundParticipant.initialQuoteAmount ||
+            linkedParticipation?.totalAmount ||
+            linkedParticipation?.quotedAmount ||
+            quotedVal
+          );
+
+          const docs = (linkedParticipation?.documents && Array.isArray(linkedParticipation.documents) && linkedParticipation.documents.length > 0)
+            ? linkedParticipation.documents
+            : (Array.isArray(ack.documents) && ack.documents.length > 0)
+              ? ack.documents
+              : (foundParticipant.qualificationDocuments || []);
+
+          myParticipant = {
+            ...foundParticipant,
+            quotedAmount: quotedVal,
+            totalAmount: quotedVal,
+            offeredPrice: quotedVal,
+            initialQuoteAmount: initialVal,
+            initialQuoteTotal: initialVal,
+            lastBidAmount: foundParticipant.lastBidAmount || myBestBid?.amount || quotedVal,
+            deliveryTimeline: ack.deliveryTimeline || linkedParticipation?.deliveryTimeline || null,
+            paymentTerms: ack.paymentTerms || ack.terms || linkedParticipation?.paymentTerms || null,
+            documents: docs,
+            lineItems: (Array.isArray(ack.lineItems) && ack.lineItems.length > 0) ? ack.lineItems : [],
+            acknowledgement: linkedParticipation?.acknowledgement || null,
+            makeBrand: foundParticipant.makeBrand || linkedParticipation?.makeBrand || ack.makeBrand || null,
+            model: foundParticipant.model || linkedParticipation?.model || ack.model || null,
+          };
         }
       }
     }
@@ -1112,6 +1209,11 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       }),
       participant: maskSensitive(participant ? {
         ...participant,
+        quotedAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+        totalAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+        offeredPrice: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+        initialQuoteAmount: Number(participant.initialQuoteAmount ?? participant.initialQuoteTotal ?? 0),
+        initialQuoteTotal: Number(participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
         canBid,
         disqualificationReason
       } : null),
@@ -2061,6 +2163,22 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
         ? matchedBp.documents
         : (p.qualificationDocuments || []);
 
+      const quotedVal = Number(
+        p.lastBidAmount ??
+        initialQuoteTotal ??
+        initialQuoteAmount ??
+        matchedBp?.totalAmount ??
+        matchedBp?.quotedAmount ??
+        0
+      );
+      const initialVal = Number(
+        initialQuoteTotal ??
+        initialQuoteAmount ??
+        matchedBp?.totalAmount ??
+        matchedBp?.quotedAmount ??
+        quotedVal
+      );
+
       return {
         ...p,
         sellerOrgName: displayName,
@@ -2069,12 +2187,15 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
         isCurrentViewer: Boolean(isMe),
         makeBrand,
         model,
-        initialQuoteAmount,
-        initialQuoteTotal,
-        initialQuoteGstPercent,
+        quotedAmount: quotedVal,
+        totalAmount: quotedVal,
+        offeredPrice: quotedVal,
+        initialQuoteAmount: initialVal,
+        initialQuoteTotal: initialVal,
+        lastBidAmount: p.lastBidAmount || quotedVal,
         technicalSpecifications: matchedBp?.offeredItemDescription || ack.technicalSpecifications || ack.lineItems?.[0]?.specifications || null,
-        deliveryTimeline: ack.deliveryTimeline || null,
-        paymentTerms: ack.paymentTerms || ack.terms || null,
+        deliveryTimeline: ack.deliveryTimeline || matchedBp?.deliveryTimeline || null,
+        paymentTerms: ack.paymentTerms || ack.terms || matchedBp?.paymentTerms || null,
         lineItems,
         acknowledgement: matchedBp?.acknowledgement || null,
         documents,
@@ -2120,11 +2241,42 @@ router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_a
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const body = auctionClarificationAskBody.parse(req.body);
 
-    // Closed/awarded auctions no longer take questions.
+    // Closed/awarded/live/scheduled auctions no longer take questions.
     const status = String(auction.statusEnum || auction.status || '').toUpperCase();
-    if (['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status)) {
+    if (['LIVE', 'SCHEDULED', 'PAUSED', 'CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED', 'CANCELLED'].includes(status)) {
       throw new ApiError(400, 'The clarification window has closed for this auction.', 'AUCTION_CLARIFICATION_CLOSED');
     }
+    const now = Date.now();
+    if (auction.endTime && new Date(auction.endTime).getTime() < now) {
+      throw new ApiError(400, 'The clarification window has closed for this auction.', 'AUCTION_CLARIFICATION_CLOSED');
+    }
+
+    if (auction.linkedRequirementId) {
+      const linkedReq = await db.procurementRequirement.findUnique({
+        where: { id: auction.linkedRequirementId },
+        select: { clarificationDeadline: true, bidSubmissionEnd: true }
+      });
+      if (linkedReq?.clarificationDeadline && new Date(linkedReq.clarificationDeadline).getTime() < now) {
+        throw new ApiError(400, 'The clarification submission window has closed.', 'AUCTION_CLARIFICATION_CLOSED');
+      }
+      if (linkedReq?.bidSubmissionEnd && new Date(linkedReq.bidSubmissionEnd).getTime() < now) {
+        throw new ApiError(400, 'Bid submission has ended. Clarification window is closed.', 'AUCTION_CLARIFICATION_CLOSED');
+      }
+    }
+
+    if (auction.linkedBidId) {
+      const linkedBid = await db.procurementBid.findUnique({
+        where: { id: auction.linkedBidId },
+        select: { clarificationEndDate: true, endDate: true }
+      });
+      if (linkedBid?.clarificationEndDate && new Date(linkedBid.clarificationEndDate).getTime() < now) {
+        throw new ApiError(400, 'The clarification submission window has closed.', 'AUCTION_CLARIFICATION_CLOSED');
+      }
+      if (linkedBid?.endDate && new Date(linkedBid.endDate).getTime() < now) {
+        throw new ApiError(400, 'Bid submission has ended. Clarification window is closed.', 'AUCTION_CLARIFICATION_CLOSED');
+      }
+    }
+
     // Sellers ask; the buyer/manager may also post announcements.
     if (req.user?.role !== 'seller' && !isAuctionManagerUser(req, auction)) {
       throw new ApiError(403, 'Access denied', 'AUCTION_CLARIFICATION_FORBIDDEN');

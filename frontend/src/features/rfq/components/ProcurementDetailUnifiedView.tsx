@@ -13560,6 +13560,29 @@ export function ProcurementDetailUnifiedView(
                               : "Quotation officially received on portal"}
                           </p>
                         </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={handleOpenMyQuotationModal}
+                            className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-500" />
+                            <span>View Proposal Details</span>
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            disabled={isDownloadingQuotationPdf}
+                            onClick={handleDownloadSubmittedQuotationPdf}
+                            className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-900 border-slate-200 hover:bg-slate-50 flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                          >
+                            <Download className="h-3.5 w-3.5 text-slate-500" />
+                            <span>PDF Receipt</span>
+                          </Button>
+                        </div>
                       </div>
 
                       {/* Live Auction Floor Enrolled Callout for Seller */}
@@ -13605,6 +13628,11 @@ export function ProcurementDetailUnifiedView(
                               effectiveMyParticipation?.quotedAmount ||
                                 effectiveMyParticipation?.totalAmount ||
                                 effectiveMyParticipation?.offeredPrice ||
+                                effectiveMyParticipation?.initialQuoteTotal ||
+                                effectiveMyParticipation?.initialQuoteAmount ||
+                                effectiveMyParticipation?.lastBidAmount ||
+                                effectiveMyParticipation?.amount ||
+                                effectiveMyParticipation?.bidAmount ||
                                 0,
                             )}
                           </span>
@@ -13614,8 +13642,17 @@ export function ProcurementDetailUnifiedView(
                             Delivery Timeline
                           </span>
                           <span className="text-xs font-bold text-slate-800">
-                            {effectiveMyParticipation?.deliveryTimeline ||
-                              "As per specifications"}
+                            {(() => {
+                              const rawDel =
+                                effectiveMyParticipation?.deliveryTimeline ||
+                                (effectiveMyParticipation?.deliveryDays ? `${effectiveMyParticipation.deliveryDays} Days` : null) ||
+                                effectiveMyParticipation?.acknowledgement?.deliveryTimeline ||
+                                props.deliveryTerms ||
+                                props.deliveryLocation;
+                              if (!rawDel) return "As per specifications";
+                              const str = String(rawDel).trim();
+                              return /^\d+$/.test(str) ? `${str} Days` : str;
+                            })()}
                           </span>
                         </div>
                         <div>
@@ -13624,6 +13661,9 @@ export function ProcurementDetailUnifiedView(
                           </span>
                           <span className="text-xs font-bold text-slate-800">
                             {effectiveMyParticipation?.paymentTerms ||
+                              effectiveMyParticipation?.acknowledgement?.paymentTerms ||
+                              effectiveMyParticipation?.acknowledgement?.terms ||
+                              props.paymentTerms ||
                               "As per tender terms"}
                           </span>
                         </div>
@@ -13632,10 +13672,16 @@ export function ProcurementDetailUnifiedView(
                             Technical Documents
                           </span>
                           <span className="text-xs font-bold text-slate-800">
-                            {Array.isArray(effectiveMyParticipation?.documents)
-                              ? effectiveMyParticipation.documents.length
-                              : 0}{" "}
-                            Document(s) Attached
+                            {(() => {
+                              const docsCount = Array.isArray(effectiveMyParticipation?.documents) && effectiveMyParticipation.documents.length > 0
+                                ? effectiveMyParticipation.documents.length
+                                : Array.isArray(effectiveMyParticipation?.qualificationDocuments) && effectiveMyParticipation.qualificationDocuments.length > 0
+                                  ? effectiveMyParticipation.qualificationDocuments.length
+                                  : Array.isArray(effectiveMyParticipation?.acknowledgement?.documents)
+                                    ? effectiveMyParticipation.acknowledgement.documents.length
+                                    : 0;
+                              return `${docsCount} Document(s) Attached`;
+                            })()}
                           </span>
                         </div>
                       </div>
@@ -13757,6 +13803,10 @@ export function ProcurementDetailUnifiedView(
                         : "quote-request");
                     const clarId = props.clarificationEntityId ?? targetId;
                     const isClarDeadlinePassed = (() => {
+                      if (isBiddingClosed || isDeadlinePassed) return true;
+                      const clarD = parseDateValue(clarificationDeadlineValue);
+                      const clarT = clarD && !isNaN(clarD.getTime()) ? clarD.getTime() : 0;
+                      if (clarT > 0 && clarT < nowMs) return true;
                       const d = parseDateValue(
                         closingDateValue || props.deadlineDate || schedule.submissionDate,
                       );
@@ -13989,6 +14039,11 @@ export function extractQuotationDetails(
       participation.totalAmount,
       participation.quotedAmount,
       participation.offeredPrice,
+      participation.initialQuoteTotal,
+      participation.initialQuoteAmount,
+      participation.lastBidAmount,
+      participation.amount,
+      participation.bidAmount,
       respData.totalAmount,
       respData.quotedAmount,
       respData.totalPrice,
@@ -14346,6 +14401,7 @@ export function extractQuotationDetails(
   // Documents (Deduplicated across all candidate sources)
   const rawDocsList: any[] = [
     ...(Array.isArray(participation.documents) ? participation.documents : []),
+    ...(Array.isArray(participation.qualificationDocuments) ? participation.qualificationDocuments : []),
     ...(Array.isArray(respData.documents) ? respData.documents : []),
     ...(Array.isArray(ackData.documents) ? ackData.documents : []),
     ...(Array.isArray(participation.requestedDocuments) ? participation.requestedDocuments : []),
