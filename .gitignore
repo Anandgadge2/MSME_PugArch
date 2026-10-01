@@ -86,3 +86,12 @@ uploads/
 backend/uploads/
 # Added by code-review-graph
 .code-review-graph/
+
+# GSD
+.gsd/
+GSD-STYLE.md
+PROJECT_RULES.md
+VERSION
+adapters/
+model_capabilities.yaml
+scripts/
