@@ -17,13 +17,25 @@ export type DisputeSocketEvent =
   | { type: 'DISPUTE_EVIDENCE_ADDED'; disputeId: number; evidence: any };
 
 export type ProcurementSocketEvent =
-  | { type: 'QUOTATION_SUBMITTED'; requirementId: number | string; procurementId?: number | string; responseId?: number; offeredPrice?: number; sellerOrgId?: number | null; timestamp: string }
-  | { type: 'QUOTATION_STATUS_CHANGED'; requirementId: number | string; procurementId?: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
-  | { type: 'PROCUREMENT_UPDATED'; requirementId: number | string; procurementId?: number | string; status?: string; timestamp: string };
+  | { type: 'QUOTATION_SUBMITTED'; requirementId?: number | string; procurementId?: number | string; responseId?: number; offeredPrice?: number; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'QUOTATION_STATUS_CHANGED'; requirementId?: number | string; procurementId?: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
+  | { type: 'PROCUREMENT_UPDATED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
+  | { type: 'PROCUREMENT_AWARDED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; sellerUserId?: number | null; awardedAmount?: number; timestamp: string }
+  | { type: 'BID_ACCEPTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'BID_REJECTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; timestamp: string }
+  | { type: 'TECHNICAL_EVALUATION_STARTED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
+  | { type: 'FINANCIAL_EVALUATION_STARTED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
+  | { type: 'L1_GENERATED'; requirementId?: number | string; procurementId?: number | string; l1Price?: number; timestamp: string };
 
 export type AuctionSocketEvent =
   | { type: 'REVERSE_AUCTION_BID'; auctionId: number | string; auctionCode?: string; currentLowest: number; minimumNextBid: number; sellerOrgId?: number | null; timestamp: string }
-  | { type: 'REVERSE_AUCTION_UPDATED'; auctionId: number | string; status?: string; timestamp: string };
+  | { type: 'REVERSE_AUCTION_UPDATED'; auctionId: number | string; status?: string; timestamp: string }
+  | { type: 'REVERSE_AUCTION_STATUS_CHANGED'; auctionId: number | string; status: string; timestamp: string };
+
+export type UserSocketEvent =
+  | { type: 'AWARD_RECEIVED'; procurementId?: number | string; requirementId?: number | string; auctionId?: number | string; awardedAmount?: number; timestamp: string }
+  | { type: 'BID_STATUS_CHANGED'; procurementId?: number | string; requirementId?: number | string; status: string; timestamp: string }
+  | { type: string; [key: string]: any };
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -223,6 +235,17 @@ wss.on('connection', (socket: AuthenticatedWebSocket, req) => {
             leaveRoom(socket, `auction:${String(message.auctionId || message.auctionCode).trim()}`);
           }
           break;
+        case 'SUBSCRIBE_USER':
+          if (socket.user?.id) {
+            joinRoom(socket, `user:${socket.user.id}`);
+            socket.send(JSON.stringify({ type: 'SUBSCRIBE_USER_SUCCESS', userId: socket.user.id }));
+          }
+          break;
+        case 'UNSUBSCRIBE_USER':
+          if (socket.user?.id) {
+            leaveRoom(socket, `user:${socket.user.id}`);
+          }
+          break;
         case 'PING':
           socket.send(JSON.stringify({ type: 'PONG' }));
           break;
@@ -259,7 +282,7 @@ export const handleUpgrade = (request: IncomingMessage, socket: any, head: Buffe
   });
 };
 
-import { publishDisputeEvent, publishProcurementEvent, publishAuctionEvent } from './pusher.service.js';
+import { publishDisputeEvent, publishProcurementEvent, publishAuctionEvent, publishUserEvent } from './pusher.service.js';
 
 export const broadcastToDispute = (disputeId: number, event: DisputeSocketEvent) => {
   // Always push to Pusher if configured (serverless compatible)
@@ -345,4 +368,23 @@ export const broadcastToAuction = (auctionId: number | string, event: AuctionSoc
 
   logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
 };
+
+export const broadcastToUser = (userId: number, event: UserSocketEvent) => {
+  void publishUserEvent(userId, event);
+
+  const roomId = `user:${userId}`;
+  const room = rooms.get(roomId);
+  if (!room) return;
+
+  const message = JSON.stringify(event);
+  let sentCount = 0;
+  room.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+      sentCount++;
+    }
+  });
+  logger.info(`[WS] Broadcasted ${event.type} to ${sentCount} clients in ${roomId}`);
+};
+
 

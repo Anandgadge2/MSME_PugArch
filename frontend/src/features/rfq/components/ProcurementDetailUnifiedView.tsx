@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState, useEffect, useCallback } from "react";
+import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -101,6 +101,7 @@ import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuction
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
 import { useProcurementRealtime } from "../hooks/useProcurementRealtime";
+import { useUserRealtime } from "../../../hooks/useUserRealtime";
 import {
   formatDate,
   formatDateTime,
@@ -693,14 +694,21 @@ function DeadlineCountdown({
   startDate,
   label = "Quote Due: ",
   startLabel = "Starts in: ",
+  onExpire,
+  onStartReached,
 }: {
   targetDate: Date | string;
   startDate?: Date | string | null;
   label?: string;
   startLabel?: string;
+  onExpire?: () => void;
+  onStartReached?: () => void;
 }) {
   const startObj = useMemo(() => parseDateValue(startDate, true), [startDate]);
   const endObj = useMemo(() => parseDateValue(targetDate, false), [targetDate]);
+  const expiredRef = useRef(false);
+  const startReachedRef = useRef(false);
+
   const [timerState, setTimerState] = useState<{
     days: number;
     hours: number;
@@ -721,6 +729,8 @@ function DeadlineCountdown({
     const calc = () => {
       const now = Date.now();
       if (startObj && startObj.getTime() > now) {
+        expiredRef.current = false;
+        startReachedRef.current = false;
         const ms = startObj.getTime() - now;
         const days = Math.floor(ms / 86_400_000);
         const hours = Math.floor((ms % 86_400_000) / 3_600_000);
@@ -736,6 +746,13 @@ function DeadlineCountdown({
         });
         return;
       }
+
+      // Fire onStartReached once when start time is crossed
+      if (startObj && !startReachedRef.current) {
+        startReachedRef.current = true;
+        onStartReached?.();
+      }
+
       if (!endObj) {
         setTimerState({
           days: 0,
@@ -749,6 +766,11 @@ function DeadlineCountdown({
       }
       const ms = endObj.getTime() - now;
       if (ms <= 0) {
+        // Fire onExpire once when cutoff deadline is crossed
+        if (!expiredRef.current) {
+          expiredRef.current = true;
+          onExpire?.();
+        }
         setTimerState({
           days: 0,
           hours: 0,
@@ -776,7 +798,7 @@ function DeadlineCountdown({
     calc();
     const interval = setInterval(calc, 1000);
     return () => clearInterval(interval);
-  }, [startObj, endObj]);
+  }, [startObj, endObj, onExpire, onStartReached]);
 
   if (!endObj && !startObj) return null;
 
@@ -4476,6 +4498,25 @@ export function ProcurementDetailUnifiedView(
   useProcurementRealtime(targetId);
   useProcurementRealtime(props.id && String(props.id) !== targetId ? props.id : null);
   useProcurementRealtime(props.displayId && String(props.displayId) !== targetId ? props.displayId : null);
+  useUserRealtime(currentUser?.id);
+
+  const handleTimerExpiry = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ["rfq-buyer-responses-v2"] });
+    void queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
+    void queryClient.invalidateQueries({ queryKey: ["procurement-bids"] });
+    void queryClient.invalidateQueries({ queryKey: ["buyer-procurements"] });
+    void queryClient.invalidateQueries({ queryKey: ["buyerMyProcurements"] });
+    void queryClient.invalidateQueries({ queryKey: ["marketplace-requirement"] });
+    void queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+    void queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
+    void queryClient.invalidateQueries({ queryKey: ["rfq-detail"] });
+    void queryClient.invalidateQueries({ queryKey: ["quote-requests"] });
+    void queryClient.invalidateQueries({ queryKey: ["buyer-unified-participations"] });
+    void queryClient.invalidateQueries({ queryKey: ["reverse-auction-live"] });
+    void queryClient.invalidateQueries({ queryKey: ["reverse-auction-participants"] });
+    void queryClient.invalidateQueries({ queryKey: ["reverse-auction-result"] });
+    void queryClient.invalidateQueries({ queryKey: ["dashboard", "summary"] });
+  }, [queryClient]);
   const userRoleStr = String(currentUser?.role || "").toLowerCase();
   const isBuyerOrAdmin =
     userRoleStr === "buyer" ||
@@ -5687,7 +5728,26 @@ export function ProcurementDetailUnifiedView(
     isPostBiddingStage,
   );
 
+  const upperRefToken = String(
+    targetId ||
+    props.displayId ||
+    (props as any).bidNumber ||
+    props.requirementNumber ||
+    payload.requirementNumber ||
+    payload.bidNumber ||
+    ""
+  ).trim().toUpperCase();
+
+  const hasRfqPrefix = upperRefToken.startsWith("RFQ-");
+  const hasRfpPrefix = upperRefToken.startsWith("RFP-");
+  const hasTndPrefix = upperRefToken.startsWith("TND-");
+  const hasLtndPrefix = upperRefToken.startsWith("LTND-") || upperRefToken.startsWith("LIM-");
+  const hasRcPrefix = upperRefToken.startsWith("RC-");
+  const hasRaPrefix = upperRefToken.startsWith("RA-") || upperRefToken.startsWith("AUCTION-");
+  const hasDpPrefix = upperRefToken.startsWith("DP-") || upperRefToken.startsWith("DIR-");
+
   const isRateContractType =
+    hasRcPrefix ||
     props.procurementType === "RATE_CONTRACT" ||
     props.procurementType === "rate-contract" ||
     String(props.procurementType || "")
@@ -5706,7 +5766,8 @@ export function ProcurementDetailUnifiedView(
 
   const isReverseAuctionType =
     !isRateContractType &&
-    (props.procurementType === "REVERSE_AUCTION" ||
+    (hasRaPrefix ||
+      props.procurementType === "REVERSE_AUCTION" ||
       props.procurementType === "reverse-auction" ||
       String(props.procurementType || "")
         .toUpperCase()
@@ -5718,6 +5779,26 @@ export function ProcurementDetailUnifiedView(
         .toUpperCase()
         .includes("REVERSE AUCTION") ||
       pathname.includes("/reverse-auction"));
+
+  const isDirectPurchaseType =
+    !isRateContractType &&
+    !isReverseAuctionType &&
+    (hasDpPrefix ||
+      props.procurementType === "DIRECT_PURCHASE" ||
+      props.procurementType === "direct-purchase" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("DIRECT_PURCHASE") ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("DIRECT PURCHASE") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("DIRECT PURCHASE") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("DIRECT PURCHASE") ||
+      pathname.includes("/direct-purchase"));
 
   const allowsReverseAuction = Boolean(
     !isRateContractType &&
@@ -5752,6 +5833,15 @@ export function ProcurementDetailUnifiedView(
     (isReverseAuctionType || props.linkedAuction || linkedAuction) &&
     !isTwoStageReverseAuction,
   );
+
+  const resultsPageUrl = React.useMemo(() => {
+    if (isReverseAuctionType || targetId.startsWith("RA-") || targetId.startsWith("AUCTION-")) {
+      const auctionCode = (linkedAuction as any)?.auctionCode || targetId;
+      const role = isBuyerSide ? "buyer" : "seller";
+      return `/${role}/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/results`;
+    }
+    return `/bids/${targetId}/results`;
+  }, [isReverseAuctionType, targetId, linkedAuction, isBuyerSide]);
 
   const corrigendumCount = Number(
     (props.rawBid?.technicalPacket as any)?.corrigendumCount ||
@@ -5836,8 +5926,24 @@ export function ProcurementDetailUnifiedView(
 
   const statusLabel = (props.status || "ACTIVE").toUpperCase();
   const displayIdStr = String(props.displayId || props.id);
+  const prefixTypeLabel = hasLtndPrefix
+    ? "Limited Tender"
+    : hasTndPrefix
+      ? "Open Tender"
+      : hasRfqPrefix
+        ? "RFQ"
+        : hasRfpPrefix
+          ? "RFP"
+          : hasRcPrefix
+            ? "Rate Contract"
+            : hasRaPrefix
+              ? "Reverse Auction"
+              : hasDpPrefix
+                ? "Direct Purchase"
+                : "";
+
   const procurementTypeLabel =
-    props.procurementLabel || props.procurementType || "PROCUREMENT";
+    prefixTypeLabel || props.procurementLabel || props.procurementType || "PROCUREMENT";
 
   // Title / Procurement Name Resolution
   const isGenericTitle = (val?: string | null) => {
@@ -5918,83 +6024,105 @@ export function ProcurementDetailUnifiedView(
       props.id && Number(props.id) > 0
         ? `${procurementTypeLabel.toUpperCase().replace(/\s+/g, "_")}-${props.id}`
         : undefined,
-    ) || `RFQ-${Math.abs(Number(props.id || 1))}`;
-
-  const isRfqType =
-    props.procurementType === "RFQ" ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("RFQ") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("QUOTATION") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("RFQ") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("QUOTATION") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("RFQ") ||
-    pathname.includes("/rfq");
-  const isBuyerRfq = isBuyerSide && (isRfqType || pathname.includes("/rfq"));
-
-  const isRfpType =
-    props.procurementType === "RFP" ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("RFP") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("PROPOSAL") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("RFP") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("PROPOSAL") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("RFP") ||
-    pathname.includes("/rfp");
-  const isBuyerRfp = isBuyerSide && (isRfpType || pathname.includes("/rfp"));
-
-  const isOpenTenderType =
-    props.procurementType === "OPEN_TENDER" ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("OPEN_TENDER") ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("OPEN TENDER") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("OPEN TENDER") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("OPEN TENDER") ||
-    pathname.includes("/open-tender") ||
-    (pathname.includes("/tender") && !pathname.includes("/limited"));
-  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
+    ) || `${hasLtndPrefix ? "LTND" : hasTndPrefix ? "TND" : hasRfpPrefix ? "RFP" : hasRcPrefix ? "RC" : hasRaPrefix ? "RA" : hasDpPrefix ? "DP" : "RFQ"}-${Math.abs(Number(props.id || 1))}`;
 
   const isLimitedTenderType =
-    props.procurementType === "LIMITED_TENDER" ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("LIMITED_TENDER") ||
-    String(props.procurementType || "")
-      .toUpperCase()
-      .includes("LIMITED TENDER") ||
-    String(props.procurementLabel || "")
-      .toUpperCase()
-      .includes("LIMITED TENDER") ||
-    String(props.procurementMethod || "")
-      .toUpperCase()
-      .includes("LIMITED TENDER") ||
-    pathname.includes("/limited-tender") ||
-    pathname.includes("/limited");
+    !isRateContractType &&
+    !isReverseAuctionType &&
+    !isDirectPurchaseType &&
+    (hasLtndPrefix ||
+      props.procurementType === "LIMITED_TENDER" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("LIMITED_TENDER") ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("LIMITED TENDER") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("LIMITED TENDER") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("LIMITED TENDER") ||
+      pathname.includes("/limited-tender") ||
+      pathname.includes("/limited"));
   const isBuyerLimitedTender = isBuyerSide && isLimitedTenderType;
+
+  const isRfqType =
+    !isRateContractType &&
+    !isReverseAuctionType &&
+    !isDirectPurchaseType &&
+    !isLimitedTenderType &&
+    (hasRfqPrefix ||
+      props.procurementType === "RFQ" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("RFQ") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("QUOTATION") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("RFQ") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("QUOTATION") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("RFQ") ||
+      pathname.includes("/rfq"));
+  const isBuyerRfq = isBuyerSide && isRfqType;
+
+  const isRfpType =
+    !isRateContractType &&
+    !isReverseAuctionType &&
+    !isDirectPurchaseType &&
+    !isLimitedTenderType &&
+    !isRfqType &&
+    (hasRfpPrefix ||
+      props.procurementType === "RFP" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("RFP") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("PROPOSAL") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("RFP") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("PROPOSAL") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("RFP") ||
+      pathname.includes("/rfp"));
+  const isBuyerRfp = isBuyerSide && isRfpType;
+
+  const isOpenTenderType =
+    !isRateContractType &&
+    !isReverseAuctionType &&
+    !isDirectPurchaseType &&
+    !isLimitedTenderType &&
+    !isRfqType &&
+    !isRfpType &&
+    (hasTndPrefix ||
+      props.procurementType === "OPEN_TENDER" ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("OPEN_TENDER") ||
+      String(props.procurementType || "")
+        .toUpperCase()
+        .includes("OPEN TENDER") ||
+      String(props.procurementLabel || "")
+        .toUpperCase()
+        .includes("OPEN TENDER") ||
+      String(props.procurementMethod || "")
+        .toUpperCase()
+        .includes("OPEN TENDER") ||
+      pathname.includes("/open-tender") ||
+      (pathname.includes("/tender") && !pathname.includes("/limited")));
+  const isBuyerOpenTender = isBuyerSide && isOpenTenderType;
 
   const cleanBuyerTerms = (val: any): any => {
     if (!val) return val;
@@ -9876,7 +10004,7 @@ export function ProcurementDetailUnifiedView(
                   <Button
                     type="button"
                     size="sm"
-                    onClick={() => router.push(`/bids/${targetId}/results`)}
+                    onClick={() => router.push(resultsPageUrl)}
                     className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 h-8 rounded-lg px-3"
                   >
                     View Bid Evaluation
@@ -10409,6 +10537,8 @@ export function ProcurementDetailUnifiedView(
                           ? "Stage 1 Quote Due: "
                           : "Quote Due: "
                       }
+                      onExpire={handleTimerExpiry}
+                      onStartReached={handleTimerExpiry}
                     />
                   )}
                   {!isBuyerSide ? (
@@ -11026,7 +11156,7 @@ export function ProcurementDetailUnifiedView(
                                     );
                                     return;
                                   }
-                                  router.push(`/bids/${targetId}/results`);
+                                  router.push(resultsPageUrl);
                                 }}
                                 className={`h-8 px-3 gap-1.5 text-xs font-bold shadow-2xs rounded-lg ${
                                   isTwoPacketMode && !isFinancialOpeningReady
@@ -11240,6 +11370,8 @@ export function ProcurementDetailUnifiedView(
                             startDate={subStartDateObj}
                             label="Submission Closes in: "
                             startLabel="Submission Opens in: "
+                            onExpire={handleTimerExpiry}
+                            onStartReached={handleTimerExpiry}
                           />
                         </div>
                       )}
@@ -12409,7 +12541,7 @@ export function ProcurementDetailUnifiedView(
                                     );
                                     return;
                                   }
-                                  router.push(`/bids/${targetId}/results`);
+                                  router.push(resultsPageUrl);
                                 }}
                                 className={cn(
                                   "h-7.5 gap-1.5 text-xs font-bold shadow-2xs",
@@ -12552,6 +12684,7 @@ export function ProcurementDetailUnifiedView(
                   procurementTitle={props.subject || props.procurementLabel}
                   targetId={targetId}
                   router={router}
+                  resultsPageUrl={resultsPageUrl}
                   isTwoPacketMode={isTwoPacketMode}
                   isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
                   isBidAwarded={isBidAwarded}
@@ -12647,6 +12780,7 @@ export function ProcurementDetailUnifiedView(
                   procurementTitle={props.subject || props.procurementLabel}
                   targetId={targetId}
                   router={router}
+                  resultsPageUrl={resultsPageUrl}
                   onSelectQuotationReview={(p) =>
                     setSelectedQuotationForReview(p)
                   }
@@ -12920,6 +13054,8 @@ export function ProcurementDetailUnifiedView(
                             startDate={subStartDateObj}
                             label="Submission Closes in: "
                             startLabel="Submission Opens in: "
+                            onExpire={handleTimerExpiry}
+                            onStartReached={handleTimerExpiry}
                           />
                         </div>
                       )}
@@ -13620,6 +13756,7 @@ interface SellerQuotationReviewModalProps {
   canAward?: boolean;
   isBuyer?: boolean;
   isOwnQuotation?: boolean;
+  resultsPageUrl?: string;
   onAwardVendor?: (participation: any) => void;
   onOpenCompare?: () => void;
   onOpenTechnicalEvaluation?: (participation: any) => void;
@@ -13632,6 +13769,7 @@ export function SellerQuotationReviewModal({
   procurementTitle,
   targetId,
   router,
+  resultsPageUrl,
   isTwoPacketMode,
   isFinancialStageOpened,
   isBidAwarded,
@@ -13642,6 +13780,11 @@ export function SellerQuotationReviewModal({
   onOpenCompare,
   onOpenTechnicalEvaluation,
 }: SellerQuotationReviewModalProps) {
+  const effectiveResultsUrl =
+    resultsPageUrl ||
+    (String(targetId).startsWith("RA-") || String(targetId).startsWith("AUCTION-")
+      ? `/${isBuyer ? "buyer" : "seller"}/procurement/reverse-auction/${encodeURIComponent(String(targetId))}/results`
+      : `/bids/${targetId}/results`);
   const [previewDocument, setPreviewDocument] =
     useState<DocumentPreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<
@@ -14745,7 +14888,7 @@ export function SellerQuotationReviewModal({
                   size="sm"
                   onClick={() => {
                     onClose();
-                    router.push(`/bids/${targetId}/results`);
+                    router.push(effectiveResultsUrl);
                   }}
                   className="border-emerald-300 bg-emerald-50 text-emerald-800 hover:bg-emerald-100 font-bold text-xs cursor-pointer shadow-2xs"
                 >
@@ -14777,6 +14920,7 @@ interface QuotationComparisonModalProps {
   procurementTitle?: string;
   targetId: string;
   router: any;
+  resultsPageUrl?: string;
   onSelectQuotationReview?: (participation: any) => void;
 }
 
@@ -14788,8 +14932,14 @@ export function QuotationComparisonModal({
   procurementTitle,
   targetId,
   router,
+  resultsPageUrl,
   onSelectQuotationReview,
 }: QuotationComparisonModalProps) {
+  const effectiveResultsUrl =
+    resultsPageUrl ||
+    (String(targetId).startsWith("RA-") || String(targetId).startsWith("AUCTION-")
+      ? `/buyer/procurement/reverse-auction/${encodeURIComponent(String(targetId))}/results`
+      : `/bids/${targetId}/results`);
   const list = participations || [];
   const [activeSelectedIds, setActiveSelectedIds] = useState<string[]>(() => {
     if (initialSelectedSellerIds && initialSelectedSellerIds.length > 0)
@@ -15444,7 +15594,7 @@ export function QuotationComparisonModal({
             type="button"
             onClick={() => {
               onClose();
-              router.push(`/bids/${targetId}/results`);
+              router.push(effectiveResultsUrl);
             }}
             className="bg-[#12335f] hover:bg-[#0b2445] font-bold text-white shadow-sm"
           >

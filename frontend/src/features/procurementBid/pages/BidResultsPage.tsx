@@ -24,6 +24,9 @@ import { toast } from 'sonner';
 import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
 import { SupplierQuotationDetailModal, SupplierQuotationDetailView, normalizeQuotationDocuments } from '../components/SupplierQuotationDetailModal';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
+import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
+import { useReverseAuctionRealtime } from '../../reverseAuctions/hooks/useReverseAuctionRealtime';
+import { useUserRealtime } from '../../../hooks/useUserRealtime';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
@@ -31,6 +34,9 @@ export default function BidResultsPage() {
   const pathname = usePathname() || '';
   const router = useRouter();
   const bidId = pathname.split('/')[2];
+  useProcurementRealtime(bidId);
+  useReverseAuctionRealtime(bidId);
+  useUserRealtime(user?.id);
   
   const [bid, setBid] = useState<ProcurementBid | null>(null);
   const [ranking, setRanking] = useState<BidResultRow[]>([]);
@@ -259,6 +265,20 @@ export default function BidResultsPage() {
   }, [bid, ranking, isAwardOfferPending, isPriceMatchPending, activeAward, poIssuedLocally]);
 
   const isBidAlreadyAwarded = Boolean(isContractFinalized);
+
+  const isCurrentReverseAuction = React.useMemo(() => {
+    const rawType = String(bid?.bidType || '').toUpperCase();
+    const rawMethod = String((bid as any)?.procurementMethod || bid?.procurementType || '').toUpperCase();
+    const rawBidId = String(bidId || '').toUpperCase();
+    return (
+      rawType === 'REVERSE AUCTION' ||
+      rawType === 'REVERSE_AUCTION' ||
+      rawMethod === 'REVERSE_AUCTION' ||
+      rawMethod === 'REVERSE AUCTION' ||
+      rawBidId.startsWith('RA-') ||
+      Boolean((bid as any)?.isReverseAuction)
+    );
+  }, [bid, bidId]);
 
   const l1Price = React.useMemo(() => {
     const prices = ranking
@@ -837,7 +857,10 @@ export default function BidResultsPage() {
               sellerId: raResultVal.winningParticipant.sellerUserId || raAuction.winnerSellerId,
               awardAmount: Number(raResultVal.winningParticipant.lastBidAmount || 0),
               awardStatus: raResultVal.isAwardAccepted ? 'ACCEPTED' : 'RECOMMENDED'
-            }] : []
+            }] : [],
+            purchaseOrder: raResultVal?.purchaseOrder || null,
+            purchaseOrders: raResultVal?.purchaseOrder ? [raResultVal.purchaseOrder] : [],
+            activeOrder: raResultVal?.purchaseOrder || null
           };
         } else if (data && Array.isArray(data.results)) {
           // Merge pricing and ranks from auction ranking
@@ -863,6 +886,11 @@ export default function BidResultsPage() {
           });
           if (!data.estimatedValue || data.estimatedValue === 0) {
             data.estimatedValue = Number(raAuction.basePrice || raAuction.startPrice || raAuction.reservePrice || 0);
+          }
+          if (raResultVal?.purchaseOrder) {
+            data.purchaseOrder = raResultVal.purchaseOrder;
+            data.activeOrder = raResultVal.purchaseOrder;
+            data.purchaseOrders = [raResultVal.purchaseOrder];
           }
         }
       }
@@ -943,6 +971,10 @@ export default function BidResultsPage() {
 
   useEffect(() => {
     loadBid();
+    const interval = setInterval(() => {
+      loadBid();
+    }, 15000);
+    return () => clearInterval(interval);
   }, [loadBid]);
 
   const toggleSellerSelection = (participationId: number) => {
@@ -2029,7 +2061,7 @@ export default function BidResultsPage() {
                 </div>
 
                 {/* Reverse Auction Button */}
-                {!isBidAlreadyAwarded && (
+                {!isBidAlreadyAwarded && !isCurrentReverseAuction && (
                   <button
                     type="button"
                     onClick={() => {

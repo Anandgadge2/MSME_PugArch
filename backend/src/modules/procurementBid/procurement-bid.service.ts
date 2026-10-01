@@ -4,7 +4,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
 import { createOrReuseProcurementPOForAward, getSellerUserIdsForActor } from './procurement-order.service.js';
-import { broadcastToProcurement } from '../../services/websocket.service.js';
+import { broadcastToProcurement, broadcastToUser } from '../../services/websocket.service.js';
 import { logger } from '../../config/logger.js';
 import { notificationService, resolveSellerOrgName } from '../../services/notification.service.js';
 import { buildGovernmentGradeEmailHtml, ensurePublicUrl, formatIstDateTime, type TableRow } from '../../services/email-template.builder.js';
@@ -433,13 +433,27 @@ export const resolveAuctionAsBidRecord = async (token: string, client: any = db)
   if (!auction) return null;
 
   // Query linked procurement bid if exists
+  const candidateRefs: string[] = [];
+  if (auction.referenceNo) {
+    candidateRefs.push(auction.referenceNo);
+    const stripped = auction.referenceNo.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+    if (stripped && stripped !== auction.referenceNo) candidateRefs.push(stripped);
+  }
+  const configParentRef = (auction.auctionConfig as any)?.parentRefNumber;
+  if (configParentRef && typeof configParentRef === 'string') {
+    candidateRefs.push(configParentRef);
+  }
+  const configParentId = (auction.auctionConfig as any)?.parentProcurementId;
+  const configNumId = Number(configParentId);
+  const resolvedBidId = auction.linkedBidId ? Number(auction.linkedBidId) : (Number.isFinite(configNumId) && configNumId > 0 ? configNumId : null);
+
   let linkedBid: any = null;
-  if (auction.linkedBidId || auction.referenceNo) {
+  if (resolvedBidId || candidateRefs.length > 0) {
     linkedBid = await client.procurementBid.findFirst({
       where: {
         OR: [
-          ...(auction.linkedBidId ? [{ id: Number(auction.linkedBidId) }] : []),
-          ...(auction.referenceNo ? [{ bidNumber: auction.referenceNo }, { referenceNumber: auction.referenceNo }] : [])
+          ...(resolvedBidId ? [{ id: resolvedBidId }] : []),
+          ...(candidateRefs.length > 0 ? [{ bidNumber: { in: candidateRefs } }] : [])
         ]
       },
       include: {
@@ -3316,6 +3330,40 @@ export const finalSubmitParticipation = async (req: AuthRequest, bidId: string, 
   } catch (err) {
     logger.warn({ err }, 'Failed to send bid submission notification');
   }
+
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'QUOTATION_SUBMITTED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        responseId: updated.id,
+        offeredPrice: updated.totalAmount ? Number(updated.totalAmount) : undefined,
+        sellerOrgId: (req.user as any)?.organizationId || null,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: String(bid.status),
+        timestamp: new Date().toISOString()
+      });
+    });
+    if (bid.buyerId) {
+      broadcastToUser(bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'QUOTATION_SUBMITTED',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[finalSubmitParticipation] Realtime broadcast error');
+  }
+
   const saved = await db.procurementBidParticipation.findUnique({
     where: { id: updated.id },
     include: { documents: true, clarifications: { include: { files: true } }, evaluations: true, awards: true }
@@ -3705,6 +3753,28 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
   // Option B: Auto-transition technical evaluation & open financial ranking once all sellers are evaluated
   await autoCheckAndPerformTransitions(bid.id, req);
 
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'TECHNICAL_EVALUATION_STARTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'TECHNICAL_EVALUATION',
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'TECHNICAL_EVALUATION',
+        timestamp: new Date().toISOString()
+      });
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[evaluateTechnicalPart] Failed to broadcast technical evaluation start');
+  }
+
   return updatedRows;
 };
 
@@ -3762,6 +3832,37 @@ export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: 
     await procurementAudit(req, 'FINANCIAL_EVALUATION_OPENED', 'ProcurementBid', bid.id, { qualifiedCount: ranked.length }).catch(() => null);
     await procurementAudit(req, 'L1_GENERATED', 'ProcurementBid', bid.id, ranked.map((r: any) => ({ id: r.id, rank: r.rank, totalAmount: r.totalAmount }))).catch(() => null);
   }
+
+  try {
+    const l1Price = ranked.length > 0 ? Number(ranked[0].totalAmount || 0) : undefined;
+    const targetIds = [bid.id, bid.bidNumber, sourceReqId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'FINANCIAL_EVALUATION_STARTED',
+        procurementId: bid.id,
+        requirementId: sourceReqId || bid.id,
+        status: 'L1_GENERATED',
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'L1_GENERATED',
+        procurementId: bid.id,
+        requirementId: sourceReqId || bid.id,
+        l1Price,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        procurementId: bid.id,
+        requirementId: sourceReqId || bid.id,
+        status: 'L1_GENERATED',
+        timestamp: new Date().toISOString()
+      });
+    });
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[performFinancialRankingAndOpening] Broadcast error');
+  }
+
   return ranked;
 };
 
@@ -4232,13 +4333,35 @@ export const recommendAward = async (req: AuthRequest, bidId: string, body: any)
   }).catch(() => undefined);
 
   try {
-    broadcastToProcurement(bid.id, {
-      type: 'PROCUREMENT_UPDATED',
-      requirementId: bid.id,
-      procurementId: bid.id,
-      status: 'AWARD_OFFERED',
-      timestamp: new Date().toISOString()
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_AWARDED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_OFFERED',
+        sellerOrgId: participation.sellerOrgId,
+        sellerUserId: participation.sellerId,
+        awardedAmount: Number(award.awardedAmount || 0),
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'AWARD_OFFERED',
+        timestamp: new Date().toISOString()
+      });
     });
+    if (participation.sellerId) {
+      broadcastToUser(participation.sellerId, {
+        type: 'AWARD_RECEIVED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        awardedAmount: Number(award.awardedAmount || 0),
+        timestamp: new Date().toISOString()
+      });
+    }
   } catch (bcErr) {
     logger.warn({ bcErr }, '[RECOMMEND_AWARD] Failed to broadcast award offer to procurement');
   }
@@ -4344,13 +4467,33 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
   }).catch(() => undefined);
 
   try {
-    broadcastToProcurement(bid.id, {
-      type: 'PROCUREMENT_UPDATED',
-      requirementId: bid.id,
-      procurementId: bid.id,
-      status: 'AWARD_ACCEPTED',
-      timestamp: new Date().toISOString()
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'BID_ACCEPTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_ACCEPTED',
+        sellerOrgId: award.sellerId,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
     });
+    if (bid.buyerId) {
+      broadcastToUser(bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
+    }
   } catch (bcErr) {
     logger.warn({ bcErr }, '[ACCEPT_AWARD] Failed to broadcast award acceptance to procurement');
   }
@@ -4454,6 +4597,38 @@ export const declineAward = async (req: AuthRequest, bidId: string, body: any = 
     type: 'award_declined',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
+
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'BID_REJECTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_DECLINED',
+        sellerOrgId: award.sellerId,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'UNDER_EVALUATION',
+        timestamp: new Date().toISOString()
+      });
+    });
+    if (bid.buyerId) {
+      broadcastToUser(bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_DECLINED',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[DECLINE_AWARD] Failed to broadcast award decline to procurement');
+  }
 
   return { award: updatedAward, status: 'AWARD_DECLINED' };
 };
@@ -4579,6 +4754,40 @@ export const sendPriceMatchCounterOffer = async (req: AuthRequest, bidId: string
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
 
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_AWARDED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_OFFERED',
+        sellerOrgId: targetParticipation.sellerOrgId,
+        sellerUserId: targetParticipation.sellerId,
+        awardedAmount: targetPrice,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'AWARD_OFFERED',
+        timestamp: new Date().toISOString()
+      });
+    });
+    if (targetParticipation.sellerId) {
+      broadcastToUser(targetParticipation.sellerId, {
+        type: 'AWARD_RECEIVED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        awardedAmount: targetPrice,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[sendPriceMatchCounterOffer] Failed to broadcast price match offer');
+  }
+
   return {
     award,
     status: 'COUNTER_OFFER_PENDING',
@@ -4696,6 +4905,38 @@ export const acceptPriceMatchCounterOffer = async (req: AuthRequest, bidId: stri
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
 
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'BID_ACCEPTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_ACCEPTED',
+        sellerOrgId: award.sellerId,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
+    });
+    if (bid.buyerId) {
+      broadcastToUser(bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[acceptPriceMatchCounterOffer] Failed to broadcast accept');
+  }
+
   return { award: updated, status: 'AWARD_ACCEPTED', acceptedAmount };
 };
 
@@ -4799,6 +5040,38 @@ export const declinePriceMatchCounterOffer = async (req: AuthRequest, bidId: str
     type: 'counter_offer_declined',
     redirectUrl: `/bids/${bid.id}`
   }).catch(() => undefined);
+
+  try {
+    const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'BID_REJECTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_DECLINED',
+        sellerOrgId: award.sellerId,
+        timestamp: new Date().toISOString()
+      });
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.sourceId || bid.id,
+        procurementId: bid.id,
+        status: 'UNDER_EVALUATION',
+        timestamp: new Date().toISOString()
+      });
+    });
+    if (bid.buyerId) {
+      broadcastToUser(bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_DECLINED',
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[declinePriceMatchCounterOffer] Failed to broadcast decline');
+  }
 
   return { award: updated, status: 'AWARD_DECLINED', reason };
 };

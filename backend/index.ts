@@ -27,7 +27,7 @@ import { upload } from './src/config/storage.js';
 import { errorHandler } from './src/middleware/errorHandler.js';
 import { checkOwnership } from './src/middleware/ownership.js';
 import { handleUpgrade, broadcastToProcurement } from './src/services/websocket.service.js';
-import { authorizePusherChannel, isPusherConfigured, publishConversationEvent } from './src/services/pusher.service.js';
+import { authorizePusherChannel, isPusherConfigured, publishConversationEvent, getPusherHealth } from './src/services/pusher.service.js';
 import { safeAsync } from './src/utils/safeAsync.js';
 import { TimeConstants } from './src/constants/time.js';
 import {
@@ -238,6 +238,10 @@ app.get('/api/ws', (req, res) => {
 
 app.get('/api/ws/health', (req, res) => {
   res.json({ status: 'OK', transport: 'websocket' });
+});
+
+app.get('/api/realtime/health', authenticate, (req: AuthRequest, res: Response) => {
+  res.json(getPusherHealth());
 });
 
 app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {

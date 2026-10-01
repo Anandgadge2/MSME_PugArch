@@ -22,6 +22,7 @@ import {
   RefreshCw,
   ShieldCheck,
   Sparkles,
+  Target,
   TrendingDown,
   Trophy,
   Users,
@@ -31,7 +32,9 @@ import { Button } from '../../../components/ui/button';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { formatCurrency, formatDateTime } from '../../shared/format';
 import { useAuth } from '../../../hooks/useAuth';
+import { useUserRealtime } from '../../../hooks/useUserRealtime';
 import { reverseAuctionApi } from '../api';
+import { useReverseAuctionRealtime } from '../hooks/useReverseAuctionRealtime';
 import { toast } from 'sonner';
 
 export default function AuctionResultPage({ id }: { id: number | string }) {
@@ -42,6 +45,7 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
   const [selectedParticipantForAward, setSelectedParticipantForAward] = useState<any | null>(null);
   const [awardActionType, setAwardActionType] = useState<'recommend' | 'generate_po'>('recommend');
+  const [isPriceMatchMode, setIsPriceMatchMode] = useState(false);
   const [nonL1Reason, setNonL1Reason] = useState('MSE Purchase Preference Policy (Matching L1 Price)');
   const [awardRemarks, setAwardRemarks] = useState('');
   const [showDeclineModal, setShowDeclineModal] = useState(false);
@@ -66,6 +70,9 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
   const auction = query.data?.auction;
   const canonicalCode = auction?.auctionCode || String(id);
+
+  useReverseAuctionRealtime(auction?.id || id, canonicalCode);
+  useUserRealtime(user?.id);
   const ranking: any[] = query.data?.ranking || [];
   const canRecommendAward = Boolean(query.data?.canRecommendAward);
   const canOfferAward = Boolean(query.data?.canOfferAward);
@@ -79,12 +86,13 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
   const status = String(auction?.statusEnum || auction?.status || '').toUpperCase();
 
   const awardMutation = useMutation({
-    mutationFn: ({ participantId, remarks }: { participantId?: number; remarks?: string }) =>
-      reverseAuctionApi.recommendAward(id, participantId, remarks),
+    mutationFn: ({ participantId, remarks, isPriceMatch, counterOfferAmount }: { participantId?: number; remarks?: string; isPriceMatch?: boolean; counterOfferAmount?: number }) =>
+      reverseAuctionApi.recommendAward(id, participantId, remarks, { isPriceMatch, counterOfferAmount }),
     onSuccess: () => {
-      toast.success('Contract award offer successfully issued to supplier!');
+      toast.success(isPriceMatchMode ? 'Price match counter-offer issued to supplier!' : 'Contract award offer successfully issued to supplier!');
       setSelectedParticipantForAward(null);
       setAwardRemarks('');
+      setIsPriceMatchMode(false);
       qc.invalidateQueries({ queryKey: ['reverse-auction-result', id] });
       qc.invalidateQueries({ queryKey: ['reverse-auction', id] });
     },
@@ -227,7 +235,9 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
   const handleConfirmAward = () => {
     if (!selectedParticipantForAward) return;
     const isNonL1 = (selectedParticipantForAward.currentRank || 1) !== 1;
-    const combinedRemarks = isNonL1
+    const combinedRemarks = isPriceMatchMode
+      ? `[Price Match to L1 Price: ${formatCurrency(lowestBidAmount)}] ${awardRemarks}`.trim()
+      : isNonL1
       ? `[Non-L1 Justification: ${nonL1Reason}] ${awardRemarks}`.trim()
       : awardRemarks.trim();
 
@@ -239,7 +249,9 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
     } else {
       awardMutation.mutate({
         participantId: selectedParticipantForAward.id,
-        remarks: combinedRemarks
+        remarks: combinedRemarks,
+        isPriceMatch: isPriceMatchMode,
+        counterOfferAmount: isPriceMatchMode ? lowestBidAmount : undefined
       });
     }
   };
@@ -854,23 +866,57 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                               <Clock className="h-3 w-3" /> Offer Awaiting Acceptance
                             </span>
                           ) : canOfferAward ? (
-                            <Button
-                              size="sm"
-                              variant={isL1 ? 'primary' : 'outline'}
-                              onClick={() => {
-                                setSelectedParticipantForAward(row);
-                                setAwardActionType('recommend');
-                              }}
-                              disabled={awardMutation.isPending || generatePoMutation.isPending}
-                              className={`h-8 text-xs font-bold ${
-                                isL1 
-                                  ? 'bg-indigo-600 hover:bg-indigo-700 text-white' 
-                                  : 'border-slate-300 text-slate-800 hover:bg-slate-100'
-                              }`}
-                            >
-                              <Award className="mr-1 h-3.5 w-3.5" />
-                              {isL1 ? 'Offer Award L1' : `Offer Award L${rankNumber}`}
-                            </Button>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {isL1 ? (
+                                <Button
+                                  size="sm"
+                                  variant="primary"
+                                  onClick={() => {
+                                    setSelectedParticipantForAward(row);
+                                    setIsPriceMatchMode(false);
+                                    setAwardActionType('recommend');
+                                  }}
+                                  disabled={awardMutation.isPending || generatePoMutation.isPending}
+                                  className="h-8 text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs"
+                                >
+                                  <Award className="mr-1 h-3.5 w-3.5" />
+                                  Offer Award L1
+                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedParticipantForAward(row);
+                                      setIsPriceMatchMode(true);
+                                      setAwardActionType('recommend');
+                                    }}
+                                    disabled={awardMutation.isPending || generatePoMutation.isPending}
+                                    className="h-8 text-xs font-bold border-blue-300 text-blue-700 hover:bg-blue-50 shadow-2xs"
+                                    title="Send counter-offer inviting supplier to match L1 lowest price"
+                                  >
+                                    <Target className="mr-1 h-3.5 w-3.5 text-blue-600" />
+                                    Match L1
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setSelectedParticipantForAward(row);
+                                      setIsPriceMatchMode(false);
+                                      setAwardActionType('recommend');
+                                    }}
+                                    disabled={awardMutation.isPending || generatePoMutation.isPending}
+                                    className="h-8 text-xs font-bold border-slate-300 text-slate-700 hover:bg-slate-100 shadow-2xs"
+                                    title="Award directly at higher quoted price with required justification"
+                                  >
+                                    <Award className="mr-1 h-3.5 w-3.5" />
+                                    Award L{rankNumber}
+                                  </Button>
+                                </>
+                              )}
+                            </div>
                           ) : (
                             <span className="text-slate-400 text-xs font-semibold">—</span>
                           )}
@@ -904,12 +950,12 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
             </button>
 
             <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-              <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${awardActionType === 'generate_po' ? 'bg-emerald-100 text-emerald-700' : 'bg-indigo-100 text-indigo-700'}`}>
-                {awardActionType === 'generate_po' ? <Receipt className="h-5 w-5" /> : <Award className="h-5 w-5" />}
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${awardActionType === 'generate_po' ? 'bg-emerald-100 text-emerald-700' : isPriceMatchMode ? 'bg-blue-100 text-blue-700' : 'bg-indigo-100 text-indigo-700'}`}>
+                {awardActionType === 'generate_po' ? <Receipt className="h-5 w-5" /> : isPriceMatchMode ? <Target className="h-5 w-5" /> : <Award className="h-5 w-5" />}
               </div>
               <div>
                 <h3 id="award-modal-title" className="text-base font-black text-slate-900">
-                  {awardActionType === 'generate_po' ? 'Generate Official Purchase Order (PO)' : 'Issue Contract Award Offer'}
+                  {awardActionType === 'generate_po' ? 'Generate Official Purchase Order (PO)' : isPriceMatchMode ? 'Send Price Match Counter-Offer' : 'Issue Contract Award Offer'}
                 </h3>
                 <p className="text-xs text-slate-500 font-semibold">
                   Auction: <span className="font-mono font-bold text-slate-800">{canonicalCode}</span>
@@ -929,23 +975,40 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                   L{selectedParticipantForAward.currentRank || 1}
                 </span>
               </div>
-              <div className="flex justify-between items-center">
-                <span className="font-semibold text-slate-600">Evaluated Contract Amount:</span>
-                <span className="font-mono font-black text-emerald-700 text-sm">
-                  {formatCurrency(selectedParticipantForAward.lastBidAmount || 0)}
-                </span>
-              </div>
+              {isPriceMatchMode ? (
+                <>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-blue-800">Counter-Offer Price (L1 Match):</span>
+                    <span className="font-mono font-black text-emerald-700 text-sm">
+                      {formatCurrency(lowestBidAmount)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-500">Supplier's Quoted Bid:</span>
+                    <span className="font-mono text-slate-500 line-through text-xs">
+                      {formatCurrency(selectedParticipantForAward.lastBidAmount || 0)}
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold text-slate-600">Evaluated Contract Amount:</span>
+                  <span className="font-mono font-black text-emerald-700 text-sm">
+                    {formatCurrency(selectedParticipantForAward.lastBidAmount || 0)}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Non-L1 Discretionary Justification Section */}
-            {(selectedParticipantForAward.currentRank || 1) !== 1 && (
+            {!isPriceMatchMode && (selectedParticipantForAward.currentRank || 1) !== 1 && (
               <div className="rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 space-y-2.5">
                 <div className="flex items-start gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
                   <div>
                     <p className="text-xs font-black text-amber-900">Non-L1 Award Justification (Required)</p>
                     <p className="text-[11px] text-amber-800 font-medium leading-relaxed">
-                      You are exercising buyer discretion to award Rank L{selectedParticipantForAward.currentRank}. Under procurement rules, selecting a non-L1 supplier requires logging the formal justification for audit compliance.
+                      You are exercising buyer discretion to award Rank L{selectedParticipantForAward.currentRank} directly at their higher quoted bid. Selecting a non-L1 supplier requires logging the formal justification for audit compliance.
                     </p>
                   </div>
                 </div>
@@ -960,9 +1023,6 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                     onChange={(e) => setNonL1Reason(e.target.value)}
                     className="w-full text-xs font-semibold rounded-lg border border-amber-300 bg-white p-2 text-slate-900 focus:ring-2 focus:ring-amber-500"
                   >
-                    <option value="MSE Purchase Preference Policy (Matching L1 Price)">
-                      MSE Purchase Preference Policy (Matching L1 Price)
-                    </option>
                     <option value="Capacity Constraints & Split Volume Sourcing">
                       Capacity Constraints & Split Volume Sourcing
                     </option>
@@ -984,14 +1044,16 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
             )}
 
             {/* Procurement Lifecycle Guidance Note */}
-            <div className={`p-3 rounded-xl border text-xs leading-relaxed ${awardActionType === 'generate_po' ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : 'bg-indigo-50/70 border-indigo-200 text-indigo-950'}`}>
+            <div className={`p-3 rounded-xl border text-xs leading-relaxed ${awardActionType === 'generate_po' ? 'bg-emerald-50/70 border-emerald-200 text-emerald-950' : isPriceMatchMode ? 'bg-blue-50/70 border-blue-200 text-blue-950' : 'bg-indigo-50/70 border-indigo-200 text-indigo-950'}`}>
               <p className="font-bold flex items-center gap-1.5 mb-0.5">
                 <Info className="h-3.5 w-3.5" />
-                {awardActionType === 'generate_po' ? 'Binding Purchase Order Creation' : '4-Step Procurement Lifecycle Step 1'}
+                {awardActionType === 'generate_po' ? 'Binding Purchase Order Creation' : isPriceMatchMode ? 'Price Match Policy (Rule 153 / MSE Preference)' : '4-Step Procurement Lifecycle Step 1'}
               </p>
               <p className="text-[11px] font-medium opacity-90">
                 {awardActionType === 'generate_po'
                   ? 'The supplier has formally accepted the award offer. Generating this Purchase Order creates the official binding contract and opens delivery fulfillment tracking.'
+                  : isPriceMatchMode
+                  ? `Under purchase preference policies, this sends a formal counter-offer to Rank L${selectedParticipantForAward.currentRank} to match the L1 price of ${formatCurrency(lowestBidAmount)}. If the supplier accepts, the contract is finalized at this price.`
                   : 'Issuing this award offer formally notifies the supplier of selection. The supplier must formally accept the award before the binding Purchase Order is generated.'}
               </p>
             </div>
@@ -999,7 +1061,7 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
             {/* Remarks / Justification textarea */}
             <div className="space-y-1.5">
               <label htmlFor={modalRemarksId} className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                Evaluation Notes & Committee Remarks {(selectedParticipantForAward.currentRank || 1) !== 1 && <span className="text-red-500">*</span>}
+                Evaluation Notes & Committee Remarks {!isPriceMatchMode && (selectedParticipantForAward.currentRank || 1) !== 1 && <span className="text-red-500">*</span>}
               </label>
               <textarea
                 id={modalRemarksId}
@@ -1027,9 +1089,9 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 disabled={
                   awardMutation.isPending || 
                   generatePoMutation.isPending || 
-                  ((selectedParticipantForAward.currentRank || 1) !== 1 && !awardRemarks.trim())
+                  (!isPriceMatchMode && (selectedParticipantForAward.currentRank || 1) !== 1 && !awardRemarks.trim())
                 }
-                className={awardActionType === 'generate_po' ? "bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider px-4" : "bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider px-4"}
+                className={awardActionType === 'generate_po' ? "bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider px-4" : isPriceMatchMode ? "bg-blue-600 hover:bg-blue-700 text-white font-black text-xs uppercase tracking-wider px-4" : "bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider px-4"}
               >
                 {awardMutation.isPending || generatePoMutation.isPending ? (
                   <>
@@ -1038,6 +1100,10 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 ) : awardActionType === 'generate_po' ? (
                   <>
                     <Receipt className="mr-1.5 h-3.5 w-3.5" /> Confirm & Issue Purchase Order
+                  </>
+                ) : isPriceMatchMode ? (
+                  <>
+                    <Target className="mr-1.5 h-3.5 w-3.5" /> Confirm & Send Price Match Offer
                   </>
                 ) : (
                   <>

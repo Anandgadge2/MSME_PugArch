@@ -26,15 +26,49 @@ if (pusherAppId && pusherKey && pusherSecret) {
   logger.info('[Pusher] Credentials not present in environment; defaulting to local WebSocket fallback mode');
 }
 
+let pusherDailyCount = 0;
+let pusherDayKey = '';
+const PUSHER_DAILY_LIMIT = 180_000; // 90% of free tier 200k limit to safely throttle before exhaustion
+
+export const trackPusherMessage = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (pusherDayKey !== today) {
+    pusherDayKey = today;
+    pusherDailyCount = 0;
+  }
+  pusherDailyCount++;
+};
+
+export const getPusherHealth = () => {
+  const today = new Date().toISOString().slice(0, 10);
+  if (pusherDayKey !== today) {
+    pusherDayKey = today;
+    pusherDailyCount = 0;
+  }
+  return {
+    configured: isPusherConfigured(),
+    cluster: pusherCluster,
+    dailyCount: pusherDailyCount,
+    dailyLimit: PUSHER_DAILY_LIMIT,
+    isThrottled: pusherDailyCount >= PUSHER_DAILY_LIMIT,
+    remaining: Math.max(0, PUSHER_DAILY_LIMIT - pusherDailyCount),
+  };
+};
+
 export const isPusherConfigured = (): boolean => pusherInstance !== null;
 
 export const getPusherServer = (): Pusher | null => pusherInstance;
 
 export const publishDisputeEvent = async (disputeId: number, event: any): Promise<boolean> => {
   if (!pusherInstance) return false;
+  if (getPusherHealth().isThrottled) {
+    logger.warn('[Pusher] Quota throttle reached; bypassing Pusher publish for dispute');
+    return false;
+  }
   try {
     const channel = `private-dispute-${disputeId}`;
     await pusherInstance.trigger(channel, event.type, event);
+    trackPusherMessage();
     logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
     return true;
   } catch (err) {
@@ -45,9 +79,14 @@ export const publishDisputeEvent = async (disputeId: number, event: any): Promis
 
 export const publishConversationEvent = async (conversationId: number, event: any): Promise<boolean> => {
   if (!pusherInstance) return false;
+  if (getPusherHealth().isThrottled) {
+    logger.warn('[Pusher] Quota throttle reached; bypassing Pusher publish for conversation');
+    return false;
+  }
   try {
     const channel = `private-conversation-${conversationId}`;
     await pusherInstance.trigger(channel, event.type, event);
+    trackPusherMessage();
     logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
     return true;
   } catch (err) {
@@ -58,9 +97,14 @@ export const publishConversationEvent = async (conversationId: number, event: an
 
 export const publishProcurementEvent = async (procurementId: number | string, event: any): Promise<boolean> => {
   if (!pusherInstance) return false;
+  if (getPusherHealth().isThrottled) {
+    logger.warn('[Pusher] Quota throttle reached; bypassing Pusher publish for procurement');
+    return false;
+  }
   try {
     const channel = `procurement-${procurementId}`;
     await pusherInstance.trigger(channel, event.type, event);
+    trackPusherMessage();
     logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
     return true;
   } catch (err) {
@@ -71,13 +115,36 @@ export const publishProcurementEvent = async (procurementId: number | string, ev
 
 export const publishAuctionEvent = async (auctionId: number | string, event: any): Promise<boolean> => {
   if (!pusherInstance) return false;
+  if (getPusherHealth().isThrottled) {
+    logger.warn('[Pusher] Quota throttle reached; bypassing Pusher publish for auction');
+    return false;
+  }
   try {
     const channel = `auction-${auctionId}`;
     await pusherInstance.trigger(channel, event.type, event);
+    trackPusherMessage();
     logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
     return true;
   } catch (err) {
     logger.error({ err, auctionId, eventType: event.type }, '[Pusher] Failed to trigger auction event');
+    return false;
+  }
+};
+
+export const publishUserEvent = async (userId: number, event: any): Promise<boolean> => {
+  if (!pusherInstance) return false;
+  if (getPusherHealth().isThrottled) {
+    logger.warn('[Pusher] Quota throttle reached; bypassing Pusher publish for user');
+    return false;
+  }
+  try {
+    const channel = `private-user-${userId}`;
+    await pusherInstance.trigger(channel, event.type, event);
+    trackPusherMessage();
+    logger.info(`[Pusher] Triggered ${event.type} on channel ${channel}`);
+    return true;
+  } catch (err) {
+    logger.error({ err, userId, eventType: event.type }, '[Pusher] Failed to trigger user event');
     return false;
   }
 };
@@ -88,3 +155,4 @@ export const authorizePusherChannel = (socketId: string, channelName: string, da
   }
   return pusherInstance.authorizeChannel(socketId, channelName, data);
 };
+

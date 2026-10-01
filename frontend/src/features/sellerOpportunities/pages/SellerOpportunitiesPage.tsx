@@ -31,6 +31,7 @@ import {
   RotateCcw,
   TrendingUp,
   Lock,
+  ShoppingBag,
   type LucideIcon
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
@@ -778,36 +779,41 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       const next: SellerOpportunity[] = [];
       const bids = res?.items || [];
       bids.forEach((bid: any) => {
-        const method = String(bid.procurementType || bid.bidType || '').toUpperCase();
-        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
-        if (!allowedMethods.includes(method)) return;
+        const method = String(bid.canonicalMethod || bid.procurementType || bid.bidType || '').toUpperCase();
+        const upperBidNumber = String(bid.bidNumber || bid.id || bid.sourceId || '').toUpperCase();
+        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT', 'DIRECT_PURCHASE', 'DIRECT', 'DP'];
+        const hasCanonicalPrefix = ['RFQ-', 'RFP-', 'TND-', 'LTND-', 'LIM-', 'RC-', 'DP-', 'DIR-', 'RA-'].some(pfx => upperBidNumber.startsWith(pfx));
+        if (!allowedMethods.includes(method) && !method.startsWith('RFQ') && !hasCanonicalPrefix) return;
 
         const documents = asTextList(bid.requiredDocuments);
         const terms = asTextList(bid.terms);
 
         const upperTitle = String(bid.title || bid.itemName || '').toUpperCase();
         const upperMethod = method;
-        const upperBidNumber = String(bid.id || bid.bidNumber || bid.sourceId || '').toUpperCase();
 
-        const isExplicitBidRfq = method === 'RFQ' || bid.procurementType === 'RFQ' || bid.bidType === 'RFQ';
-        const isExplicitBidRfp = method === 'RFP' || bid.procurementType === 'RFP' || bid.bidType === 'RFP';
-        const isExplicitBidTender = method.includes('TENDER') || String(bid.procurementType || '').includes('TENDER');
+        const isExplicitBidRfq = upperBidNumber.startsWith('RFQ-') || method === 'RFQ' || bid.canonicalMethod === 'RFQ' || bid.procurementType === 'RFQ' || bid.bidType === 'RFQ';
+        const isExplicitBidRfp = upperBidNumber.startsWith('RFP-') || method === 'RFP' || bid.canonicalMethod === 'RFP' || bid.procurementType === 'RFP' || bid.bidType === 'RFP';
+        const isExplicitBidLimited = upperBidNumber.startsWith('LTND-') || upperBidNumber.startsWith('LIM-') || method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED') || String(bid.procurementType || '').includes('LIMITED');
+        const isExplicitBidTender = !isExplicitBidLimited && (upperBidNumber.startsWith('TND-') || method.includes('TENDER') || String(bid.procurementType || '').includes('TENDER') || method === 'OPEN_TENDER');
 
-        const isBidRateContract = !isExplicitBidRfq && !isExplicitBidRfp && !isExplicitBidTender && (
+        const isBidRateContract = !isExplicitBidRfq && !isExplicitBidRfp && !isExplicitBidLimited && !isExplicitBidTender && (
+          upperBidNumber.startsWith('RC-') ||
           upperMethod.includes('RATE') ||
           upperTitle.includes('RATE CONTRACT') ||
-          upperBidNumber.startsWith('RC-') ||
           bid.sourceModel === 'RATE_CONTRACT' ||
           bid.procurementType === 'RATE_CONTRACT' ||
           bid.bidType === 'RATE_CONTRACT'
         );
+        const isBidDirectPurchase = upperBidNumber.startsWith('DP-') || upperBidNumber.startsWith('DIR-') || method === 'DIRECT_PURCHASE' || upperMethod.includes('DIRECT') || method === 'DP';
 
         let opportunityType: OpportunityType = 'RFQ';
-        if (isBidRateContract) opportunityType = 'Rate Contract';
-        else if (method === 'RFP' || upperMethod.includes('RFP')) opportunityType = 'RFP';
-        else if (method === 'LIMITED_TENDER' || method === 'LIMITED' || method.includes('LIMITED')) opportunityType = 'Limited Tender';
-        else if (method === 'OPEN_TENDER' || method === 'TENDER') opportunityType = 'Open Tender';
-        else if (method === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
+        if (isExplicitBidRfq) opportunityType = 'RFQ';
+        else if (isExplicitBidRfp || method === 'RFP' || upperMethod.includes('RFP')) opportunityType = 'RFP';
+        else if (isExplicitBidLimited) opportunityType = 'Limited Tender';
+        else if (isExplicitBidTender) opportunityType = 'Open Tender';
+        else if (isBidRateContract) opportunityType = 'Rate Contract';
+        else if (method === 'REVERSE_AUCTION' || upperBidNumber.startsWith('RA-') || upperMethod.includes('AUCTION')) opportunityType = 'Reverse Auction';
+        else if (isBidDirectPurchase) opportunityType = 'Direct Purchase';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
         let actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
@@ -838,6 +844,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           href = sellerRoutes.auctionLive(bid.id);
           detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
           actionLabel = 'Join Auction';
+        } else if (opportunityType === 'Direct Purchase') {
+          href = `/bids/${bid.id}`;
+          detailsHref = `/bids/${bid.id}`;
+          actionLabel = 'View Purchase';
         } else {
           href = bid.participated ? sellerRoutes.respond('RFQ', bid.id) : sellerRoutes.detail('RFQ', bid.id);
           detailsHref = sellerRoutes.detail('RFQ', bid.id);
@@ -918,9 +928,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       const next: SellerOpportunity[] = [];
       const requirements = (res as any)?.requirements || (res as any)?.items || res || [];
       (Array.isArray(requirements) ? requirements : []).forEach((req: any) => {
-        const reqMethod = String(req.canonicalMethod || req.procurementMethod || 'RFQ').toUpperCase();
-        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT'];
-        if (reqMethod && !allowedMethods.includes(reqMethod)) return;
+        const reqMethod = String(req.canonicalMethod || req.procurementMethod || '').toUpperCase();
+        const upperReqNumber = String(req.requirementNumber || req.referenceNumber || req.bidNumber || req.id || '').toUpperCase();
+        const allowedMethods = ['RFQ', 'RFP', 'OPEN_TENDER', 'LIMITED_TENDER', 'REVERSE_AUCTION', 'TENDER', 'REPEAT_ORDER', 'RATE_CONTRACT', 'DIRECT_PURCHASE', 'DIRECT', 'DP'];
+        const hasReqPrefix = ['RFQ-', 'RFP-', 'TND-', 'LTND-', 'LIM-', 'RC-', 'DP-', 'DIR-', 'RA-'].some(pfx => upperReqNumber.startsWith(pfx));
+        if (reqMethod && !allowedMethods.includes(reqMethod) && !hasReqPrefix) return;
 
         // Sellers must only see approved/sourcing/active requirements, never buyer drafts
         const reqStat = String(req.status || '').toUpperCase();
@@ -930,7 +942,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? req.payload.vendors.invitedSellers 
           : (Array.isArray(req.invitedSellers) ? req.invitedSellers : []);
         
-        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod);
+        const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod) || upperReqNumber.startsWith('LTND-') || upperReqNumber.startsWith('LIM-');
         
         if (isReqPrivate) {
           const isInvited = reqInvites.includes(user?.id) || (user?.organizationId && reqInvites.includes(user?.organizationId));
@@ -939,28 +951,31 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const upperReqTitle = String(req.title || '').toUpperCase();
         const upperReqMethod = String(req.canonicalMethod || req.procurementMethod || req.payload?.fullProcurementMethod || req.payload?.type || req.payload?.basics?.procurementMethod || '').toUpperCase();
-        const upperReqNumber = String(req.requirementNumber || req.id || '').toUpperCase();
 
-        const isExplicitReqRfq = reqMethod === 'RFQ' || req.procurementMethod === 'RFQ' || req.canonicalMethod === 'RFQ' || req.payload?.fullProcurementMethod === 'RFQ' || req.payload?.type === 'RFQ' || upperReqMethod === 'RFQ';
-        const isExplicitReqRfp = reqMethod === 'RFP' || req.procurementMethod === 'RFP' || req.canonicalMethod === 'RFP' || req.payload?.fullProcurementMethod === 'RFP' || req.payload?.type === 'RFP' || upperReqMethod === 'RFP';
-        const isExplicitReqTender = reqMethod.includes('TENDER') || String(req.procurementMethod || '').includes('TENDER') || String(req.canonicalMethod || '').includes('TENDER') || upperReqMethod.includes('TENDER');
+        const isExplicitReqRfq = upperReqNumber.startsWith('RFQ-') || reqMethod === 'RFQ' || req.procurementMethod === 'RFQ' || req.canonicalMethod === 'RFQ' || req.payload?.fullProcurementMethod === 'RFQ' || req.payload?.type === 'RFQ' || upperReqMethod === 'RFQ';
+        const isExplicitReqRfp = upperReqNumber.startsWith('RFP-') || reqMethod === 'RFP' || req.procurementMethod === 'RFP' || req.canonicalMethod === 'RFP' || req.payload?.fullProcurementMethod === 'RFP' || req.payload?.type === 'RFP' || upperReqMethod === 'RFP';
+        const isExplicitReqLimited = upperReqNumber.startsWith('LTND-') || upperReqNumber.startsWith('LIM-') || reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED') || upperReqMethod.includes('LIMITED');
+        const isExplicitReqTender = !isExplicitReqLimited && (upperReqNumber.startsWith('TND-') || reqMethod.includes('TENDER') || String(req.procurementMethod || '').includes('TENDER') || String(req.canonicalMethod || '').includes('TENDER') || upperReqMethod.includes('TENDER'));
 
-        const isReqRateContract = !isExplicitReqRfq && !isExplicitReqRfp && !isExplicitReqTender && (
+        const isReqRateContract = !isExplicitReqRfq && !isExplicitReqRfp && !isExplicitReqLimited && !isExplicitReqTender && (
+          upperReqNumber.startsWith('RC-') ||
           upperReqMethod.includes('RATE') ||
           upperReqTitle.includes('RATE CONTRACT') ||
-          upperReqNumber.startsWith('RC-') ||
           req.procurementMethod === 'RATE_CONTRACT' ||
           req.canonicalMethod === 'RATE_CONTRACT' ||
           req.payload?.type === 'RATE_CONTRACT' ||
           req.payload?.fullProcurementMethod === 'RATE_CONTRACT'
         );
+        const isReqDirectPurchase = upperReqNumber.startsWith('DP-') || upperReqNumber.startsWith('DIR-') || reqMethod === 'DIRECT_PURCHASE' || upperReqMethod.includes('DIRECT') || reqMethod === 'DP';
 
         let opportunityType: OpportunityType = 'RFQ';
-        if (isReqRateContract) opportunityType = 'Rate Contract';
-        else if (reqMethod === 'RFP' || upperReqMethod.includes('RFP')) opportunityType = 'RFP';
-        else if (reqMethod === 'LIMITED_TENDER' || reqMethod === 'LIMITED' || reqMethod.includes('LIMITED')) opportunityType = 'Limited Tender';
-        else if (reqMethod === 'OPEN_TENDER' || reqMethod === 'TENDER') opportunityType = 'Open Tender';
-        else if (reqMethod === 'REVERSE_AUCTION') opportunityType = 'Reverse Auction';
+        if (isExplicitReqRfq) opportunityType = 'RFQ';
+        else if (isExplicitReqRfp || reqMethod === 'RFP' || upperReqMethod.includes('RFP')) opportunityType = 'RFP';
+        else if (isExplicitReqLimited) opportunityType = 'Limited Tender';
+        else if (isExplicitReqTender) opportunityType = 'Open Tender';
+        else if (isReqRateContract) opportunityType = 'Rate Contract';
+        else if (upperReqNumber.startsWith('RA-') || reqMethod === 'REVERSE_AUCTION' || upperReqMethod.includes('AUCTION')) opportunityType = 'Reverse Auction';
+        else if (isReqDirectPurchase) opportunityType = 'Direct Purchase';
         else if (reqMethod === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
         const documents = asTextList(req.requiredDocuments);
@@ -973,6 +988,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           if (opportunityType === 'Open Tender') return sellerRoutes.detail('OPEN_TENDER', canonicalReqId);
           if (opportunityType === 'Limited Tender') return sellerRoutes.detail('LIMITED_TENDER', canonicalReqId);
           if (opportunityType === 'Reverse Auction') return sellerRoutes.detail('REVERSE_AUCTION', req.sourceId || canonicalReqId);
+          if (opportunityType === 'Direct Purchase') return `/bids/${canonicalReqId}`;
           return `/marketplace/requirements/${canonicalReqId}`;
         };
         const detailHref = buildDetailHref();
@@ -1763,6 +1779,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           title: 'Annual Rate Contracts',
           desc: 'Supply goods and services at pre-negotiated rates across scheduled institutional procurement cycles.'
         };
+      case 'Direct Purchase':
+        return {
+          title: 'Direct Purchase Orders',
+          desc: 'Review direct purchasing requirements and order requests issued by buyers.'
+        };
       default:
         return {
           title: 'New Bidding Opportunities',
@@ -1781,6 +1802,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       'Limited Tender': 0,
       'Reverse Auction': 0,
       'Rate Contract': 0,
+      'Direct Purchase': 0,
     };
 
     items.forEach(item => {
@@ -1814,7 +1836,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
     { label: 'RFPs', typeVal: 'RFP', countKey: 'RFP', icon: Layers },
     { label: 'Limited Tenders', typeVal: 'Limited Tender', countKey: 'Limited Tender', icon: Users },
     { label: 'Reverse Auctions', typeVal: 'Reverse Auction', countKey: 'Reverse Auction', icon: Gavel },
-    { label: 'Rate Contracts', typeVal: 'Rate Contract', countKey: 'Rate Contract', icon: RotateCcw }
+    { label: 'Rate Contracts', typeVal: 'Rate Contract', countKey: 'Rate Contract', icon: RotateCcw },
+    { label: 'Direct Purchases', typeVal: 'Direct Purchase', countKey: 'Direct Purchase', icon: ShoppingBag }
   ], []);
 
   return (

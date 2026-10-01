@@ -1,5 +1,6 @@
 import prisma from '../lib/prisma.js';
 import { logger } from '../config/logger.js';
+import { deriveMethodPrefix } from '../utils/refIdUtils.js';
 
 export const CANONICAL_METHOD_PREFIXES = ['RFQ', 'RFP', 'TND', 'LTND', 'RC', 'DP', 'RA', 'PO', 'INV', 'DSP'] as const;
 export type CanonicalMethodPrefix = typeof CANONICAL_METHOD_PREFIXES[number];
@@ -16,7 +17,10 @@ export async function getNextCanonicalSequence(
   prefix: CanonicalMethodPrefix | string,
   yearOverride?: number
 ): Promise<string> {
-  const pfx = String(prefix || 'RFQ').trim().toUpperCase();
+  const rawPfx = String(prefix || 'RFQ').trim().toUpperCase();
+  const pfx = (rawPfx === 'PO' || rawPfx === 'INV' || rawPfx === 'DSP')
+    ? rawPfx
+    : deriveMethodPrefix(rawPfx, null, 'RFQ');
   const year = yearOverride && yearOverride > 2000 ? yearOverride : new Date().getFullYear();
   const sequenceId = `${pfx}-${year}`;
 

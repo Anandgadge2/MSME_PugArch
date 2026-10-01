@@ -51,6 +51,10 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       void queryClient.invalidateQueries({ queryKey: ['rfq-detail'] });
       void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
       void queryClient.invalidateQueries({ queryKey: ['buyer-unified-participations'] });
+      void queryClient.invalidateQueries({ queryKey: ['reverse-auction-live'] });
+      void queryClient.invalidateQueries({ queryKey: ['reverse-auction-participants'] });
+      void queryClient.invalidateQueries({ queryKey: ['reverse-auction-bids'] });
+      void queryClient.invalidateQueries({ queryKey: ['reverse-auction-result'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
 
       if (data.type === 'QUOTATION_SUBMITTED') {
@@ -62,6 +66,37 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
           description: priceFmt
             ? `A vendor submitted a quotation for ${priceFmt}. List refreshed automatically.`
             : 'A new quotation was just submitted and added to your view automatically.',
+          duration: 5000,
+        });
+      } else if (data.type === 'PROCUREMENT_AWARDED') {
+        const amtFmt = (data as any)?.awardedAmount
+          ? ` at ₹${Number((data as any).awardedAmount).toLocaleString('en-IN')}`
+          : '';
+        toast.success('🏆 Contract Award Offered!', {
+          description: `Contract award offer issued${amtFmt}. Data synchronized.`,
+          duration: 5000,
+        });
+      } else if (data.type === 'BID_ACCEPTED') {
+        toast.success('✅ Contract Award Accepted!', {
+          description: 'The supplier has accepted the award offer. PO can now be issued.',
+          duration: 5000,
+        });
+      } else if (data.type === 'BID_REJECTED') {
+        toast.warning('Award Offer Declined', {
+          description: 'The award offer was declined by the supplier. Status updated.',
+          duration: 5000,
+        });
+      } else if (data.type === 'TECHNICAL_EVALUATION_STARTED') {
+        toast.info('📋 Technical Evaluation Started', {
+          description: 'Technical evaluation window is active.',
+          duration: 4000,
+        });
+      } else if (data.type === 'FINANCIAL_EVALUATION_STARTED' || data.type === 'L1_GENERATED') {
+        const l1Fmt = (data as any)?.l1Price
+          ? ` (L1 Benchmark: ₹${Number((data as any).l1Price).toLocaleString('en-IN')})`
+          : '';
+        toast.info('💰 Financial Bids Opened', {
+          description: `Commercial envelopes unsealed and L1 standings computed${l1Fmt}.`,
           duration: 5000,
         });
       } else if (data.type === 'QUOTATION_STATUS_CHANGED') {
@@ -92,19 +127,23 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
         setStatus('ERROR');
       });
 
-      channel.bind('QUOTATION_SUBMITTED', (data: ProcurementSocketEvent) => {
-        if (!isMounted) return;
-        handleQuotationEvent(data);
-      });
+      const eventsToBind = [
+        'QUOTATION_SUBMITTED',
+        'QUOTATION_STATUS_CHANGED',
+        'PROCUREMENT_UPDATED',
+        'PROCUREMENT_AWARDED',
+        'BID_ACCEPTED',
+        'BID_REJECTED',
+        'TECHNICAL_EVALUATION_STARTED',
+        'FINANCIAL_EVALUATION_STARTED',
+        'L1_GENERATED'
+      ];
 
-      channel.bind('QUOTATION_STATUS_CHANGED', (data: ProcurementSocketEvent) => {
-        if (!isMounted) return;
-        handleQuotationEvent(data);
-      });
-
-      channel.bind('PROCUREMENT_UPDATED', (data: ProcurementSocketEvent) => {
-        if (!isMounted) return;
-        handleQuotationEvent(data);
+      eventsToBind.forEach((evt) => {
+        channel.bind(evt, (data: ProcurementSocketEvent) => {
+          if (!isMounted) return;
+          handleQuotationEvent(data);
+        });
       });
 
       return () => {
@@ -178,9 +217,17 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
             } else if (data.type === 'SUBSCRIBE_PROCUREMENT_SUCCESS') {
               void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
             } else if (
-              data.type === 'QUOTATION_SUBMITTED' ||
-              data.type === 'QUOTATION_STATUS_CHANGED' ||
-              data.type === 'PROCUREMENT_UPDATED'
+              [
+                'QUOTATION_SUBMITTED',
+                'QUOTATION_STATUS_CHANGED',
+                'PROCUREMENT_UPDATED',
+                'PROCUREMENT_AWARDED',
+                'BID_ACCEPTED',
+                'BID_REJECTED',
+                'TECHNICAL_EVALUATION_STARTED',
+                'FINANCIAL_EVALUATION_STARTED',
+                'L1_GENERATED'
+              ].includes(data.type)
             ) {
               handleQuotationEvent(data);
             }

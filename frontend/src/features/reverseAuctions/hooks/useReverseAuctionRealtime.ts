@@ -42,13 +42,21 @@ export const useReverseAuctionRealtime = (
     const handleAuctionEvent = (data: ReverseAuctionSocketEvent) => {
       // Invalidate queries for both numerical ID and canonical auction code
       const keysToInvalidate = [
+        ['reverse-auction', auctionId],
+        ['reverse-auction-summary', auctionId],
         ['reverse-auction-live', auctionId],
         ['reverse-auction-participants', auctionId],
         ['reverse-auction-bids', auctionId],
-        ['reverse-auction-result', auctionId]
+        ['reverse-auction-result', auctionId],
+        ['procurement-bid'],
+        ['procurement-bids'],
+        ['rfq-detail-bid'],
+        ['rfq-buyer-responses-v2']
       ];
       if (cleanCode && cleanCode !== cleanId) {
         keysToInvalidate.push(
+          ['reverse-auction', cleanCode],
+          ['reverse-auction-summary', cleanCode],
           ['reverse-auction-live', cleanCode],
           ['reverse-auction-participants', cleanCode],
           ['reverse-auction-bids', cleanCode],
@@ -72,7 +80,7 @@ export const useReverseAuctionRealtime = (
             duration: 4000
           });
         }
-      } else if (data.type === 'REVERSE_AUCTION_UPDATED') {
+      } else if (data.type === 'REVERSE_AUCTION_UPDATED' || data.type === 'REVERSE_AUCTION_STATUS_CHANGED') {
         toast.info('Auction Status Changed', {
           description: `Auction status moved to ${data.status || 'UPDATED'}.`,
           duration: 3500
@@ -106,6 +114,11 @@ export const useReverseAuctionRealtime = (
       });
 
       channel.bind('REVERSE_AUCTION_UPDATED', (data: ReverseAuctionSocketEvent) => {
+        if (!isMounted) return;
+        handleAuctionEvent(data);
+      });
+
+      channel.bind('REVERSE_AUCTION_STATUS_CHANGED', (data: ReverseAuctionSocketEvent) => {
         if (!isMounted) return;
         handleAuctionEvent(data);
       });
@@ -176,7 +189,8 @@ export const useReverseAuctionRealtime = (
               void queryClient.invalidateQueries({ queryKey: ['reverse-auction-live', auctionId] });
             } else if (
               data.type === 'REVERSE_AUCTION_BID' ||
-              data.type === 'REVERSE_AUCTION_UPDATED'
+              data.type === 'REVERSE_AUCTION_UPDATED' ||
+              data.type === 'REVERSE_AUCTION_STATUS_CHANGED'
             ) {
               handleAuctionEvent(data);
             }

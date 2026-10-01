@@ -12849,9 +12849,31 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     return acc;
   }, {});
 
+  const auctionIds = auctions.map((a: any) => a.id);
+  const auctionParticipants = auctionIds.length > 0
+    ? await db.auctionParticipant.findMany({
+        where: { auctionId: { in: auctionIds } },
+        select: { id: true, auctionId: true }
+      }).catch(() => [])
+    : [];
+  const participantsCountByAuctionId = auctionParticipants.reduce((acc: Record<number, number>, p: any) => {
+    acc[p.auctionId] = (acc[p.auctionId] || 0) + 1;
+    return acc;
+  }, {});
+
   const auctionsByBidId = auctions.reduce((acc: Record<number, any>, auc: any) => {
     if (auc.linkedBidId) {
       acc[auc.linkedBidId] = auc;
+    }
+    const parentRef = auc.referenceNo || (auc.auctionConfig as any)?.parentRefNumber;
+    const parentId = (auc.auctionConfig as any)?.parentProcurementId;
+    const matchedBid = procurementBids.find((pb: any) =>
+      (auc.linkedBidId && pb.id === Number(auc.linkedBidId)) ||
+      (parentId && (pb.id === Number(parentId) || pb.bidNumber === String(parentId))) ||
+      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef)))
+    );
+    if (matchedBid) {
+      acc[matchedBid.id] = auc;
     }
     return acc;
   }, {});
@@ -13776,7 +13798,15 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   // 7) Reverse Auctions
   for (const a of auctions) {
     if (a.linkedRequirementId) continue;
-    if (a.linkedBidId && procurementBids.some((pb: any) => pb.id === a.linkedBidId)) continue;
+    const parentRef = a.referenceNo || (a.auctionConfig as any)?.parentRefNumber;
+    const parentId = (a.auctionConfig as any)?.parentProcurementId;
+    const isLinkedToProcurementBid = procurementBids.some((pb: any) =>
+      (a.linkedBidId && pb.id === Number(a.linkedBidId)) ||
+      (parentId && (pb.id === Number(parentId) || pb.bidNumber === String(parentId))) ||
+      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef)))
+    );
+    if (isLinkedToProcurementBid) continue;
+
     const s = String(a.statusEnum || a.status || 'scheduled').toUpperCase();
     const statusGroup = statusGroupFor(s);
 
@@ -13791,6 +13821,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     })();
 
     const raRef = formatRefId('RA', a.id, a.auctionCode || a.referenceNo, 'REVERSE_AUCTION');
+    const partCount = participantsCountByAuctionId[a.id] || (Array.isArray(a.bids) ? a.bids.length : 0);
 
     all.push({
       id: a.id,
@@ -13803,6 +13834,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       statusGroup: statusGroup,
       method: 'reverse-auction',
       methodLabel: 'Reverse Auction',
+      participantsCount: partCount,
       estimatedValue: Number(a.startPrice || a.basePrice || 0),
       category: a.category || '',
       description: cleanOpportunitySummary(a.description || ''),

@@ -55,6 +55,8 @@ import {
 } from '../../rfq/components/ProcurementDetailUnifiedView';
 import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
+import { useReverseAuctionRealtime } from '../hooks/useReverseAuctionRealtime';
+import { useUserRealtime } from '../../../hooks/useUserRealtime';
 import AuctionClarificationPanel from '../components/AuctionClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { marketplaceApi, type MarketplaceSeller } from '../../marketplace/api';
@@ -163,6 +165,9 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const effectiveId = auction.data?.id ?? id;
   const canonicalCode = auction.data?.auctionCode || String(effectiveId);
 
+  useReverseAuctionRealtime(effectiveId, canonicalCode);
+  useUserRealtime(user?.id);
+
   // Sync URL to human-readable canonical code (e.g. /seller/procurement/reverse-auction/RA-2026-69UXUD)
   useEffect(() => {
     if (auction.data?.auctionCode && typeof window !== 'undefined') {
@@ -197,10 +202,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     enabled: !!user && !!auction.data,
   });
 
-  const linkedBidId = auction.data?.linkedBidId;
+  const linkedBidId = auction.data?.linkedBidId || auction.data?.linkedRequirement?.id;
   const tenderId = auction.data?.tenderId;
   const linkedRequirementId = auction.data?.linkedRequirementId;
-  const referenceNo = auction.data?.referenceNo;
+  const referenceNo = auction.data?.referenceNo || (auction.data?.linkedRequirement as any)?.bidNumber || auction.data?.linkedRequirement?.requirementNumber;
 
   const targetProcurementId = linkedBidId
     ? String(linkedBidId)

@@ -15,7 +15,7 @@ import { upload } from '../config/storage.js';
 import { uploadFile } from '../services/storage/storage.service.js';
 import { env } from '../config/env.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
-import { broadcastToAuction, broadcastToProcurement } from '../services/websocket.service.js';
+import { broadcastToAuction, broadcastToProcurement, broadcastToUser } from '../services/websocket.service.js';
 import { formatIstDateTime } from '../services/email-template.builder.js';
 
 const router = Router();
@@ -129,7 +129,12 @@ const inviteSchema = z.object({
 });
 const bidSchema = z.object({ amount: z.coerce.number().positive(), deviceHash: z.string().trim().max(128).optional() });
 const cancelSchema = z.object({ reason: z.string().trim().min(5).max(500) });
-const awardSchema = z.object({ participantId: z.coerce.number().int().positive().optional(), remarks: z.string().trim().max(1000).optional() });
+const awardSchema = z.object({
+  participantId: z.coerce.number().int().positive().optional(),
+  remarks: z.string().trim().max(1000).optional(),
+  isPriceMatch: z.boolean().optional(),
+  counterOfferAmount: z.coerce.number().positive().optional()
+});
 const initialQuoteSchema = z.object({
   quotedAmount: z.coerce.number().positive(),
   gstPercentage: z.coerce.number().min(0).max(100).optional().default(0),
@@ -327,13 +332,27 @@ const linkedRequirementSummary = async (auction: any) => {
   const linkedReqId = auction.linkedRequirementId ? Number(auction.linkedRequirementId) : null;
   const refNo = auction.referenceNo || null;
 
+  const candidateRefs: string[] = [];
+  if (refNo) {
+    candidateRefs.push(refNo);
+    const stripped = refNo.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+    if (stripped && stripped !== refNo) candidateRefs.push(stripped);
+  }
+  const configParentRef = auction.auctionConfig?.parentRefNumber;
+  if (configParentRef && typeof configParentRef === 'string') {
+    candidateRefs.push(configParentRef);
+  }
+  const configParentId = auction.auctionConfig?.parentProcurementId;
+  const configNumId = Number(configParentId);
+  const resolvedBidId = linkedBidId || (Number.isFinite(configNumId) && configNumId > 0 ? configNumId : null);
+
   // 1. Try finding linked procurementBid
-  if (linkedBidId || refNo) {
+  if (resolvedBidId || candidateRefs.length > 0) {
     const pBid = await db.procurementBid.findFirst({
       where: {
         OR: [
-          ...(linkedBidId ? [{ id: linkedBidId }] : []),
-          ...(refNo ? [{ bidNumber: refNo }, { referenceNumber: refNo }] : [])
+          ...(resolvedBidId ? [{ id: resolvedBidId }] : []),
+          ...(candidateRefs.length > 0 ? [{ bidNumber: { in: candidateRefs } }] : [])
         ]
       },
       include: {
@@ -1182,6 +1201,19 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
 
     if (!linkedBid && !linkedReq && typeof rawId === 'string') {
       linkedBid = await db.procurementBid.findFirst({ where: { bidNumber: rawId } }).catch(() => null);
+      if (!linkedBid) {
+        const stripped = rawId.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+        if (stripped && stripped !== rawId) {
+          linkedBid = await db.procurementBid.findFirst({
+            where: {
+              OR: [
+                { bidNumber: stripped },
+                { bidNumber: { contains: stripped } }
+              ]
+            }
+          }).catch(() => null);
+        }
+      }
       if (!linkedReq) {
         linkedReq = await db.requirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
       }
@@ -1206,11 +1238,13 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
     const endAt = payload.endTime ? new Date(payload.endTime) : new Date(startAt.getTime() + duration * 60000);
     const isLiveImmediately = startAt <= new Date();
 
+    const effectiveLinkedBidId = linkedBid?.id || (Number.isFinite(numId) && numId > 0 ? numId : null);
+
     const auction = await db.auction.create({
       data: {
         auctionCode: nextAuctionCode(),
         referenceNo: parentRef,
-        linkedBidId: linkedBid?.id || (Number.isFinite(numId) ? numId : null),
+        linkedBidId: effectiveLinkedBidId,
         linkedRequirementId: linkedReq?.id || null,
         title: procurementTitle,
         description: linkedBid?.description || linkedReq?.description || `Dynamic Reverse Auction event initiated for ${parentRef}.`,
@@ -1644,6 +1678,12 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
       const updated = await db.auction.update({ where: { id }, data });
       await writeAuctionEvent(req, id, target.toLowerCase(), `Auction moved to ${target}`, data);
       try {
+        broadcastToAuction(id, {
+          type: 'REVERSE_AUCTION_STATUS_CHANGED',
+          auctionId: id,
+          status: target,
+          timestamp: new Date().toISOString()
+        });
         broadcastToAuction(id, {
           type: 'REVERSE_AUCTION_UPDATED',
           auctionId: id,
@@ -2624,6 +2664,16 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
     }
 
     const isNonL1 = (winner.currentRank || 1) !== 1;
+    const isPriceMatch = Boolean(payload.isPriceMatch);
+    const l1Amount = Number(auction.currentLowestAmount || auction.currentLowestBid || auction.currentBid || 0);
+    const candidateAwardAmount = isPriceMatch
+      ? (Number(payload.counterOfferAmount) > 0 ? Number(payload.counterOfferAmount) : l1Amount)
+      : Number(winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice || 0);
+    const awardAmount = candidateAwardAmount > 0 ? candidateAwardAmount : Number(auction.startPrice || 0);
+    const awardRemarks = isPriceMatch
+      ? `[Price Match Counter-Offer to Match L1 Price] ${payload.remarks || ''}`.trim()
+      : (payload.remarks || 'Award offered from Reverse Auction outcome');
+
     const updated = await db.auction.update({
       where: { id },
       data: {
@@ -2646,7 +2696,7 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
           ]
         }
       });
-      const awardAmount = Number(winner.lastBidAmount || auction.currentLowestAmount || auction.startPrice || 0);
+
       if (bidParticipation) {
         const finalSellerUserId = bidParticipation.sellerId || sellerUserId;
         const existingAward = await db.procurementBidAward.findFirst({
@@ -2658,9 +2708,12 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
             data: {
               awardStatus: 'OFFERED',
               awardedAmount: awardAmount,
-              originalBidAmount: awardAmount,
+              originalBidAmount: Number(winner.lastBidAmount || awardAmount),
+              counterOfferStatus: isPriceMatch ? 'PENDING_SUPPLIER' : 'NONE',
+              counterOfferAmount: isPriceMatch ? awardAmount : null,
+              counterOfferRemarks: isPriceMatch ? awardRemarks : null,
               justificationReason: isNonL1 ? payload.remarks : null,
-              remarks: payload.remarks || 'Award offered from Reverse Auction outcome',
+              remarks: awardRemarks,
               awardedAt: new Date()
             }
           }).catch(() => null);
@@ -2671,11 +2724,14 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
               participationId: bidParticipation.id,
               sellerId: finalSellerUserId,
               awardedAmount: awardAmount,
-              originalBidAmount: awardAmount,
+              originalBidAmount: Number(winner.lastBidAmount || awardAmount),
+              counterOfferStatus: isPriceMatch ? 'PENDING_SUPPLIER' : 'NONE',
+              counterOfferAmount: isPriceMatch ? awardAmount : null,
+              counterOfferRemarks: isPriceMatch ? awardRemarks : null,
               justificationReason: isNonL1 ? payload.remarks : null,
               awardStatus: 'OFFERED',
               awardedById: req.user!.id,
-              remarks: payload.remarks || 'Award offered from Reverse Auction outcome',
+              remarks: awardRemarks,
               awardedAt: new Date()
             }
           }).catch(() => null);
@@ -2708,6 +2764,50 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
       type: 'bid_awarded',
       redirectUrl: `/seller/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
     }).catch(() => undefined);
+
+    try {
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_STATUS_CHANGED',
+        auctionId: auction.id,
+        status: 'AWARDED',
+        timestamp: new Date().toISOString()
+      });
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_UPDATED',
+        auctionId: auction.id,
+        status: 'AWARDED',
+        timestamp: new Date().toISOString()
+      });
+      if (auction.linkedBidId) {
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'PROCUREMENT_AWARDED',
+          procurementId: auction.linkedBidId,
+          status: 'AWARD_OFFERED',
+          sellerOrgId: winner.sellerOrgId,
+          sellerUserId,
+          awardedAmount: awardAmount,
+          timestamp: new Date().toISOString()
+        });
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'PROCUREMENT_UPDATED',
+          procurementId: auction.linkedBidId,
+          requirementId: auction.linkedBidId,
+          status: 'AWARD_OFFERED',
+          timestamp: new Date().toISOString()
+        });
+      }
+      if (sellerUserId) {
+        broadcastToUser(sellerUserId, {
+          type: 'AWARD_RECEIVED',
+          auctionId: auction.id,
+          procurementId: auction.linkedBidId || undefined,
+          awardedAmount: awardAmount,
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[reverse-auction.routes] Broadcast failed for award recommendation');
+    }
 
     return apiResponse.success(res, { auction: maskSensitive(updated), winner: maskSensitive(winner) }, 200, 'Award offer successfully issued to supplier');
   } catch (error: any) {
@@ -2819,6 +2919,48 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
         type: 'award_accepted',
         redirectUrl: `/buyer/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
       }).catch(() => undefined);
+    }
+
+    try {
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_STATUS_CHANGED',
+        auctionId: auction.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_UPDATED',
+        auctionId: auction.id,
+        status: 'AWARD_ACCEPTED',
+        timestamp: new Date().toISOString()
+      });
+      if (auction.linkedBidId) {
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'BID_ACCEPTED',
+          procurementId: auction.linkedBidId,
+          status: 'AWARD_ACCEPTED',
+          sellerOrgId: winner.sellerOrgId,
+          timestamp: new Date().toISOString()
+        });
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'PROCUREMENT_UPDATED',
+          procurementId: auction.linkedBidId,
+          requirementId: auction.linkedBidId,
+          status: 'AWARD_ACCEPTED',
+          timestamp: new Date().toISOString()
+        });
+      }
+      if (auction.createdByUserId) {
+        broadcastToUser(auction.createdByUserId, {
+          type: 'BID_STATUS_CHANGED',
+          auctionId: auction.id,
+          procurementId: auction.linkedBidId || undefined,
+          status: 'AWARD_ACCEPTED',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[reverse-auction.routes] Broadcast failed for accept award');
     }
 
     return apiResponse.success(res, {
@@ -2936,6 +3078,48 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
         type: 'award_declined',
         redirectUrl: `/buyer/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || auction.id)}/result`
       }).catch(() => undefined);
+    }
+
+    try {
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_STATUS_CHANGED',
+        auctionId: auction.id,
+        status: 'AWARD_DECLINED',
+        timestamp: new Date().toISOString()
+      });
+      broadcastToAuction(auction.id, {
+        type: 'REVERSE_AUCTION_UPDATED',
+        auctionId: auction.id,
+        status: 'AWARD_DECLINED',
+        timestamp: new Date().toISOString()
+      });
+      if (auction.linkedBidId) {
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'BID_REJECTED',
+          procurementId: auction.linkedBidId,
+          status: 'AWARD_DECLINED',
+          sellerOrgId: winner?.sellerOrgId,
+          timestamp: new Date().toISOString()
+        });
+        broadcastToProcurement(auction.linkedBidId, {
+          type: 'PROCUREMENT_UPDATED',
+          procurementId: auction.linkedBidId,
+          requirementId: auction.linkedBidId,
+          status: 'L1_GENERATED',
+          timestamp: new Date().toISOString()
+        });
+      }
+      if (auction.createdByUserId) {
+        broadcastToUser(auction.createdByUserId, {
+          type: 'BID_STATUS_CHANGED',
+          auctionId: auction.id,
+          procurementId: auction.linkedBidId || undefined,
+          status: 'AWARD_DECLINED',
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[reverse-auction.routes] Broadcast failed for decline award');
     }
 
     return apiResponse.success(res, { auction: maskSensitive(updatedAuction) }, 200, 'Award offer declined');

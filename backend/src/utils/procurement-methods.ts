@@ -46,6 +46,12 @@ const normalizeToken = (value: unknown) =>
 export const normalizeCanonicalMethod = (rawMethod: unknown, fallback: CanonicalProcurementMethod = 'OPEN_TENDER'): CanonicalProcurementMethod => {
   const token = normalizeToken(rawMethod);
   if (canonicalSet.has(token)) return token as CanonicalProcurementMethod;
+  if (token.startsWith('LTND') || token.startsWith('LIMITED')) return 'LIMITED_TENDER';
+  if (token.startsWith('TND') || token.startsWith('TENDER')) return 'OPEN_TENDER';
+  if (token.startsWith('RFQ') || token.startsWith('QUOTE')) return 'RFQ';
+  if (token.startsWith('RFP') || token.startsWith('PROPOSAL')) return 'RFP';
+  if (token.startsWith('RC') || token.startsWith('RATE_CONTRACT')) return 'RATE_CONTRACT';
+  if (token.startsWith('RA') || token.startsWith('AUCTION') || token.startsWith('REVERSE_AUCTION')) return 'REVERSE_AUCTION';
   return legacyAliases[token] || fallback;
 };
 
@@ -90,9 +96,28 @@ export const canonicalMethodFromRecord = (record: {
   canonicalMethod?: unknown;
   methodSlug?: unknown;
   procurementMethod?: unknown;
+  procurementType?: unknown;
+  bidType?: unknown;
+  bidNumber?: unknown;
+  requirementNumber?: unknown;
+  referenceNumber?: unknown;
   payload?: unknown;
   items?: Array<{ specifications?: unknown }>;
 }) => {
+  const refCandidate = String(
+    record.bidNumber ||
+    record.requirementNumber ||
+    record.referenceNumber ||
+    ''
+  ).trim().toUpperCase();
+
+  if (refCandidate.startsWith('LTND-') || refCandidate.startsWith('LIM-')) return 'LIMITED_TENDER';
+  if (refCandidate.startsWith('TND-')) return 'OPEN_TENDER';
+  if (refCandidate.startsWith('RFQ-')) return 'RFQ';
+  if (refCandidate.startsWith('RFP-')) return 'RFP';
+  if (refCandidate.startsWith('RC-')) return 'RATE_CONTRACT';
+  if (refCandidate.startsWith('RA-')) return 'REVERSE_AUCTION';
+
   const payload = record.payload && typeof record.payload === 'object'
     ? record.payload as Record<string, unknown>
     : null;
@@ -111,6 +136,7 @@ export const canonicalMethodFromRecord = (record: {
 
   return normalizeCanonicalMethod(
     record.canonicalMethod ||
+      record.procurementType ||
       payload?.fullProcurementMethod ||
       payload?.type ||
       draftPayload?.fullProcurementMethod ||
