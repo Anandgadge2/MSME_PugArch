@@ -1263,9 +1263,9 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (estimatedValue <= 0) throw new ApiError(400, 'Estimated procurement value must be positive', 'PROCUREMENT_VALUE_REQUIRED');
   if (items.length === 0) throw new ApiError(400, 'At least one item or service line is required', 'PROCUREMENT_ITEM_REQUIRED');
 
-  // Verify that all items have valid names, quantities, and units when submitting if buying a Product
+  // Verify that all items have valid names, quantities, and units when submitting if buying a Product/Catalogue item
   const whatAreYouBuying = basics.whatAreYouBuying || 'Product';
-  if (whatAreYouBuying === 'Product') {
+  if (whatAreYouBuying === 'Product' || whatAreYouBuying === 'Catalogue item') {
     for (const item of items) {
       if (!item.itemName || String(item.itemName).trim().length < 2) {
         throw new ApiError(400, 'Item name must be at least 2 characters long', 'PROCUREMENT_ITEM_NAME_INVALID');
@@ -1276,6 +1276,16 @@ const validateProcurementDraftForSubmit = (draft: any) => {
       if (!item.unitOfMeasure || String(item.unitOfMeasure).trim().length < 1) {
         throw new ApiError(400, 'Item unit of measure is required', 'PROCUREMENT_ITEM_UOM_INVALID');
       }
+    }
+  } else if (whatAreYouBuying === 'Service' || whatAreYouBuying === 'Services') {
+    const serviceDetails = payload.serviceDetails || {};
+    const hasSow = Boolean(serviceDetails.sowFileAssetId || serviceDetails.sowFileName || (serviceDetails.scopeOfWork && String(serviceDetails.scopeOfWork).trim().length >= 10));
+    const serviceTitle = String(serviceDetails.serviceTitle || basics.title || '').trim();
+    if (!serviceTitle) {
+      throw new ApiError(400, 'Service Contract Title is required', 'PROCUREMENT_SERVICE_TITLE_REQUIRED');
+    }
+    if (!hasSow) {
+      throw new ApiError(400, 'Service Scope of Work (SOW text or document upload) is required', 'PROCUREMENT_SERVICE_SOW_REQUIRED');
     }
   }
 

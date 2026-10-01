@@ -23,7 +23,6 @@ import {
   BadgeCheck,
   ArrowRight,
   ChevronRight,
-  ChevronDown,
   Info,
   ShoppingCart,
   Trash2,
@@ -54,6 +53,7 @@ import {
   Repeat,
   Clock,
   RefreshCw,
+  IndianRupee,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -899,7 +899,8 @@ const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ valu
   RFQ: [
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
+    { value: 'Service', label: 'Service / Routine Maintenance' }
   ],
   RFP: [
     { value: 'Service', label: 'Service Contract' },
@@ -921,12 +922,15 @@ const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ valu
   ],
   REVERSE_AUCTION: [
     { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' }
+    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
   ],
   RATE_CONTRACT: [
     { value: 'Product', label: 'Product / Goods' },
     { value: 'Catalogue item', label: 'Catalogue Standard Item' },
-    { value: 'Service', label: 'Service Contract' }
+    { value: 'Service', label: 'Service Contract' },
+    { value: 'BOQ', label: 'BOQ Sourced / Schedule of Rates (SOR)' }
   ]
 };
 
@@ -2588,7 +2592,6 @@ function BasicsStepForm({
   const [alternateMobileNumber, setAlternateMobileNumber] = useState('');
   const [email, setEmail] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
-  const [rfqTypeDropdownOpen, setRfqTypeDropdownOpen] = useState(false);
   const [addressLine2, setAddressLine2] = useState('');
   const [state, setState] = useState('');
   const [district, setDistrict] = useState('');
@@ -2793,56 +2796,19 @@ function BasicsStepForm({
 
         {draft.type === 'RFQ' && (
           <Field label="RFQ Type" required>
-            <div className="relative">
-              <button
-                type="button"
-                onClick={() => setRfqTypeDropdownOpen(!rfqTypeDropdownOpen)}
-                className={cn(inputClass, "flex items-center justify-between text-left h-auto min-h-[44px] py-2")}
-              >
-                <span className="truncate pr-2">
-                  {draft.rfqType === 'LIMITED' 
-                    ? 'Limited RFQ (Only invited/selected sellers can quote)'
-                    : 'Open RFQ (All registered sellers can quote)'}
-                </span>
-                <ChevronDown className={cn("h-4 w-4 shrink-0 text-slate-400 transition-transform", rfqTypeDropdownOpen && "rotate-180")} />
-              </button>
-
-              {rfqTypeDropdownOpen && (
-                <>
-                  <div className="fixed inset-0 z-[90]" onClick={() => setRfqTypeDropdownOpen(false)} />
-                  <div className="absolute left-0 right-0 top-full mt-1 z-[100] rounded-lg border border-slate-200 bg-white shadow-lg overflow-hidden">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateDraft(c => ({ ...c, rfqType: 'OPEN' }));
-                        setRfqTypeDropdownOpen(false);
-                      }}
-                      className={cn(
-                        "w-full px-3 py-2.5 text-left text-sm font-semibold transition-colors",
-                        draft.rfqType !== 'LIMITED' ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                      )}
-                    >
-                      <span className="block">Open RFQ</span>
-                      <span className="block text-[11px] font-normal text-slate-500 mt-0.5 break-words whitespace-normal">All registered sellers can quote</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        updateDraft(c => ({ ...c, rfqType: 'LIMITED' }));
-                        setRfqTypeDropdownOpen(false);
-                      }}
-                      className={cn(
-                        "w-full px-3 py-2.5 text-left text-sm font-semibold transition-colors border-t border-slate-100",
-                        draft.rfqType === 'LIMITED' ? "bg-blue-50 text-blue-700" : "text-slate-700 hover:bg-slate-50"
-                      )}
-                    >
-                      <span className="block">Limited RFQ</span>
-                      <span className="block text-[11px] font-normal text-slate-500 mt-0.5 break-words whitespace-normal">Only invited/selected sellers can quote</span>
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
+            <select
+              value={draft.rfqType === 'LIMITED' ? 'LIMITED' : 'OPEN'}
+              onChange={e => updateDraft(c => ({ ...c, rfqType: e.target.value as 'OPEN' | 'LIMITED' }))}
+              className={inputClass}
+            >
+              <option value="OPEN">Open RFQ (All registered sellers can quote)</option>
+              <option value="LIMITED">Limited RFQ (Only invited/selected sellers can quote)</option>
+            </select>
+            <p className="text-[10px] text-slate-500 font-medium mt-1">
+              {draft.rfqType === 'LIMITED'
+                ? 'Limited RFQ restricts bidding to invited/selected suppliers (requires internal audit justification).'
+                : 'Open RFQ broadcasts to all registered MSME suppliers for broad market price discovery.'}
+            </p>
           </Field>
         )}
 
@@ -5573,6 +5539,22 @@ function ItemsDetailsForm({
           </div>
         )}
 
+        {draft.type === 'RATE_CONTRACT' && (
+          <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3 sm:p-3.5 text-xs text-indigo-950 font-medium shadow-3xs">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="font-black uppercase tracking-wide text-indigo-900 text-xs">
+                Schedule of Rates (SOR) Contract
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+                Rate Agreement
+              </span>
+            </div>
+            <p className="text-[11px] text-indigo-900/90">
+              Unit rates configured below establish the legally binding price ceiling for all future call-off purchase orders during the contract validity period. Quantities represent indicative annual consumption.
+            </p>
+          </div>
+        )}
+
         <BOQTable
           rows={draft.boqTable}
           onChange={handleBOQCellChange}
@@ -5604,6 +5586,36 @@ function ItemsDetailsForm({
             </div>
             <p className="text-[11px] text-purple-700/90 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
           </div>
+        </div>
+      </div>
+
+      {/* Lump-Sum SOW Pricing & Confidential Budget Banner */}
+      <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 sm:p-3.5 space-y-1.5 shadow-3xs">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5">
+            <IndianRupee className="h-4 w-4 text-blue-700 shrink-0" aria-hidden="true" />
+            <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
+              Pricing Model: Lump-Sum Total Contract Value
+            </span>
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
+            Single Commercial Quote
+          </span>
+        </div>
+        <p className="text-[11px] text-blue-900/90 font-medium">
+          Participating bidders will quote a single <strong>Lump-Sum Base Fee + GST %</strong> covering the entire Scope of Work (SOW). No milestone or itemized breakdown required.
+        </p>
+        <div className="pt-1 flex items-center gap-2 flex-wrap text-[10.5px]">
+          <span className="font-bold text-slate-700">Internal Benchmark: ₹{Number(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}</span>
+          {!draft.basics.discloseEstimatedCost ? (
+            <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md">
+              ✓ Blind Bidding Active (Budget hidden from bidders for genuine market price discovery)
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md">
+              ⚠ Disclosed Budget (Bidders can view internal ceiling)
+            </span>
+          )}
         </div>
       </div>
 
@@ -5882,6 +5894,51 @@ function ItemsDetailsForm({
             </p>
           </div>
         </div>
+
+        {(whatBuying === 'Service' || draft.type === 'RFP') && draft.items.length === 0 && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-xs text-purple-950 animate-fadeIn">
+            <div className="space-y-0.5">
+              <span className="font-extrabold uppercase text-purple-900 tracking-wide block">
+                Initialize Single Lump-Sum SOW Contract Item
+              </span>
+              <p className="text-[11px] text-purple-800/90 font-medium">
+                Auto-generate the single Lump-Sum line item (1 Job / Set) synchronized with your contract title and internal benchmark.
+              </p>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                const title = draft.serviceDetails.serviceTitle || draft.basics.title || 'Master Service Scope';
+                const estVal = Number(draft.basics.estimatedValue || 0);
+                const baseVal = Math.round(estVal / 1.18);
+                handleSaveItem({
+                  id: makeId(),
+                  itemType: 'Service',
+                  name: title,
+                  specification: draft.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) specification document.',
+                  quantity: 1,
+                  unit: 'Set',
+                  unitPrice: baseVal > 0 ? baseVal : estVal,
+                  gst: 18,
+                  deliveryDate: nextFortnight,
+                  brandPolicy: 'Equivalent allowed',
+                  technicalSpecification: draft.serviceDetails.scopeOfWork || '',
+                  specificationFileName: draft.serviceDetails.sowFileName || '',
+                  hsn_sac_code: '9983',
+                  brand_preference: '',
+                  brand_flexible: 'Yes',
+                  fileAssetId: draft.serviceDetails.sowFileAssetId || null,
+                  attachments: [],
+                });
+              }}
+              className="bg-purple-700 hover:bg-purple-800 text-white font-black text-xs shrink-0 cursor-pointer shadow-3xs"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+              Initialize SOW Item (1 Set)
+            </Button>
+          </div>
+        )}
 
         {/* Action Toolbar: All buttons in a single row without wrapping */}
         <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">

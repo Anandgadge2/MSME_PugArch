@@ -213,9 +213,16 @@ const asTenderItems = (bid?: ProcurementBid | null): TenderBoqItem[] => {
   }));
 };
 
+const isServiceBid = (bid?: ProcurementBid | null) => {
+  const tp = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
+  const buyType = String(bid?.bidType || tp?.basics?.whatAreYouBuying || tp?.basics?.bidType || '').toUpperCase();
+  return buyType.includes('SERVICE') || Boolean(tp?.serviceDetails?.scopeOfWork || tp?.serviceDetails?.sowFileName);
+};
+
 const isBoqTender = (bid?: ProcurementBid | null) => {
+  if (isServiceBid(bid)) return false; // Services strictly use Lump-Sum commercial quoting
   const type = String(bid?.procurementType || bid?.bidType || '').toUpperCase().replace(/[-\s]/g, '_');
-  return ['BOQ_BASED_BID', 'BOQ_BID', 'OPEN_TENDER', 'LIMITED_TENDER'].includes(type) || asTenderItems(bid).length > 1;
+  return ['BOQ_BASED_BID', 'BOQ_BID'].includes(type) || asTenderItems(bid).length > 1;
 };
 
 const getDefaultFinancialOffer = (item?: TenderBoqItem): BoqFinancialOffer => ({
@@ -1340,7 +1347,8 @@ function FinancialQuoteStep({
   onSaveDraft: () => void;
   savingDraft: boolean;
 }) {
-  const isBoq = bid?.procurementType === 'BOQ_BASED_BID' || bid?.procurementType === 'OPEN_TENDER' || bid?.procurementType === 'LIMITED_TENDER';
+  const isService = isServiceBid(bid);
+  const isBoq = isBoqTender(bid);
   const isRateContract = bid?.procurementType === 'RATE_CONTRACT';
   const isRfq = bid?.procurementType === 'RFQ';
   const items = Array.isArray(bid?.technicalPacket?.items) ? bid.technicalPacket.items : [];
@@ -1452,29 +1460,67 @@ function FinancialQuoteStep({
           </div>
         </div>
       ) : (
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          <Input
-            label={isBoq ? "Total Quoted Amount (from BOQ sheet)" : "Quoted amount"}
-            value={quote.quotedAmount}
-            onChange={next => setQuote(prev => ({ ...prev, quotedAmount: next.replace(/[^\d.]/g, '') }))}
-            disabled={!canEdit}
-            required
-            prefix="₹"
-          />
-          <Input
-            label="GST percentage"
-            value={quote.gstPercentage}
-            onChange={next => setQuote(prev => ({ ...prev, gstPercentage: next.replace(/[^\d.]/g, '') }))}
-            disabled={!canEdit}
-            required
-          />
-          <Input
-            label="Total amount"
-            value={quote.totalAmount}
-            onChange={next => setQuote(prev => ({ ...prev, totalAmount: next.replace(/[^\d.]/g, '') }))}
-            disabled={!canEdit}
-            prefix="₹"
-          />
+        <div className="mt-4 space-y-4">
+          {isService && (
+            <div className="rounded-xl border border-purple-200 bg-purple-50/80 p-3.5 space-y-1.5 shadow-3xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-xs font-black uppercase text-purple-950 tracking-wide">
+                  Lump-Sum Commercial Proposal (Master Scope of Work)
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                  Lump-Sum Single Quote
+                </span>
+              </div>
+              <p className="text-[11px] text-purple-900/90 font-medium">
+                Submit your all-inclusive Lump-Sum fee covering the complete Scope of Work (SOW), personnel, equipment, SLAs, and deliverables requested by the buyer.
+              </p>
+            </div>
+          )}
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input
+              label={isService ? "Lump-Sum Quoted Amount (Excl. GST)" : isBoq ? "Total Quoted Amount (from BOQ sheet)" : "Quoted amount (Excl. GST)"}
+              value={quote.quotedAmount}
+              onChange={next => {
+                const cleanBase = next.replace(/[^\d.]/g, '');
+                const base = Number(cleanBase) || 0;
+                const gstPct = Number(quote.gstPercentage || 18);
+                const total = Math.round((base + (base * gstPct / 100)) * 100) / 100;
+                setQuote(prev => ({
+                  ...prev,
+                  quotedAmount: cleanBase,
+                  totalAmount: base > 0 ? String(total) : ''
+                }));
+              }}
+              disabled={!canEdit}
+              required
+              prefix="₹"
+            />
+            <Input
+              label="GST percentage (%)"
+              value={quote.gstPercentage}
+              onChange={next => {
+                const cleanGst = next.replace(/[^\d.]/g, '');
+                const gstPct = Number(cleanGst) || 0;
+                const base = Number(quote.quotedAmount) || 0;
+                const total = Math.round((base + (base * gstPct / 100)) * 100) / 100;
+                setQuote(prev => ({
+                  ...prev,
+                  gstPercentage: cleanGst,
+                  totalAmount: base > 0 ? String(total) : ''
+                }));
+              }}
+              disabled={!canEdit}
+              required
+            />
+            <Input
+              label={isService ? "Total Lump-Sum Offer (Incl. GST)" : "Total amount (Incl. GST)"}
+              value={quote.totalAmount}
+              onChange={next => setQuote(prev => ({ ...prev, totalAmount: next.replace(/[^\d.]/g, '') }))}
+              disabled={!canEdit}
+              prefix="₹"
+            />
+          </div>
         </div>
       )}
 
