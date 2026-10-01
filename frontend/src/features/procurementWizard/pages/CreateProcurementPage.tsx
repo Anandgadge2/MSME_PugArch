@@ -1848,6 +1848,25 @@ export default function CreateProcurementPage() {
         toast.error('A valid 10-digit Contact Mobile Number is required (e.g. 9876543210).');
         return false;
       }
+      const auth = (d.internal.approvalAuthority || '').trim();
+      if (!auth || auth.length < 3) {
+        toast.error('Internal Approval Authority is required (minimum 3 characters).');
+        return false;
+      }
+      if (/^(.)\1{3,}$/i.test(auth) || !/[a-zA-Z]/.test(auth)) {
+        toast.error('Please enter a valid title or name for Internal Approval Authority.');
+        return false;
+      }
+
+      const just = (d.internal.justification || '').trim();
+      if (!just || just.length < 10) {
+        toast.error('Purchase justification & compliance reason is required (minimum 10 characters).');
+        return false;
+      }
+      if (/^(.)\1{4,}$/i.test(just) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(just.replace(/\s+/g, ''))) {
+        toast.error('Please provide a legitimate business justification or statutory compliance reason.');
+        return false;
+      }
     } else if (stepIdx === 3) {
       // Step 3 Items details
       if (d.type === 'RFP') {

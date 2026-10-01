@@ -837,17 +837,20 @@ export default function App({
 
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract|reverse-auction)\/([^/]+)\/?$/i);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|open_tender|limited-tender|limited_tender|rate-contract|rate_contract|reverse-auction|reverse_auction|tenders?)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
-        const [, role, typeSlug, rawId] = procDetailMatch;
+        const [, role, rawTypeSlug, rawId] = procDetailMatch;
+        const typeSlug = rawTypeSlug.toLowerCase().replace(/_/g, '-');
         const id = decodeURIComponent(rawId);
         if (id.toLowerCase() === 'new' || id.toLowerCase() === 'create') {
           const methodParam = typeSlug ? `?method=${typeSlug.toUpperCase()}` : '';
           return <Redirect to={`/buyer/procurement/create${methodParam}`} />;
         }
-        switch (typeSlug.toLowerCase()) {
+        switch (typeSlug) {
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
+          case 'tender':
+          case 'tenders':
           case 'open-tender':      return <OpenTenderDetailPage />;
           case 'limited-tender':   return <LimitedTenderDetailPage />;
           case 'rate-contract':    return <Redirect to={`/bids/${id}`} />;

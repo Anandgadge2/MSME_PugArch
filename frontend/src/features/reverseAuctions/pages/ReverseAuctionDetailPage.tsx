@@ -957,18 +957,70 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     </div>
   ) : null;
 
+  const parentRef =
+    linkedBidData.bidNumber ||
+    linkedBidData.referenceNumber ||
+    (linkedBidData.id ? formatRefId(String(linkedBidData.procurementType || '').includes('LIMITED') ? 'LTND' : 'TND', linkedBidData.id) : null) ||
+    reqData.referenceNumber ||
+    (auctionData.auctionConfig as any)?.parentRefNumber ||
+    auctionData.referenceNo ||
+    null;
+
+  const compositeDisplayId = parentRef && auctionData.auctionCode
+    ? `${parentRef} • ${auctionData.auctionCode}`
+    : (auctionData.auctionCode || (parentRef || (auctionData.linkedRequirementId ? formatRefId('REQ', auctionData.linkedRequirementId) : `RA-${effectiveId}`)));
+
+  const isParentLimitedTender = Boolean(
+    String(linkedBidData.procurementType || '').toUpperCase().includes('LIMITED') ||
+    parentRef?.startsWith('LTND-') ||
+    String(reqData.procurementMethod || '').toUpperCase().includes('LIMITED') ||
+    String(reqData.procurementType || '').toUpperCase().includes('LIMITED')
+  );
+  const isParentOpenTender = Boolean(
+    String(linkedBidData.procurementType || '').toUpperCase().includes('OPEN') ||
+    parentRef?.startsWith('TND-') ||
+    String(reqData.procurementMethod || '').toUpperCase().includes('OPEN')
+  );
+  const isParentRfq = Boolean(
+    String(linkedBidData.procurementType || '').toUpperCase().includes('RFQ') ||
+    parentRef?.startsWith('RFQ-') ||
+    String(reqData.procurementMethod || '').toUpperCase().includes('RFQ')
+  );
+  const isParentRateContract = Boolean(
+    String(linkedBidData.procurementType || '').toUpperCase().includes('RATE') ||
+    parentRef?.startsWith('RC-') ||
+    String(reqData.procurementMethod || '').toUpperCase().includes('RATE')
+  );
+
+  const parentTypeLabel = isParentLimitedTender
+    ? 'Limited Tender'
+    : isParentOpenTender
+    ? 'Open Tender'
+    : isParentRfq
+    ? 'RFQ'
+    : isParentRateContract
+    ? 'Rate Contract'
+    : null;
+
+  const effectiveProcurementLabel = parentTypeLabel ? `${parentTypeLabel} (e-RA)` : 'Reverse Auction';
+
+  const resolvedBuyingType =
+    reqData.whatAreYouBuying ||
+    reqData.buyingType ||
+    linkedBidData.whatAreYouBuying ||
+    linkedBidData.buyingType ||
+    (linkedBidData.category && !String(linkedBidData.category).toUpperCase().includes('TENDER') && !String(linkedBidData.category).toUpperCase().includes('AUCTION') ? linkedBidData.category : undefined) ||
+    'Goods / Products';
+
   return (
     <>
       <ProcurementDetailUnifiedView
         procurementType="REVERSE_AUCTION"
-        procurementLabel="Reverse Auction"
+        procurementLabel={effectiveProcurementLabel}
         backRouteLabel={isSeller ? 'Opportunities' : 'Reverse Auctions'}
         backRoute={isSeller ? '/seller/opportunities' : '/buyer/my-procurements'}
         id={effectiveId}
-        displayId={
-          auctionData.auctionCode ||
-          (auctionData.linkedRequirementId ? formatRefId('REQ', auctionData.linkedRequirementId) : `RA-${effectiveId}`)
-        }
+        displayId={compositeDisplayId}
         subject={resolvedSubject}
         status={status}
         buyerName={auctionData.buyerOrganizationName || reqData.buyerOrganization?.organizationName || 'Verified Buyer'}
@@ -998,8 +1050,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         closingDate={auctionData.endTime ? formatDateTime(auctionData.endTime) : undefined}
         clarificationDate={reqData.clarificationDeadline ? formatDateTime(reqData.clarificationDeadline) : undefined}
         category={resolvedCategory}
-        procurementMethod="Reverse Auction"
-        buyingType={reqData.whatAreYouBuying || linkedBidData.procurementType || 'Goods / Products'}
+        procurementMethod={parentTypeLabel ? `${parentTypeLabel} with Reverse Auction` : "Reverse Auction"}
+        buyingType={resolvedBuyingType}
         deliveryLocation={resolvedDeliveryLocation}
         paymentTerms={resolvedPaymentTerms}
         deliveryTerms={resolvedDeliveryTerms}

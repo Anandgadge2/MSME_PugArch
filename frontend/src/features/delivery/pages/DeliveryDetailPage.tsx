@@ -13,6 +13,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '../../shared/queryKeys';
 import {
   AlertTriangle,
+  ArrowLeft,
   ArrowRight,
   Box,
   Building2,
@@ -99,8 +100,8 @@ import type {
 
 const ALL_STATUSES = Object.keys(DELIVERY_STATUS_LABELS) as DeliveryStatus[];
 
-const fieldLabel = 'text-[10px] font-black uppercase tracking-wider text-slate-400';
-const sectionHeader = 'text-xs font-black uppercase tracking-wider text-[#0f766e]';
+const fieldLabel = 'text-[10px] font-bold uppercase tracking-wider text-slate-500';
+const sectionHeader = 'text-sm font-bold text-slate-900 tracking-tight';
 const inputBase = 'h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#0f766e]/25 transition-all';
 const textareaBase = `${inputBase} h-24 py-2.5`;
 
@@ -365,164 +366,164 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
   return (
     <div className="space-y-4">
-      {/* ─── Premium Compact Header Card ─── */}
-      <div className="relative overflow-hidden rounded-xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50/50 to-teal-50/30 p-3.5 shadow-xs sm:p-4">
-        <div className="absolute top-0 right-0 h-28 w-28 translate-x-8 -translate-y-8 rounded-full bg-[#0f766e]/5 blur-2xl pointer-events-none" />
-        
-        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-          <div className="flex min-w-0 items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#12335f] to-[#07172e] text-white shadow-xs ring-2 ring-[#12335f]/10">
-              <Package className="h-4.5 w-4.5" />
+      {/* ─── Premium Executive Header Card ─── */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-gradient-to-r from-white via-slate-50/60 to-teal-50/20 p-4 shadow-xs sm:p-5">
+        <div className="absolute top-0 right-0 h-32 w-32 translate-x-8 -translate-y-8 rounded-full bg-teal-500/5 blur-2xl pointer-events-none" />
+
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex min-w-0 items-start gap-3.5">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-slate-900 via-teal-900 to-[#0f766e] text-white shadow-xs ring-4 ring-teal-500/10">
+              <Package className="h-5 w-5" />
             </span>
             <div className="min-w-0">
               {/* Top Reference Bar */}
-              <div className="flex flex-wrap items-center gap-1.5 mb-1">
+              <div className="flex flex-wrap items-center gap-2 mb-1.5">
                 <DeliveryStatusBadge status={delivery.status} size="sm" />
                 <button
                   type="button"
                   onClick={() => copyToClipboard(poNumber, 'PO Number')}
-                  className="group inline-flex items-center gap-1 rounded-full bg-slate-100 hover:bg-slate-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-700 transition-colors"
+                  className="group inline-flex items-center gap-1.5 rounded-lg border border-slate-200/90 bg-white hover:bg-slate-50 px-2.5 py-0.5 text-xs font-mono font-semibold text-slate-800 shadow-2xs transition-all cursor-pointer"
                   title="Click to copy Purchase Order number"
                 >
-                  <span className="text-slate-400 font-semibold">PO:</span>
+                  <span className="text-slate-400 font-sans font-medium text-[10px]">PO</span>
                   <span>{poNumber}</span>
-                  <Copy className="h-2.5 w-2.5 text-slate-400 group-hover:text-slate-700" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleOpenPo}
-                  className="group inline-flex items-center gap-1 rounded-full bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-indigo-700 transition-colors cursor-pointer"
-                  title="Open Purchase Order Dialog"
-                >
-                  <Eye className="h-2.5 w-2.5 text-indigo-600" />
-                  <span>View PO</span>
+                  <Copy className="h-3 w-3 text-slate-400 group-hover:text-slate-700 transition-colors" />
                 </button>
                 <SlaBadge slaStatus={delivery.slaStatus} />
                 {isAdmin && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-300 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-slate-700 shadow-2xs">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 border border-slate-300 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-slate-700 shadow-2xs">
                     <Eye className="h-2.5 w-2.5 text-slate-500" /> Admin View-Only Mode
                   </span>
                 )}
               </div>
 
               {/* Order Title */}
-              <h1 className="text-base font-black tracking-tight text-slate-950 break-words sm:text-lg">
+              <h1 className="text-lg font-bold tracking-tight text-slate-900 break-words sm:text-xl leading-snug">
                 {po?.title || po?.poNumber || `Delivery #${delivery.id}`}
               </h1>
 
-              {/* Counterparty Route */}
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-slate-600">
-                <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 shadow-2xs border border-slate-200/80 text-[10px]">
-                  <span className="text-[8px] font-black uppercase tracking-wider text-slate-400">Supplier:</span>
-                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-slate-100 text-[8px] font-bold text-slate-700">
-                    {sellerName.charAt(0).toUpperCase()}
-                  </span>
-                  <span className="font-bold text-slate-800 truncate max-w-[130px]">{sellerName}</span>
-                </span>
-                <ArrowRight className="h-3 w-3 text-slate-400 shrink-0" />
-                <span className="inline-flex items-center gap-1 rounded-md bg-white px-2 py-0.5 shadow-2xs border border-slate-200/80 text-[10px]">
-                  <span className="text-[8px] font-black uppercase tracking-wider text-[#0f766e]">Consignee:</span>
-                  <span className="flex h-3.5 w-3.5 items-center justify-center rounded-full bg-teal-100 text-[8px] font-bold text-[#0f766e]">
-                    {buyerName.charAt(0).toUpperCase()}
-                  </span>
-                  <span className="font-bold text-slate-800 truncate max-w-[130px]">{buyerName}</span>
-                </span>
+              {/* Counterparty Logistics Route */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2 text-xs">
+                <div className="inline-flex items-center gap-2 rounded-lg bg-slate-50/90 border border-slate-200/80 px-2.5 py-1 text-slate-700 shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Supplier</span>
+                  <span className="font-semibold text-slate-900 truncate max-w-[180px]">{sellerName}</span>
+                </div>
+                <div className="flex items-center justify-center text-slate-400">
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </div>
+                <div className="inline-flex items-center gap-2 rounded-lg bg-teal-50/60 border border-teal-200/70 px-2.5 py-1 text-teal-900 shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-teal-700">Consignee</span>
+                  <span className="font-semibold text-teal-950 truncate max-w-[180px]">{buyerName}</span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Action Buttons */}
           <div className="flex flex-wrap items-center gap-2 self-start shrink-0">
-            {/* View PO Button */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleOpenPo}
-              className="h-8 rounded-lg border-indigo-200 bg-indigo-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-100 hover:border-indigo-300 shadow-2xs cursor-pointer transition-all"
-              title="View Purchase Order details & line items"
-            >
-              <FileText className="mr-1.5 h-3.5 w-3.5 text-indigo-600" />
-              View PO
-            </Button>
-
-            {/* View Invoice Button */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleOpenInvoice}
-              className="h-8 rounded-lg border-emerald-200 bg-emerald-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-emerald-700 hover:bg-emerald-100 hover:border-emerald-300 shadow-2xs cursor-pointer transition-all"
-              title="View Tax Invoice & GST details"
-            >
-              <Receipt className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-              View Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}
-            </Button>
-
-            {/* Approve Invoice Button for Buyer (Admin is strictly View-Only) */}
-            {pendingSubmittedInvoice && !isAdmin && (accessRole === 'buyer' || user?.role === 'buyer') && (
-              <Button
-                type="button"
-                disabled={approvingInvoiceId === pendingSubmittedInvoice.id}
-                onClick={() => handleDirectApproveInvoice(pendingSubmittedInvoice.id)}
-                className="h-8 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white px-3 text-[11px] font-black uppercase tracking-wider shadow-2xs cursor-pointer transition-all"
-                title={`Approve Invoice #${pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} to unlock payment`}
-              >
-                {approvingInvoiceId === pendingSubmittedInvoice.id ? (
-                  <RefreshCw className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                Approve Invoice
-              </Button>
-            )}
-
-            {/* View Payment Proof Button */}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleOpenPaymentProof}
-              className="h-8 rounded-lg border-sky-200 bg-sky-50/80 px-3 text-[11px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-100 hover:border-sky-300 shadow-2xs cursor-pointer transition-all"
-              title="View Payment proof, UTR & transaction receipt"
-            >
-              <CreditCard className="mr-1.5 h-3.5 w-3.5 text-sky-600" />
-              View Payment Proof
-            </Button>
-
-            {/* Prominent Mark Packed action if awaiting packing */}
+            {/* Primary Operational Action: Mark Packed */}
             {!isAdmin && accessRole === 'seller' &&
               (delivery.status === 'SELLER_ACCEPTED' || (delivery.status as string) === 'CREATED') && (
                 <Button
                   type="button"
                   onClick={() => setIsPackModalOpen(true)}
-                  className="h-8 rounded-lg bg-indigo-600 px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-2xs cursor-pointer"
+                  className="h-9 rounded-xl bg-teal-700 hover:bg-teal-800 text-white font-bold text-xs px-3.5 shadow-sm hover:shadow transition-all cursor-pointer flex items-center gap-1.5"
+                  title="Prepare packaging and tare weight"
                 >
-                  <Package className="mr-1.5 h-3.5 w-3.5" /> Mark Packed
+                  <Package className="h-4 w-4" />
+                  <span>Mark Packed</span>
                 </Button>
             )}
 
-            {/* Manage Fulfillment button */}
-            {!isAdmin && (accessRole === 'seller' || accessRole === 'logistics') && (
+            {/* Primary Operational Action: Approve Invoice for Buyer */}
+            {pendingSubmittedInvoice && !isAdmin && (accessRole === 'buyer' || user?.role === 'buyer') && (
               <Button
                 type="button"
-                onClick={() => setIsFulfillmentModalOpen(true)}
-                className="h-8 rounded-lg bg-[#12335f] px-3.5 text-[11px] font-black uppercase tracking-wider text-white hover:bg-[#0b2447] shadow-2xs cursor-pointer"
+                disabled={approvingInvoiceId === pendingSubmittedInvoice.id}
+                onClick={() => handleDirectApproveInvoice(pendingSubmittedInvoice.id)}
+                className="h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs px-3.5 shadow-sm hover:shadow transition-all cursor-pointer flex items-center gap-1.5"
+                title={`Approve Invoice #${pendingSubmittedInvoice.invoiceNumber || pendingSubmittedInvoice.id} to unlock payment`}
               >
-                <Truck className="mr-1.5 h-3.5 w-3.5" /> Manage Fulfillment
+                {approvingInvoiceId === pendingSubmittedInvoice.id ? (
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                )}
+                <span>Approve Invoice</span>
               </Button>
             )}
 
+            {/* Secondary Operational Action: Manage Fulfillment */}
+            {!isAdmin && (accessRole === 'seller' || accessRole === 'logistics') && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsFulfillmentModalOpen(true)}
+                className="h-9 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3 shadow-2xs hover:border-slate-300 transition-all cursor-pointer flex items-center gap-1.5"
+                title="Manage dispatch, vehicle, driver & tracking"
+              >
+                <Truck className="h-3.5 w-3.5 text-slate-500" />
+                <span>Fulfillment</span>
+              </Button>
+            )}
+
+            {/* Unified Document Buttons */}
+            <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-slate-50/80 p-0.5 shadow-2xs">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleOpenPo}
+                className="h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 px-2.5 text-xs font-semibold shadow-2xs cursor-pointer transition-all flex items-center gap-1.5"
+                title="View Purchase Order details & line items"
+              >
+                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                <span>PO</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleOpenInvoice}
+                className="h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 px-2.5 text-xs font-semibold shadow-2xs cursor-pointer transition-all flex items-center gap-1.5"
+                title="View Tax Invoice & GST details"
+              >
+                <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                <span>Invoice{invoices.length > 1 ? ` (${invoices.length})` : ''}</span>
+              </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={handleOpenPaymentProof}
+                className="h-8 rounded-lg bg-white hover:bg-slate-100 text-slate-700 hover:text-slate-900 px-2.5 text-xs font-semibold shadow-2xs cursor-pointer transition-all flex items-center gap-1.5"
+                title="View Payment proof & transaction receipt"
+              >
+                <CreditCard className="h-3.5 w-3.5 text-sky-600" />
+                <span>Payment</span>
+              </Button>
+            </div>
+
+            {/* Utility Navigation Buttons */}
             <Button
+              type="button"
               variant="outline"
               onClick={onClose || (() => window.history.back())}
-              className="h-8 rounded-lg border-slate-200 bg-white px-3 text-[11px] font-black uppercase text-slate-700 hover:bg-slate-50 shadow-2xs"
+              className="h-9 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              title="Return to previous screen"
             >
-              Back
+              <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+              <span>Back</span>
             </Button>
+
             <Button
+              type="button"
               variant="outline"
               onClick={() => detailQuery.refetch()}
-              className="h-8 rounded-lg border-[#0f766e] bg-[#0f766e] px-3.5 text-[11px] font-black uppercase text-white hover:bg-[#0d665f] shadow-2xs"
+              className="h-9 rounded-xl border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs px-3 shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              title="Refresh delivery status and tracking"
             >
-              <RefreshCw className={cn('mr-1.5 h-3 w-3', isFetching && 'animate-spin')} /> Refresh
+              <RefreshCw className={cn('h-3.5 w-3.5 text-slate-500', isFetching && 'animate-spin')} />
+              <span>Refresh</span>
             </Button>
           </div>
         </div>
@@ -530,123 +531,123 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
 
       {/* ─── Delivery Overview Command Center ─── */}
       <CollapsibleSection title="Delivery Command Center" icon={Package} defaultOpen>
-        {/* 4 Crisp, High-Density Metric Tiles */}
-        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-4">
+        {/* 4 Crisp, High-Density Executive KPI Tiles */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           {/* Tile 1: Logistics & Carrier */}
-          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Logistics & Carrier</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-teal-50 text-[#0f766e]">
-                <Truck className="h-3 w-3" />
-              </span>
-            </div>
-            <p className="mt-1 text-xs font-black text-slate-900 truncate">
-              {delivery.carrierName || delivery.logisticsPartnerName || 'Assigned Courier'}
-            </p>
-            <div className="mt-1.5 flex items-center justify-between rounded-md bg-slate-50 px-2 py-1 border border-slate-100">
-              <div className="min-w-0 pr-1">
-                <span className="block text-[7px] font-bold uppercase text-slate-400">AWB Tracking No</span>
-                <span className="font-mono text-[10px] font-bold text-slate-700 truncate block">{trackingNo}</span>
+          <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all hover:border-teal-300 hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Logistics & Carrier</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-teal-50 text-teal-700">
+                  <Truck className="h-3.5 w-3.5" />
+                </span>
               </div>
-              <button
-                type="button"
-                onClick={() => copyToClipboard(trackingNo, 'Tracking Number')}
-                className="rounded p-0.5 text-slate-400 hover:bg-slate-200 hover:text-[#0f766e] transition-colors"
-                aria-label="Copy Tracking Number"
-                title="Copy Tracking Number"
-              >
-                <Copy className="h-3 w-3" />
-              </button>
+              <p className="mt-2 text-sm font-bold text-slate-900 truncate">
+                {delivery.carrierName || delivery.logisticsPartnerName || 'Assigned Courier'}
+              </p>
+              <div className="mt-2 flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5 border border-slate-100">
+                <div className="min-w-0 pr-1">
+                  <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-400">AWB Tracking No</span>
+                  <span className="font-mono text-xs font-bold text-slate-800 truncate block">{trackingNo}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => copyToClipboard(trackingNo, 'Tracking Number')}
+                  className="rounded p-1 text-slate-400 hover:bg-slate-200 hover:text-teal-700 transition-colors cursor-pointer"
+                  title="Copy Tracking Number"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            <p className="mt-1 text-[9px] font-semibold text-slate-500 flex items-center gap-1 truncate">
-              <MapPin className="h-2.5 w-2.5 text-slate-400 shrink-0" />
-              Location: {delivery.currentLocation || 'In Transit'}
-            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-slate-500 font-medium truncate border-t border-slate-100/80 pt-2.5">
+              <MapPin className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+              <span>Location: <strong className="text-slate-800">{delivery.currentLocation || 'In Transit'}</strong></span>
+            </div>
           </div>
 
           {/* Tile 2: Destination & Address */}
-          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Delivery Destination</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-sky-50 text-sky-600">
-                <MapPin className="h-3 w-3" />
-              </span>
+          <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all hover:border-teal-300 hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Delivery Destination</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+                  <MapPin className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-2 text-sm font-bold text-slate-900 truncate">
+                {buyerName}
+              </p>
+              <p className="mt-1.5 text-xs text-slate-600 line-clamp-2 leading-relaxed" title={po?.deliveryAddress || 'Address not specified'}>
+                {po?.deliveryAddress || 'Address not specified'}
+              </p>
             </div>
-            <p className="mt-1 text-xs font-black text-slate-900 truncate">
-              {buyerName}
-            </p>
-            <p className="mt-1 text-[10px] font-semibold text-slate-600 line-clamp-2 leading-relaxed" title={po?.deliveryAddress || 'Address not specified'}>
-              {po?.deliveryAddress || 'Address not specified'}
-            </p>
+            <div className="mt-3 flex items-center gap-1.5 text-xs text-teal-700 font-medium border-t border-slate-100/80 pt-2.5">
+              <CheckCircle2 className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+              <span>Verified Destination</span>
+            </div>
           </div>
 
           {/* Tile 3: Financial & Settlement */}
-          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Order Value & Escrow</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-emerald-50 text-emerald-600">
-                <Wallet className="h-3 w-3" />
-              </span>
+          <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all hover:border-teal-300 hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order Value & Escrow</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                  <Wallet className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <p className="mt-2 text-lg font-bold text-slate-900 tracking-tight">
+                {formatCurrency(po?.amount || po?.totalValue)}
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-xs font-medium text-slate-500">Escrow State:</span>
+                <span className={cn(
+                  'rounded-full px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider',
+                  delivery.settlement?.status === 'RELEASED' ? 'bg-emerald-100 text-emerald-800' :
+                  delivery.settlement?.status === 'APPROVED' ? 'bg-teal-100 text-teal-800' :
+                  'bg-slate-100 text-slate-700'
+                )}>
+                  {delivery.settlement?.status || 'FUNDS SECURED'}
+                </span>
+              </div>
             </div>
-            <p className="mt-1 text-sm font-black text-slate-950">
-              {formatCurrency(po?.amount || po?.totalValue)}
-            </p>
-            <div className="mt-1.5 flex items-center justify-between">
-              <span className="text-[9px] font-bold text-slate-500">Escrow State:</span>
-              <span className={cn(
-                'rounded-full px-2 py-0.5 text-[8px] font-black uppercase tracking-wider',
-                delivery.settlement?.status === 'RELEASED' ? 'bg-emerald-100 text-emerald-800' :
-                delivery.settlement?.status === 'APPROVED' ? 'bg-teal-100 text-[#0f766e]' :
-                'bg-slate-100 text-slate-600'
-              )}>
-                {delivery.settlement?.status || 'FUNDS SECURED'}
+            <div className="mt-3 flex items-center justify-between text-xs text-slate-500 border-t border-slate-100/80 pt-2.5">
+              <span>Settlement Status</span>
+              <span className="font-semibold text-emerald-600 flex items-center gap-1">
+                <ShieldCheck className="h-3.5 w-3.5" /> Protected
               </span>
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 border-t border-slate-100 pt-1.5">
-              <button
-                type="button"
-                onClick={handleOpenInvoice}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/80 px-2 py-0.5 text-[9px] font-bold text-emerald-700 transition-colors cursor-pointer"
-                title="View Tax Invoice"
-              >
-                <Receipt className="h-2.5 w-2.5 text-emerald-600" />
-                <span>View Invoice</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleOpenPaymentProof}
-                className="inline-flex items-center gap-1 rounded-md bg-sky-50 hover:bg-sky-100 border border-sky-200/80 px-2 py-0.5 text-[9px] font-bold text-sky-700 transition-colors cursor-pointer"
-                title="View Payment Proof"
-              >
-                <CreditCard className="h-2.5 w-2.5 text-sky-600" />
-                <span>Payment Proof</span>
-              </button>
             </div>
           </div>
 
           {/* Tile 4: Next Milestone & Schedule */}
-          <div className="group rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs transition-all hover:border-teal-200 hover:shadow-xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Schedule & Milestone</span>
-              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-indigo-50 text-indigo-600">
-                <Layers className="h-3 w-3" />
+          <div className="group relative flex flex-col justify-between rounded-xl border border-slate-200/80 bg-white p-4 shadow-2xs transition-all hover:border-teal-300 hover:shadow-xs">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Schedule & Milestone</span>
+                <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+                  <Layers className="h-3.5 w-3.5" />
+                </span>
+              </div>
+              <div className="mt-2 flex items-center justify-between">
+                <p className="text-sm font-bold text-slate-900 truncate">
+                  {nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Fully Completed'}
+                </p>
+                <span className="rounded-full bg-teal-50 border border-teal-200/80 px-2 py-0.5 text-[10px] font-bold text-teal-700">
+                  {delivery.slaStatus || 'ON_TIME'}
+                </span>
+              </div>
+              <div className="mt-2 flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                <Calendar className="h-3.5 w-3.5 text-teal-600 shrink-0" />
+                <span>ETA: <strong>{formatDate(delivery.expectedDelivery || po?.expectedDelivery)}</strong></span>
+              </div>
+            </div>
+            <div className="mt-3 text-xs text-slate-500 border-t border-slate-100/80 pt-2.5 flex items-center justify-between">
+              <span>Package Details</span>
+              <span className="font-semibold text-slate-700">
+                {delivery.packageWeightKg ? `${delivery.packageWeightKg} kg • ` : ''}{delivery.packageCount || 1} unit(s)
               </span>
             </div>
-            <div className="mt-1 flex items-center justify-between">
-              <p className="text-xs font-black text-slate-900 truncate">
-                {nextManualStatus ? DELIVERY_STATUS_LABELS[nextManualStatus] : 'Fully Completed'}
-              </p>
-              <span className="text-[9px] font-extrabold text-[#0f766e]">{delivery.slaStatus || 'ON_TIME'}</span>
-            </div>
-            <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-bold text-slate-700">
-              <Calendar className="h-3 w-3 text-[#0f766e] shrink-0" />
-              <span>ETA: {formatDate(delivery.expectedDelivery || po?.expectedDelivery)}</span>
-            </div>
-            {delivery.packageWeightKg && (
-              <p className="mt-1 text-[8px] font-bold text-slate-400">
-                Pkg: {delivery.packageWeightKg} kg • {delivery.packageCount || 1} unit(s)
-              </p>
-            )}
           </div>
         </div>
       </CollapsibleSection>
@@ -969,12 +970,12 @@ function SectionHeading({
   meta?: React.ReactNode;
 }) {
   return (
-    <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-      <div className="flex items-center gap-2">
-        <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0f766e]/10 text-[#0f766e] ring-1 ring-[#0f766e]/20">
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
+      <div className="flex items-center gap-2.5">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-teal-50 text-teal-700 border border-teal-100/80 shadow-2xs">
           <Icon className="h-3.5 w-3.5" />
         </span>
-        <h2 className="text-xs font-black uppercase tracking-wider text-slate-950">{title}</h2>
+        <h2 className="text-sm font-bold text-slate-900 tracking-tight">{title}</h2>
       </div>
       {meta}
     </div>

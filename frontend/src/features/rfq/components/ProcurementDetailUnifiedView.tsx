@@ -6222,8 +6222,25 @@ export function ProcurementDetailUnifiedView(
                 ? "Direct Purchase"
                 : "";
 
+  const explicitPropLabel =
+    (props.procurementLabel && props.procurementLabel !== "PROCUREMENT" && props.procurementLabel !== "Procurement Opportunity")
+      ? props.procurementLabel
+      : (props.procurementType === "LIMITED_TENDER" || props.procurementType === "limited_tender")
+        ? "Limited Tender"
+        : (props.procurementType === "OPEN_TENDER" || props.procurementType === "open_tender")
+          ? "Open Tender"
+          : (props.procurementType === "REVERSE_AUCTION" || props.procurementType === "reverse-auction")
+            ? "Reverse Auction"
+            : (props.procurementType === "RATE_CONTRACT" || props.procurementType === "rate-contract")
+              ? "Rate Contract"
+              : (props.procurementType === "RFQ")
+                ? "RFQ"
+                : (props.procurementType === "RFP")
+                  ? "RFP"
+                  : undefined;
+
   const procurementTypeLabel =
-    prefixTypeLabel || props.procurementLabel || props.procurementType || "PROCUREMENT";
+    explicitPropLabel || prefixTypeLabel || props.procurementLabel || props.procurementType || "PROCUREMENT";
 
   // Title / Procurement Name Resolution
   const isGenericTitle = (val?: string | null) => {
@@ -6581,18 +6598,20 @@ export function ProcurementDetailUnifiedView(
     );
   })();
 
-  const closingDateValue = firstPresent(
-    props.rawBid?.endDate,
-    props.endDate,
-    schedule.submissionClosingDate,
-    schedule.submissionDate,
-    schedule.submissionDeadline,
-    schedule.submissionEndDate,
-    schedule.bidClosingDate,
-    tender.bidClosingDate,
-    props.closingDate,
-    props.deadlineDate,
-  );
+  const closingDateValue = (isReverseAuctionType && props.closingDate)
+    ? props.closingDate
+    : firstPresent(
+        props.rawBid?.endDate,
+        props.endDate,
+        schedule.submissionClosingDate,
+        schedule.submissionDate,
+        schedule.submissionDeadline,
+        schedule.submissionEndDate,
+        schedule.bidClosingDate,
+        tender.bidClosingDate,
+        props.closingDate,
+        props.deadlineDate,
+      );
 
   // Clarification window resolution: Check whether bidder clarifications are allowed
   const isClarificationAllowed = (() => {
@@ -11874,6 +11893,7 @@ export function ProcurementDetailUnifiedView(
 
               {/* Seller Reassurance Banner: Submitted Quotation Under Evaluation */}
               {!isBuyerOrAdmin &&
+                !isReverseAuctionType &&
                 isSellerParticipated &&
                 (isBiddingClosed || isDeadlinePassed) &&
                 !isAwardedToMe && (
@@ -12151,14 +12171,15 @@ export function ProcurementDetailUnifiedView(
                   ...(submissionStartDateFormatted
                     ? [
                         {
-                          label: "Submission Starts",
+                          label: isReverseAuctionType ? "Auction Starts" : "Submission Starts",
                           value: submissionStartDateFormatted,
                           icon: Calendar,
                           tone: "sky" as Tone,
                         },
                       ]
                     : []),
-                  ...(isClarificationAllowed &&
+                  ...(!isReverseAuctionType &&
+                  isClarificationAllowed &&
                   clarificationDateFormatted &&
                   clarificationDateFormatted !== "N/A"
                     ? [
@@ -12171,14 +12192,16 @@ export function ProcurementDetailUnifiedView(
                       ]
                     : []),
                   {
-                    label: submissionStartDateFormatted
+                    label: isReverseAuctionType
+                      ? "Auction Closes"
+                      : submissionStartDateFormatted
                       ? "Submission Ends"
                       : "Submission",
                     value: closingDateFormatted,
                     icon: Clock,
                     tone: "rose",
                   },
-                  ...(hasTechnicalOpening && technicalDateFormatted !== "N/A"
+                  ...(!isReverseAuctionType && hasTechnicalOpening && technicalDateFormatted !== "N/A"
                     ? [
                         {
                           label: "Technical Opening",
@@ -12188,7 +12211,7 @@ export function ProcurementDetailUnifiedView(
                         },
                       ]
                     : []),
-                  ...(hasFinancialOpening && financialDateFormatted !== "N/A"
+                  ...(!isReverseAuctionType && hasFinancialOpening && financialDateFormatted !== "N/A"
                     ? [
                         {
                           label: "Financial Opening",

@@ -653,14 +653,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           const isGenericLoc = (l: string) => !l || l.toLowerCase().includes('not specified') || l.toLowerCase().includes('agreed sla') || l.toLowerCase().includes('delivery within') || l.toLowerCase().includes('call-off');
           const bestLoc = isGenericLoc(locA) && !isGenericLoc(locB) ? locB : locA;
 
+          const auctionOpp = oppIsAuction ? opportunity : (existingIsAuction ? existing : null);
+          const parentOpp = (existing.type !== 'Reverse Auction' && !existing.type.endsWith('+ RA'))
+            ? existing
+            : ((opportunity.type !== 'Reverse Auction' && !opportunity.type.endsWith('+ RA')) ? opportunity : null);
+
           const valA = existing.estimatedValue || 0;
           const valB = opportunity.estimatedValue || 0;
-          let bestVal = valA;
-          if (valA > 50000000 && valB > 0 && valB <= 50000000) {
-            bestVal = valB;
-          } else if ((valA === 0 || valA > 50000000) && valB > 0) {
-            bestVal = valB;
-          }
+          let bestVal = (parentOpp?.estimatedValue && parentOpp.estimatedValue > 0)
+            ? parentOpp.estimatedValue
+            : (auctionOpp?.estimatedValue || valA || valB);
 
           const discloseA = existing.discloseEstimatedCost;
           const discloseB = opportunity.discloseEstimatedCost;
@@ -689,19 +691,19 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const closeA = existing.closingDate || '';
           const closeB = opportunity.closingDate || '';
-          const isBetterClosing = (cand: string, other: string) => {
-            if (!cand) return false;
-            if (!other) return true;
-            const candHasZ = cand.includes('Z');
-            const otherHasZ = other.includes('Z');
-            if (!candHasZ && otherHasZ) return true;
-            if (candHasZ && !otherHasZ) return false;
-            return hasExplicitTime(cand);
-          };
-          const bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
-
-          const auctionOpp = oppIsAuction ? opportunity : (existingIsAuction ? existing : null);
-          const parentOpp = existing.type !== 'Reverse Auction' ? existing : (opportunity.type !== 'Reverse Auction' ? opportunity : null);
+          let bestClosingDate = auctionOpp?.closingDate || closeA || closeB;
+          if (!auctionOpp?.closingDate) {
+            const isBetterClosing = (cand: string, other: string) => {
+              if (!cand) return false;
+              if (!other) return true;
+              const candHasZ = cand.includes('Z');
+              const otherHasZ = other.includes('Z');
+              if (!candHasZ && otherHasZ) return true;
+              if (candHasZ && !otherHasZ) return false;
+              return hasExplicitTime(cand);
+            };
+            bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
+          }
 
           let bestActionLabel = parentOpp?.actionLabel || existing.actionLabel;
           let bestHref = parentOpp?.href || existing.href;
@@ -1168,15 +1170,34 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const sourceRef = refNumber ? `${refNumber} • ${auction.auctionCode || `RA-${auction.id}`}` : (auction.auctionCode || `RA-${auction.id}`);
         const auctionStatus = String(auction.statusEnum || auction.status || 'Scheduled').toUpperCase();
         const isLive = auctionStatus === 'LIVE' || auctionStatus === 'OPEN';
+
+        let resolvedOppType: OpportunityType = 'Reverse Auction';
+        const upperRef = String(refNumber || '').toUpperCase();
+        const parentMethodStr = String(auction.parentProcurementMethod || auction.auctionConfig?.parentProcurementMethod || '').toUpperCase();
+
+        if (upperRef.startsWith('LTND-') || parentMethodStr.includes('LIMITED')) {
+          resolvedOppType = 'Limited Tender + RA';
+        } else if (upperRef.startsWith('TND-') || parentMethodStr.includes('OPEN') || parentMethodStr.includes('TENDER')) {
+          resolvedOppType = 'Open Tender + RA';
+        } else if (upperRef.startsWith('RFQ-') || parentMethodStr.includes('RFQ')) {
+          resolvedOppType = 'RFQ + RA';
+        } else if (upperRef.startsWith('RFP-') || parentMethodStr.includes('RFP')) {
+          resolvedOppType = 'RFP + RA';
+        } else if (upperRef.startsWith('RC-') || parentMethodStr.includes('RATE')) {
+          resolvedOppType = 'Rate Contract + RA';
+        }
+
+        const benchmarkVal = toNumber(auction.auctionConfig?.estimatedValue || auction.totalBudget || auction.estimatedValue || auction.startPrice || auction.currentLowestAmount);
+
         const opportunity: SellerOpportunity = {
           id: `ra-${auction.id}`,
-          type: 'Reverse Auction',
+          type: resolvedOppType,
           title: resolvedTitle,
           buyer: auction.buyerOrganizationName || auction.buyerOrgName || auction.buyerOrganization?.organizationName || auction.buyerName || auction.buyerUser?.name || 'Verified Buyer',
           category: auction.category || 'Negotiate Price',
           location: auction.deliveryLocation || auction.location || [auction.district, auction.state].filter(Boolean).join(', ') || 'Location not specified',
           closingDate: auction.endTime,
-          estimatedValue: toNumber(auction.currentLowestAmount || auction.startPrice),
+          estimatedValue: benchmarkVal,
           discloseEstimatedCost: Boolean(auction.discloseEstimatedCost ?? true),
           eligibility: 'Check invitation',
           status: isLive ? 'e-RA Live' : (auction.statusEnum || auction.status || 'Scheduled'),
@@ -1655,7 +1676,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       sortKey: 'estimatedValue',
       width: 'w-[11%]',
       cell: (item) => {
-        const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction';
+        const isDisclosed = item.discloseEstimatedCost === true || item.type === 'Reverse Auction' || item.type.includes('+ RA');
         if (!isDisclosed) {
           return (
             <div className="space-y-0.5 whitespace-nowrap">
@@ -1663,17 +1684,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <span>Confidential</span>
                 <Lock className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
               </span>
-
             </div>
           );
         }
+        const isRaType = item.type === 'Reverse Auction' || item.type.includes('+ RA');
         return (
           <div className="space-y-0.5 whitespace-nowrap">
             <span className="text-xs font-extrabold text-slate-900 block">
               {formatMoney(item.estimatedValue)}
             </span>
             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
-              {item.type === 'Reverse Auction' ? 'Negotiate Price' : 
+              {isRaType ? 'Dynamic e-RA' : 
                item.type === 'RFP' ? 'Negotiable' : 'Fixed Price'}
             </span>
           </div>
