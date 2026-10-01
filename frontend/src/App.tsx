@@ -758,6 +758,17 @@ export default function App({
       return <Redirect to={`/login?returnUrl=${encodeURIComponent(pathname)}`} />;
     }
     if (user) {
+      // Reverse auction URLs: automatically cross-redirect users to their authorized role prefix instead of bouncing them
+      if (user.role === 'buyer' && /^\/seller\/procurement\/reverse-auction\//i.test(pathname)) {
+        return <Redirect to={pathname.replace(/^\/seller\//i, '/buyer/')} />;
+      }
+      if (['seller', 'shg'].includes(user.role) && /^\/buyer\/procurement\/reverse-auction\//i.test(pathname)) {
+        return <Redirect to={pathname.replace(/^\/buyer\//i, '/seller/')} />;
+      }
+      if (user.role === 'admin' && /^\/(?:buyer|seller|shg)\/procurement\/reverse-auction\//i.test(pathname)) {
+        return <Redirect to={pathname.replace(/^\/(?:buyer|seller|shg)\//i, '/admin/')} />;
+      }
+
       const roleRestricted =
         (pathname.startsWith('/master-admin') && user.role !== 'master_admin') ||
         (pathname.startsWith('/admin') && user.role !== 'admin') ||

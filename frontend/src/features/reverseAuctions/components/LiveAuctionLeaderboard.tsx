@@ -23,6 +23,7 @@ import {
 import { Button } from '../../../components/ui/button';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionParticipant } from '../api';
 import { toast } from 'sonner';
+import { useAuth } from '../../../hooks/useAuth';
 import { formatTime } from '../../shared/format';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 
@@ -39,7 +40,9 @@ export default function LiveAuctionLeaderboard({
 }: LiveAuctionLeaderboardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const isBuyer = pathname?.startsWith('/buyer');
+  const { user } = useAuth();
+  const isBuyer = user?.role === 'buyer' || pathname?.startsWith('/buyer');
+  const rolePrefix = isBuyer ? '/buyer' : (user?.role === 'admin' ? '/admin' : (user?.role === 'shg' ? '/shg' : '/seller'));
   const [auction, setAuction] = useState<ReverseAuction | null>(null);
   const [participants, setParticipants] = useState<ReverseAuctionParticipant[]>([]);
   const [bids, setBids] = useState<any[]>([]);
@@ -57,9 +60,19 @@ export default function LiveAuctionLeaderboard({
         reverseAuctionApi.participants(auctionId).catch(() => ({ participants: [] })),
         reverseAuctionApi.bids(auctionId).catch(() => ({ bids: [] })),
       ]);
+      const partList = Array.isArray(partData)
+        ? partData
+        : Array.isArray((partData as any)?.participants)
+        ? (partData as any).participants
+        : [];
+      const bidsList = Array.isArray(bidsData)
+        ? bidsData
+        : Array.isArray((bidsData as any)?.bids)
+        ? (bidsData as any).bids
+        : [];
       setAuction(aucData);
-      setParticipants(partData.participants || []);
-      setBids(bidsData.bids || []);
+      setParticipants(partList);
+      setBids(bidsList);
     } catch (err: any) {
       // Silent in background, alert on manual
       if (isManual) toast.error('Failed to update live auction data');
@@ -333,9 +346,8 @@ export default function LiveAuctionLeaderboard({
 
           {isLive && (
             <Link
-              href={`${isBuyer ? '/buyer' : '/seller'}/procurement/reverse-auction/${auction.auctionCode || auction.id}/live`}
-              target="_blank"
-              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition"
+              href={`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(auction.auctionCode || String(auction.id))}/live`}
+              className="inline-flex items-center gap-1.5 h-10 px-4 rounded-xl text-xs font-black uppercase tracking-wider bg-slate-900 hover:bg-slate-800 text-white shadow-xs transition cursor-pointer"
             >
               <ExternalLink className="h-3.5 w-3.5" /> Open Full Board
             </Link>
@@ -432,7 +444,7 @@ export default function LiveAuctionLeaderboard({
             ) : (
               <Button
                 type="button"
-                onClick={() => router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(auction?.auctionCode || auctionId)}/result`)}
+                onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(auction?.auctionCode || auctionId)}/result`)}
                 className="h-11 px-6 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white font-extrabold text-xs uppercase tracking-wider shadow-md shadow-indigo-600/25 flex items-center gap-2"
               >
                 <Award className="h-4 w-4" /> Review Outcomes & Issue Award Offer
