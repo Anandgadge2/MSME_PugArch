@@ -1379,11 +1379,12 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
             null;
           return (cat && String(cat).toLowerCase() !== 'general procurement') ? String(cat) : null;
         })(),
+        startPrice: Number(startPrice),
         basePrice: startPrice,
-        currentBid: currentLowestAmount,
+        currentBid: Number(currentLowestAmount),
         currentLowestBid: currentLowestAmount,
         currentLowestAmount,
-        minDecrement: payload.minDecrementAmount,
+        minDecrement: Number(payload.minDecrementAmount),
         minDecrementAmount: payload.minDecrementAmount,
         autoExtensionEnabled: true,
         autoExtensionWindowMinutes: payload.autoExtensionWindowMinutes,
