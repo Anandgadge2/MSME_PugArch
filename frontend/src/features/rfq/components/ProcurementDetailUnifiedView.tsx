@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState, useEffect, useCallback, useRef } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
@@ -4491,21 +4491,140 @@ export interface ProcurementDetailUnifiedViewProps {
   purchaseOrders?: any[];
 }
 
+export type ProcurementDetailTab =
+  | "overview"
+  | "scope_docs"
+  | "terms_schedule"
+  | "evaluation"
+  | "clarifications";
+
+export function normalizeProcurementTab(raw?: string | null): ProcurementDetailTab | null {
+  if (!raw) return null;
+  const s = raw.trim().toLowerCase();
+  if (
+    [
+      "clarifications",
+      "proposals",
+      "quotations",
+      "submissions",
+      "bids",
+      "quotes",
+      "evaluation-proposals",
+    ].includes(s)
+  ) {
+    return "clarifications";
+  }
+  if (["evaluation", "controls", "eval", "criteria"].includes(s)) {
+    return "evaluation";
+  }
+  if (["terms_schedule", "terms", "schedule", "timeline"].includes(s)) {
+    return "terms_schedule";
+  }
+  if (["scope_docs", "scope", "documents", "docs"].includes(s)) {
+    return "scope_docs";
+  }
+  if (["overview", "dates", "summary", "info"].includes(s)) {
+    return "overview";
+  }
+  return null;
+}
+
 export function ProcurementDetailUnifiedView(
   props: ProcurementDetailUnifiedViewProps,
 ) {
   const router = useRouter();
   const pathname = usePathname() || "";
+  const searchParams = useSearchParams();
   const { user } = useAuth();
   const currentUser: any = user;
   const [isIssueCallOffModalOpen, setIsIssueCallOffModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<
-    | "overview"
-    | "scope_docs"
-    | "terms_schedule"
-    | "evaluation"
-    | "clarifications"
-  >("overview");
+
+  const targetId = String(
+    props.displayId && props.displayId !== "N/A" && props.displayId !== "—"
+      ? props.displayId
+      : props.id,
+  );
+
+  const resolveInitialTab = (): ProcurementDetailTab => {
+    const fromParams = normalizeProcurementTab(searchParams?.get("tab"));
+    if (fromParams) return fromParams;
+
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromWin = normalizeProcurementTab(urlParams.get("tab"));
+        if (fromWin) return fromWin;
+
+        const tenderKey = `procurement_active_tab_${targetId}`;
+        const stored = normalizeProcurementTab(sessionStorage.getItem(tenderKey));
+        if (stored) return stored;
+
+        const globalStored = normalizeProcurementTab(sessionStorage.getItem("last_active_procurement_tab"));
+        if (globalStored) return globalStored;
+      } catch {}
+    }
+
+    return "overview";
+  };
+
+  const [activeTab, setActiveTabState] = useState<ProcurementDetailTab>(resolveInitialTab);
+
+  const setActiveTab = useCallback(
+    (newTab: ProcurementDetailTab) => {
+      setActiveTabState(newTab);
+      if (typeof window !== "undefined") {
+        try {
+          sessionStorage.setItem(`procurement_active_tab_${targetId}`, newTab);
+          sessionStorage.setItem("last_active_procurement_tab", newTab);
+          const url = new URL(window.location.href);
+          url.searchParams.set("tab", newTab);
+          window.history.replaceState(window.history.state, "", url.toString());
+        } catch {}
+      }
+    },
+    [targetId],
+  );
+
+  useEffect(() => {
+    const fromParams = normalizeProcurementTab(searchParams?.get("tab"));
+    if (fromParams && fromParams !== activeTab) {
+      setActiveTabState(fromParams);
+      try {
+        sessionStorage.setItem(`procurement_active_tab_${targetId}`, fromParams);
+        sessionStorage.setItem("last_active_procurement_tab", fromParams);
+      } catch {}
+    }
+  }, [searchParams, targetId, activeTab]);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const fromWin = normalizeProcurementTab(urlParams.get("tab"));
+        if (fromWin) {
+          setActiveTabState(fromWin);
+        } else {
+          const tenderKey = `procurement_active_tab_${targetId}`;
+          const stored = normalizeProcurementTab(sessionStorage.getItem(tenderKey));
+          if (stored) setActiveTabState(stored);
+        }
+      } catch {}
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [targetId]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const url = new URL(window.location.href);
+        if (!url.searchParams.get("tab") && activeTab !== "overview") {
+          url.searchParams.set("tab", activeTab);
+          window.history.replaceState(window.history.state, "", url.toString());
+        }
+      } catch {}
+    }
+  }, [activeTab]);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<
     any | null
   >(null);
@@ -4535,11 +4654,6 @@ export function ProcurementDetailUnifiedView(
     const timer = setInterval(() => setNowMs(Date.now()), 30_000);
     return () => clearInterval(timer);
   }, []);
-  const targetId = String(
-    props.displayId && props.displayId !== "N/A" && props.displayId !== "—"
-      ? props.displayId
-      : props.id,
-  );
   useProcurementRealtime(targetId);
   useProcurementRealtime(props.id && String(props.id) !== targetId ? String(props.id) : undefined);
   useUserRealtime(currentUser?.id);

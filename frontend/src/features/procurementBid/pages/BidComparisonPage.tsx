@@ -8,7 +8,7 @@ import {
   ArrowLeft, Award, Info, CheckCircle2, AlertTriangle, FileText,
   ChevronRight, X, BarChart3, Trophy, Scale, Layers, RotateCcw,
   Phone, Mail, FileSpreadsheet, Printer, ExternalLink,
-  ShieldCheck, Check, Clock, Lock, XCircle, Package, Truck
+  ShieldCheck, Check, Clock, Lock, XCircle, Package, Truck, MapPin
 } from 'lucide-react';
 import { PageShell, ProcurementLoadingState, ProcurementErrorState } from '../components';
 import { money } from '../data';
@@ -232,6 +232,8 @@ export default function BidComparisonPage() {
     );
 
     // Scope & Quantity
+    const tenderQty = bid?.basics?.quantity || bid?.quantity || bid?.requirement?.quantity;
+    const tenderUnit = bid?.basics?.unit || bid?.unit || bid?.requirement?.unit || 'Nos';
     const offeredQty = first(
       p.offeredQuantity,
       p.offeredQty,
@@ -241,7 +243,7 @@ export default function BidComparisonPage() {
       details.offeredQty,
       ackData.offeredQty,
       firstItem.quantity ? `${firstItem.quantity} ${firstItem.unit || ''}`.trim() : null
-    ) || '100% of Specified Requirement';
+    ) || (tenderQty ? `${tenderQty} ${tenderUnit}` : '—');
 
     // Delivery & SLA
     const rawDelivery = first(
@@ -257,15 +259,25 @@ export default function BidComparisonPage() {
     );
     const deliveryTimeline = rawDelivery && /^\d+$/.test(String(rawDelivery).trim())
       ? `${rawDelivery} Calendar Days`
-      : (rawDelivery || 'As per tender terms');
+      : (rawDelivery ? String(rawDelivery) : '—');
 
-    const deliveryTerms = first(
+    const consigneeLocation = first(
+      bid?.basics?.deliveryLocation,
+      bid?.deliveryLocation,
+      bid?.consigneeLocation,
+      bid?.deliveryAddress,
+      bid?.district ? `${bid.district}${bid.state ? `, ${bid.state}` : ''}` : null
+    );
+    const rawDeliveryTerms = first(
       p.deliveryTerms,
       p.freightTerms,
       respData.deliveryTerms,
       details.deliveryTerms,
       ackData.deliveryTerms
-    ) || 'Free Delivery to Consignee (FOR Destination)';
+    );
+    const deliveryTerms = rawDeliveryTerms 
+      ? String(rawDeliveryTerms)
+      : (consigneeLocation ? `Consignee Site (${consigneeLocation})` : '—');
 
     const rawPay = first(
       p.paymentTerms,
@@ -273,16 +285,18 @@ export default function BidComparisonPage() {
       respData.paymentTerms,
       ackData.paymentTerms,
       p.terms,
-      descData.paymentTerms
+      descData.paymentTerms,
+      bid?.paymentTerms,
+      bid?.basics?.paymentTerms
     );
     const formatPay = (v?: string) => {
-      if (!v) return 'As per tender requirements (Escrow Protected)';
+      if (!v) return '—';
       const s = String(v).trim();
       const l = s.toLowerCase();
       if (l === 'on_delivery' || l === 'on delivery') return '100% on Delivery (Escrow Protected)';
       if (l === 'advance_payment' || l === 'advance') return '100% Advance Payment';
       if (l === 'against_invoice' || l === 'invoice') return 'Against Invoice (30 Days SLA)';
-      if (['standard', 'standard terms', 'standard payment terms', 'as specified'].includes(l)) return 'As per tender requirements (Escrow Protected)';
+      if (['standard', 'standard terms', 'standard payment terms', 'as specified'].includes(l)) return 'As per tender requirements';
       return s;
     };
     const paymentTerms = formatPay(rawPay);
@@ -296,17 +310,17 @@ export default function BidComparisonPage() {
       details.warrantyDetails,
       ackData.warranty,
       firstItem.warranty
-    ) || '12 Months Comprehensive OEM Warranty';
+    ) || '—';
 
     const serviceSupport = first(
       p.serviceSupport,
       details.serviceSupport,
       respData.serviceSupport,
       ackData.serviceSupport
-    ) || 'Standard OEM Support SLA';
+    ) || '—';
 
     // Technical
-    const makeBrand = first(
+    const rawMake = first(
       p.makeBrand,
       details.makeBrand,
       respData.makeBrand,
@@ -315,9 +329,12 @@ export default function BidComparisonPage() {
       techOffer.makeBrand,
       firstItem.makeBrand,
       firstItem.brand
-    ) || 'Compliant with Technical Specs';
+    );
+    const makeBrand = rawMake && !['standard', 'compliant with technical specs', 'as per tender'].includes(String(rawMake).trim().toLowerCase())
+      ? String(rawMake).trim()
+      : '—';
 
-    const model = first(
+    const rawModel = first(
       p.model,
       p.modelNumber,
       details.model,
@@ -327,7 +344,10 @@ export default function BidComparisonPage() {
       techOffer.model,
       firstItem.model,
       firstItem.partNumber
-    ) || 'As per tender BOQ';
+    );
+    const model = rawModel && !['standard', 'as per tender boq'].includes(String(rawModel).trim().toLowerCase())
+      ? String(rawModel).trim()
+      : '—';
 
     const techSpecs = first(
       p.techSpecs,
@@ -343,7 +363,7 @@ export default function BidComparisonPage() {
       details.complianceStatement,
       respData.complianceStatement,
       ackData.complianceStatement
-    ) || (p.deviation ? 'WITH_DEVIATION' : 'COMPLIANT');
+    ) || (p.deviation ? 'WITH_DEVIATION' : '');
 
     const complianceRemarks = first(
       p.complianceRemarks,
@@ -398,11 +418,62 @@ export default function BidComparisonPage() {
     ];
     const phone = phoneCandidates.find(v => typeof v === 'string' && v.trim().length > 0 && v !== '—' && v !== '-' && v !== 'null') || null;
 
-    const location = [
-      p.seller?.organization?.city || p.sellerOrganization?.city,
-      p.seller?.organization?.district || p.sellerOrganization?.district,
-      p.seller?.organization?.state || p.sellerOrganization?.state
-    ].filter(Boolean).join(', ') || 'Registered Location';
+    const orgObj = p.seller?.organization || p.sellerOrganization || p.organization || details.organization || {};
+    const sellerProf = p.seller?.sellerProfile || p.sellerProfile || {};
+    const buyerProf = p.seller?.buyerProfile || {};
+
+    const city = first(
+      orgObj.city,
+      p.city,
+      p.sellerCity,
+      respData.city,
+      details.city,
+      sellerProf.city,
+      buyerProf.city
+    );
+
+    const district = first(
+      orgObj.district,
+      p.district,
+      p.sellerDistrict,
+      respData.district,
+      details.district,
+      sellerProf.district,
+      buyerProf.district
+    );
+
+    const state = first(
+      orgObj.state,
+      p.state,
+      p.sellerState,
+      respData.state,
+      details.state,
+      sellerProf.state,
+      buyerProf.state
+    );
+
+    const addressLine = first(
+      orgObj.addressLine1,
+      orgObj.address,
+      p.address,
+      p.sellerAddress
+    );
+
+    const pincode = first(
+      orgObj.pincode,
+      p.pincode
+    );
+
+    const locParts = [city, district && district !== city ? district : null, state].filter(Boolean);
+    let location: string | null = locParts.length > 0 ? locParts.join(', ') : null;
+
+    if (!location && addressLine) {
+      location = pincode ? `${addressLine}, ${pincode}` : String(addressLine);
+    }
+
+    if (!location && pincode) {
+      location = `PIN: ${pincode}`;
+    }
 
     return {
       raw: p,
@@ -431,7 +502,7 @@ export default function BidComparisonPage() {
       lineItems,
       submittedAt: p.submittedAt || p.createdAt
     };
-  }, []);
+  }, [bid]);
 
   // Filter and Sort participations
   const filteredAndSortedItems = useMemo(() => {
@@ -449,9 +520,7 @@ export default function BidComparisonPage() {
     // Status Filtering
     const filtered = parsedList.filter(item => {
       if (filterStatus === 'technically-qualified') return item.techStatus === 'QUALIFIED';
-      if (filterStatus === 'compliant') return item.complianceStatement === 'COMPLIANT';
-      if (filterStatus === 'deviated') return item.complianceStatement === 'WITH_DEVIATION';
-      if (filterStatus === 'rejected') return item.techStatus === 'DISQUALIFIED';
+      if (filterStatus === 'disqualified') return item.techStatus === 'DISQUALIFIED' || item.techStatus === 'NOT_QUALIFIED';
       return true;
     });
 
@@ -488,8 +557,7 @@ export default function BidComparisonPage() {
     const savingsPercent = l2Price > 0 && l1Savings > 0 ? ((l1Savings / l2Price) * 100).toFixed(1) : '0.0';
 
     const qualifiedCount = filteredAndSortedItems.filter(p => p.techStatus === 'QUALIFIED').length;
-    const compliantCount = filteredAndSortedItems.filter(p => p.complianceStatement === 'COMPLIANT').length;
-    const deviatedCount = filteredAndSortedItems.filter(p => p.complianceStatement === 'WITH_DEVIATION').length;
+    const disqualifiedCount = filteredAndSortedItems.filter(p => p.techStatus === 'DISQUALIFIED' || p.techStatus === 'NOT_QUALIFIED').length;
 
     const isAnomalouslyLow = Number(savingsPercent) >= 35.0;
 
@@ -503,8 +571,7 @@ export default function BidComparisonPage() {
       savingsPercent,
       isAnomalouslyLow,
       qualifiedCount,
-      compliantCount,
-      deviatedCount,
+      disqualifiedCount,
       totalCount: filteredAndSortedItems.length
     };
   }, [filteredAndSortedItems]);
@@ -780,15 +847,14 @@ export default function BidComparisonPage() {
               )}
 
               <select
-                aria-label="Filter quotations by compliance status"
+                aria-label="Filter quotations by status"
                 value={filterStatus}
                 onChange={e => setFilterStatus(e.target.value)}
                 className="h-8 rounded-xl border border-slate-250 bg-white px-2.5 text-xs font-bold text-slate-700 shadow-2xs focus:outline-none focus:ring-1 focus:ring-blue-600"
               >
                 <option value="all">Filter: All Quotes</option>
                 <option value="technically-qualified">Technically Qualified Only</option>
-                <option value="compliant">100% Compliant Only</option>
-                <option value="deviated">With Deviations Only</option>
+                <option value="disqualified">Disqualified Only</option>
               </select>
 
               <select
@@ -880,7 +946,7 @@ export default function BidComparisonPage() {
                   </p>
                 </div>
                 <p className="text-[10.5px] font-semibold text-slate-500">
-                  {comparisonMetrics.compliantCount} fully compliant • {comparisonMetrics.deviatedCount} minor deviations
+                  {comparisonMetrics.disqualifiedCount > 0 ? `${comparisonMetrics.disqualifiedCount} disqualified • ` : ''}{comparisonMetrics.qualifiedCount} cleared for commercial evaluation
                 </p>
               </div>
 
@@ -1215,10 +1281,14 @@ export default function BidComparisonPage() {
                     </td>
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-700">
-                        <span className="inline-flex items-center gap-1">
-                          <Truck className="h-3.5 w-3.5 text-slate-400" />
-                          {p.deliveryTerms}
-                        </span>
+                        {p.deliveryTerms && p.deliveryTerms !== '—' ? (
+                          <span className="inline-flex items-center gap-1">
+                            <Truck className="h-3.5 w-3.5 text-slate-400" />
+                            {p.deliveryTerms}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1230,7 +1300,11 @@ export default function BidComparisonPage() {
                     </td>
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-800">
-                        {p.warranty}
+                        {p.warranty && p.warranty !== '—' ? (
+                          p.warranty
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1242,7 +1316,11 @@ export default function BidComparisonPage() {
                     </td>
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-600">
-                        {p.serviceSupport}
+                        {p.serviceSupport && p.serviceSupport !== '—' ? (
+                          p.serviceSupport
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1308,10 +1386,12 @@ export default function BidComparisonPage() {
                           <span className="inline-flex items-center gap-1 rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10px] font-bold text-purple-800">
                             Alternative Offered
                           </span>
-                        ) : (
+                        ) : p.complianceStatement === 'COMPLIANT' ? (
                           <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            <Check className="h-3 w-3 text-emerald-600" /> 100% Compliant
+                            <Check className="h-3 w-3 text-emerald-600" /> Compliant
                           </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
                         )}
                         {p.complianceRemarks && (
                           <p className="text-[10px] text-slate-500 mt-1 italic">
@@ -1329,7 +1409,11 @@ export default function BidComparisonPage() {
                     </td>
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
-                        {p.makeBrand}
+                        {p.makeBrand && p.makeBrand !== '—' ? (
+                          p.makeBrand
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1341,7 +1425,11 @@ export default function BidComparisonPage() {
                     </td>
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-bold text-slate-800">
-                        {p.model}
+                        {p.model && p.model !== '—' ? (
+                          p.model
+                        ) : (
+                          <span className="text-slate-400 font-normal italic">—</span>
+                        )}
                       </td>
                     ))}
                   </tr>
@@ -1378,7 +1466,16 @@ export default function BidComparisonPage() {
                     {filteredAndSortedItems.map((p) => (
                       <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
                         <p className="font-black text-slate-900 uppercase">{p.sellerOrg}</p>
-                        <p className="text-[11px] font-semibold text-slate-500 mt-0.5">📍 {p.location}</p>
+                        {p.location ? (
+                          <p className="text-[11px] font-semibold text-slate-600 mt-0.5 flex items-center gap-1">
+                            <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                            <span>{p.location}</span>
+                          </p>
+                        ) : (
+                          <p className="text-[11px] font-normal text-slate-400 mt-0.5 italic">
+                            Location not specified
+                          </p>
+                        )}
                       </td>
                     ))}
                   </tr>

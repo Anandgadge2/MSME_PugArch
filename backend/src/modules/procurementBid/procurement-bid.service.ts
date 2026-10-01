@@ -322,7 +322,7 @@ export const bidInclude: any = {
   buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, addressLine1: true, addressLine2: true, pincode: true } } } },
       documents: true,
       clarifications: { include: { files: true } },
       evaluations: true,
@@ -372,7 +372,7 @@ export const leanBidInclude = {
   documents: true,
   participations: {
     include: {
-      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { organizationName: true } } } },
+      seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, addressLine1: true, addressLine2: true, pincode: true } } } },
       documents: true
     }
   },
