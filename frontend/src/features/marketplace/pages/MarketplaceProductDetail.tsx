@@ -13,6 +13,7 @@ import { marketplaceApi, type MarketplaceProduct } from '../api';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
+import { MarketplaceQuantityControl } from '../components/MarketplaceQuantityControl';
 import { openFileAsset } from '../../../lib/files';
 import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { CompareToggleButton } from '../components/CompareToggleButton';
@@ -265,6 +266,7 @@ export default function MarketplaceProductDetail() {
             unit: product.unitOfMeasure || 'unit',
             imageUrl: currentImage || undefined,
             category: product.category?.name,
+            quantity: orderQuantity,
         });
     };
 
@@ -718,30 +720,14 @@ export default function MarketplaceProductDetail() {
                                     {user && (
                                         <div className="space-y-1.5 pt-1">
                                             <label className="text-[11px] font-bold text-slate-700 block">Quantity ({product.unitOfMeasure || 'units'})</label>
-                                            <div className="flex items-center rounded-xl border border-slate-200 overflow-hidden bg-white">
-                                                <button
-                                                    type="button"
-                                                    disabled={orderQuantity <= 1}
-                                                    onClick={() => setOrderQuantity(q => Math.max(1, q - 1))}
-                                                    className="w-10 h-9 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-black text-sm disabled:opacity-30 cursor-pointer"
-                                                >
-                                                    −
-                                                </button>
-                                                <input
-                                                    type="number"
-                                                    min={1}
-                                                    value={orderQuantity}
-                                                    onChange={(e) => setOrderQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                                                    className="w-full text-center text-xs font-black text-[#0b2447] focus:outline-hidden"
-                                                />
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setOrderQuantity(q => q + 1)}
-                                                    className="w-10 h-9 flex items-center justify-center bg-slate-50 hover:bg-slate-100 text-slate-700 font-black text-sm cursor-pointer"
-                                                >
-                                                    +
-                                                </button>
-                                            </div>
+                                            <MarketplaceQuantityControl
+                                                quantity={orderQuantity}
+                                                itemName={product.name}
+                                                min={1}
+                                                onChange={(q) => setOrderQuantity(q)}
+                                                size="md"
+                                                className="h-10 border-slate-200"
+                                            />
                                         </div>
                                     )}
 

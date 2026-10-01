@@ -6,6 +6,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
+import { MarketplaceQuantityControl } from '../components/MarketplaceQuantityControl';
 import {
     ShoppingCart, Package, Trash2, Plus, Minus,
     ArrowRight, LogIn, Store, ChevronRight,
@@ -133,23 +134,12 @@ export default function GuestCartPage() {
 
                                             {/* Quantity controls inline beneath the title */}
                                             <div className="flex items-center gap-4 mt-4">
-                                                <div className="flex items-center h-8 rounded-lg border border-slate-300 bg-slate-50 overflow-hidden shadow-sm">
-                                                    <button
-                                                        onClick={() => update(item.id, item.type, item.quantity - 1)}
-                                                        className="w-8 h-full flex items-center justify-center text-slate-650 hover:bg-slate-200 hover:text-[#0b2447] active:bg-slate-300 transition [&:not(:disabled):hover]:translate-y-0"
-                                                        aria-label="Decrease"
-                                                    >
-                                                        <Minus className="h-3 w-3" />
-                                                    </button>
-                                                    <span className="w-8 text-center text-xs font-black text-slate-800">{item.quantity}</span>
-                                                    <button
-                                                        onClick={() => update(item.id, item.type, item.quantity + 1)}
-                                                        className="w-8 h-full flex items-center justify-center text-slate-650 hover:bg-slate-200 hover:text-[#0b2447] active:bg-slate-300 transition [&:not(:disabled):hover]:translate-y-0"
-                                                        aria-label="Increase"
-                                                    >
-                                                        <Plus className="h-3 w-3" />
-                                                    </button>
-                                                </div>
+                                                <MarketplaceQuantityControl
+                                                    quantity={item.quantity}
+                                                    itemName={item.name}
+                                                    onChange={(qty) => update(item.id, item.type, qty)}
+                                                    className="w-28 sm:w-32 flex-initial"
+                                                />
 
                                                 <span className="text-slate-300 text-sm">|</span>
 

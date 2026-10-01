@@ -65,21 +65,23 @@ export function useMarketplaceCart() {
         };
 
         const add = (
-            item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'>,
+            item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'> & { quantity?: number },
             options?: { source?: string; showToast?: boolean }
         ) => {
             const itemKey = `${item.type}-${item.id}`;
+            const targetQty = item.quantity && item.quantity > 0 ? item.quantity : 1;
             addToCartMut.mutate(
                 {
                     productId: item.type === 'product' ? item.id : undefined,
                     serviceId: item.type === 'service' ? item.id : undefined,
-                    quantity: 1,
+                    quantity: targetQty,
                     itemName: item.name,
                     unitPrice: item.price,
                     unitOfMeasure: item.unit
                 },
                 {
                     onSuccess: (createdCart: any) => {
+                        api.invalidate('/api/cart');
                         const pendingQty = pendingUpdatesRef.current.get(itemKey);
                         pendingUpdatesRef.current.delete(itemKey);
                         if (options?.showToast !== false) {
@@ -149,6 +151,9 @@ export function useMarketplaceCart() {
                 updateCartItemMut.mutate(
                     { id: mappedItem.dbCartItemId, quantity: qty },
                     {
+                        onSuccess: () => {
+                            api.invalidate('/api/cart');
+                        },
                         onError: (err: any) => {
                             toast.error(err?.message || 'Failed to update quantity');
                         }
@@ -179,6 +184,7 @@ export function useMarketplaceCart() {
                 }
                 removeCartItemMut.mutate(mappedItem.dbCartItemId, {
                     onSuccess: () => {
+                        api.invalidate('/api/cart');
                         toast.info(`${mappedItem.name} removed from cart`);
                     },
                     onError: (err: any) => {
@@ -284,7 +290,7 @@ export function useMarketplaceCart() {
     };
 
     const guestAdd = (
-        item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'>,
+        item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'> & { quantity?: number },
         options?: { source?: string; showToast?: boolean }
     ) => {
         guestCart.add({
@@ -294,7 +300,8 @@ export function useMarketplaceCart() {
             unit: item.unit,
             imageUrl: item.imageUrl,
             category: item.category,
-            type: item.type
+            type: item.type,
+            quantity: item.quantity && item.quantity > 0 ? item.quantity : 1,
         });
 
         if (options?.showToast !== false) {

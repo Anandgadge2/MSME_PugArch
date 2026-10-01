@@ -64,14 +64,15 @@ function broadcast(items: GuestCartItem[]) {
     listeners.forEach(fn => fn());
 }
 
-export function addGuestItem(item: Omit<GuestCartItem, 'quantity'>) {
+export function addGuestItem(item: Omit<GuestCartItem, 'quantity'> & { quantity?: number }) {
     const current = ensureLoaded();
+    const qtyToAdd = item.quantity && item.quantity > 0 ? item.quantity : 1;
     const existing = current.findIndex(i => i.id === item.id && i.type === item.type);
     if (existing >= 0) {
-        const next = current.map((i, idx) => idx === existing ? { ...i, quantity: i.quantity + 1 } : i);
+        const next = current.map((i, idx) => idx === existing ? { ...i, quantity: i.quantity + qtyToAdd } : i);
         broadcast(next);
     } else {
-        broadcast([...current, { ...item, quantity: 1 }]);
+        broadcast([...current, { ...item, quantity: qtyToAdd }]);
     }
 }
 
@@ -129,7 +130,7 @@ function getServerSnapshot(): GuestCartItem[] {
 export function useGuestCart() {
     const items = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-    const add = useCallback((item: Omit<GuestCartItem, 'quantity'>) => addGuestItem(item), []);
+    const add = useCallback((item: Omit<GuestCartItem, 'quantity'> & { quantity?: number }) => addGuestItem(item), []);
     const remove = useCallback((id: number, type: 'product' | 'service') => removeGuestItem(id, type), []);
     const update = useCallback((id: number, type: 'product' | 'service', qty: number) => updateGuestItemQty(id, type, qty), []);
     const clear = useCallback(() => clearGuestCart(), []);

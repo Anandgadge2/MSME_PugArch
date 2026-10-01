@@ -1344,6 +1344,24 @@ const validateProcurementDraftForSubmit = (draft: any) => {
       throw new ApiError(400, 'Limited Tender / RFQ requires inviting at least one selected vendor', 'PROCUREMENT_VENDORS_REQUIRED');
     }
   }
+  // Statutory audit field validation
+  const internal = payload.internal || {};
+  const approvalAuthority = clean(internal.approvalAuthority || payload.approvalAuthority || '');
+  if (approvalAuthority) {
+    if (approvalAuthority.length < 3) {
+      throw new ApiError(400, 'Internal Approval Authority must be at least 3 characters', 'APPROVAL_AUTHORITY_INVALID');
+    }
+    if (/^(.)\1{3,}$/i.test(approvalAuthority) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(approvalAuthority.replace(/\s+/g, '')) || !/[a-zA-Z]/.test(approvalAuthority)) {
+      throw new ApiError(400, 'Please enter a valid title or name for Internal Approval Authority', 'APPROVAL_AUTHORITY_INVALID');
+    }
+  }
+
+  const statutoryJustification = clean(payload.limitedTenderJustification || basics.justification || internal.justification || '');
+  if (statutoryJustification) {
+    if (/^(.)\1{4,}$/i.test(statutoryJustification) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(statutoryJustification.replace(/\s+/g, ''))) {
+      throw new ApiError(400, 'Please provide a legitimate business justification or statutory compliance reason', 'JUSTIFICATION_INVALID');
+    }
+  }
 };
 
 const auctionConfigSchema = z.object({
@@ -2013,7 +2031,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
         data: {
           bidNumber: (requirement.requirementNumber && isValidCanonicalRef(requirement.requirementNumber))
             ? requirement.requirementNumber
-            : await nextBidNumber(requirement.procurementMethod),
+            : await nextBidNumber(requirement.canonicalMethod || requirement.procurementMethod),
           ...baseData
         }
       });
@@ -13054,8 +13072,20 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const schedule = technicalPacket.schedule || {};
     const terms = technicalPacket.terms || {};
 
-    const approvalAuthority = String(internal.approvalAuthority || '').trim();
-    const justification = String(internal.justification || basics.justification || technicalPacket.limitedTenderJustification || '').trim();
+    const sanitizeStatutoryDisplay = (val: string, fallback: string) => {
+      const s = String(val || '').trim();
+      if (!s) return '';
+      if (/^(.)\1{3,}$/i.test(s) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(s.replace(/[\s_-]+/g, '')) || !/[a-zA-Z]/.test(s)) {
+        return fallback;
+      }
+      return s;
+    };
+
+    const approvalAuthority = sanitizeStatutoryDisplay(internal.approvalAuthority, 'Competent Financial Authority');
+    const justification = sanitizeStatutoryDisplay(
+      internal.justification || basics.justification || technicalPacket.limitedTenderJustification,
+      'Approved for official procurement in accordance with statutory public procurement guidelines.'
+    );
     const budgetConfirmed = internal.budgetConfirmed !== undefined ? Boolean(internal.budgetConfirmed) : true;
     const internalDetails = {
       orgName: internal.orgName || b.buyerOrganizationName || '',

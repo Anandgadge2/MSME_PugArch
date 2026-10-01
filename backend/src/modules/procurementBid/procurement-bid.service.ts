@@ -148,9 +148,19 @@ const rankToFinalStatus = (rank: number) => {
   return 'NOT_SELECTED';
 };
 
-export const isRestrictedBidMethod = (bid: any) =>
-  restrictedProcurementMethods.includes(String(bid?.procurementType || '').toUpperCase()) ||
-  restrictedProcurementMethods.includes(String(bid?.bidType || '').toUpperCase());
+export const isRestrictedBidMethod = (bid: any) => {
+  const pType = String(bid?.procurementType || '').toUpperCase();
+  const bType = String(bid?.bidType || '').toUpperCase();
+  const rfqType = String(
+    bid?.technicalPacket?.vendors?.rfqType ||
+    bid?.technicalPacket?.rfqType ||
+    bid?.technicalPacket?.wizardData?.rfqType ||
+    ''
+  ).toUpperCase();
+  if (restrictedProcurementMethods.includes(pType) || restrictedProcurementMethods.includes(bType)) return true;
+  if (rfqType === 'LIMITED') return true;
+  return false;
+};
 
 export const isActorInvitedToBid = (actor: Actor | null | undefined, bid: any) => {
   if (!actor || actor.role !== 'seller') return false;
@@ -188,29 +198,53 @@ export const isActorInvitedToBid = (actor: Actor | null | undefined, bid: any) =
 
 // Single source of truth for whether a procurement is invite-only ("PRIVATE") vs "PUBLIC".
 // Prefers the explicit `visibility` column; falls back to method-name/selection heuristics
-// for rows created before the column existed.
+// for rows created before the column existed or where legacy visibility was set to PUBLIC.
 export const isPrivateBid = (bid: any) => {
   if (bid?.visibility === 'PRIVATE') return true;
-  if (bid?.visibility === 'PUBLIC') return false;
   if (isRestrictedBidMethod(bid)) return true;
   const selection = String(
     bid?.technicalPacket?.vendors?.selection
     ?? bid?.technicalPacket?.wizardData?.vendors?.selection
     ?? ''
   ).toUpperCase();
-  return selection === 'SELECT' || selection === 'LIMITED';
+  const rfqType = String(
+    bid?.technicalPacket?.rfqType
+    ?? bid?.technicalPacket?.vendors?.rfqType
+    ?? bid?.technicalPacket?.wizardData?.rfqType
+    ?? ''
+  ).toUpperCase();
+  if (['SELECT', 'SELECTED', 'LIMITED', 'INVITED'].includes(selection) || rfqType === 'LIMITED') return true;
+  const invitedList = extractInvitedSellerIds(bid?.technicalPacket);
+  if (invitedList.length > 0 && selection !== 'OPEN') return true;
+  if (bid?.visibility === 'PUBLIC') return false;
+  return false;
 };
 
 // Derive the visibility value to persist at create/publish time from the method + vendor selection.
-export const deriveVisibility = (input: { procurementType?: string | null; bidType?: string | null; technicalPacket?: any }) => {
+export const deriveVisibility = (input: { procurementType?: string | null; bidType?: string | null; technicalPacket?: any; rfqType?: string | null }) => {
+  const pType = String(input?.procurementType || '').toUpperCase();
+  const bType = String(input?.bidType || '').toUpperCase();
+  const rfqType = String(
+    input?.rfqType ||
+    input?.technicalPacket?.rfqType ||
+    input?.technicalPacket?.vendors?.rfqType ||
+    input?.technicalPacket?.wizardData?.rfqType ||
+    ''
+  ).toUpperCase();
   const selection = String(
     input?.technicalPacket?.vendors?.selection
     ?? input?.technicalPacket?.wizardData?.vendors?.selection
     ?? ''
   ).toUpperCase();
-  const restricted = restrictedProcurementMethods.includes(String(input?.procurementType || '').toUpperCase())
-    || restrictedProcurementMethods.includes(String(input?.bidType || '').toUpperCase());
-  return (restricted || selection === 'SELECT' || selection === 'LIMITED') ? 'PRIVATE' : 'PUBLIC';
+  const restricted = restrictedProcurementMethods.includes(pType)
+    || restrictedProcurementMethods.includes(bType)
+    || rfqType === 'LIMITED'
+    || pType === 'LIMITED_TENDER'
+    || bType === 'LIMITED_TENDER';
+  const isSelectedMode = ['SELECT', 'SELECTED', 'LIMITED', 'INVITED'].includes(selection);
+  const invitedList = extractInvitedSellerIds(input?.technicalPacket);
+  const hasInvites = invitedList.length > 0 && selection !== 'OPEN';
+  return (restricted || isSelectedMode || hasInvites) ? 'PRIVATE' : 'PUBLIC';
 };
 
 // Extract invited-seller ids (as numbers) from a technicalPacket blob, tolerant of the
@@ -2421,7 +2455,7 @@ export const createBuyerBid = async (req: AuthRequest, body: any) => {
   }
   const bid = await db.procurementBid.create({
     data: {
-      bidNumber: await nextBidNumber(),
+      bidNumber: await nextBidNumber(body.canonicalMethod || body.procurementType || body.bidType || body.procurementMethod || 'RFQ'),
       title: body.title,
       description: body.description,
       buyerId: req.user!.id,

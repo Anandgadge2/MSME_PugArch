@@ -30,7 +30,7 @@ export const procurementWorkflow = {
       const u = await db.user.findUnique({ where: { id: actor.id }, select: { organizationId: true } });
       orgId = u?.organizationId || null;
     }
-    const methodPrefix = deriveMethodPrefix(input.procurementMethod || input.canonicalMethod, null, 'REQ');
+    const methodPrefix = deriveMethodPrefix(input.canonicalMethod || input.procurementMethod, null, 'REQ');
     const requirement = await db.requirement.create({
       data: {
         requirementNumber: numberSeries(methodPrefix),

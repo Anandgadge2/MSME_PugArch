@@ -22,6 +22,7 @@ import { MarketplaceFilterPanel } from '../components/MarketplaceFilterPanel';
 import { MarketplaceSearchBar } from '../components/MarketplaceSearchBar';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
+import { MarketplaceQuantityControl } from '../components/MarketplaceQuantityControl';
 import { cn } from '../../../lib/utils';
 import { Skeleton } from '../../../components/ui/skeleton';
 import { ProductCartLoader } from '../../../components/loaders/ProductCartLoader';
@@ -417,6 +418,7 @@ export default function MarketplaceProductList() {
 
         const itemType = isServices ? 'service' : 'product';
         const itemPrice = Number(isServices ? item.basePrice || 0 : item.price || 0);
+        const initialQty = Number(item.moq) > 1 ? Number(item.moq) : 1;
         addCartItem(
             {
                 id: item.id,
@@ -425,7 +427,8 @@ export default function MarketplaceProductList() {
                 unit: isServices ? item.pricingModel : item.unitOfMeasure,
                 imageUrl: resolveMarketplaceImage(item, itemType),
                 category: item.category?.name,
-                type: itemType
+                type: itemType,
+                quantity: initialQty
             },
             { source: isServices ? 'services-list' : 'products-list', showToast: options.showToast }
         );
@@ -1359,25 +1362,11 @@ export default function MarketplaceProductList() {
                                                     <div className="flex gap-1.5 sm:gap-2 items-center justify-between">
                                                         {showBuyerMarketplaceActions && (
                                                             cartQuantity > 0 ? (
-                                                                <div className="flex-1 inline-flex h-7 sm:h-8 items-center justify-between rounded-xl border border-[#0b2447]/30 bg-white text-[#0b2447] shadow-sm px-1">
-                                                                    <button
-                                                                        type="button"
-                                                                        aria-label={`Decrease quantity of ${item.name}`}
-                                                                        onClick={() => handleCartQuantityChange(item, cartQuantity - 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                                                                    >
-                                                                        <Minus className="h-3 w-3" aria-hidden="true" />
-                                                                    </button>
-                                                                    <span className="text-[10px] sm:text-xs font-black tabular-nums" aria-live="polite" aria-atomic="true">{cartQuantity}</span>
-                                                                    <button
-                                                                        type="button"
-                                                                        aria-label={`Increase quantity of ${item.name}`}
-                                                                        onClick={() => handleCartQuantityChange(item, cartQuantity + 1)}
-                                                                        className="h-5 w-5 sm:h-6 sm:w-6 rounded flex items-center justify-center bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-                                                                    >
-                                                                        <Plus className="h-3 w-3" aria-hidden="true" />
-                                                                    </button>
-                                                                </div>
+                                                                <MarketplaceQuantityControl
+                                                                    quantity={cartQuantity}
+                                                                    itemName={item.name}
+                                                                    onChange={(nextQty) => handleCartQuantityChange(item, nextQty)}
+                                                                />
                                                             ) : (
                                                                 <button
                                                                     type="button"

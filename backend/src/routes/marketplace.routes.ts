@@ -2958,10 +2958,11 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
             return apiResponse.error(res, 404, 'Requirement not found', 'REQUIREMENT_NOT_FOUND');
         }
 
+        const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
+        const isOwner = Boolean(req.user?.id && (requirement.buyerId === req.user.id || requirement.createdById === req.user.id || (req.user.organizationId && requirement.buyerOrganizationId === req.user.organizationId)));
+
         if (requirement.visibility === 'VERIFIED_SELLERS_ONLY') {
             const isVerifiedSeller = req.user?.role === 'seller';
-            const isAdmin = ['admin', 'master_admin'].includes(req.user?.role || '');
-            const isOwner = Boolean(req.user?.id && (requirement.buyerId === req.user.id || requirement.createdById === req.user.id || (req.user.organizationId && requirement.buyerOrganizationId === req.user.organizationId)));
             if (!isVerifiedSeller && !isAdmin && !isOwner) {
                 return apiResponse.error(res, 403, 'This requirement is restricted to verified sellers only. Please sign in with an approved seller account.', 'RESTRICTED_REQUIREMENT');
             }
@@ -2972,7 +2973,7 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
         const isLimitedRfq = method.toUpperCase() === 'RFQ' && requirement.payload && typeof requirement.payload === 'object' && (requirement.payload as any).rfqType === 'LIMITED';
         
-        if (isRestricted || isLimitedRfq) {
+        if ((isRestricted || isLimitedRfq) && !isAdmin && !isOwner) {
             if (!currentUserId) {
                 return apiResponse.error(res, 403, 'Access denied. This is a restricted procurement event.', 'FORBIDDEN');
             }

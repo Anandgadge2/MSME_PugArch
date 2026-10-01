@@ -837,10 +837,10 @@ export default function App({
 
     // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
     {
-      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|open-tender|open_tender|limited-tender|limited_tender|rate-contract|rate_contract|reverse-auction|reverse_auction|tenders?)\/([^/]+)\/?$/i);
+      const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|(?:open[-_]tenders?)|(?:limited[-_]tenders?)|(?:rate[-_]contracts?)|(?:reverse[-_]auctions?)|tenders?)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
         const [, role, rawTypeSlug, rawId] = procDetailMatch;
-        const typeSlug = rawTypeSlug.toLowerCase().replace(/_/g, '-');
+        const typeSlug = rawTypeSlug.toLowerCase().replace(/_/g, '-').replace(/s$/, '');
         const id = decodeURIComponent(rawId);
         if (id.toLowerCase() === 'new' || id.toLowerCase() === 'create') {
           const methodParam = typeSlug ? `?method=${typeSlug.toUpperCase()}` : '';
@@ -850,7 +850,6 @@ export default function App({
           case 'rfq':              return <RfqDetailPage />;
           case 'rfp':              return <RfpDetailPage />;
           case 'tender':
-          case 'tenders':
           case 'open-tender':      return <OpenTenderDetailPage />;
           case 'limited-tender':   return <LimitedTenderDetailPage />;
           case 'rate-contract':    return <Redirect to={`/bids/${id}`} />;
@@ -860,15 +859,28 @@ export default function App({
           }
         }
       }
-      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/live\/?$/i);
+      const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse[-_]auctions?\/([^/]+)\/live\/?$/i);
       if (procAuctionLiveMatch) {
         const id = decodeURIComponent(procAuctionLiveMatch[2]);
         if (id) return <ReverseAuctionLivePage id={id} />;
       }
-      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse-auction\/([^/]+)\/results?\/?$/i);
+      const procAuctionResultMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse[-_]auctions?\/([^/]+)\/results?\/?$/i);
       if (procAuctionResultMatch) {
         const id = decodeURIComponent(procAuctionResultMatch[2]);
         if (id) return <AuctionResultPage id={id} />;
+      }
+    }
+
+    // ── Legacy top-level procurement routes → redirect to canonical URLs ──
+    {
+      const legacyTopProcMatch = pathname.match(/^\/(limited[-_]tenders?|open[-_]tenders?|reverse[-_]auctions?|rfqs?|rfps?)\/([^/]+)\/?$/i);
+      if (legacyTopProcMatch) {
+        const rawKind = legacyTopProcMatch[1].toLowerCase().replace(/_/g, '-').replace(/s$/, '');
+        const id = decodeURIComponent(legacyTopProcMatch[2]);
+        const targetRole = user?.role === 'buyer' ? 'buyer' : 'seller';
+        if (id && id !== 'create') {
+          return <Redirect to={`/${targetRole}/procurement/${rawKind}/${encodeURIComponent(id)}`} />;
+        }
       }
     }
 
@@ -882,7 +894,7 @@ export default function App({
       return <Redirect to="/seller/procurement/opportunities?type=rate-contract" />;
     }
     {
-      const reverseAuctionDetailMatch = pathname.match(/^\/reverse-auctions\/([^/]+)$/);
+      const reverseAuctionDetailMatch = pathname.match(/^\/reverse[-_]auctions?\/([^/]+)$/i);
       if (reverseAuctionDetailMatch) {
         const id = decodeURIComponent(reverseAuctionDetailMatch[1]);
         if (id && id !== 'create') return <ReverseAuctionDetailPage id={id} />;
