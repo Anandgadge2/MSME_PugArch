@@ -310,6 +310,41 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     ? lowestFromBids
     : rawCurrentLowest;
 
+  // Find authentic L1 Leader Bid (lowest valid commercial offer, tie-broken by earliest submission time)
+  const leaderBid = useMemo(() => {
+    const validBids = bidRows.filter(b => getBidAmount(b) > 0);
+    if (validBids.length === 0) return null;
+    return validBids.slice().sort((a, b) => {
+      const amtA = getBidAmount(a);
+      const amtB = getBidAmount(b);
+      if (amtA !== amtB) return amtA - amtB;
+      return new Date(a.submittedAt || 0).getTime() - new Date(b.submittedAt || 0).getTime();
+    })[0];
+  }, [bidRows]);
+
+  // Find L1 participant if available in participants list
+  const leaderParticipant = useMemo(() => {
+    if (participantRows.length > 0) {
+      const sorted = participantRows.slice().sort((a, b) => {
+        const rankA = Number(a.currentRank || 999);
+        const rankB = Number(b.currentRank || 999);
+        if (rankA !== rankB) return rankA - rankB;
+        const amtA = Number(a.lastBidAmount || 999999999);
+        const amtB = Number(b.lastBidAmount || 999999999);
+        return amtA - amtB;
+      });
+      if (sorted[0] && (sorted[0].currentRank === 1 || Number(sorted[0].lastBidAmount) === currentLowest)) {
+        return sorted[0];
+      }
+    }
+    return null;
+  }, [participantRows, currentLowest]);
+
+  const leaderOrgName =
+    leaderParticipant?.sellerOrgName ||
+    leaderBid?.sellerOrgName ||
+    (currentLowest > 0 ? 'L1 Bidder' : 'Awaiting Bids');
+
   const startPrice = numberValue(auction?.startPrice, 0);
   const savings = startPrice > currentLowest && currentLowest > 0 ? startPrice - currentLowest : 0;
   const savingsPercent = startPrice > 0 && savings > 0 ? (savings / startPrice) * 100 : 0;
@@ -568,10 +603,19 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     bid.mutate(nextAmount);
   };
 
-  // Process data for the real-time bid chart in chronological order
+  // Process data for the real-time bid chart:
+  // For initial baseline bids submitted at the same time, higher quotes come first so downward progression is accurately reflected.
   const chartData = bidRows
     .slice()
-    .reverse()
+    .sort((a, b) => {
+      const timeA = new Date(a.submittedAt || 0).getTime();
+      const timeB = new Date(b.submittedAt || 0).getTime();
+      if (Math.abs(timeA - timeB) > 2000) {
+        return timeA - timeB; // Chronological order across distinct times
+      }
+      // If submitted within 2 seconds of each other (e.g. initial baseline import), sort higher amount first so reverse auction curve goes DOWN
+      return getBidAmount(b) - getBidAmount(a);
+    })
     .map((b, idx) => ({
       index: idx + 1,
       amount: getBidAmount(b),
@@ -579,7 +623,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       fullTime: formatDateTime(b.submittedAt || 0),
       label: b.isMyBid ? 'Your Bid' : (b.sellerOrgName || `Bidder #${idx + 1}`),
       isMyBid: Boolean(b.isMyBid),
-      rank: b.bidderRank || b.rankAtSubmission || (idx === bidRows.length - 1 ? 1 : null),
+      rank: b.bidderRank || b.rankAtSubmission || (getBidAmount(b) === currentLowest ? 1 : null),
       isLowest: getBidAmount(b) === currentLowest
     }));
 
@@ -803,10 +847,10 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         {/* Card 2: My Current Rank (Seller) / Event Standing (Buyer) */}
         <StatsCard
           icon={Trophy}
-          label={isBuyerOrAdmin ? "Auction Leader" : "My Current Rank"}
+          label={isBuyerOrAdmin ? "Auction Leader (L1)" : "My Current Rank"}
           value={
             isBuyerOrAdmin
-              ? (latestBid ? (latestBid.sellerOrgName || 'L1 Bidder') : 'Awaiting Bids')
+              ? leaderOrgName
               : myRank === 1
               ? '🥇 L1 (Leading)'
               : myRank === 2
@@ -821,7 +865,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           }
           subtitle={
             isBuyerOrAdmin
-              ? `${bidRows.length} total bids received`
+              ? (leaderBid ? `Holding L1 at ${formatCurrency(getBidAmount(leaderBid))}` : `${bidRows.length} total bids received`)
               : myRank === 1
               ? 'Holding the winning commercial offer'
               : myBestBid > 0
