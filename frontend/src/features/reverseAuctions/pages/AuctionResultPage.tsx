@@ -85,6 +85,12 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
   const isManager = Boolean(query.data?.isManager);
   const status = String(auction?.statusEnum || auction?.status || '').toUpperCase();
 
+  const displayCategory = (() => {
+    const raw = auction?.category || auction?.linkedRequirement?.category;
+    if (!raw || raw.trim().toLowerCase() === 'general procurement') return null;
+    return raw.trim();
+  })();
+
   const awardMutation = useMutation({
     mutationFn: ({ participantId, remarks, isPriceMatch, counterOfferAmount }: { participantId?: number; remarks?: string; isPriceMatch?: boolean; counterOfferAmount?: number }) =>
       reverseAuctionApi.recommendAward(id, participantId, remarks, { isPriceMatch, counterOfferAmount }),
@@ -342,7 +348,7 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
             </h1>
             <p className="text-xs sm:text-sm font-semibold text-slate-600 mt-1">
               Auction Code: <span className="font-mono font-bold text-slate-900">{canonicalCode}</span>
-              {auction?.category && <> · Category: <span className="font-bold text-slate-900">{auction.category}</span></>}
+              {displayCategory && <> · Category: <span className="font-bold text-slate-900">{displayCategory}</span></>}
               {auction?.endTime && <> · Concluded: <span className="font-bold text-slate-900">{formatDateTime(auction.endTime)}</span></>}
             </p>
           </div>

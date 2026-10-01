@@ -333,26 +333,33 @@ const linkedRequirementSummary = async (auction: any) => {
   const refNo = auction.referenceNo || null;
 
   const candidateRefs: string[] = [];
+  let stripped: string | null = null;
   if (refNo) {
     candidateRefs.push(refNo);
-    const stripped = refNo.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+    stripped = refNo.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
     if (stripped && stripped !== refNo) candidateRefs.push(stripped);
   }
   const configParentRef = auction.auctionConfig?.parentRefNumber;
   if (configParentRef && typeof configParentRef === 'string') {
     candidateRefs.push(configParentRef);
+    const configStripped = configParentRef.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+    if (configStripped && configStripped !== configParentRef) {
+      candidateRefs.push(configStripped);
+      if (!stripped) stripped = configStripped;
+    }
   }
   const configParentId = auction.auctionConfig?.parentProcurementId;
   const configNumId = Number(configParentId);
   const resolvedBidId = linkedBidId || (Number.isFinite(configNumId) && configNumId > 0 ? configNumId : null);
 
   // 1. Try finding linked procurementBid
-  if (resolvedBidId || candidateRefs.length > 0) {
+  if (resolvedBidId || candidateRefs.length > 0 || stripped) {
     const pBid = await db.procurementBid.findFirst({
       where: {
         OR: [
           ...(resolvedBidId ? [{ id: resolvedBidId }] : []),
-          ...(candidateRefs.length > 0 ? [{ bidNumber: { in: candidateRefs } }] : [])
+          ...(candidateRefs.length > 0 ? [{ bidNumber: { in: candidateRefs } }] : []),
+          ...(stripped ? [{ bidNumber: { contains: stripped } }] : [])
         ]
       },
       include: {
@@ -432,12 +439,14 @@ const linkedRequirementSummary = async (auction: any) => {
   }
 
   // 2. Try finding linked buyerRequirement
-  if (linkedReqId || refNo) {
+  if (linkedReqId || refNo || stripped || candidateRefs.length > 0) {
     const buyerReq = await db.buyerRequirement.findFirst({
       where: {
         OR: [
           ...(linkedReqId ? [{ id: linkedReqId }] : []),
-          ...(refNo ? [{ title: { contains: refNo } }] : [])
+          ...(candidateRefs.length > 0 ? [{ title: { in: candidateRefs } }] : []),
+          ...(refNo ? [{ title: { contains: refNo } }] : []),
+          ...(stripped ? [{ title: { contains: stripped } }] : [])
         ]
       },
       include: {
@@ -506,9 +515,15 @@ const linkedRequirementSummary = async (auction: any) => {
   }
 
   // 3. Fallback to legacy requirement
-  if (!linkedReqId) return null;
-  const requirement = await db.requirement.findUnique({
-    where: { id: linkedReqId },
+  if (!linkedReqId && !stripped && candidateRefs.length === 0) return null;
+  const requirement = await db.requirement.findFirst({
+    where: {
+      OR: [
+        ...(linkedReqId ? [{ id: linkedReqId }] : []),
+        ...(candidateRefs.length > 0 ? [{ requirementNumber: { in: candidateRefs } }] : []),
+        ...(stripped ? [{ requirementNumber: { contains: stripped } }] : [])
+      ]
+    },
     include: {
       items: true,
       category: true,
@@ -959,8 +974,22 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       }
     }
 
+    let auctionCategory = auction.category;
+    if ((!auctionCategory || auctionCategory.toLowerCase() === 'general procurement') && linkedRequirement?.category) {
+      auctionCategory = linkedRequirement.category;
+      auction.category = linkedRequirement.category;
+      db.auction.update({
+        where: { id: auction.id },
+        data: {
+          category: linkedRequirement.category,
+          ...(linkedRequirement.id && !auction.linkedBidId ? { linkedBidId: linkedRequirement.id } : {})
+        }
+      }).catch(() => {});
+    }
+
     return apiResponse.success(res, maskSensitive({
       ...auction,
+      category: (auctionCategory && auctionCategory.toLowerCase() !== 'general procurement') ? auctionCategory : (linkedRequirement?.category || null),
       isPublic,
       hasJoined,
       evaluationPending: Boolean(auction.evaluationPending),
@@ -1056,10 +1085,27 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
     const requiredDecrement = Math.max(amountDecrement, percentDecrement);
     const calculatedNextBid = Math.max(0, currentLow - requiredDecrement);
 
+    let liveCategory = auction.category;
+    if (!liveCategory || liveCategory.toLowerCase() === 'general procurement') {
+      const summary = await linkedRequirementSummary(auction);
+      if (summary?.category) {
+        liveCategory = summary.category;
+        auction.category = summary.category;
+        db.auction.update({
+          where: { id: auction.id },
+          data: {
+            category: summary.category,
+            ...(summary.id && !auction.linkedBidId ? { linkedBidId: summary.id } : {})
+          }
+        }).catch(() => {});
+      }
+    }
+
     return apiResponse.success(res, {
       serverTime: new Date(),
       auction: maskSensitive({
         ...auction,
+        category: (liveCategory && liveCategory.toLowerCase() !== 'general procurement') ? liveCategory : null,
         isPublic,
         hasJoined: !!participant,
         evaluationPending: Boolean(auction.evaluationPending)
@@ -1201,21 +1247,36 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
 
     if (!linkedBid && !linkedReq && typeof rawId === 'string') {
       linkedBid = await db.procurementBid.findFirst({ where: { bidNumber: rawId } }).catch(() => null);
-      if (!linkedBid) {
-        const stripped = rawId.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
-        if (stripped && stripped !== rawId) {
-          linkedBid = await db.procurementBid.findFirst({
-            where: {
-              OR: [
-                { bidNumber: stripped },
-                { bidNumber: { contains: stripped } }
-              ]
-            }
-          }).catch(() => null);
-        }
+      const stripped = rawId.replace(/^(RA-|PRC-|AUCTION-|TENDER-|TND-|RFQ-|RFP-|RC-|RATE-)/i, '');
+      if (!linkedBid && stripped && stripped !== rawId) {
+        linkedBid = await db.procurementBid.findFirst({
+          where: {
+            OR: [
+              { bidNumber: stripped },
+              { bidNumber: { contains: stripped } }
+            ]
+          }
+        }).catch(() => null);
       }
       if (!linkedReq) {
-        linkedReq = await db.requirement.findFirst({ where: { requirementNumber: rawId } }).catch(() => null);
+        linkedReq = await db.requirement.findFirst({
+          where: {
+            OR: [
+              { requirementNumber: rawId },
+              ...(stripped ? [{ requirementNumber: { contains: stripped } }] : [])
+            ]
+          }
+        }).catch(() => null);
+      }
+      if (!linkedReq) {
+        linkedReq = await db.buyerRequirement.findFirst({
+          where: {
+            OR: [
+              { title: { contains: rawId } },
+              ...(stripped ? [{ title: { contains: stripped } }] : [])
+            ]
+          }
+        }).catch(() => null);
       }
     }
 
@@ -1306,8 +1367,18 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
         title: procurementTitle,
         description: linkedBid?.description || linkedReq?.description || `Dynamic Reverse Auction event initiated for ${parentRef}.`,
         procurementMethod: 'REVERSE_AUCTION',
-        category: linkedBid?.category || linkedReq?.category || 'General Procurement',
-        startPrice,
+        category: (() => {
+          const packet = (linkedBid?.technicalPacket && typeof linkedBid.technicalPacket === 'object') ? linkedBid.technicalPacket as any : {};
+          const cat = linkedBid?.category ||
+            packet.basics?.category ||
+            packet.category ||
+            packet.wizardData?.basics?.category ||
+            linkedReq?.category?.name ||
+            linkedReq?.category ||
+            (linkedReq?.payload as any)?.basics?.category ||
+            null;
+          return (cat && String(cat).toLowerCase() !== 'general procurement') ? String(cat) : null;
+        })(),
         basePrice: startPrice,
         currentBid: currentLowestAmount,
         currentLowestBid: currentLowestAmount,
@@ -2673,8 +2744,26 @@ router.get('/reverse-auctions/:id/result', optionalAuthenticate, async (req: Aut
       };
     });
 
+    const linkedRequirement = await linkedRequirementSummary(auction);
+    let resolvedCategory = auction.category;
+    if ((!resolvedCategory || resolvedCategory.toLowerCase() === 'general procurement') && linkedRequirement?.category) {
+      resolvedCategory = linkedRequirement.category;
+      auction.category = linkedRequirement.category;
+      db.auction.update({
+        where: { id: auction.id },
+        data: {
+          category: linkedRequirement.category,
+          ...(linkedRequirement.id && !auction.linkedBidId ? { linkedBidId: linkedRequirement.id } : {})
+        }
+      }).catch(() => {});
+    }
+
     return apiResponse.success(res, {
-      auction: maskSensitive(auction),
+      auction: maskSensitive({
+        ...auction,
+        category: (resolvedCategory && resolvedCategory.toLowerCase() !== 'general procurement') ? resolvedCategory : (linkedRequirement?.category || null),
+        linkedRequirement
+      }),
       ranking: maskSensitive(ranking),
       purchaseOrder: purchaseOrder ? maskSensitive(purchaseOrder) : null,
       canRecommendAward: isManager,

@@ -409,11 +409,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     (linkedBidData.technicalPacket as any)?.terms?.deliveryTerms ||
     'Door delivery within contract period';
 
-  const resolvedCategory =
+  const rawCategoryCandidate =
     auctionData.category ||
     reqData.category ||
     linkedBidData.category ||
-    'General Sourcing';
+    null;
+
+  const resolvedCategory =
+    (rawCategoryCandidate && !['general sourcing', 'general procurement'].includes(rawCategoryCandidate.trim().toLowerCase()))
+      ? rawCategoryCandidate.trim()
+      : (reqData.whatAreYouBuying || '');
 
   const resolvedApprovalAuthority =
     reqData.approvalAuthority ||
@@ -480,7 +485,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             title: 'BUYER ORGANIZATION',
             name: auctionData.buyerOrganizationName || 'Verified Buyer',
             address: reqData.deliveryLocation || undefined,
-            details: [`Category: ${auctionData.category || reqData.category || 'General Procurement'}`],
+            details: resolvedCategory ? [`Category: ${resolvedCategory}`] : [],
           },
           {
             title: 'AUCTION EVENT SPECIFICATION',
