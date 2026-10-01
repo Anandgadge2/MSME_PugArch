@@ -7,6 +7,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Building2,
+  Briefcase,
   Calendar,
   CalendarDays,
   ChevronDown,
@@ -2989,6 +2990,228 @@ function MilestonesTable({ milestones }: { milestones: any }) {
   );
 }
 
+function ServiceDossierCard({
+  serviceDetails,
+  buyingType,
+  scopeText,
+}: {
+  serviceDetails: any;
+  buyingType?: string;
+  scopeText?: string;
+}) {
+  if (!serviceDetails || !isPlainObject(serviceDetails)) {
+    return null;
+  }
+
+  const {
+    serviceTitle,
+    title,
+    scopeOfWork,
+    deliverables,
+    inclusions,
+    exclusions,
+    slaResponseTime,
+    duration,
+    projectDuration,
+    manpowerRequired,
+    experienceRequired,
+    penaltyClause,
+    milestones,
+    sowFileAssetId,
+    sowFileName,
+    sowFileUrl,
+    location,
+  } = serviceDetails;
+
+  const resolvedTitle = serviceTitle || title;
+  const resolvedScope = scopeOfWork || scopeText;
+  const resolvedDuration = duration || projectDuration;
+  const milestonesList = asArray(milestones).filter(hasDetailData);
+
+  const hasAnyData =
+    resolvedTitle ||
+    resolvedScope ||
+    deliverables ||
+    inclusions ||
+    exclusions ||
+    slaResponseTime ||
+    resolvedDuration ||
+    manpowerRequired ||
+    penaltyClause ||
+    milestonesList.length > 0 ||
+    sowFileName ||
+    sowFileAssetId;
+
+  if (!hasAnyData) return null;
+
+  return (
+    <DataCard
+      title="Service Level Agreement (SLA) & Scope of Work (SOW)"
+      icon={Briefcase}
+    >
+      <div className="space-y-4">
+        {/* Top Header Card */}
+        <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-white p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                  Service Contract
+                </span>
+                {resolvedDuration && (
+                  <span className="inline-flex items-center gap-1 rounded-md border border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                    <Clock className="h-3 w-3" /> Duration: {resolvedDuration}
+                  </span>
+                )}
+                <span className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                  Lump-Sum SOW Fee
+                </span>
+              </div>
+              <h3 className="text-sm font-extrabold text-slate-900 mt-1">
+                {resolvedTitle || "Service Specifications & Contract Scope"}
+              </h3>
+            </div>
+
+            {/* SOW Document Download Action */}
+            {(sowFileAssetId || sowFileName || sowFileUrl) && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  openFileAsset(
+                    {
+                      fileAssetId: sowFileAssetId,
+                      url: sowFileUrl,
+                      originalName: sowFileName || "SOW_Document.pdf",
+                    },
+                    sowFileName || "SOW_Document.pdf",
+                  );
+                }}
+                className="shrink-0 border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs h-9 shadow-xs cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 mr-1.5" />
+                Download SOW Document
+              </Button>
+            )}
+          </div>
+        </div>
+
+        {/* SLA & Service Key Parameters Grid */}
+        <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
+          <PropertyGrid columns={4}>
+            {resolvedDuration && (
+              <PropertyItem label="Contract Duration" value={resolvedDuration} />
+            )}
+            {slaResponseTime && (
+              <PropertyItem label="SLA Response Time" value={slaResponseTime} />
+            )}
+            {penaltyClause && (
+              <PropertyItem label="Downtime / Penalty Clause" value={penaltyClause} />
+            )}
+            {manpowerRequired && (
+              <PropertyItem label="Manpower Required" value={formatPrimitiveValue(manpowerRequired)} />
+            )}
+            {experienceRequired && (
+              <PropertyItem label="Experience Required" value={formatPrimitiveValue(experienceRequired)} />
+            )}
+            {location && (
+              <PropertyItem label="Service Location" value={location} />
+            )}
+          </PropertyGrid>
+        </div>
+
+        {/* Scope of Work & Key Deliverables */}
+        {(resolvedScope || deliverables) && (
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            {resolvedScope && (
+              <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+                  <FileText className="h-3.5 w-3.5 text-indigo-600" /> Scope of Work (SOW)
+                </h4>
+                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {resolvedScope}
+                </p>
+              </div>
+            )}
+            {deliverables && (
+              <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Key Deliverables &amp; Outcomes
+                </h4>
+                <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
+                  {deliverables}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Inclusions & Exclusions */}
+        {(inclusions || exclusions) && (
+          <div className="grid gap-3.5 sm:grid-cols-2">
+            {inclusions && (
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-1.5 flex items-center gap-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Scope Inclusions
+                </h4>
+                <p className="text-xs text-emerald-900/90 leading-relaxed whitespace-pre-wrap">
+                  {inclusions}
+                </p>
+              </div>
+            )}
+            {exclusions && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-rose-900 mb-1.5 flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-rose-600" /> Scope Exclusions &amp; Limitations
+                </h4>
+                <p className="text-xs text-rose-900/90 leading-relaxed whitespace-pre-wrap">
+                  {exclusions}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Payment Milestones Table */}
+        {milestonesList.length > 0 && (
+          <div className="space-y-2 pt-1">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+              <IndianRupee className="h-3.5 w-3.5 text-indigo-600" /> Payment Milestones &amp; Billing Triggers
+            </h4>
+            <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
+              <table className="min-w-full divide-y divide-slate-200 text-xs">
+                <thead className="bg-slate-50 text-[10.5px] font-black uppercase tracking-wider text-slate-600">
+                  <tr>
+                    <th scope="col" className="px-3 py-2 text-left w-12">#</th>
+                    <th scope="col" className="px-3 py-2 text-left">Milestone Description</th>
+                    <th scope="col" className="px-3 py-2 text-center w-24">Payout %</th>
+                    <th scope="col" className="px-3 py-2 text-left">Verification / Release Trigger</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 font-medium text-slate-700">
+                  {milestonesList.map((m: any, idx: number) => (
+                    <tr key={m.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="px-3 py-2 font-mono font-bold text-slate-500">{idx + 1}</td>
+                      <td className="px-3 py-2 font-bold text-slate-900">{m.label || m.milestone || m.name || `Phase ${idx + 1}`}</td>
+                      <td className="px-3 py-2 text-center">
+                        <span className="inline-flex rounded-md bg-emerald-50 px-2 py-0.5 font-black text-emerald-700 border border-emerald-200">
+                          {m.percentage ? `${m.percentage}%` : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-slate-600">{m.trigger || m.condition || m.deliverable || "Upon buyer sign-off"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </DataCard>
+  );
+}
+
 function ServiceDetailsSection({
   serviceDetails,
   isRfqType,
@@ -2996,69 +3219,11 @@ function ServiceDetailsSection({
   serviceDetails: any;
   isRfqType?: boolean;
 }) {
-  const ctx = React.useContext(BuyerSideContext);
-  const isBuyer = typeof ctx === "boolean" ? ctx : ctx.isBuyer;
-  const isOpenTender = typeof ctx === "boolean" ? false : ctx.isOpenTender;
-  const isLimitedTender =
-    typeof ctx === "boolean" ? false : ctx.isLimitedTender || false;
-
-  // Strictly hide Service Details & Parameters on RFQ globally, or on buyer side for limited tender, open tender, etc.
-  if (
-    isRfqType ||
-    (isBuyer && (isLimitedTender || isOpenTender)) ||
-    !serviceDetails ||
-    !isPlainObject(serviceDetails)
-  )
-    return null;
-
-  const {
-    duration,
-    projectDuration,
-    penaltyClause,
-    slaResponseTime,
-    manpowerRequired,
-    experienceRequired,
-    milestones,
-    warranty,
-    warrantyTerms,
-    warrantyPeriod,
-    paymentTerms,
-    ...rest
-  } = serviceDetails;
-
-  const mainFields = compactObject({
-    ...(isRfqType
-      ? {}
-      : {
-          duration,
-          projectDuration,
-          penaltyClause,
-          slaResponseTime,
-          manpowerRequired,
-          experienceRequired,
-        }),
-    ...rest,
-  });
-
-  const entries = detailEntries(mainFields);
-  if (!entries.length) return null;
-
   return (
-    <div className="space-y-2.5 pt-1.5">
-      <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-        <Building2 className="h-3.5 w-3.5 text-indigo-600" />
-        <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900">
-          Service Details &amp; Parameters
-        </h3>
-      </div>
-      <div className="rounded-xl bg-slate-50/70 p-3.5 border border-slate-150">
-        <PropertyGrid columns={5}>
-          {entries.map(([key, val]) => (
-            <PropertyItem key={key} label={humanizeKey(key)} value={val} />
-          ))}
-        </PropertyGrid>
-      </div>
-    </div>
+    <ServiceDossierCard
+      serviceDetails={serviceDetails}
+      buyingType="Services"
+    />
   );
 }
 function getUniqueItemFiles(
@@ -3255,10 +3420,12 @@ function LineItemsTable({
   items,
   defaultSubject,
   isBuyer,
+  buyingType,
 }: {
   items: any;
   defaultSubject?: string;
   isBuyer?: boolean;
+  buyingType?: string;
 }) {
   const ctx = React.useContext(BuyerSideContext);
   const shouldShowCost = ctx.shouldShowEstimatedCost ?? ctx.isBuyer ?? isBuyer;
@@ -3268,8 +3435,35 @@ function LineItemsTable({
   } | null>(null);
   const list = asArray(items).filter(hasDetailData);
 
-  const columns = useMemo<ColumnDef<any>[]>(
-    () => [
+  const isServicesMode = useMemo(() => {
+    if (String(buyingType || "").toLowerCase().includes("service")) return true;
+    if (
+      list.length > 0 &&
+      list.every((it: any) => {
+        const sp =
+          typeof it?.specifications === "object" && it?.specifications
+            ? it.specifications
+            : {};
+        const rawType = firstPresent(
+          it?.itemType,
+          it?.type,
+          it?.categoryType,
+          sp?.itemType,
+          sp?.type,
+          sp?.categoryType,
+        );
+        return String(rawType || "")
+          .toLowerCase()
+          .includes("service");
+      })
+    ) {
+      return true;
+    }
+    return false;
+  }, [buyingType, list]);
+
+  const columns = useMemo<ColumnDef<any>[]>(() => {
+    const baseColumns: ColumnDef<any>[] = [
       {
         key: "type",
         header: "Type",
@@ -3406,7 +3600,11 @@ function LineItemsTable({
       },
       {
         key: "qty",
-        header: ctx.isRateContractType ? "Est. Annual Qty & UOM" : "Qty & UOM",
+        header: isServicesMode
+          ? "Scope / Units"
+          : ctx.isRateContractType
+            ? "Est. Annual Qty & UOM"
+            : "Qty & UOM",
         width: ctx.isRateContractType ? "w-28 min-w-[110px]" : "w-24 min-w-[100px]",
         align: "center",
         cell: (item) => {
@@ -3437,7 +3635,7 @@ function LineItemsTable({
               sp.unit,
               sp.uom,
               sp.unitOfMeasure,
-            ) || "NOS.";
+            ) || (isServicesMode ? "Job / SOW" : "NOS.");
           const cleanUom = sanitizeUom(unit);
           const qtyDisplay =
             rawQty !== undefined &&
@@ -3472,8 +3670,8 @@ function LineItemsTable({
       },
       {
         key: "rate",
-        header: "Est. Unit Rate",
-        width: "w-24 min-w-[95px]",
+        header: isServicesMode ? "Est. Service Fee (Lump-Sum)" : "Est. Unit Rate",
+        width: isServicesMode ? "w-40 min-w-[160px]" : "w-24 min-w-[95px]",
         align: "right",
         cell: (item) => {
           if (!shouldShowCost) {
@@ -3512,6 +3710,10 @@ function LineItemsTable({
             <div className="font-bold text-slate-900 whitespace-nowrap">
               {rateNumber !== null ? (
                 <span>₹{rateNumber.toLocaleString("en-IN")}</span>
+              ) : isServicesMode ? (
+                <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 text-[9.5px] font-bold text-indigo-700 whitespace-nowrap">
+                  Price Discovery (Bidders to Quote)
+                </span>
               ) : (
                 <span className="text-slate-400 font-normal">-</span>
               )}
@@ -3521,8 +3723,8 @@ function LineItemsTable({
       },
       {
         key: "hsn",
-        header: "HSN / SAC",
-        width: "w-20 min-w-[80px]",
+        header: isServicesMode ? "SAC Code" : "HSN / SAC",
+        width: "w-24 min-w-[85px]",
         align: "center",
         cell: (item) => {
           const sp =
@@ -3546,12 +3748,32 @@ function LineItemsTable({
             sp.sacCode,
           );
           const cleanHsnCode = sanitizeHsn(rawHsn);
+          const isItemService =
+            isServicesMode ||
+            String(
+              firstPresent(
+                item.itemType,
+                item.type,
+                item.categoryType,
+                sp.itemType,
+                sp.type,
+                sp.categoryType,
+              ) || "",
+            )
+              .toLowerCase()
+              .includes("service");
+          const displayHsn =
+            cleanHsnCode !== "-"
+              ? isItemService && !cleanHsnCode.toUpperCase().startsWith("SAC")
+                ? `SAC ${cleanHsnCode}`
+                : cleanHsnCode
+              : "-";
           return (
             <span
-              className="font-mono text-[10.5px] font-medium text-slate-600 truncate max-w-[80px] block"
-              title={cleanHsnCode !== "-" ? cleanHsnCode : undefined}
+              className="font-mono text-[10.5px] font-medium text-slate-600 truncate max-w-[85px] block"
+              title={displayHsn !== "-" ? displayHsn : undefined}
             >
-              {cleanHsnCode}
+              {displayHsn}
             </span>
           );
         },
@@ -3712,9 +3934,13 @@ function LineItemsTable({
           );
         },
       },
-    ],
-    [defaultSubject, shouldShowCost],
-  );
+    ];
+
+    if (isServicesMode) {
+      return baseColumns.filter((c) => c.key !== "brand");
+    }
+    return baseColumns;
+  }, [defaultSubject, shouldShowCost, isServicesMode, ctx.isRateContractType]);
 
   if (!list.length) return null;
 
@@ -3723,7 +3949,7 @@ function LineItemsTable({
       <div className="flex items-center justify-between border-b border-slate-100 pb-2">
         <h3 className="text-xs font-bold uppercase tracking-wide text-slate-900 flex items-center gap-2">
           <Layers className="h-3.5 w-3.5 text-indigo-600" />
-          Line Items ({list.length})
+          {isServicesMode ? `Service Schedule (${list.length})` : `Line Items (${list.length})`}
         </h3>
       </div>
       <DataTable<any>
@@ -3735,8 +3961,12 @@ function LineItemsTable({
         srNoHeader="#"
         srNoWidth="w-12"
         minWidth="min-w-[1000px]"
-        emptyTitle="No line items"
-        emptyDescription="No line items available for this procurement."
+        emptyTitle={isServicesMode ? "No service lines" : "No line items"}
+        emptyDescription={
+          isServicesMode
+            ? "No service lines defined for this procurement."
+            : "No line items available for this procurement."
+        }
       />
 
       {viewingItemFiles && (
@@ -5947,7 +6177,14 @@ export function ProcurementDetailUnifiedView(
   const terms = payload.terms || {};
   const rules = payload.rules || {};
   const evaluation = payload.evaluation || {};
-  const serviceDetails = props.serviceDetails || payload.serviceDetails || {};
+  const serviceDetails =
+    props.serviceDetails ||
+    payload.serviceDetails ||
+    payload.wizardData?.serviceDetails ||
+    (props as any)?.rawBid?.serviceDetails ||
+    (props as any)?.technicalPacket?.serviceDetails ||
+    (props as any)?.rawBid?.technicalPacket?.serviceDetails ||
+    {};
   const buyerProfile = props.buyer?.buyerProfile || {};
   const buyerOrg =
     props.buyer?.buyerOrganization || props.buyer?.organization || {};
@@ -6131,7 +6368,94 @@ export function ProcurementDetailUnifiedView(
     0
   );
 
-  const documents = props.documents || [];
+  const rawDocs = asArray(
+    props.documents ||
+      payload.documents ||
+      payload.bidDocuments ||
+      (props as any).rawBid?.documents ||
+      [],
+  );
+
+  const documents = useMemo(() => {
+    const list = [...rawDocs];
+
+    // Check if serviceDetails has an attached SOW document
+    const sowFileAssetId =
+      serviceDetails?.sowFileAssetId ||
+      payload.serviceDetails?.sowFileAssetId ||
+      payload.wizardData?.serviceDetails?.sowFileAssetId;
+    const sowFileName =
+      serviceDetails?.sowFileName ||
+      payload.serviceDetails?.sowFileName ||
+      payload.wizardData?.serviceDetails?.sowFileName;
+    const sowFileUrl =
+      serviceDetails?.sowFileUrl ||
+      payload.serviceDetails?.sowFileUrl ||
+      payload.wizardData?.serviceDetails?.sowFileUrl;
+
+    if (sowFileAssetId || sowFileName || sowFileUrl) {
+      const alreadyIncluded = list.some(
+        (d: any) =>
+          (sowFileAssetId && (d.fileAssetId === sowFileAssetId || d.id === sowFileAssetId)) ||
+          (sowFileName &&
+            (d.name === sowFileName ||
+              d.fileName === sowFileName ||
+              d.originalName === sowFileName)),
+      );
+      if (!alreadyIncluded) {
+        list.unshift({
+          id: "sow-dossier-doc",
+          fileAssetId: sowFileAssetId,
+          url: sowFileUrl,
+          name: sowFileName || "Scope of Work (SOW) & SLA Specification.pdf",
+          meta: "Official SOW & SLA Document",
+          required: true,
+        });
+      }
+    }
+
+    // Check if boqTable has an attached BOQ spreadsheet
+    const boqFileAssetId =
+      payload.boqFileAssetId ||
+      payload.wizardData?.boqFileAssetId ||
+      (props as any).boqFileAssetId;
+    const boqFileName =
+      payload.boqFileName ||
+      payload.wizardData?.boqFileName ||
+      (props as any).boqFileName;
+    if (boqFileAssetId || boqFileName) {
+      const alreadyIncluded = list.some(
+        (d: any) =>
+          (boqFileAssetId && (d.fileAssetId === boqFileAssetId || d.id === boqFileAssetId)) ||
+          (boqFileName &&
+            (d.name === boqFileName ||
+              d.fileName === boqFileName ||
+              d.originalName === boqFileName)),
+      );
+      if (!alreadyIncluded) {
+        list.push({
+          id: "boq-schedule-doc",
+          fileAssetId: boqFileAssetId,
+          name: boqFileName || "Bill of Quantities (BOQ).xlsx",
+          meta: "Official BOQ Schedule",
+          required: true,
+        });
+      }
+    }
+
+    return list;
+  }, [
+    rawDocs,
+    serviceDetails,
+    payload.serviceDetails,
+    payload.wizardData?.serviceDetails,
+    payload.boqFileAssetId,
+    payload.wizardData?.boqFileAssetId,
+    payload.boqFileName,
+    payload.wizardData?.boqFileName,
+    (props as any).boqFileAssetId,
+    (props as any).boqFileName,
+  ]);
   const requiredDocuments = firstPresent(
     props.requiredDocuments,
     payload.requiredDocuments,
@@ -6941,12 +7265,12 @@ export function ProcurementDetailUnifiedView(
     ? cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation
     : undefined;
 
-  const isServices = String(buyingType || "")
-    .toLowerCase()
-    .includes("service");
-  const projectDuration =
-    !isRfqType && (isServices || isRateContractType)
-      ? firstPresent(
+  const isServices =
+    String(buyingType || "").toLowerCase().includes("service") ||
+    hasDetailData(serviceDetails?.scopeOfWork) ||
+    hasDetailData(serviceDetails?.serviceTitle);
+  const projectDuration = (!isRfqType && (isServices || isRateContractType))
+    ? firstPresent(
           props.projectDuration &&
             props.projectDuration !== "—" &&
             props.projectDuration !== "N/A"
@@ -12109,6 +12433,98 @@ export function ProcurementDetailUnifiedView(
                   />
                 )}
 
+              {/* Executive Service & SLA Highlights for Services Procurements */}
+              {isServices &&
+                (serviceDetails.slaResponseTime ||
+                  serviceDetails.duration ||
+                  serviceDetails.scopeOfWork ||
+                  serviceDetails.sowFileName) && (
+                  <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-white p-3.5 sm:p-4 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100/80 pb-3">
+                      <div className="flex items-center gap-2.5">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
+                          <Briefcase className="h-4 w-4" />
+                        </span>
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
+                              Service SOW &amp; SLA Overview
+                            </span>
+                            {serviceDetails.duration && (
+                              <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                <Clock className="h-3 w-3 text-indigo-600" />
+                                {serviceDetails.duration}
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 mt-0.5">
+                            {serviceDetails.serviceTitle ||
+                              props.subject ||
+                              "Service Contract Requirements"}
+                          </h4>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setActiveTab("scope_docs")}
+                        className="border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 font-bold text-xs h-8 cursor-pointer"
+                      >
+                        <FileText className="h-3.5 w-3.5 mr-1" />
+                        View Full SOW &amp; SLA
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 text-xs">
+                      <div>
+                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                          SLA Response
+                        </span>
+                        <span className="font-bold text-slate-800">
+                          {serviceDetails.slaResponseTime ||
+                            "Standard Business Hours"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                          Penalty Clause
+                        </span>
+                        <span
+                          className="font-bold text-slate-800 truncate block"
+                          title={
+                            serviceDetails.penaltyClause ||
+                            "Standard Liquidated Damages"
+                          }
+                        >
+                          {serviceDetails.penaltyClause ||
+                            "Standard Liquidated Damages"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                          Pricing Basis
+                        </span>
+                        <span className="font-bold text-emerald-700">
+                          Lump-Sum SOW Fee
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
+                          SOW Document
+                        </span>
+                        <span
+                          className="font-bold text-indigo-600 truncate block"
+                          title={
+                            serviceDetails.sowFileName || "Detailed in Scope Tab"
+                          }
+                        >
+                          {serviceDetails.sowFileName || "Detailed in Scope Tab"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
               <div className="grid gap-3.5 sm:gap-4 lg:grid-cols-2">
                 <DataCard
                   title={
@@ -12258,6 +12674,7 @@ export function ProcurementDetailUnifiedView(
                     items={lineItems}
                     defaultSubject={resolvedSubject}
                     isBuyer={isBuyerSide}
+                    buyingType={buyingType}
                   />
                 )}
 
@@ -12274,6 +12691,15 @@ export function ProcurementDetailUnifiedView(
                     />
                   )}
               </DataCard>
+
+              {/* Service Level Agreement (SLA) & Scope of Work (SOW) Dossier */}
+              {isServices && (
+                <ServiceDossierCard
+                  serviceDetails={serviceDetails}
+                  buyingType={buyingType}
+                  scopeText={scopeText}
+                />
+              )}
 
               {(() => {
                 const validDownloadableDocs = documents.filter(

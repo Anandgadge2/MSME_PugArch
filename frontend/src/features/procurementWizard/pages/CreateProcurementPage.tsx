@@ -8862,7 +8862,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: (draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP')
+    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
