@@ -772,20 +772,7 @@ export default function BidComparisonPage() {
                                   );
                                 }
 
-                                return (
-                                  <button
-                                    onClick={() => handleOpenAwardModal(p)}
-                                    className={`inline-flex h-8.5 items-center gap-1.5 rounded-xl px-4 text-xs font-black text-white shadow-xs transition hover:opacity-95 cursor-pointer ${
-                                      isL1 
-                                        ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/20' 
-                                        : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
-                                    }`}
-                                    title={isL1 ? "Issue contract award offer to L1 lowest bidder" : "Issue award offer with L1 override justification"}
-                                  >
-                                    <Award className="h-4 w-4" /> 
-                                    <span>{isL1 ? 'Issue Award Offer' : 'Offer Award (Override)'}</span>
-                                  </button>
-                                );
+                               
                               })()}
                             </div>
                           </div>
