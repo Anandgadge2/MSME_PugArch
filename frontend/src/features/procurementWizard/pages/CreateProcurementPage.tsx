@@ -5940,89 +5940,120 @@ function ItemsDetailsForm({
           </div>
         )}
 
-        {/* Action Toolbar: All buttons in a single row without wrapping */}
+        {/* Action Toolbar: Strictly gated by whatAreYouBuying */}
         <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
           <div className="flex items-center gap-2 shrink-0 flex-nowrap">
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleAddNewItem('Product')}
-              className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
-            </Button>
+            {whatBuying !== 'Service' && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleAddNewItem('Product')}
+                className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
+              </Button>
+            )}
 
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => handleAddNewItem('Service')}
-              className="h-8.5 px-3.5 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
-            >
-              <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service
-            </Button>
+            {whatBuying === 'Service' && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleAddNewItem('Service')}
+                className="h-8.5 px-3.5 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shadow-3xs shrink-0 whitespace-nowrap"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+              </Button>
+            )}
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleImportCartItems}
-              disabled={isCartLoading}
-              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
-              title="Import catalogue items from your active cart"
-            >
-              <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
-              {isCartLoading ? 'Reading Cart...' : activeCart?.items?.length ? `Import Cart (${activeCart.items.length})` : 'Import Cart'}
-            </Button>
+            {whatBuying !== 'Service' ? (
+              <>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleImportCartItems}
+                  disabled={isCartLoading}
+                  className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+                  title="Import catalogue items from your active cart"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
+                  {isCartLoading ? 'Reading Cart...' : activeCart?.items?.length ? `Import Cart (${activeCart.items.length})` : 'Import Cart'}
+                </Button>
 
-            <div className="relative shrink-0">
-              <input
-                type="file"
-                id="item-template-import"
-                accept=".xlsx,.xls,.csv,.txt"
-                onChange={handleImportItemTemplate}
-                className="sr-only"
-                aria-label="Import items from Excel or CSV spreadsheet"
-              />
-              <label
-                htmlFor="item-template-import"
-                className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
-                title="Import items from Excel (.xlsx) or CSV spreadsheet"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
-              </label>
-            </div>
+                <div className="relative shrink-0">
+                  <input
+                    type="file"
+                    id="item-template-import"
+                    accept=".xlsx,.xls,.csv,.txt"
+                    onChange={handleImportItemTemplate}
+                    className="sr-only"
+                    aria-label="Import items from Excel or CSV spreadsheet"
+                  />
+                  <label
+                    htmlFor="item-template-import"
+                    className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
+                    title="Import items from Excel (.xlsx) or CSV spreadsheet"
+                  >
+                    <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
+                  </label>
+                </div>
 
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={handleDownloadItemTemplate}
-              className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
-              title="Download Excel template (.xlsx) for bulk items"
-            >
-              <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
-            </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleDownloadItemTemplate}
+                  className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
+                  title="Download Excel template (.xlsx) for bulk items"
+                >
+                  <Download className="h-3.5 w-3.5 mr-1 text-slate-500" aria-hidden="true" /> Template
+                </Button>
+              </>
+            ) : (
+              <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-100/80 border border-purple-200 px-3 py-1.5 rounded-lg shadow-3xs">
+                <Wrench className="h-3.5 w-3.5 text-purple-700 shrink-0" />
+                <span>Service & SOW Sourcing Mode</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Helpful Hint Cards */}
+      {/* Helpful Hint Cards - Contextually Gated */}
       <div className="grid gap-3 sm:grid-cols-3">
-        <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
-          <Info className="h-4 w-4 text-[#12335f] shrink-0 mt-0.5" />
-          <span>Click <strong>Add Product</strong> or <strong>Add Service</strong> to configure specs, unit rate, and GST.</span>
-        </div>
-        <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-900 flex items-start gap-2.5">
-          <Paperclip className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
-          <span>Attach CAD drawings, datasheets, or spec PDFs directly from the table or inside the item modal.</span>
-        </div>
-        <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs font-semibold text-slate-700 flex items-start gap-2.5">
-          <FileSpreadsheet className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
-          <span>Bulk import items from CSV templates or pull pre-selected catalogue items from your cart.</span>
-        </div>
+        {whatBuying === 'Service' ? (
+          <>
+            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs font-semibold text-purple-950 flex items-start gap-2.5">
+              <FileText className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" />
+              <span><strong>Scope of Work (SOW):</strong> Upload your SOW dossier or type specifications above to govern deliverables and operational boundaries.</span>
+            </div>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
+              <IndianRupee className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+              <span><strong>Lump-Sum Commercials:</strong> Add your service line with agreed billing unit (1 Job / Set / Year) and GST rate.</span>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-950 flex items-start gap-2.5">
+              <Clock className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+              <span><strong>SLA & Penalties:</strong> Configure contract duration, response times, and downtime penalties in the terms panel above.</span>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
+              <Info className="h-4 w-4 text-[#12335f] shrink-0 mt-0.5" />
+              <span>Click <strong>Add Product</strong> to configure technical specs, unit rate, and GST percentage.</span>
+            </div>
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-900 flex items-start gap-2.5">
+              <Paperclip className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+              <span>Attach CAD drawings, datasheets, or spec PDFs directly from the table or inside the item modal.</span>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 text-xs font-semibold text-slate-700 flex items-start gap-2.5">
+              <FileSpreadsheet className="h-4 w-4 text-slate-600 shrink-0 mt-0.5" />
+              <span>Bulk import items from CSV templates or pull pre-selected catalogue items from your cart.</span>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Modern Schedule Table */}
@@ -6034,31 +6065,38 @@ function ItemsDetailsForm({
         minWidth="min-w-[1180px]"
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
-        emptyTitle="No items or services added yet"
-        emptyDescription="Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+        emptyTitle={whatBuying === 'Service' ? "No service contract lines added yet" : "No product items added yet"}
+        emptyDescription={
+          whatBuying === 'Service'
+            ? "Click 'Add Service Line' or use the 1-click Initialize button above to configure your lump-sum contract item."
+            : "Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+        }
         footer={
           <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
             <div className="flex items-center gap-2 shrink-0 flex-nowrap">
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => handleAddNewItem('Product')}
-                className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => handleAddNewItem('Service')}
-                className="h-8 px-3 text-xs font-bold border-purple-200 text-purple-700 hover:bg-purple-50 shrink-0 whitespace-nowrap"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
-              </Button>
+              {whatBuying !== 'Service' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleAddNewItem('Product')}
+                  className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
+                </Button>
+              )}
+              {whatBuying === 'Service' && (
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={() => handleAddNewItem('Service')}
+                  className="h-8 px-3 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shrink-0 whitespace-nowrap"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+                </Button>
+              )}
             </div>
             <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
-              {draft.items.length} line item{draft.items.length === 1 ? '' : 's'} scheduled
+              {draft.items.length} {whatBuying === 'Service' ? 'service line' : 'line item'}{draft.items.length === 1 ? '' : 's'} scheduled
             </span>
           </div>
         }

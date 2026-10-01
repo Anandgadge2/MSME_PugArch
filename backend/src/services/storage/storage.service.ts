@@ -52,11 +52,30 @@ const allowedByExtension: Record<string, string[]> = {
   '.jpeg': ['image/jpeg'],
   '.png': ['image/png'],
   '.webp': ['image/webp'],
-  '.doc': ['application/msword'],
-  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
-  '.xls': ['application/vnd.ms-excel'],
-  '.xlsx': ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'],
-  '.csv': ['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'],
+  '.doc': ['application/msword', 'application/octet-stream'],
+  '.docx': [
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/octet-stream',
+    'application/x-zip-compressed',
+    'application/zip'
+  ],
+  '.xls': ['application/vnd.ms-excel', 'application/octet-stream'],
+  '.xlsx': [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/octet-stream',
+    'application/x-zip-compressed',
+    'application/zip'
+  ],
+  '.csv': [
+    'text/csv',
+    'application/csv',
+    'application/vnd.ms-excel',
+    'text/plain',
+    'application/octet-stream',
+    'text/comma-separated-values',
+    'text/x-csv',
+    'application/x-csv'
+  ],
   '.webm': ['audio/webm', 'video/webm'],
   '.ogg': ['audio/ogg', 'application/ogg'],
   '.mp3': ['audio/mpeg', 'audio/mp3'],
@@ -81,7 +100,7 @@ const extensionForMime = (mimeType: string) => {
   if (mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return '.docx';
   if (mimeType === 'application/vnd.ms-excel') return '.xls';
   if (mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') return '.xlsx';
-  if (['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain'].includes(mimeType)) return '.csv';
+  if (['text/csv', 'application/csv', 'application/vnd.ms-excel', 'text/plain', 'text/comma-separated-values', 'text/x-csv', 'application/x-csv'].includes(mimeType)) return '.csv';
   if (['audio/webm', 'video/webm'].includes(mimeType)) return '.webm';
   if (['audio/ogg', 'application/ogg'].includes(mimeType)) return '.ogg';
   if (['audio/mpeg', 'audio/mp3'].includes(mimeType)) return '.mp3';
@@ -102,19 +121,37 @@ const detectMagicMime = (buffer: Buffer, declaredMime?: string): string | null =
   if (buffer.subarray(4, 8).equals(Buffer.from([0x66, 0x74, 0x79, 0x70]))) return 'audio/x-m4a';
   if (buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
     const archiveIndex = buffer.toString('latin1');
-    if (archiveIndex.includes('[Content_Types].xml') || archiveIndex.includes('word/')) {
-      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
-    }
     if (archiveIndex.includes('xl/')) {
       return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    }
+    if (archiveIndex.includes('word/')) {
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    if (archiveIndex.includes('ppt/')) {
+      return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    }
+    if (archiveIndex.includes('[Content_Types].xml')) {
+      if (declaredMime === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet') {
+        return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      }
+      return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
     return null;
   }
   if (buffer.subarray(0, 8).equals(Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]))) {
     return declaredMime === 'application/vnd.ms-excel' ? 'application/vnd.ms-excel' : 'application/msword';
   }
-  const sample = buffer.subarray(0, Math.min(buffer.length, 512)).toString('utf8');
-  if (/^[\u0009\u000a\u000d\u0020-\u007e]+$/.test(sample) && sample.includes(',')) return 'text/csv';
+  // Robust CSV / Text detection: strip UTF-8 BOM, allow valid UTF-8 text with delimiters
+  let textSample = buffer.subarray(0, Math.min(buffer.length, 2048));
+  if (textSample.length >= 3 && textSample[0] === 0xef && textSample[1] === 0xbb && textSample[2] === 0xbf) {
+    textSample = textSample.subarray(3);
+  }
+  const sampleStr = textSample.toString('utf8');
+  // Disallow binary control bytes, but allow tab, LF, CR, and printable UTF-8 characters
+  const isPrintable = !/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(sampleStr);
+  if (isPrintable && (sampleStr.includes(',') || sampleStr.includes(';') || sampleStr.includes('\t') || sampleStr.includes('\n'))) {
+    return 'text/csv';
+  }
   if (declaredMime && ['audio/webm', 'audio/ogg', 'audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-m4a'].includes(declaredMime)) {
     return declaredMime;
   }
@@ -148,18 +185,39 @@ export const validateFile = (file: Express.Multer.File) => {
 
   const magicMime = detectMagicMime(file.buffer, file.mimetype);
   if (!magicMime || !allowedMimes.includes(magicMime)) {
-    if (ext === '.csv' && magicMime === 'text/csv' && allowedMimes.includes(file.mimetype)) {
-      const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
-      const secureName = `${crypto.randomUUID()}.csv`;
-      return {
-        originalName,
-        secureName,
-        extension: '.csv',
-        mimeType: file.mimetype === 'application/vnd.ms-excel' ? 'text/csv' : magicMime,
-        size: file.size,
-        checksum,
-        resourceType: 'raw' as StorageResourceType
-      };
+    if (ext === '.csv') {
+      let s = file.buffer.subarray(0, Math.min(file.buffer.length, 2048));
+      if (s.length >= 3 && s[0] === 0xef && s[1] === 0xbb && s[2] === 0xbf) s = s.subarray(3);
+      const str = s.toString('utf8');
+      if (!/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(str)) {
+        const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
+        const secureName = `${crypto.randomUUID()}.csv`;
+        return {
+          originalName,
+          secureName,
+          extension: '.csv',
+          mimeType: 'text/csv',
+          size: file.size,
+          checksum,
+          resourceType: 'raw' as StorageResourceType
+        };
+      }
+    }
+    if (ext === '.xlsx' && file.buffer.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))) {
+      const archiveIndex = file.buffer.toString('latin1');
+      if (archiveIndex.includes('xl/') || archiveIndex.includes('[Content_Types].xml')) {
+        const checksum = crypto.createHash('sha256').update(file.buffer).digest('hex');
+        const secureName = `${crypto.randomUUID()}.xlsx`;
+        return {
+          originalName,
+          secureName,
+          extension: '.xlsx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          size: file.size,
+          checksum,
+          resourceType: 'raw' as StorageResourceType
+        };
+      }
     }
     throw new ApiError(400, 'File signature does not match allowed file type', 'FILE_MAGIC_MISMATCH');
   }
