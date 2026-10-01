@@ -34,6 +34,8 @@ import {
   ChevronRight,
   UserCheck,
   ExternalLink,
+  FileText,
+  Tag,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -82,6 +84,54 @@ const liveAwareRefetch = (query: any) => {
   const auction = query?.state?.data?.auction || cachedAuction || (query?.state?.data?.status ? query?.state?.data : undefined);
   if (!auction) return 10_000;
   return isAuctionLive(auction, query?.state?.data?.serverTime) ? 2_000 : 15_000;
+};
+
+const parseDescriptionContent = (rawText?: string | null) => {
+  if (!rawText || !rawText.trim()) {
+    return {
+      narrative: 'Participate in a competitive reverse auction with live downward price tracking, real-time rank updates, and server timestamp verification.',
+      badges: [] as Array<{ key: string; label: string; value: string; variant: 'blue' | 'emerald' | 'amber' | 'slate' }>
+    };
+  }
+
+  const text = rawText.trim();
+
+  // Split by newlines or inline concatenated keys like "Sourcing Method: ... Value: ... Urgency: ..."
+  const rawSegments = text.split(/\r?\n/).flatMap(segment => {
+    return segment.split(/(?<=\S)\s+(?=(?:Sourcing Method|Method|Value|Estimated Value|Budget|Urgency|Priority|Category):\s*)/i);
+  }).map(s => s.trim()).filter(Boolean);
+
+  const badges: Array<{ key: string; label: string; value: string; variant: 'blue' | 'emerald' | 'amber' | 'slate' }> = [];
+  const narrativeParts: string[] = [];
+
+  for (const seg of rawSegments) {
+    const match = seg.match(/^([^:]+):\s*(.+)$/);
+    if (match) {
+      const rawKey = match[1].trim();
+      const rawVal = match[2].trim();
+      const lowerKey = rawKey.toLowerCase();
+
+      if (lowerKey === 'sourcing method' || lowerKey === 'method') {
+        const formattedVal = rawVal.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        badges.push({ key: 'method', label: 'Method', value: formattedVal, variant: 'blue' });
+      } else if (lowerKey === 'value' || lowerKey === 'estimated value' || lowerKey === 'budget') {
+        const formattedVal = rawVal.replace(/^INR\s*/i, '₹');
+        badges.push({ key: 'value', label: 'Est. Value', value: formattedVal, variant: 'emerald' });
+      } else if (lowerKey === 'urgency' || lowerKey === 'priority') {
+        const formattedVal = rawVal.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+        badges.push({ key: 'urgency', label: 'Urgency', value: formattedVal, variant: 'amber' });
+      } else if (lowerKey === 'category') {
+        badges.push({ key: 'category', label: 'Category', value: rawVal, variant: 'slate' });
+      } else {
+        narrativeParts.push(seg);
+      }
+    } else {
+      narrativeParts.push(seg);
+    }
+  }
+
+  const narrative = narrativeParts.join(' ').trim();
+  return { narrative, badges };
 };
 
 export default function ReverseAuctionLivePage({ id }: { id: number | string }) {
@@ -208,6 +258,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   const [isNearEnding, setIsNearEnding] = useState(false);
   const live = auction ? isAuctionLive(auction, summary.data?.serverTime || liveSummaryCache.get(id)?.serverTime) : false;
   const status = auction ? getStatus(auction) : 'DRAFT';
+  const parsedDesc = useMemo(() => parseDescriptionContent(auction?.description), [auction?.description]);
 
   useEffect(() => {
     if (!live || !auction?.endTime) {
@@ -637,9 +688,39 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900">
             {auction.title || `Auction #${id}`}
           </h1>
-          <p className="max-w-4xl text-xs sm:text-sm font-semibold leading-relaxed text-slate-500">
-            {auction.description || 'Participate in a competitive reverse auction with live downward price tracking, real-time rank updates, and server timestamp verification.'}
-          </p>
+          {/* Formatted Description & Structured Badges */}
+          <div className="space-y-2 mt-1">
+            {parsedDesc.badges.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                {parsedDesc.badges.map((b) => (
+                  <span
+                    key={b.key}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold border shadow-2xs",
+                      b.variant === 'blue' && "bg-blue-50 border-blue-200 text-blue-800",
+                      b.variant === 'emerald' && "bg-emerald-50 border-emerald-200 text-emerald-800",
+                      b.variant === 'amber' && "bg-amber-50 border-amber-200 text-amber-800",
+                      b.variant === 'slate' && "bg-slate-50 border-slate-200 text-slate-700"
+                    )}
+                  >
+                    {b.key === 'method' && <FileText className="h-3.5 w-3.5 text-blue-600" />}
+                    {b.key === 'value' && <IndianRupee className="h-3.5 w-3.5 text-emerald-600" />}
+                    {b.key === 'urgency' && <Clock3 className="h-3.5 w-3.5 text-amber-600" />}
+                    {b.key === 'category' && <Tag className="h-3.5 w-3.5 text-slate-500" />}
+                    <span className="text-[10px] font-extrabold uppercase tracking-wider opacity-70">
+                      {b.label}:
+                    </span>
+                    <span className="font-black">
+                      {b.value}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+            <p className="max-w-4xl text-xs sm:text-sm font-semibold leading-relaxed text-slate-500">
+              {parsedDesc.narrative || 'Dynamic Stage 2 live reverse auction with downward price discovery and server-verified timestamping.'}
+            </p>
+          </div>
         </div>
 
         {/* Countdown & Action Buttons */}
