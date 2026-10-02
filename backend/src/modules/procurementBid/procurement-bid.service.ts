@@ -13,6 +13,7 @@ import { maskSensitive } from '../../utils/maskSensitive.js';
 import { CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../../utils/refIdUtils.js';
 import { getNextCanonicalSequence } from '../../services/sequence.service.js';
 import { filterSealedDocuments } from './procurement-sealing.utils.js';
+import { parseDateIST } from '../../utils/dateUtils.js';
 
 const db = prisma as any;
 
@@ -1386,7 +1387,8 @@ export const refreshBidStatus = async (bid: any) => {
     tp?.bidClosingDate,
     bid.endDate
   );
-  const endDateTime = deadlineCandidate ? new Date(deadlineCandidate).getTime() : (bid.endDate ? new Date(bid.endDate).getTime() : null);
+  const parsedDeadline = deadlineCandidate ? parseDateIST(deadlineCandidate) : (bid.endDate ? parseDateIST(bid.endDate) : null);
+  const endDateTime = parsedDeadline ? parsedDeadline.getTime() : null;
 
   if (['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'ACTIVE'].includes(current) && endDateTime && endDateTime <= time.getTime()) {
     const expired = await db.procurementBid.update({
@@ -2760,8 +2762,8 @@ export const extendBidSchedule = async (
     );
   }
 
-  const newClosingDate = new Date(body.closingDate);
-  if (isNaN(newClosingDate.getTime())) {
+  const newClosingDate = parseDateIST(body.closingDate);
+  if (!newClosingDate || isNaN(newClosingDate.getTime())) {
     throw new ApiError(400, 'Invalid submission closing date provided.', 'INVALID_CLOSING_DATE');
   }
 
@@ -2789,27 +2791,27 @@ export const extendBidSchedule = async (
     ? (sched.submissionClosingDate || sched.submissionDate || sched.submissionDeadline || sched.submissionEndDate || sched.bidClosingDate || tndr.bidClosingDate || packet.submissionDeadline || packet.bidClosingDate || bid.endDate)
     : (sched.submissionClosingDate || sched.submissionDate || sched.submissionDeadline || sched.submissionEndDate || sched.bidClosingDate || tndr.bidClosingDate || packet.submissionDeadline || packet.bidClosingDate || bid.endDate);
 
-  const oldEndDate = effectiveCurrentClosingDate ? new Date(effectiveCurrentClosingDate) : (bid.endDate ? new Date(bid.endDate) : null);
+  const oldEndDate = effectiveCurrentClosingDate ? parseDateIST(effectiveCurrentClosingDate) : (bid.endDate ? parseDateIST(bid.endDate) : null);
   const isPastDeadline = oldEndDate ? oldEndDate.getTime() <= now.getTime() : false;
+  const isExpiredOrClosed = ['CLOSED', 'EXPIRED'].includes(status) || isPastDeadline;
 
-  if (oldEndDate && !isPastDeadline && newClosingDate.getTime() <= oldEndDate.getTime()) {
+  if (oldEndDate && !isExpiredOrClosed && newClosingDate.getTime() <= oldEndDate.getTime()) {
     throw new ApiError(400, 'New submission closing date must be later than the current deadline.', 'CLOSING_DATE_NOT_EXTENDED');
   }
 
   // Validate technical opening date if provided
   let newTechDate: Date | null = null;
   if (body.technicalOpeningDate) {
-    newTechDate = new Date(body.technicalOpeningDate);
-    if (isNaN(newTechDate.getTime())) {
+    newTechDate = parseDateIST(body.technicalOpeningDate);
+    if (!newTechDate || isNaN(newTechDate.getTime())) {
       throw new ApiError(400, 'Invalid technical opening date provided.', 'INVALID_TECH_DATE');
     }
     if (newTechDate.getTime() < newClosingDate.getTime()) {
       throw new ApiError(400, 'Technical opening date cannot be earlier than the submission closing date.', 'INVALID_DATE_SEQUENCE');
     }
-  } else if (bid.technicalOpeningDate) {
-    // If existing technical date is prior to new closing date, auto-align it
-    const oldTech = new Date(bid.technicalOpeningDate);
-    if (oldTech.getTime() < newClosingDate.getTime()) {
+  } else if (bid.technicalOpeningDate || sched.technicalOpeningDate || tndr.technicalEvaluationDate) {
+    const oldTech = parseDateIST(bid.technicalOpeningDate || sched.technicalOpeningDate || tndr.technicalEvaluationDate);
+    if (oldTech && oldTech.getTime() < newClosingDate.getTime()) {
       newTechDate = newClosingDate;
     }
   }
@@ -2825,18 +2827,18 @@ export const extendBidSchedule = async (
   if (!isTwoPacketBid || body.financialOpeningDate === null) {
     newFinDate = null;
   } else if (body.financialOpeningDate) {
-    newFinDate = new Date(body.financialOpeningDate);
-    if (isNaN(newFinDate.getTime())) {
+    newFinDate = parseDateIST(body.financialOpeningDate);
+    if (!newFinDate || isNaN(newFinDate.getTime())) {
       throw new ApiError(400, 'Invalid financial opening date provided.', 'INVALID_FIN_DATE');
     }
     const minFin = newTechDate || newClosingDate;
     if (newFinDate.getTime() < minFin.getTime()) {
       throw new ApiError(400, 'Financial opening date cannot be earlier than the technical opening / closing date.', 'INVALID_DATE_SEQUENCE');
     }
-  } else if (bid.financialOpeningDate) {
-    const oldFin = new Date(bid.financialOpeningDate);
+  } else if (bid.financialOpeningDate || sched.financialOpeningDate || tndr.financialEvaluationDate) {
+    const oldFin = parseDateIST(bid.financialOpeningDate || sched.financialOpeningDate || tndr.financialEvaluationDate);
     const minFin = newTechDate || newClosingDate;
-    if (oldFin.getTime() < minFin.getTime()) {
+    if (oldFin && oldFin.getTime() < minFin.getTime()) {
       newFinDate = minFin;
     } else {
       newFinDate = oldFin;
@@ -2846,8 +2848,8 @@ export const extendBidSchedule = async (
   // Validate requiredByDate / delivery date if provided
   let newRequiredByDate: Date | null = null;
   if (body.requiredByDate) {
-    newRequiredByDate = new Date(body.requiredByDate);
-    if (isNaN(newRequiredByDate.getTime())) {
+    newRequiredByDate = parseDateIST(body.requiredByDate, true);
+    if (!newRequiredByDate || isNaN(newRequiredByDate.getTime())) {
       throw new ApiError(400, 'Invalid delivery / required-by date provided.', 'INVALID_DELIVERY_DATE');
     }
     if (newRequiredByDate.getTime() < newClosingDate.getTime()) {
@@ -2858,8 +2860,8 @@ export const extendBidSchedule = async (
   // Validate bid validity date
   let newValidityDate: Date | null = null;
   if (body.bidValidityDate) {
-    newValidityDate = new Date(body.bidValidityDate);
-    if (isNaN(newValidityDate.getTime())) {
+    newValidityDate = parseDateIST(body.bidValidityDate, true);
+    if (!newValidityDate || isNaN(newValidityDate.getTime())) {
       throw new ApiError(400, 'Invalid bid validity date provided.', 'INVALID_VALIDITY_DATE');
     }
     if (newValidityDate.getTime() < newClosingDate.getTime()) {
