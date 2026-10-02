@@ -6853,6 +6853,80 @@ export function ProcurementDetailUnifiedView(
     boqFileAssetId,
     boqFileName,
   ]);
+
+  const [unifiedPreviewDocument, setUnifiedPreviewDocument] =
+    useState<DocumentPreview | null>(null);
+  const [previewLoadingDocId, setPreviewLoadingDocId] = useState<
+    string | number | null
+  >(null);
+
+  const handleOpenDoc = useCallback(
+    async (doc: any, fallbackName = "Document") => {
+      const rawUrl =
+        doc?.url || doc?.fileUrl || doc?.signedUrl || doc?.documentUrl || "";
+      const urlMatchId = String(rawUrl).match(
+        /\/api\/(?:public\/)?files\/(\d+)/,
+      )?.[1];
+      const fileId =
+        doc?.fileAssetId ||
+        doc?.fileId ||
+        (typeof doc?.id === "number" || /^\d+$/.test(String(doc?.id || ""))
+          ? Number(doc.id)
+          : urlMatchId
+            ? Number(urlMatchId)
+            : undefined);
+      const effectiveUrl =
+        rawUrl || (fileId ? `/api/files/${fileId}/view` : "");
+      const docName =
+        doc?.name || doc?.fileName || doc?.originalName || fallbackName;
+
+      const docIdentifier = doc?.id || doc?.fileAssetId || docName;
+      setPreviewLoadingDocId(docIdentifier);
+
+      try {
+        if (fileId || effectiveUrl) {
+          try {
+            const prev = await getFileAssetPreview(
+              {
+                id: fileId,
+                fileAssetId: fileId,
+                url: effectiveUrl,
+                fileName: docName,
+              },
+              docName,
+            );
+            if (prev) {
+              setUnifiedPreviewDocument(prev);
+              return;
+            }
+          } catch (e) {
+            console.warn("getFileAssetPreview fallback to openFileAsset:", e);
+          }
+
+          await openFileAsset(
+            {
+              id: fileId,
+              fileAssetId: fileId,
+              originalName: docName,
+              url: effectiveUrl,
+            },
+            docName,
+          );
+          return;
+        }
+        toast.error("Document file is not available for preview.");
+      } catch (err: any) {
+        console.error("Failed to view attachment:", err);
+        toast.error(
+          err instanceof Error ? err.message : "Unable to open document file.",
+        );
+      } finally {
+        setPreviewLoadingDocId(null);
+      }
+    },
+    [],
+  );
+
   const requiredDocuments = firstPresent(
     props.requiredDocuments,
     payload.requiredDocuments,
@@ -13220,6 +13294,7 @@ export function ProcurementDetailUnifiedView(
                   serviceDetails={serviceDetails}
                   buyingType={buyingType}
                   scopeText={scopeText}
+                  onOpenDoc={handleOpenDoc}
                 />
               )}
 
@@ -13291,23 +13366,18 @@ export function ProcurementDetailUnifiedView(
                                   type="button"
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => {
-                                    if (doc.fileAssetId || doc.url) {
-                                      openFileAsset(
-                                        {
-                                          fileAssetId: doc.fileAssetId,
-                                          url: doc.url,
-                                          originalName: docDisplayName,
-                                        },
-                                        docDisplayName,
-                                      );
-                                    }
-                                  }}
+                                  onClick={() => handleOpenDoc(doc, docDisplayName)}
                                   disabled={!doc.fileAssetId && !doc.url}
                                   className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                                  Open Document
+                                  {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName) ? (
+                                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                  ) : (
+                                    <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                  )}
+                                  {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName)
+                                    ? "Opening..."
+                                    : "Open Document"}
                                 </Button>
                               </article>
                             );
@@ -14777,6 +14847,14 @@ export function ProcurementDetailUnifiedView(
                   window.location.reload();
                 }
               }}
+            />
+          )}
+
+          {/* Unified Document Preview Modal */}
+          {unifiedPreviewDocument && (
+            <DocumentPreviewModal
+              previewDocument={unifiedPreviewDocument}
+              onClose={() => setUnifiedPreviewDocument(null)}
             />
           )}
         </div>
