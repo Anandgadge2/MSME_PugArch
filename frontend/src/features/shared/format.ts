@@ -31,6 +31,17 @@ export const formatTime = (value: unknown): string => {
   return `${h}:${m} ${ampm}`;
 };
 
+export const formatTimeWithSeconds = (value: unknown): string => {
+  const d = safeDate(value);
+  if (!d) return '—';
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${h}:${m}:${s} ${ampm}`;
+};
+
 export const formatDateTime = (value: unknown): string => {
   const d = safeDate(value);
   if (!d) return '—';
@@ -42,6 +53,20 @@ export const formatDateTime = (value: unknown): string => {
   const ampm = h >= 12 ? 'PM' : 'AM';
   h = h % 12 || 12;
   return `${day} ${month} ${year}, ${h}:${m} ${ampm}`;
+};
+
+export const formatDateTimeWithSeconds = (value: unknown): string => {
+  const d = safeDate(value);
+  if (!d) return '—';
+  const day = d.getDate();
+  const month = MONTH_NAMES[d.getMonth()];
+  const year = d.getFullYear();
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const s = String(d.getSeconds()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return `${day} ${month} ${year}, ${h}:${m}:${s} ${ampm}`;
 };
 
 /**

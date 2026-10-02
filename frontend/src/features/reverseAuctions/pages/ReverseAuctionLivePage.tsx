@@ -52,7 +52,7 @@ import { Button } from '../../../components/ui/button';
 import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
-import { formatCurrency, formatDateTime, formatNumber, formatTime } from '../../shared/format';
+import { formatCurrency, formatDateTime, formatDateTimeWithSeconds, formatNumber, formatTime, formatTimeWithSeconds } from '../../shared/format';
 import { cn } from '../../../lib/utils';
 import { useAuth } from '../../../hooks/useAuth';
 import { reverseAuctionApi, type ReverseAuction, type ReverseAuctionBid, type ReverseAuctionParticipant } from '../api';
@@ -605,27 +605,72 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
   // Process data for the real-time bid chart:
   // For initial baseline bids submitted at the same time, higher quotes come first so downward progression is accurately reflected.
-  const chartData = bidRows
-    .slice()
-    .sort((a, b) => {
-      const timeA = new Date(a.submittedAt || 0).getTime();
-      const timeB = new Date(b.submittedAt || 0).getTime();
-      if (Math.abs(timeA - timeB) > 2000) {
-        return timeA - timeB; // Chronological order across distinct times
-      }
-      // If submitted within 2 seconds of each other (e.g. initial baseline import), sort higher amount first so reverse auction curve goes DOWN
-      return getBidAmount(b) - getBidAmount(a);
-    })
-    .map((b, idx) => ({
-      index: idx + 1,
-      amount: getBidAmount(b),
-      time: formatTime(b.submittedAt || 0),
-      fullTime: formatDateTime(b.submittedAt || 0),
-      label: b.isMyBid ? 'Your Bid' : (b.sellerOrgName || `Bidder #${idx + 1}`),
-      isMyBid: Boolean(b.isMyBid),
-      rank: b.bidderRank || b.rankAtSubmission || (getBidAmount(b) === currentLowest ? 1 : null),
-      isLowest: getBidAmount(b) === currentLowest
-    }));
+  const sortedBidRows = useMemo(() => {
+    return bidRows
+      .slice()
+      .sort((a, b) => {
+        const timeA = new Date(a.submittedAt || 0).getTime();
+        const timeB = new Date(b.submittedAt || 0).getTime();
+        if (Math.abs(timeA - timeB) > 2000) {
+          return timeA - timeB; // Chronological order across distinct times
+        }
+        // If submitted within 2 seconds of each other (e.g. initial baseline import), sort higher amount first so reverse auction curve goes DOWN
+        return getBidAmount(b) - getBidAmount(a);
+      });
+  }, [bidRows]);
+
+  const chartData = useMemo(() => {
+    return sortedBidRows.map((b, idx, arr) => {
+      const amt = getBidAmount(b);
+      const prevAmt = idx > 0 ? getBidAmount(arr[idx - 1]) : startPrice;
+      const dropFromPrev = prevAmt > 0 && prevAmt > amt ? prevAmt - amt : 0;
+      const dropFromPrevPct = prevAmt > 0 && dropFromPrev > 0 ? (dropFromPrev / prevAmt) * 100 : 0;
+      const dropFromStart = startPrice > 0 && startPrice > amt ? startPrice - amt : 0;
+      const dropFromStartPct = startPrice > 0 && dropFromStart > 0 ? (dropFromStart / startPrice) * 100 : 0;
+      const rankNum = b.bidderRank || b.rankAtSubmission || (amt === currentLowest && currentLowest > 0 ? 1 : null);
+
+      return {
+        index: idx + 1,
+        bidNumber: idx + 1,
+        totalBids: arr.length,
+        amount: amt,
+        time: formatTimeWithSeconds(b.submittedAt || 0),
+        shortTime: formatTime(b.submittedAt || 0),
+        fullTime: formatDateTimeWithSeconds(b.submittedAt || 0),
+        label: b.isMyBid ? 'Your Bid' : (b.sellerOrgName || `Bidder #${idx + 1}`),
+        sellerOrgName: b.sellerOrgName,
+        isMyBid: Boolean(b.isMyBid),
+        rank: rankNum,
+        isLowest: amt === currentLowest && currentLowest > 0,
+        dropFromPrev,
+        dropFromPrevPct,
+        dropFromStart,
+        dropFromStartPct,
+        isFirstBid: idx === 0,
+      };
+    });
+  }, [sortedBidRows, startPrice, currentLowest]);
+
+  // Compute padded Y-Axis domain to ensure curve and dots have vertical breathing room
+  const { chartYMin, chartYMax } = useMemo(() => {
+    if (chartData.length === 0) return { chartYMin: 0, chartYMax: 100 };
+    const amounts = chartData.map(d => d.amount);
+    if (startPrice > 0) amounts.push(startPrice);
+    if (currentLowest > 0) amounts.push(currentLowest);
+    const minVal = Math.min(...amounts);
+    const maxVal = Math.max(...amounts);
+    const range = maxVal - minVal;
+    const padding = range > 0 ? range * 0.15 : (minVal * 0.05 || 5000);
+    return {
+      chartYMin: Math.max(0, Math.floor(minVal - padding)),
+      chartYMax: Math.ceil(maxVal + padding),
+    };
+  }, [chartData, startPrice, currentLowest]);
+
+  // Determine if Start Price and L1 coincide closely to prevent overlapping ReferenceLine labels
+  const startAndL1Same = useMemo(() => {
+    return startPrice > 0 && currentLowest > 0 && Math.abs(startPrice - currentLowest) < 1;
+  }, [startPrice, currentLowest]);
 
   // Quick helper to fill amount
   const handleQuickFill = (targetAmt: number) => {
@@ -936,17 +981,29 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
             {/* Quick Chart Legend / Metric Pills */}
             <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-              <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 border border-slate-200/60">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block" />
-                Current L1: <span className="font-mono font-black text-emerald-600">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</span>
+              <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-2.5 py-1 text-emerald-800 border border-emerald-200/80 shadow-2xs">
+                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                Current L1: <span className="font-mono font-black text-emerald-700">{currentLowest > 0 ? formatCurrency(currentLowest) : '-'}</span>
               </span>
+              {startPrice > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-700 border border-slate-200/60">
+                  <span className="h-2 w-2 rounded-full bg-slate-400 inline-block" />
+                  Opening Benchmark: <span className="font-mono font-bold text-slate-800">{formatCurrency(startPrice)}</span>
+                </span>
+              )}
+              {savings > 0 && (
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-teal-50 px-2.5 py-1 text-teal-800 border border-teal-200/70">
+                  <TrendingDown className="h-3 w-3 text-teal-600" />
+                  Price Drop: <span className="font-mono font-bold text-teal-700">-{formatCurrency(savings)} ({savingsPercent.toFixed(1)}%)</span>
+                </span>
+              )}
               {!isBuyerOrAdmin && myBestBid > 0 && (
                 <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 px-2.5 py-1 text-blue-700 border border-blue-200/60">
-                  <span className="h-2.5 w-2.5 rounded-full bg-blue-600 inline-block" />
+                  <span className="h-2 w-2 rounded-full bg-blue-600 inline-block" />
                   Your Best: <span className="font-mono font-black">{formatCurrency(myBestBid)}</span>
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-slate-600">
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-slate-600 border border-slate-200/60">
                 Total Bids: <span className="font-mono font-bold text-slate-800">{chartData.length}</span>
               </span>
             </div>
@@ -961,7 +1018,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 15, right: 20, left: 15, bottom: 5 }}>
+                <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 15, bottom: 10 }}>
                   <defs>
                     <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.25} />
@@ -970,42 +1027,79 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   </defs>
                   <CartesianGrid stroke="#f1f5f9" strokeDasharray="3 3" vertical={false} />
                   <XAxis 
-                    dataKey="time" 
+                    dataKey="index" 
                     stroke="#94a3b8" 
                     fontSize={10} 
                     tickLine={false} 
-                    dy={5}
+                    dy={6}
+                    tickFormatter={(val) => {
+                      const item = chartData[val - 1];
+                      if (!item) return `Bid #${val}`;
+                      if (chartData.length <= 4) return `Bid #${val} (${item.shortTime})`;
+                      return `Bid #${val}`;
+                    }}
                   />
                   <YAxis 
                     stroke="#94a3b8" 
                     fontSize={10} 
                     tickLine={false} 
-                    domain={['auto', 'auto']}
-                    tickFormatter={(val) => `₹${val >= 100000 ? (val / 100000).toFixed(1) + 'L' : val.toLocaleString('en-IN')}`}
+                    domain={[chartYMin, chartYMax]}
+                    tickFormatter={(val) => val <= 0 ? '₹0' : `₹${val >= 100000 ? (val / 100000).toFixed(1) + 'L' : val.toLocaleString('en-IN')}`}
                     dx={-5}
                   />
                   
-                  {/* Start price benchmark reference line */}
-                  {startPrice > 0 && (
+                  {/* Start price benchmark reference line (rendered when distinct from L1) */}
+                  {startPrice > 0 && !startAndL1Same && (
                     <ReferenceLine 
                       y={startPrice} 
                       stroke="#94a3b8" 
                       strokeDasharray="4 4" 
-                      label={{ value: `Start: ₹${startPrice.toLocaleString('en-IN')}`, position: 'top', fill: '#64748b', fontSize: 10, fontWeight: 700 }} 
+                      strokeWidth={1.5}
+                      label={{ 
+                        value: `Start Benchmark: ₹${startPrice.toLocaleString('en-IN')}`, 
+                        position: 'top', 
+                        fill: '#64748b', 
+                        fontSize: 10, 
+                        fontWeight: 700 
+                      }} 
                     />
                   )}
 
-                  {/* Current L1 benchmark reference line */}
-                  {currentLowest > 0 && (
+                  {/* Current L1 benchmark reference line (rendered when distinct from startPrice) */}
+                  {currentLowest > 0 && !startAndL1Same && (
                     <ReferenceLine 
                       y={currentLowest} 
                       stroke="#10b981" 
                       strokeDasharray="3 3" 
-                      label={{ value: `L1: ₹${currentLowest.toLocaleString('en-IN')}`, position: 'bottom', fill: '#059669', fontSize: 10, fontWeight: 800 }} 
+                      strokeWidth={1.5}
+                      label={{ 
+                        value: `Current L1 Floor: ₹${currentLowest.toLocaleString('en-IN')}`, 
+                        position: 'bottom', 
+                        fill: '#059669', 
+                        fontSize: 10, 
+                        fontWeight: 800 
+                      }} 
                     />
                   )}
 
-                  <RechartsTooltip content={<CustomChartTooltip />} />
+                  {/* Single unified benchmark line when Start and L1 are identical */}
+                  {startAndL1Same && (
+                    <ReferenceLine 
+                      y={currentLowest} 
+                      stroke="#059669" 
+                      strokeDasharray="3 3" 
+                      strokeWidth={1.5}
+                      label={{ 
+                        value: `Opening & L1 Floor: ₹${currentLowest.toLocaleString('en-IN')}`, 
+                        position: 'top', 
+                        fill: '#059669', 
+                        fontSize: 10, 
+                        fontWeight: 800 
+                      }} 
+                    />
+                  )}
+
+                  <RechartsTooltip content={<CustomChartTooltip />} cursor={{ stroke: '#cbd5e1', strokeWidth: 1.5, strokeDasharray: '4 4' }} />
 
                   <Area
                     type="monotone"
@@ -1015,7 +1109,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                     fillOpacity={1}
                     fill="url(#priceGradient)"
                     dot={<CustomizedDot />}
-                    activeDot={{ r: 7, fill: '#059669', stroke: '#ffffff', strokeWidth: 2 }}
+                    activeDot={{ r: 7.5, fill: '#059669', stroke: '#ffffff', strokeWidth: 2.5 }}
                     isAnimationActive={true}
                     animationDuration={600}
                     animationEasing="ease-in-out"
@@ -1476,29 +1570,87 @@ function RuleItem({ label, value, className }: { label: string; value: string; c
 function CustomChartTooltip({ active, payload }: any) {
   if (active && payload && payload.length) {
     const data = payload[0].payload;
+    const isLead = data.rank === 1 || data.isLowest;
+
     return (
-      <div className="rounded-xl border border-slate-200 bg-white/95 p-3.5 shadow-xl backdrop-blur-md text-xs space-y-1.5 min-w-[190px]">
-        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-1.5">
-          <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Bid #{data.index}</span>
+      <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-2xl backdrop-blur-md text-xs space-y-2.5 min-w-[240px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150">
+        {/* Header: Bid Sequence & Rank Badge */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
+          <div className="flex items-center gap-1.5">
+            <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[10px] font-black text-slate-700">
+              #{data.bidNumber}
+            </span>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+              of {data.totalBids} Bids
+            </span>
+          </div>
           <span className={cn(
-            "px-1.5 py-0.5 rounded text-[9px] font-extrabold",
-            data.rank === 1 ? "bg-amber-100 text-amber-900 border border-amber-300" : "bg-slate-100 text-slate-700"
+            "px-2 py-0.5 rounded-full text-[10px] font-black tracking-tight",
+            isLead
+              ? "bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs"
+              : data.rank === 2
+              ? "bg-slate-100 text-slate-800 border border-slate-300"
+              : data.rank === 3
+              ? "bg-amber-50 text-amber-800 border border-amber-200"
+              : "bg-slate-100 text-slate-600 border border-slate-200"
           )}>
-            {data.rank === 1 ? '🥇 L1' : data.rank ? `L${data.rank}` : 'Valid'}
+            {isLead ? '🥇 L1 Leading Offer' : data.rank === 2 ? '🥈 L2 Trailing' : data.rank === 3 ? '🥉 L3 Trailing' : `L${data.rank || '-'}`}
           </span>
         </div>
-        <div className="text-base font-black font-mono text-slate-900">
-          {formatCurrency(data.amount)}
+
+        {/* Commercial Price & Delta */}
+        <div>
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Commercial Offer</p>
+          <div className="text-lg font-black font-mono text-slate-900 tracking-tight mt-0.5">
+            {formatCurrency(data.amount)}
+          </div>
+          
+          {/* Price drop pill */}
+          {data.dropFromPrev > 0 ? (
+            <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70 mt-1">
+              <TrendingDown className="h-3 w-3 shrink-0" />
+              <span>▼ {formatCurrency(data.dropFromPrev)}</span>
+              <span className="font-mono text-[10px] opacity-80">(-{data.dropFromPrevPct.toFixed(1)}%)</span>
+            </div>
+          ) : data.isFirstBid ? (
+            <div className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1">
+              Opening Benchmark Bid
+            </div>
+          ) : null}
         </div>
-        <div className="flex items-center justify-between text-[11px] pt-1">
-          <span className="text-slate-500">Bidder:</span>
-          <span className={cn("font-bold", data.isMyBid ? "text-blue-600 font-extrabold" : "text-slate-700")}>
-            {data.isMyBid ? 'You (Your Organization)' : data.label}
+
+        {/* Bidder Organization */}
+        <div className="border-t border-slate-100 pt-2 space-y-1">
+          <div className="flex items-center justify-between text-[11px]">
+            <span className="text-slate-400 font-medium">Bidder:</span>
+            {data.isMyBid ? (
+              <span className="inline-flex items-center gap-1 font-black text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">
+                YOU (Your Org)
+              </span>
+            ) : (
+              <span className="font-bold text-slate-800 truncate max-w-[160px]" title={data.sellerOrgName || data.label}>
+                {data.sellerOrgName || data.label}
+              </span>
+            )}
+          </div>
+
+          {/* Cumulative Drop vs Start Price */}
+          {data.dropFromStart > 0 && (
+            <div className="flex items-center justify-between text-[10.5px]">
+              <span className="text-slate-400 font-medium">Drop vs Start:</span>
+              <span className="font-mono font-bold text-emerald-600">
+                -{formatCurrency(data.dropFromStart)} ({data.dropFromStartPct.toFixed(1)}%)
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Timestamp */}
+        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-100">
+          <span className="flex items-center gap-1">
+            <Clock3 className="h-3 w-3 text-slate-400" /> Time
           </span>
-        </div>
-        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-100">
-          <span>Time</span>
-          <span className="font-semibold text-slate-600">{data.fullTime || data.time}</span>
+          <span className="font-semibold text-slate-700 font-mono">{data.fullTime || data.time}</span>
         </div>
       </div>
     );
@@ -1506,7 +1658,7 @@ function CustomChartTooltip({ active, payload }: any) {
   return null;
 }
 
-// Custom Dot for AreaChart: Highlights user's own bids and lowest point
+// Custom Dot for AreaChart: Highlights user's own bids, lowest point, and competitors
 function CustomizedDot(props: any) {
   const { cx, cy, payload } = props;
   if (!cx || !cy) return null;
@@ -1514,22 +1666,24 @@ function CustomizedDot(props: any) {
   if (payload?.isMyBid) {
     return (
       <g key={`dot-my-${payload.index}`}>
-        <circle cx={cx} cy={cy} r={8} fill="#3b82f6" fillOpacity={0.25} />
+        <circle cx={cx} cy={cy} r={8.5} fill="#3b82f6" fillOpacity={0.25} />
         <circle cx={cx} cy={cy} r={5} fill="#2563eb" stroke="#ffffff" strokeWidth={2} />
       </g>
     );
   }
 
-  if (payload?.isLowest) {
+  if (payload?.isLowest || payload?.rank === 1) {
     return (
       <g key={`dot-low-${payload.index}`}>
-        <circle cx={cx} cy={cy} r={7} fill="#10b981" fillOpacity={0.3} />
-        <circle cx={cx} cy={cy} r={4.5} fill="#10b981" stroke="#ffffff" strokeWidth={2} />
+        <circle cx={cx} cy={cy} r={8} fill="#10b981" fillOpacity={0.3} />
+        <circle cx={cx} cy={cy} r={5} fill="#059669" stroke="#ffffff" strokeWidth={2} />
       </g>
     );
   }
 
   return (
-    <circle key={`dot-other-${payload.index}`} cx={cx} cy={cy} r={3.5} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
+    <g key={`dot-other-${payload.index}`}>
+      <circle cx={cx} cy={cy} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
+    </g>
   );
 }
