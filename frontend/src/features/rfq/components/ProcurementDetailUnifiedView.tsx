@@ -3002,10 +3002,12 @@ function ServiceDossierCard({
   serviceDetails,
   buyingType,
   scopeText,
+  onOpenDoc,
 }: {
   serviceDetails: any;
   buyingType?: string;
   scopeText?: string;
+  onOpenDoc?: (doc: any, name: string) => void;
 }) {
   if (!serviceDetails || !isPlainObject(serviceDetails)) {
     return null;
@@ -3087,14 +3089,18 @@ function ServiceDossierCard({
                 variant="outline"
                 size="sm"
                 onClick={() => {
-                  openFileAsset(
-                    {
-                      fileAssetId: sowFileAssetId,
-                      url: sowFileUrl,
-                      originalName: sowFileName || "SOW_Document.pdf",
-                    },
-                    sowFileName || "SOW_Document.pdf",
-                  );
+                  const docPayload = {
+                    id: sowFileAssetId,
+                    fileAssetId: sowFileAssetId,
+                    url: sowFileUrl,
+                    fileName: sowFileName || "SOW_Document.pdf",
+                    originalName: sowFileName || "SOW_Document.pdf",
+                  };
+                  if (onOpenDoc) {
+                    onOpenDoc(docPayload, sowFileName || "SOW_Document.pdf");
+                  } else {
+                    openFileAsset(docPayload, sowFileName || "SOW_Document.pdf");
+                  }
                 }}
                 className="shrink-0 border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs h-9 shadow-xs cursor-pointer"
               >
