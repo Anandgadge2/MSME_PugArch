@@ -6684,6 +6684,12 @@ export function ProcurementDetailUnifiedView(
       const role = isBuyerSide ? "buyer" : "seller";
       return `/${role}/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/results`;
     }
+    // Two-stage flow: base procurement (RFP/RFQ) with a linked reverse auction
+    if (linkedAuction) {
+      const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction.id;
+      const role = isBuyerSide ? "buyer" : "seller";
+      return `/${role}/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/results`;
+    }
     return `/bids/${targetId}/results`;
   }, [isReverseAuctionType, targetId, linkedAuction, isBuyerSide]);
 
@@ -12281,8 +12287,13 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     size="sm"
                     onClick={() => {
-                      if (isBuyerOrAdmin && isBidAwarded && linkedAuction?.id) {
-                        router.push(`/buyer/procurement/reverse-auction/${linkedAuction.id}/result`);
+                      if (isBuyerOrAdmin && isBidAwarded) {
+                        if (linkedAuction) {
+                          const code = (linkedAuction as any).auctionCode || linkedAuction.id;
+                          router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(code))}/result`);
+                        } else {
+                          router.push(resultsPageUrl);
+                        }
                         return;
                       }
                       if (primaryHighwayAction.type === 'SELLER_VIEW_SUBMITTED') {

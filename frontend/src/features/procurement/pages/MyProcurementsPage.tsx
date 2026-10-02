@@ -343,6 +343,16 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   const typeLabel = String(p.typeLabel || '').toLowerCase();
   const methodLabel = String(p.methodLabel || '').toLowerCase();
 
+  // Detect linked reverse auction to build composite type (e.g., "RFP + RA")
+  const hasLinkedAuction = Boolean(
+    p.linkedAuctionId ||
+    method === 'bid_with_reverse_auction' ||
+    method === 'bid-with-reverse-auction' ||
+    (method.includes('reverse') && !refToken.startsWith('RA-')) ||
+    (methodLabel.includes('auction') && !refToken.startsWith('RA-')) ||
+    title.includes('reverse auction')
+  );
+
   // 1. Draft
   if (status === 'draft' || statusGroup === 'draft' || type === 'bid_draft' || title.includes('draft')) {
     return 'Draft';
@@ -352,29 +362,29 @@ const getConsolidatedType = (p: NormalizedProcurement): string => {
   if (refToken.startsWith('RC-') || method === 'rate-contract' || method === 'rate_contract' || type === 'rate_contract' || methodLabel.includes('rate contract')) {
     return 'Rate Contract';
   }
-  if (refToken.startsWith('RA-') || method === 'reverse-auction' || method === 'reverse_auction' || type === 'reverse_auction' || methodLabel.includes('auction')) {
+  if (refToken.startsWith('RA-') || method === 'reverse-auction' || method === 'reverse_auction' || type === 'reverse_auction') {
     return 'Reverse Auction';
   }
   if (refToken.startsWith('LTND-') || refToken.startsWith('LIM-') || method.includes('limited') || type.includes('limited') || typeLabel.includes('limited') || methodLabel.includes('limited')) {
-    return 'Limited Tender';
+    return hasLinkedAuction ? 'Limited Tender + RA' : 'Limited Tender';
   }
   if (refToken.startsWith('TND-') || method === 'open-tender' || method === 'open_tender' || (method === 'tender' && !methodLabel.includes('rate')) || type.includes('open') || typeLabel.includes('open') || methodLabel.includes('open')) {
-    return 'OpenTender';
+    return hasLinkedAuction ? 'Open Tender + RA' : 'OpenTender';
   }
   if (refToken.startsWith('RFP-') || method === 'rfp' || method === 'rfi' || type.includes('rfp') || type.includes('rfi') || methodLabel.includes('rfp')) {
-    return 'RFP';
+    return hasLinkedAuction ? 'RFP + RA' : 'RFP';
   }
   if (refToken.startsWith('DP-') || refToken.startsWith('DIR-') || type === 'procurement_request' || type.includes('checkout') || type.includes('cart') || method.includes('direct') || type.includes('direct')) {
     return 'Cart Checkout';
   }
   if (refToken.startsWith('RFQ-') || method === 'rfq' || type.includes('rfq') || methodLabel.includes('rfq')) {
-    return 'RFQ';
+    return hasLinkedAuction ? 'RFQ + RA' : 'RFQ';
   }
   if (method === 'repeat-order' || method === 'repeat_order' || method === 'repeat-purchase') {
     return 'Repeat order';
   }
 
-  return 'RFQ';
+  return hasLinkedAuction ? 'RFQ + RA' : 'RFQ';
 };
 
 export const isProcurementCancellable = (p: any): boolean => {
@@ -397,7 +407,12 @@ const TYPE_BADGE_STYLES: Record<string, string> = {
   'Rate Contract': 'border-teal-200 bg-teal-50 text-teal-800',
   'Limited Tender': 'border-amber-200 bg-amber-50 text-amber-800',
   'LimitedTender': 'border-amber-200 bg-amber-50 text-amber-800',
-  'Repeat order': 'border-pink-200 bg-pink-50 text-pink-850 text-pink-800',
+  'Repeat order': 'border-pink-200 bg-pink-50 text-pink-800',
+  // Composite types: base procurement + linked Reverse Auction
+  'RFQ + RA': 'border-violet-200 bg-violet-50 text-violet-800',
+  'RFP + RA': 'border-violet-200 bg-violet-50 text-violet-800',
+  'Open Tender + RA': 'border-violet-200 bg-violet-50 text-violet-800',
+  'Limited Tender + RA': 'border-violet-200 bg-violet-50 text-violet-800',
 };
 
 const STATUS_BADGE_STYLES: Record<string, string> = {
@@ -421,6 +436,11 @@ const getTypeIcon = (type: string) => {
     case 'Limited Tender':
     case 'LimitedTender': return Users;
     case 'Repeat order': return RefreshCw;
+    // Composite types: use Gavel icon to denote auction stage
+    case 'RFQ + RA':
+    case 'RFP + RA':
+    case 'Open Tender + RA':
+    case 'Limited Tender + RA': return Gavel;
     default: return Package;
   }
 };
