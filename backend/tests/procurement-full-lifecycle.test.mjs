@@ -139,6 +139,33 @@ test('9. Landed Cost Formula & Ranking: Base + GST + Freight + Loading Charges',
   assert.match(service, /singleBidConfirmed/);
 });
 
+test('9b. Dynamic Minimum Sourcing Bids & Single Bidder Threshold Governance', () => {
+  const service = read('src/modules/procurementBid/procurement-bid.service.ts');
+  const routes = read('src/modules/procurementBid/procurement-bid.routes.ts');
+  const phase4 = read('src/routes/phase4.routes.ts');
+
+  // Dynamic extraction from technicalPacket / schedule
+  assert.match(service, /evaluateBidCountThresholds/);
+  assert.match(service, /minimumBidders/);
+  assert.match(service, /minRequired/);
+
+  // Single-bidder protocol
+  assert.match(service, /SINGLE_BID_CONFIRMATION_REQUIRED/);
+  assert.match(service, /singleBidConfirmed/);
+
+  // Low bid count guard below configured minimum
+  assert.match(service, /LOW_BID_COUNT_CONFIRMATION_REQUIRED/);
+  assert.match(service, /lowBidConfirmed/);
+  assert.match(service, /lowBidCountWarning/);
+
+  // Route passes body parameters
+  assert.match(routes, /singleBidConfirmed/);
+  assert.match(routes, /lowBidConfirmed/);
+
+  // Phase 4 routes persists schedule.minimumBidders
+  assert.match(phase4, /minimumBidders:\s*Math\.max\(1/);
+});
+
 test('10. Selection, Award Issuance & Purchase Order Generation', () => {
   const service = read('src/modules/procurementBid/procurement-bid.service.ts');
   const orderService = read('src/modules/procurementBid/procurement-order.service.ts');

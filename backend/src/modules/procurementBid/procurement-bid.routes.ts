@@ -1955,8 +1955,8 @@ router.post('/buyer/procurement-bids/:bidId/complete-technical-evaluation', auth
   return apiResponse.success(res, data, 200, 'Technical evaluation completed');
 }));
 
-router.post('/buyer/procurement-bids/:bidId/open-financial-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.financial.evaluate'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
-  const data = await service.openFinancialEvaluation(req, req.params.bidId);
+router.post('/buyer/procurement-bids/:bidId/open-financial-evaluation', authenticate, requireAccountType('buyer', 'admin'), requirePermission('bid.financial.evaluate'), validate({ params: idParamSchema, body: z.object({ singleBidConfirmed: z.boolean().optional(), lowBidConfirmed: z.boolean().optional(), confirmProceedBelowMinimum: z.boolean().optional(), justificationReason: z.string().trim().max(2000).optional(), remarks: z.string().trim().max(2000).optional() }).optional() }), asyncRoute(async (req, res) => {
+  const data = await service.openFinancialEvaluation(req, req.params.bidId, req.body || {});
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Financial evaluation opened and L1/L2/L3/L4 ranking generated');
 }));

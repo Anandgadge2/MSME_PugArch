@@ -2020,8 +2020,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
       priority: payload.priority || payload.urgency || basics.priority || basics.urgency || (draftBody as any).priority || (draftBody as any).urgency || String(requirement.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1] || 'Normal',
       schedule: {
         ...schedule,
+        minimumBidders: Math.max(1, Number(schedule.minimumBidders || payload.minimumQualifiedBidders || payload.schedule?.minimumBidders || 3)),
         publishDate: isFutureScheduled ? effectiveStartDate.toISOString() : (schedule.publishDate || effectiveStartDate.toISOString()),
       },
+      minimumBidders: Math.max(1, Number(schedule.minimumBidders || payload.minimumQualifiedBidders || payload.schedule?.minimumBidders || 3)),
+      minimumQualifiedBidders: Math.max(1, Number(schedule.minimumBidders || payload.minimumQualifiedBidders || payload.schedule?.minimumBidders || 3)),
       sourceRequirementId: requirement.id,
       requirementId: requirement.id,
       requirementNumber: requirement.requirementNumber,

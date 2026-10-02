@@ -21,6 +21,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { openFileAsset } from '../../../lib/files';
 import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
 import { toast } from 'sonner';
+import { cn } from '../../../lib/utils';
 import { ComparisonMatrixSkeleton } from '../../../components/ui/skeleton';
 import { SupplierQuotationDetailModal, SupplierQuotationDetailView, normalizeQuotationDocuments } from '../components/SupplierQuotationDetailModal';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
@@ -119,6 +120,14 @@ export default function BidResultsPage() {
   const [isOpeningFinancialEvalSuccess, setIsOpeningFinancialEvalSuccess] = useState(false);
   const [isGeneratingPO, setIsGeneratingPO] = useState(false);
   const [poIssuedLocally, setPoIssuedLocally] = useState(false);
+  const [thresholdPrompt, setThresholdPrompt] = useState<{
+    type: 'SINGLE_BID' | 'LOW_BID';
+    message: string;
+    minRequired: number;
+    qualifiedCount: number;
+  } | null>(null);
+  const [justificationReason, setJustificationReason] = useState('');
+  const hasAttemptedAutoOpenRef = React.useRef(false);
   const hasInitialLoadedRef = React.useRef(false);
 
   const isTwoPacketMode = React.useMemo(() => {
@@ -423,14 +432,21 @@ export default function BidResultsPage() {
     }
   };
 
-  const handleOpenFinancialEvaluation = async () => {
+  const handleOpenFinancialEvaluation = async (confirmationOverrides?: {
+    singleBidConfirmed?: boolean;
+    lowBidConfirmed?: boolean;
+    justificationReason?: string;
+  }) => {
     setIsOpeningFinancialEval(true);
     try {
+      const payload = confirmationOverrides || {};
       const res: any = await postApi(
         `/api/buyer/procurement-bids/${encodeURIComponent(bidId)}/open-financial-evaluation`,
-        {},
+        payload,
       );
       setIsOpeningFinancialEvalSuccess(true);
+      setThresholdPrompt(null);
+      setJustificationReason('');
       setBid((prev) => {
         if (!prev) return prev;
         return {
@@ -446,10 +462,34 @@ export default function BidResultsPage() {
       await loadBid(true);
     } catch (err: any) {
       console.error(err);
-      toast.error(
-        err?.message ||
-          'Failed to open financial evaluation. Please check server logs.',
-      );
+      const code = err?.code || err?.data?.code || '';
+      const msg = err?.message || err?.data?.message || '';
+
+      const pkt: any = (bid as any)?.technicalPacket || {};
+      const sched: any = pkt.schedule || {};
+      const minRequired = Number(sched.minimumBidders || pkt.minimumBidders || pkt.minimumQualifiedBidders || 3);
+      const qCount = techEvaluationStats.qualified || 1;
+
+      if (code === 'SINGLE_BID_CONFIRMATION_REQUIRED' || msg.includes('Single bid received')) {
+        setThresholdPrompt({
+          type: 'SINGLE_BID',
+          message: msg || 'Only 1 technically qualified quotation was received. Buyer admin confirmation is required to verify rate reasonability before unsealing financial quotes.',
+          minRequired,
+          qualifiedCount: qCount,
+        });
+      } else if (code === 'LOW_BID_COUNT_CONFIRMATION_REQUIRED' || msg.includes('below the configured minimum')) {
+        setThresholdPrompt({
+          type: 'LOW_BID',
+          message: msg || `Only ${qCount} technically qualified quotation(s) were received, which is below the configured requirement of ${minRequired}.`,
+          minRequired,
+          qualifiedCount: qCount,
+        });
+      } else {
+        toast.error(
+          msg ||
+            'Failed to open financial evaluation. Please check server logs.',
+        );
+      }
     } finally {
       setIsOpeningFinancialEval(false);
     }
@@ -463,8 +503,11 @@ export default function BidResultsPage() {
       !isOpeningFinancialEval &&
       !isFinancialOpeningPending &&
       techEvaluationStats.pending === 0 &&
-      techEvaluationStats.qualified > 0
+      techEvaluationStats.qualified > 0 &&
+      !hasAttemptedAutoOpenRef.current &&
+      !thresholdPrompt
     ) {
+      hasAttemptedAutoOpenRef.current = true;
       handleOpenFinancialEvaluation();
     }
   }, [
@@ -474,6 +517,7 @@ export default function BidResultsPage() {
     isFinancialOpeningPending,
     techEvaluationStats.pending,
     techEvaluationStats.qualified,
+    thresholdPrompt,
   ]);
 
   const [awardModal, setAwardModal] = useState<{
@@ -1762,6 +1806,114 @@ export default function BidResultsPage() {
     );
   }
 
+  // Minimum Sourcing Bids / Single-Bid Confirmation Modal renderer
+  const renderThresholdModal = () => {
+    if (!thresholdPrompt) return null;
+    const isSingle = thresholdPrompt.type === 'SINGLE_BID';
+    return (
+      <div 
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="threshold-modal-title"
+        aria-describedby="threshold-modal-desc"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 backdrop-blur-xs animate-in fade-in duration-200"
+      >
+        <div className="relative w-full max-w-lg rounded-3xl border border-slate-200 bg-white p-6 sm:p-7 shadow-2xl animate-in zoom-in-95 duration-200 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center gap-2.5">
+              <div className={cn(
+                "flex h-9 w-9 items-center justify-center rounded-xl text-white shadow-xs",
+                isSingle ? "bg-amber-600" : "bg-blue-600"
+              )}>
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <div>
+                <span className={cn(
+                  "text-[9.5px] font-black uppercase tracking-wider px-2 py-0.5 rounded-sm",
+                  isSingle ? "bg-amber-100 text-amber-900" : "bg-blue-100 text-blue-900"
+                )}>
+                  {isSingle ? 'Single-Bidder Price Verification' : 'Insufficient Bids Governance'}
+                </span>
+                <h3 id="threshold-modal-title" className="text-base font-black text-slate-900 mt-0.5">
+                  {isSingle ? 'Confirm Single Bid Financial Unsealing' : 'Proceed Below Minimum Threshold'}
+                </h3>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => { setThresholdPrompt(null); setJustificationReason(''); }}
+              aria-label="Close dialog"
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-slate-100 text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0b2447]"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+
+          <div id="threshold-modal-desc" className="space-y-3 text-xs">
+            <p className="text-slate-600 leading-relaxed">
+              {thresholdPrompt.message}
+            </p>
+
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-50 border border-slate-200 p-3 text-slate-700">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Configured Minimum:</span>
+                <p className="text-sm font-black text-slate-900">{thresholdPrompt.minRequired} Bid(s)</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">Qualified Received:</span>
+                <p className="text-sm font-black text-amber-700">{thresholdPrompt.qualifiedCount} Bid(s)</p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label htmlFor="threshold-justification" className="block text-xs font-bold text-slate-700">
+                Buyer Administrative Justification <span className="text-red-500">*</span>
+              </label>
+              <textarea
+                id="threshold-justification"
+                rows={3}
+                value={justificationReason}
+                onChange={e => setJustificationReason(e.target.value)}
+                placeholder={isSingle ? "State basis for rate reasonability (e.g., market rate analysis, prior contract rates, urgent delivery)..." : "State justification for proceeding with below-minimum qualified bids (e.g., specialized category, urgent operational requirement)..."}
+                className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#0b2447] focus:ring-2 focus:ring-[#0b2447]/20 outline-none transition"
+              />
+              <p className="text-[10.5px] text-slate-500">
+                This justification will be permanently immutably logged into the procurement audit trail.
+              </p>
+            </div>
+          </div>
+
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-end gap-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => { setThresholdPrompt(null); setJustificationReason(''); }}
+              className="w-full sm:w-auto px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition"
+            >
+              Cancel &amp; Review Tender
+            </button>
+            <button
+              type="button"
+              disabled={isOpeningFinancialEval || !justificationReason.trim()}
+              onClick={() => handleOpenFinancialEvaluation({
+                singleBidConfirmed: true,
+                lowBidConfirmed: true,
+                justificationReason: justificationReason.trim()
+              })}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-[#0b2447] hover:bg-[#12335f] text-white px-5 py-2 text-xs font-black shadow-xs transition disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isOpeningFinancialEval ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4" />
+              )}
+              Confirm &amp; Unseal Quotes
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   // Award Offer Confirmation Modal renderer
   const renderAwardModal = () => {
     if (!awardModal.show || !awardModal.row) return null;
@@ -2267,6 +2419,52 @@ export default function BidResultsPage() {
               </div>
             ) : null}
 
+            {/* Minimum Sourcing Bids & Single Bidder Governance Banner */}
+            {(() => {
+              const meta: any = (bid as any)?.technicalPacket?.metadata || {};
+              if (meta.lowBidCountWarning) {
+                return (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                        <AlertCircle className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-amber-950">Below Configured Sourcing Requirement</h4>
+                        <p className="text-xs text-amber-800 font-medium">
+                          {meta.lowBidAdvisory || `Only ${meta.bidCount || 'fewer'} qualified bids received against the configured minimum requirement of ${meta.minimumBidsRequired || 3}.`}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 px-3 py-1.5 text-xs font-black shrink-0">
+                      {meta.bidCount || 0} / {meta.minimumBidsRequired || 3} Bids
+                    </span>
+                  </div>
+                );
+              }
+              if (meta.singleBidReceived) {
+                return (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-xs">
+                        <AlertCircle className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-black text-amber-950">Single-Bidder Governance Active</h4>
+                        <p className="text-xs text-amber-800 font-medium">
+                          {meta.singleBidAdvisory || 'Only 1 quotation received. Unsealed under administrative single-bid rate reasonability confirmation.'}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="inline-flex items-center gap-1.5 rounded-xl bg-amber-100 border border-amber-300 text-amber-900 px-3 py-1.5 text-xs font-black shrink-0">
+                      Single Bidder
+                    </span>
+                  </div>
+                );
+              }
+              return null;
+            })()}
+
             {/* Active Award / Counter-Offer Status Banner */}
             {isAwardAccepted && !isContractFinalized && (
               <div className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in">
@@ -2746,6 +2944,9 @@ export default function BidResultsPage() {
 
       {/* Award Offer Confirmation Modal */}
       {renderAwardModal()}
+
+      {/* Minimum Bids / Single Bid Threshold Confirmation Modal */}
+      {renderThresholdModal()}
 
       {/* Price Match Counter-Offer Modal (Configurable Deadline) */}
       {priceMatchModal.show && priceMatchModal.row && (

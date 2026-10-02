@@ -6855,7 +6855,9 @@ function VendorsStepForm({
             type="text"
             inputMode="numeric"
             pattern="[0-9]*"
+            id="minimum-sourcing-bids-input"
             aria-label="Minimum Sourcing bids required"
+            aria-describedby="min-bids-instructions min-bids-guidance"
             value={draft.schedule.minimumBidders ?? ''}
             onChange={e => {
               let val = e.target.value.replace(/[^0-9]/g, '');
@@ -6872,34 +6874,63 @@ function VendorsStepForm({
             }}
             onBlur={() => {
               const current = parseInt(String(draft.schedule.minimumBidders), 10);
-              if (!current || current < 1) {
+              if (isNaN(current) || current < 1) {
                 updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
               }
             }}
             className={inputClass}
             placeholder="3"
           />
-          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+          <div className="flex flex-wrap items-center gap-1.5 pt-2">
+            <span className="text-[10px] font-bold text-slate-500 mr-0.5">Recommended Presets:</span>
             {[
-              { label: '2 Bids (Expedited)', val: 2 },
-              { label: '3 Bids (GFR Standard)', val: 3 },
-              { label: '5 Bids (Competitive)', val: 5 },
+              { label: '1 Bid (Proprietary / Monopoly)', val: 1 },
+              { label: '2 Bids (Expedited / Urgent)', val: 2 },
+              { label: '3 Bids (GFR 173 Standard)', val: 3 },
+              { label: '5 Bids (High Competition)', val: 5 },
             ].map(p => (
               <button
                 key={p.val}
                 type="button"
                 onClick={() => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: p.val } }))}
                 className={cn(
-                  "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                  "text-[10px] font-bold px-2.5 py-1 rounded-md border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]",
                   Number(draft.schedule.minimumBidders) === p.val
-                    ? "border-[#0b2447] bg-[#0b2447] text-white"
-                    : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                    ? "border-[#0b2447] bg-[#0b2447] text-white shadow-xs"
+                    : "border-slate-300 bg-white hover:bg-slate-100 text-slate-700"
                 )}
+                aria-pressed={Number(draft.schedule.minimumBidders) === p.val}
               >
                 {p.label}
               </button>
             ))}
+          </div>
+
+          <div id="min-bids-instructions" className="mt-2 text-xs rounded-lg p-2.5 bg-slate-100/80 border border-slate-200 text-slate-700 space-y-1">
+            <p className="font-semibold text-slate-800">
+              How Minimum Sourcing Bids Work:
+            </p>
+            <p className="text-[11px] leading-relaxed text-slate-600">
+              Specifies the minimum number of technically qualified supplier quotations required before financial bids can be unsealed automatically.
+            </p>
+            <div id="min-bids-guidance" className="pt-1 text-[11px] font-medium">
+              {Number(draft.schedule.minimumBidders) === 1 ? (
+                <div className="flex items-start gap-1.5 text-amber-800 bg-amber-50/80 border border-amber-200 rounded p-1.5">
+                  <span className="font-bold">⚠️ Single-Bid Policy:</span>
+                  <span>Minimum set to 1. If only 1 quotation is submitted, the system halts with a Single-Bidder Advisory requiring explicit buyer administrative price confirmation before financial opening.</span>
+                </div>
+              ) : Number(draft.schedule.minimumBidders) >= 5 ? (
+                <div className="flex items-start gap-1.5 text-blue-900 bg-blue-50/80 border border-blue-200 rounded p-1.5">
+                  <span className="font-bold">ℹ️ High Competition:</span>
+                  <span>Targeting {draft.schedule.minimumBidders} bids. If fewer than {draft.schedule.minimumBidders} qualified bids are received at deadline, the system will raise an Insufficient Bids Warning, prompting a deadline extension or buyer justification.</span>
+                </div>
+              ) : (
+                <div className="flex items-start gap-1.5 text-slate-700 bg-slate-50 border border-slate-200 rounded p-1.5">
+                  <span className="font-bold">✓ Standard Competitive Rule:</span>
+                  <span>Requires at least {draft.schedule.minimumBidders || 3} qualified bids. If fewer bids arrive at opening, the system prompts for administrative confirmation or a deadline extension.</span>
+                </div>
+              )}
+            </div>
           </div>
         </Field>
       </div>

@@ -3981,7 +3981,78 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
   return updatedRows;
 };
 
-export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: number, req?: any) => {
+export const evaluateBidCountThresholds = async (
+  tx: any,
+  bid: any,
+  qualifiedCount: number,
+  body: any = {}
+) => {
+  const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
+  const sched = (pkt.schedule && typeof pkt.schedule === 'object') ? pkt.schedule : {};
+  const rawMin = sched.minimumBidders ?? pkt.minimumBidders ?? pkt.minimumQualifiedBidders ?? (bid as any).minimumQualifiedBidders;
+  const minRequired = Number(rawMin) > 0 ? Number(rawMin) : 3;
+  const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
+
+  // Single Bidder Protocol (Even if min is 1, a single bid carries monopoly pricing risk)
+  if (qualifiedCount === 1) {
+    const singleBidMeta = {
+      ...meta,
+      singleBidReceived: true,
+      bidCount: 1,
+      minimumBidsRequired: minRequired,
+      singleBidJustification: body.justificationReason || body.remarks || null,
+      singleBidAdvisory: 'Only 1 technically qualified quotation received. Buyer administrative confirmation required to ensure rate reasonability before proceeding.'
+    };
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: { technicalPacket: { ...pkt, metadata: singleBidMeta } }
+    });
+    if (body.singleBidConfirmed !== true) {
+      throw new ApiError(
+        400,
+        'Single bid received. Buyer admin must confirm rate reasonability before proceeding with financial evaluation.',
+        'SINGLE_BID_CONFIRMATION_REQUIRED'
+      );
+    }
+  } else if (qualifiedCount < minRequired && qualifiedCount > 1) {
+    const lowBidMeta = {
+      ...meta,
+      lowBidCountWarning: true,
+      bidCount: qualifiedCount,
+      minimumBidsRequired: minRequired,
+      lowBidJustification: body.justificationReason || body.remarks || null,
+      lowBidAdvisory: `Only ${qualifiedCount} bids received (less than configured minimum of ${minRequired}). Buyer confirmation required to proceed with below-threshold competition.`
+    };
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: { technicalPacket: { ...pkt, metadata: lowBidMeta } }
+    });
+    if (body.lowBidConfirmed !== true && body.confirmProceedBelowMinimum !== true) {
+      throw new ApiError(
+        400,
+        `Only ${qualifiedCount} technically qualified bid(s) received, which is below the configured minimum sourcing requirement of ${minRequired}. Please confirm to proceed with current bids or extend the bidding deadline.`,
+        'LOW_BID_COUNT_CONFIRMATION_REQUIRED'
+      );
+    }
+  } else if (qualifiedCount >= minRequired) {
+    // If threshold is satisfied and we previously had warnings, record that requirement is fulfilled
+    const cleanMeta = {
+      ...meta,
+      lowBidCountWarning: false,
+      singleBidReceived: false,
+      bidCount: qualifiedCount,
+      minimumBidsRequired: minRequired,
+      thresholdSatisfied: true,
+      advisoryNote: `Sourcing threshold met: ${qualifiedCount} qualified bids received (minimum required: ${minRequired}).`
+    };
+    await tx.procurementBid.update({
+      where: { id: bid.id },
+      data: { technicalPacket: { ...pkt, metadata: cleanMeta } }
+    });
+  }
+};
+
+export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: number, req?: any, body: any = {}) => {
   const sourceReqId = Number(bid.sourceId || (bid.technicalPacket as any)?.sourceRequirementId || (bid.technicalPacket as any)?.requirementId || 0);
 
   const ranked = await db.$transaction(async (tx: any) => {
@@ -3990,6 +4061,7 @@ export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: 
       orderBy: { totalAmount: 'asc' }
     });
     if (!qualified.length) return [];
+    await evaluateBidCountThresholds(tx, bid, qualified.length, body);
     for (const [index, row] of qualified.entries()) {
       const rank = index + 1;
       const finalStatus = rankToFinalStatus(rank);
@@ -4196,7 +4268,7 @@ export const completeTechnicalEvaluation = async (req: AuthRequest, bidId: strin
   return updated;
 };
 
-export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) => {
+export const openFinancialEvaluation = async (req: AuthRequest, bidId: string, body: any = {}) => {
   const bid = await resolveBid(bidId, { participations: true });
   assertBuyerOwner(req.user!, bid);
   if (
@@ -4229,7 +4301,7 @@ export const openFinancialEvaluation = async (req: AuthRequest, bidId: string) =
     }
   }
 
-  const ranked = await performFinancialRankingAndOpening(bid, req.user!.id, req);
+  const ranked = await performFinancialRankingAndOpening(bid, req.user!.id, req, body);
   if (!ranked.length) throw new ApiError(400, 'No technically qualified financial quotes are available to open.', 'FINANCIAL_NOT_OPENED');
   return ranked;
 };
@@ -5746,29 +5818,8 @@ export const openFinancialEvaluationLandedCost = async (req: AuthRequest, bidId:
     });
     if (!qualified.length) throw new ApiError(400, 'No technically qualified financial quotes are available.', 'FINANCIAL_NOT_OPENED');
 
-    // ── Edge Case 6: Single Bidder Protocol ──
-    const pkt = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as Record<string, any> : {};
-    const meta = (pkt.metadata && typeof pkt.metadata === 'object') ? pkt.metadata : {};
-    if (qualified.length === 1) {
-      const singleBidMeta = {
-        ...meta,
-        singleBidReceived: true,
-        singleBidAdvisory: 'Only 1 bid received. Buyer admin confirmation required before proceeding.'
-      };
-      await tx.procurementBid.update({ where: { id: bid.id }, data: { technicalPacket: { ...pkt, metadata: singleBidMeta } } });
-      if (body.singleBidConfirmed !== true) {
-        throw new ApiError(400, 'Single bid received. Buyer admin must confirm before proceeding with financial evaluation.', 'SINGLE_BID_CONFIRMATION_REQUIRED');
-      }
-    }
-    if (qualified.length < 3 && qualified.length > 1) {
-      const lowBidMeta = {
-        ...meta,
-        lowBidCountWarning: true,
-        bidCount: qualified.length,
-        lowBidAdvisory: `Only ${qualified.length} bids received (less than minimum 3). Proceed with caution.`
-      };
-      await tx.procurementBid.update({ where: { id: bid.id }, data: { technicalPacket: { ...pkt, metadata: lowBidMeta } } });
-    }
+    // Dynamic Minimum Sourcing Bids & Single Bidder Protocol
+    await evaluateBidCountThresholds(tx, bid, qualified.length, body);
 
     // Compute landed cost and sort
     const withLandedCost = qualified.map((row: any) => ({
