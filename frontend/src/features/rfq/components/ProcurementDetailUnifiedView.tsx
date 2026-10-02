@@ -110,6 +110,7 @@ import {
   cleanDeliveryAddress,
 } from "../../shared/format";
 import { sanitizeUom, sanitizeHsn } from "../utils/quoteItemParser";
+import { cleanCanonicalRefId } from "../../../utils/refIdUtils";
 
 type IconComponent = React.ComponentType<{ className?: string }>;
 type Tone =
@@ -5225,10 +5226,16 @@ export function ProcurementDetailUnifiedView(
   // domain reference /bids/{displayId}?type={procurementType}&tab={activeTab}
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const canonicalRef =
+    const rawDisplay =
       props.displayId && props.displayId !== "N/A" && props.displayId !== "—"
         ? props.displayId
         : (!/^\d+$/.test(String(props.id)) ? String(props.id) : null);
+
+    if (!rawDisplay) return;
+
+    // Isolate single clean alphanumeric reference (strip bullets, spaces, and duplicate suffixes)
+    const primaryToken = String(rawDisplay).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
+    const canonicalRef = cleanCanonicalRefId(primaryToken);
 
     if (!canonicalRef) return;
 
@@ -10894,46 +10901,135 @@ export function ProcurementDetailUnifiedView(
           {/* Seller Auction Actions / Status Notices */}
           {!isBuyerSide && props.sellerAuctionActions}
 
-          {/* Live/Scheduled Reverse Auction Hero Banner for Buyers */}
-          {isBuyerSide &&
-            linkedAuction &&
-            !(linkedAuction as any).auctionPlanned &&
-            ["LIVE", "SCHEDULED", "OPEN", "ACTIVE", "PAUSED"].includes(
-              String(
-                linkedAuction.statusEnum || linkedAuction.status || "",
-              ).toUpperCase(),
-            ) && (
-              <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-                    <Gavel className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="rounded-md bg-blue-100/90 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 border border-blue-200">
-                        {String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase() === 'LIVE' ? '🔴 Live Reverse Auction Running' : '⏱️ Reverse Auction Scheduled'}
-                      </span>
-                      <span className="text-xs font-semibold text-slate-500">
-                        RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
-                      </span>
+          {/* Universal Lifecycle-Aware Reverse Auction Hero Banner (Buyers & Sellers) */}
+          {linkedAuction && (() => {
+            const auctionStatus = String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase();
+            const raCode = (linkedAuction as any).auctionCode || linkedAuction.id;
+            const isLive = ["LIVE", "RUNNING", "ACTIVE", "PAUSED"].includes(auctionStatus);
+            const isScheduled = ["SCHEDULED", "UPCOMING", "OPEN"].includes(auctionStatus) && !(linkedAuction as any).auctionPlanned;
+            const isConcluded = ["CLOSED", "CONCLUDED", "ENDED", "COMPLETED", "AWARDED", "FINANCIAL_EVALUATION"].includes(auctionStatus) || isBidAwarded;
+
+            // If concluded/ended:
+            if (isConcluded) {
+              return (
+                <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50/40 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0 shadow-sm">
+                      <Trophy className="h-5 w-5" />
                     </div>
-                    <p className="text-xs font-medium text-slate-800 mt-1">
-                      Reverse auction is currently active for this requisition. Click below to monitor dynamic supplier counter-bids and manage auction parameters in the Live Console.
-                    </p>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-slate-200/80 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-800 border border-slate-300">
+                          Reverse Auction Concluded
+                        </span>
+                        <span className="text-xs font-mono font-semibold text-slate-500">
+                          RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                        </span>
+                      </div>
+                      <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
+                        Reverse Auction Bidding Concluded
+                      </h4>
+                      <p className="text-xs font-medium text-slate-600 mt-0.5">
+                        The dynamic bidding window has ended. You can view final L1 outcomes, ranking matrix, and award recommendations.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                        router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/results`);
+                      }}
+                      className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm focus:outline-none cursor-pointer"
+                    >
+                      <Trophy className="h-3.5 w-3.5 mr-1 text-amber-400" />
+                      View Auction Results
+                    </Button>
                   </div>
                 </div>
-                <div className="flex items-center gap-2.5 shrink-0">
-                  <Button
-                    type="button"
-                    onClick={() => router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(linkedAuction.auctionCode || linkedAuction.id))}/live`)}
-                    className="h-9 px-4 bg-[#12335f] hover:bg-[#0b2445] text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
-                  >
-                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                    <span>Open Live Bid Console →</span>
-                  </Button>
+              );
+            }
+
+            // If Live:
+            if (isLive) {
+              return (
+                <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 via-rose-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-sm animate-pulse">
+                      <Gavel className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-red-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-900 border border-red-200 animate-pulse">
+                          🔴 Live Reverse Auction Running
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 font-mono">
+                          RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-slate-800 mt-1">
+                        Dynamic reverse auction is currently live for this requisition. Click below to participate or monitor real-time supplier bids.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                        router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
+                      }}
+                      className="h-9 px-4 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Gavel className="h-3.5 w-3.5" />
+                      <span>{isBuyerSide ? "Open Live Bid Console →" : "Join Live Auction Room →"}</span>
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            }
+
+            // If Scheduled:
+            if (isScheduled) {
+              return (
+                <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-blue-100/90 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 border border-blue-200">
+                          ⏱️ Reverse Auction Scheduled
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 font-mono">
+                          RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-slate-800 mt-1">
+                        Stage 2 dynamic decrement bidding will begin at the scheduled window start time.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                        router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
+                      }}
+                      className="h-9 px-4 bg-[#12335f] hover:bg-[#0b2445] text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <span>View Auction Room →</span>
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            return null;
+          })()}
 
           {/* ═══════════════════════════════════════════════════════════════ */}
           {/* ENTERPRISE BID LIFECYCLE HERO ACTION BANNER                     */}
@@ -12452,22 +12548,29 @@ export function ProcurementDetailUnifiedView(
                   {/* Requisition ID badge */}
                   {displayIdStr &&
                     displayIdStr !== "N/A" &&
-                    displayIdStr !== "—" && (
-                      <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
-                        <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
-                          {hasRfqPrefix || isRfqType
-                            ? 'RFQ Ref:'
-                            : hasRfpPrefix || isRfpType
-                            ? 'RFP Ref:'
-                            : props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
-                            ? (displayIdStr.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
-                            : isRateContractType
-                            ? 'Tender Notice:'
-                            : 'Ref:'}
+                    displayIdStr !== "—" && (() => {
+                      // Deduplicate tokens if displayIdStr contains redundant repetitions like "RA-... • RA-..."
+                      const rawParts = displayIdStr.split(/[\u2022•]/).map(p => p.trim()).filter(Boolean);
+                      const uniqueParts = Array.from(new Set(rawParts));
+                      const sanitizedDisplayId = uniqueParts.join(' • ');
+
+                      return (
+                        <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
+                          <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
+                            {hasRfqPrefix || isRfqType
+                              ? 'RFQ Ref:'
+                              : hasRfpPrefix || isRfpType
+                              ? 'RFP Ref:'
+                              : isRateContractType
+                              ? 'Tender Notice:'
+                              : props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
+                              ? (sanitizedDisplayId.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
+                              : 'Ref:'}
+                          </span>
+                          <span>{sanitizedDisplayId}</span>
                         </span>
-                        <span>{displayIdStr}</span>
-                      </span>
-                    )}
+                      );
+                    })()}
 
                   {/* Companion Linked RA Room badge */}
                   {linkedAuction && (
@@ -12544,6 +12647,53 @@ export function ProcurementDetailUnifiedView(
                   )}
                   {isDownloadingPdf ? "Downloading..." : "Download Notice (PDF)"}
                 </Button>
+
+                {/* Direct Header Action for Linked Reverse Auction (Results or Live Room) */}
+                {linkedAuction && (() => {
+                  const auctionStatus = String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase();
+                  const raCode = (linkedAuction as any).auctionCode || linkedAuction.id;
+                  const isConcluded = ["CLOSED", "CONCLUDED", "ENDED", "COMPLETED", "AWARDED", "FINANCIAL_EVALUATION"].includes(auctionStatus) || isBidAwarded;
+                  const isLive = ["LIVE", "RUNNING", "ACTIVE", "PAUSED"].includes(auctionStatus);
+
+                  if (isConcluded) {
+                    return (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                          router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/results`);
+                        }}
+                        className="h-8 px-3 text-xs font-bold rounded-lg border-purple-200 bg-purple-50 text-purple-900 hover:bg-purple-100 hover:border-purple-300 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
+                        title="View Final Auction Rankings & L1 Outcomes"
+                      >
+                        <Trophy className="h-3.5 w-3.5 text-purple-600" aria-hidden="true" />
+                        <span>View Auction Results</span>
+                      </Button>
+                    );
+                  }
+
+                  if (isLive) {
+                    return (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                          router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
+                        }}
+                        className="h-8 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm gap-1.5 flex items-center cursor-pointer transition-all active:scale-95 animate-pulse"
+                        title="Enter Live Reverse Auction Console"
+                      >
+                        <Gavel className="h-3.5 w-3.5 text-white" aria-hidden="true" />
+                        <span>{isBuyerSide ? "Live Bid Console" : "Enter Live Auction"}</span>
+                      </Button>
+                    );
+                  }
+
+                  return null;
+                })()}
                 {props.invoiceStatus &&
                   (props.invoiceStatus.exists ? (
                     <Button

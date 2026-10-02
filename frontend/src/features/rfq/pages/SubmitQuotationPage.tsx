@@ -2671,17 +2671,18 @@ export default function SubmitQuotationPage() {
       navigateTo(`${rolePrefix}/messages?conversationId=${targetConvId}`);
       return;
     }
-    const targetId = requirementId || rfqData?.requirementNumber || rfqData?.id || extractedPathId;
+    const rawTarget = rfqData?.bidNumber || rfqData?.requirementNumber || requirementId || rfqData?.id || extractedPathId;
+    const cleanTargetId = String(rawTarget).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
     if (isOpenTender) {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=OPEN_TENDER`);
+      navigateTo(`/bids/${encodeURIComponent(String(cleanTargetId))}?type=OPEN_TENDER&tab=overview`);
     } else if (isLimitedTender) {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=LIMITED_TENDER`);
+      navigateTo(`/bids/${encodeURIComponent(String(cleanTargetId))}?type=LIMITED_TENDER&tab=overview`);
     } else if (isRfp) {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RFP`);
+      navigateTo(`/bids/${encodeURIComponent(String(cleanTargetId))}?type=RFP&tab=overview`);
     } else if (isRateContract) {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RATE_CONTRACT`);
+      navigateTo(`/bids/${encodeURIComponent(String(cleanTargetId))}?type=RATE_CONTRACT&tab=overview`);
     } else {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RFQ`);
+      navigateTo(`/bids/${encodeURIComponent(String(cleanTargetId))}?type=RFQ&tab=overview`);
     }
   }, [user?.role, isMarketplaceQuoteFlow, rfqData, conversationId, requirementId, extractedPathId, isOpenTender, isLimitedTender, isRfp, isRateContract, navigateTo]);
 

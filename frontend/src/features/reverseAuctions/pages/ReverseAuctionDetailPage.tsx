@@ -941,18 +941,25 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     </div>
   ) : null;
 
-  const parentRef =
+  const rawCandidateParent =
     linkedBidData.bidNumber ||
     linkedBidData.referenceNumber ||
     (linkedBidData.id ? formatRefId(String(linkedBidData.procurementType || '').includes('LIMITED') ? 'LTND' : 'TND', linkedBidData.id) : null) ||
     reqData.referenceNumber ||
     (auctionData.auctionConfig as any)?.parentRefNumber ||
-    auctionData.referenceNo ||
-    null;
+    (auctionData.referenceNo && !String(auctionData.referenceNo).toUpperCase().startsWith('RA-') && auctionData.referenceNo !== auctionData.auctionCode ? auctionData.referenceNo : null);
+
+  // Strict deduplication: A parent reference cannot be an RA- self-reference, cannot equal auctionCode, and cannot duplicate the auction code
+  const parentRef =
+    rawCandidateParent &&
+    !String(rawCandidateParent).toUpperCase().startsWith('RA-') &&
+    rawCandidateParent !== auctionData.auctionCode
+      ? rawCandidateParent
+      : null;
 
   const compositeDisplayId = parentRef && auctionData.auctionCode
     ? `${parentRef} • ${auctionData.auctionCode}`
-    : (auctionData.auctionCode || (parentRef || (auctionData.linkedRequirementId ? formatRefId('REQ', auctionData.linkedRequirementId) : `RA-${effectiveId}`)));
+    : (auctionData.auctionCode || (auctionData.linkedRequirementId ? formatRefId('REQ', auctionData.linkedRequirementId) : `RA-${effectiveId}`));
 
   const isParentLimitedTender = Boolean(
     String(linkedBidData.procurementType || '').toUpperCase().includes('LIMITED') ||

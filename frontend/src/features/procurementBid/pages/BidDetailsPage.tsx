@@ -112,9 +112,13 @@ export default function BidDetailsPage() {
 
     if (!resolvedRef) return;
 
+    // Sanitize resolvedRef to ensure no bullets, hyphens or composite tokens get encoded into the URL path
+    const cleanRef = String(resolvedRef).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
+    if (!cleanRef) return;
+
     try {
       const currentUrl = new URL(window.location.href);
-      const targetPath = `/bids/${encodeURIComponent(resolvedRef)}`;
+      const targetPath = `/bids/${encodeURIComponent(cleanRef)}`;
       let changed = false;
 
       if (currentUrl.pathname !== targetPath) {
@@ -170,50 +174,54 @@ export default function BidDetailsPage() {
   const title = String(bidObj.title || bidObj.subject || '').toUpperCase();
   const reqNum = String(bidObj.requirementNumber || bidObj.referenceNumber || bidObj.bidNumber || requestId || '').toUpperCase();
 
-  const isReverseAuction =
-    rawMethod.includes('REVERSE') ||
-    rawMethod.includes('AUCTION') ||
-    title.includes('REVERSE AUCTION') ||
-    title.includes('AUCTION') ||
-    desc.includes('REVERSE AUCTION') ||
-    reqNum.startsWith('RA-') ||
-    queryType.includes('AUCTION') ||
-    queryType.includes('REVERSE');
-
-  if (isReverseAuction) {
-    return <ReverseAuctionDetailPage id={bidObj?.auctionCode || bidObj?.id || requestId} />;
-  }
-
+  // 1. Rate Contracts (Highest precedence for RC- prefix or explicit RATE_CONTRACT query/method)
   const isRateContract =
+    reqNum.startsWith('RC-') ||
+    queryType.includes('RATE') ||
     rawMethod.includes('RATE') ||
-    title.includes('RATE CONTRACT') ||
-    reqNum.startsWith('RC-');
+    title.includes('RATE CONTRACT');
 
   if (isRateContract) {
     return <RateContractDetailPage initialData={validInitialData} />;
   }
 
+  // 2. Limited Tenders
   const isLimitedTender =
+    reqNum.startsWith('LTND-') ||
+    queryType.includes('LIMITED') ||
     rawMethod.includes('LIMITED') ||
     title.includes('LIMITEDTENDER') ||
-    title.includes('LIMITED TENDER') ||
-    reqNum.startsWith('LTND-');
+    title.includes('LIMITED TENDER');
 
   if (isLimitedTender) {
     return <LimitedTenderDetailPage initialData={validInitialData} />;
   }
 
+  // 3. Open Tenders
   const isOpenTender =
+    reqNum.startsWith('TND-') ||
+    reqNum.startsWith('TENDER-') ||
+    queryType.includes('OPEN') ||
     rawMethod.includes('OPEN_TENDER') ||
     rawMethod.includes('OPEN TENDER') ||
     title.includes('OPENTENDER') ||
     title.includes('OPEN TENDER') ||
-    reqNum.startsWith('TND-') ||
-    reqNum.startsWith('TENDER-') ||
-    ((rawMethod.includes('OPEN') || rawMethod.includes('TENDER')) && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP'));
+    ((rawMethod.includes('OPEN') || rawMethod.includes('TENDER')) && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP') && !rawMethod.includes('RATE'));
 
   if (isOpenTender) {
     return <OpenTenderDetailPage initialData={validInitialData} />;
+  }
+
+  // 4. Reverse Auctions (Only standalone auctions with RA- prefix or pure reverse auction sourcing without parent tender)
+  const isReverseAuction =
+    reqNum.startsWith('RA-') ||
+    queryType === 'REVERSE_AUCTION' ||
+    rawMethod === 'REVERSE_AUCTION' ||
+    (rawMethod.includes('AUCTION') && !rawMethod.includes('RATE') && !rawMethod.includes('TENDER') && !rawMethod.includes('RFQ') && !rawMethod.includes('RFP')) ||
+    (title.includes('REVERSE AUCTION') && !title.includes('RATE CONTRACT') && !reqNum.startsWith('RC-'));
+
+  if (isReverseAuction) {
+    return <ReverseAuctionDetailPage id={bidObj?.auctionCode || bidObj?.id || requestId} />;
   }
 
   const isExplicitRfp =

@@ -867,11 +867,27 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       sortable: true,
       sortKey: 'id',
       width: 'w-36',
-      cell: (item: any) => (
-        <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold tracking-tight bg-slate-100 text-slate-800 border border-slate-200/90 whitespace-nowrap shadow-2xs">
-          {formatBidDisplayId(item)}
-        </span>
-      )
+      cell: (item: any) => {
+        const displayId = formatBidDisplayId(item);
+        const pType = getParticipationType(item);
+        const targetId = item.bid?.bidNumber || item.matchedBidNumber || item.bid?.id || item.bidId || item.requirementId || displayId;
+        const cleanTargetId = String(targetId).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
+        const typeParam = pType === 'Rate Contract' ? 'RATE_CONTRACT' : pType === 'Open Tender' ? 'OPEN_TENDER' : pType === 'Limited Tender' ? 'LIMITED_TENDER' : pType === 'RFP' ? 'RFP' : pType === 'Reverse Auction' ? 'REVERSE_AUCTION' : 'RFQ';
+
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              router.push(`/bids/${encodeURIComponent(cleanTargetId)}?type=${typeParam}&tab=overview`);
+            }}
+            className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-mono font-bold tracking-tight bg-slate-100 hover:bg-slate-200 text-[#12335f] border border-slate-200/90 whitespace-nowrap shadow-2xs cursor-pointer hover:underline transition-colors"
+            title="View Tender Notice & Details"
+          >
+            {displayId}
+          </button>
+        );
+      }
     },
     {
       key: 'title',
@@ -989,28 +1005,42 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
       headerClassName: 'text-right',
       cell: (item: any) => {
         const pType = getParticipationType(item);
-        const isAuction =
-          pType === 'Reverse Auction' ||
-          String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
+        const isAuctionLive =
           item.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
           item.status === 'REVERSE_AUCTION_ACTIVE' ||
           Boolean(item.hasActiveReverseAuction);
+        const raId = item.bid?.linkedAuctionId || item.bid?.reverseAuction?.id || item.reverseAuctionId || (pType === 'Reverse Auction' ? (item.bid?.id || item.bidId) : null);
         const isDraftItem = isDraft(item);
 
         return (
           <div className="flex justify-end items-center gap-1.5">
-            {isAuction ? (
+            {isAuctionLive ? (
               <Button
                 onClick={(e) => {
                   e.stopPropagation();
-                  router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                  router.push(`/seller/procurement/reverse-auction/${raId || item.bid?.id || item.bidId}/live`);
                 }}
-                className="h-8 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
+                className="h-8 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer animate-pulse"
                 title="Join Live Reverse Auction"
               >
                 <Gavel className="h-3.5 w-3.5" /> Live
               </Button>
-            ) : isDraftItem ? (
+            ) : raId ? (
+              <Button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  router.push(`/seller/procurement/reverse-auction/${raId}/results`);
+                }}
+                variant="outline"
+                className="h-8 px-2.5 border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 text-xs font-semibold rounded-lg flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                title="View Final Auction Rankings & L1 Outcomes"
+              >
+                <Trophy className="h-3.5 w-3.5 text-purple-600" />
+                <span>Results</span>
+              </Button>
+            ) : null}
+
+            {isDraftItem ? (
               <Button
                 onClick={() => handleAction(item)}
                 className="h-8 px-3 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer"
@@ -1626,9 +1656,20 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                             <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-slate-100 font-mono text-[9px] font-black text-slate-500">
                               {String(rowIndex).padStart(2, '0')}
                             </span>
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-black tracking-wide bg-slate-100 text-slate-800 border border-slate-200/80">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const targetId = item.bid?.bidNumber || item.matchedBidNumber || item.bid?.id || item.bidId || item.requirementId || displayId;
+                                const cleanTargetId = String(targetId).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
+                                const typeParam = pType === 'Rate Contract' ? 'RATE_CONTRACT' : pType === 'Open Tender' ? 'OPEN_TENDER' : pType === 'Limited Tender' ? 'LIMITED_TENDER' : pType === 'RFP' ? 'RFP' : pType === 'Reverse Auction' ? 'REVERSE_AUCTION' : 'RFQ';
+                                router.push(`/bids/${encodeURIComponent(cleanTargetId)}?type=${typeParam}&tab=overview`);
+                              }}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-mono font-black tracking-wide bg-slate-100 text-[#12335f] hover:bg-slate-200 border border-slate-200/80 cursor-pointer hover:underline"
+                              title="View Tender Notice & Details"
+                            >
                               {displayId}
-                            </span>
+                            </button>
                             <span className="inline-block rounded px-1.5 py-0.5 text-[9px] font-bold uppercase bg-[#12335f]/10 text-[#12335f]">
                               {pType}
                             </span>
@@ -1676,23 +1717,37 @@ export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?
                             <div className="flex items-center gap-1.5">
                               {(() => {
                                 const pType = getParticipationType(item);
-                                const isMobileAuction =
-                                  pType === 'Reverse Auction' ||
-                                  String(item.bid?.procurementType || item.bid?.bidType || '').toUpperCase().includes('REVERSE') ||
+                                const isMobileLive =
                                   item.bid?.status === 'REVERSE_AUCTION_ACTIVE' ||
                                   item.status === 'REVERSE_AUCTION_ACTIVE' ||
                                   Boolean(item.hasActiveReverseAuction);
-                                if (isMobileAuction) {
+                                const raId = item.bid?.linkedAuctionId || item.bid?.reverseAuction?.id || item.reverseAuctionId || (pType === 'Reverse Auction' ? (item.bid?.id || item.bidId) : null);
+                                if (isMobileLive) {
                                   return (
                                     <Button
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        router.push(`/seller/procurement/reverse-auction/${item.bid?.id || item.bidId}/live`);
+                                        router.push(`/seller/procurement/reverse-auction/${raId || item.bid?.id || item.bidId}/live`);
                                       }}
                                       className="h-8 px-3 bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white text-xs font-semibold rounded-lg flex items-center gap-1.5 shadow-2xs transition-all cursor-pointer animate-pulse"
                                       title="Join Live Reverse Auction"
                                     >
                                       <Gavel className="h-3.5 w-3.5" /> Live
+                                    </Button>
+                                  );
+                                }
+                                if (raId) {
+                                  return (
+                                    <Button
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        router.push(`/seller/procurement/reverse-auction/${raId}/results`);
+                                      }}
+                                      variant="outline"
+                                      className="h-8 px-2.5 border-purple-200 bg-purple-50 text-purple-800 hover:bg-purple-100 text-xs font-semibold rounded-lg flex items-center gap-1 shadow-2xs transition-all cursor-pointer"
+                                      title="View Auction Results"
+                                    >
+                                      <Trophy className="h-3.5 w-3.5 text-purple-600" /> Results
                                     </Button>
                                   );
                                 }
