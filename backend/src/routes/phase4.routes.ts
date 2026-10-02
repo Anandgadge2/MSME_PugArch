@@ -1953,11 +1953,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   const isLimitedRfq = methodSlug === 'rfq' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
   const bidType = isLimitedRfq ? 'LIMITED_TENDER' : canonicalMethod;
   const creationTime = requirement.createdAt ? new Date(requirement.createdAt) : new Date();
-  const rawPublishCandidate = schedule.publishDate || schedule.submissionStartDate || schedule.bidStartDate || tender.bidStartDate || null;
-  const parsedStartDate = rateContractConfig.periodStartDate ? parseDateIST(rateContractConfig.periodStartDate) : (rawPublishCandidate ? parseDateIST(rawPublishCandidate) : null);
+  const rawPublishCandidate = schedule.submissionStartDate || schedule.publishDate || schedule.bidStartDate || tender.bidStartDate || null;
+  const parsedStartDate = rawPublishCandidate ? parseDateIST(rawPublishCandidate) : (rateContractConfig.periodStartDate ? parseDateIST(rateContractConfig.periodStartDate) : null);
   const isFutureScheduled = parsedStartDate && !isNaN(parsedStartDate.getTime()) && parsedStartDate.getTime() > (creationTime.getTime() + 60000);
   const effectiveStartDate = isFutureScheduled ? parsedStartDate : creationTime;
-  const rawEndDate = rateContractConfig.periodEndDate || schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || tender.bidClosingDate || requirement.requiredBy || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const rawEndDate = schedule.submissionDate || schedule.submissionDeadline || schedule.bidClosingDate || schedule.submissionEndDate || tender.bidClosingDate || requirement.requiredBy || rateContractConfig.periodEndDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
   const effectiveEndDate = parseDateIST(rawEndDate, true) || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
   const existing = await db.procurementBid.findFirst({

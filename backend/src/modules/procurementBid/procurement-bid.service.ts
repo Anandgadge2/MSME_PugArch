@@ -1363,16 +1363,28 @@ export const refreshBidStatus = async (bid: any) => {
   const current = String(bid.status || '').toUpperCase();
   const time = now();
 
-  const sched = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any).schedule : null;
-  const deadlineCandidate = bid.endDate || firstPresent(
+  const tp = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+  const sched = tp.schedule || null;
+  const tndr = tp.tender || null;
+  const rateContractConfig = tp.rateContractConfig || tp.rateContract || {};
+
+  const isRateContractPeriodEnd = Boolean(
+    rateContractConfig.periodEndDate &&
+    bid.endDate &&
+    new Date(bid.endDate).toISOString().slice(0, 10) === new Date(rateContractConfig.periodEndDate).toISOString().slice(0, 10)
+  );
+
+  const deadlineCandidate = (isRateContractPeriodEnd ? null : bid.endDate) || firstPresent(
     bid.bidClosingDate,
     sched?.submissionClosingDate,
     sched?.submissionDate,
     sched?.submissionDeadline,
     sched?.submissionEndDate,
     sched?.bidClosingDate,
-    (bid.technicalPacket as any)?.submissionDeadline,
-    (bid.technicalPacket as any)?.bidClosingDate
+    tndr?.bidClosingDate,
+    tp?.submissionDeadline,
+    tp?.bidClosingDate,
+    bid.endDate
   );
   const endDateTime = deadlineCandidate ? new Date(deadlineCandidate).getTime() : (bid.endDate ? new Date(bid.endDate).getTime() : null);
 
@@ -2758,8 +2770,29 @@ export const extendBidSchedule = async (
     throw new ApiError(400, 'New submission closing date must be in the future.', 'CLOSING_DATE_IN_PAST');
   }
 
-  const oldEndDate = bid.endDate ? new Date(bid.endDate) : null;
-  if (oldEndDate && newClosingDate.getTime() <= oldEndDate.getTime()) {
+  const packet = (bid.technicalPacket && typeof bid.technicalPacket === 'object')
+    ? (bid.technicalPacket as any)
+    : {};
+  const sched = packet.schedule || {};
+  const tndr = packet.tender || {};
+  const rateContractConfig = packet.rateContractConfig || packet.rateContract || {};
+
+  // For Rate Contracts, bid.endDate may have been assigned the 6-12 month contract periodEndDate,
+  // whereas the true bid submission closing deadline is in sched.submissionDate / sched.submissionDeadline / tndr.bidClosingDate.
+  const hasRateContractPeriodEnd = Boolean(
+    rateContractConfig.periodEndDate &&
+    bid.endDate &&
+    new Date(bid.endDate).toISOString().slice(0, 10) === new Date(rateContractConfig.periodEndDate).toISOString().slice(0, 10)
+  );
+
+  const effectiveCurrentClosingDate = hasRateContractPeriodEnd
+    ? (sched.submissionClosingDate || sched.submissionDate || sched.submissionDeadline || sched.submissionEndDate || sched.bidClosingDate || tndr.bidClosingDate || packet.submissionDeadline || packet.bidClosingDate || bid.endDate)
+    : (sched.submissionClosingDate || sched.submissionDate || sched.submissionDeadline || sched.submissionEndDate || sched.bidClosingDate || tndr.bidClosingDate || packet.submissionDeadline || packet.bidClosingDate || bid.endDate);
+
+  const oldEndDate = effectiveCurrentClosingDate ? new Date(effectiveCurrentClosingDate) : (bid.endDate ? new Date(bid.endDate) : null);
+  const isPastDeadline = oldEndDate ? oldEndDate.getTime() <= now.getTime() : false;
+
+  if (oldEndDate && !isPastDeadline && newClosingDate.getTime() <= oldEndDate.getTime()) {
     throw new ApiError(400, 'New submission closing date must be later than the current deadline.', 'CLOSING_DATE_NOT_EXTENDED');
   }
 
@@ -2841,6 +2874,7 @@ export const extendBidSchedule = async (
 
   const currentCount = Number(updatedTechnicalPacket.corrigendumCount || 0);
   const schedule = updatedTechnicalPacket.schedule || {};
+  const tndrObj = updatedTechnicalPacket.tender || {};
   const basics = updatedTechnicalPacket.basics || {};
 
   updatedTechnicalPacket = {
@@ -2859,6 +2893,12 @@ export const extendBidSchedule = async (
       ...(newTechDate ? { technicalOpeningDate: newTechDate.toISOString() } : {}),
       financialOpeningDate: newFinDate ? newFinDate.toISOString() : null,
       ...(newValidityDate ? { bidValidityDate: newValidityDate.toISOString() } : {}),
+    },
+    tender: {
+      ...tndrObj,
+      bidClosingDate: newClosingDate.toISOString(),
+      ...(newTechDate ? { technicalEvaluationDate: newTechDate.toISOString() } : {}),
+      ...(newFinDate ? { financialEvaluationDate: newFinDate.toISOString() } : {}),
     },
     basics: {
       ...basics,
