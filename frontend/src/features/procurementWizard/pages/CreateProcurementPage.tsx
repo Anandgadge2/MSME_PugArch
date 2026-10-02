@@ -4283,7 +4283,7 @@ function ItemDrawerOrModal({
           <div className="flex items-center gap-3">
             <div className={cn(
               "flex h-10 w-10 items-center justify-center rounded-xl font-bold transition-colors shadow-2xs",
-              isService ? "bg-purple-100 text-purple-700" : "bg-[#12335f] text-white"
+              isService ? "bg-[#0b2447]/10 text-[#0b2447]" : "bg-[#0b2447] text-white"
             )}>
               {isService ? <Wrench className="h-5 w-5" /> : <Package className="h-5 w-5" />}
             </div>
@@ -4294,7 +4294,7 @@ function ItemDrawerOrModal({
                 </h3>
                 <span className={cn(
                   "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
-                  isService ? "bg-purple-100 text-purple-800" : "bg-blue-100 text-blue-800"
+                  isService ? "bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20" : "bg-blue-100 text-blue-800"
                 )}>
                   {formData.itemType || 'Product'}
                 </span>
@@ -4314,7 +4314,7 @@ function ItemDrawerOrModal({
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
                   !isService
-                    ? "bg-white text-[#12335f] shadow-xs"
+                    ? "bg-white text-[#0b2447] shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -4327,7 +4327,7 @@ function ItemDrawerOrModal({
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold transition-all",
                   isService
-                    ? "bg-white text-purple-700 shadow-xs"
+                    ? "bg-white text-[#0b2447] shadow-xs"
                     : "text-slate-600 hover:text-slate-900"
                 )}
               >
@@ -4589,7 +4589,7 @@ function ItemDrawerOrModal({
                     />
                   </div>
                   {isService && (
-                    <p className="text-[10px] text-purple-800/90 font-medium mt-1">
+                    <p className="text-[10px] text-slate-500 font-medium mt-1">
                       Department benchmark or ceiling budget (excl. GST). Leave blank or 0 if bidders should propose their price freely.
                     </p>
                   )}
@@ -4626,7 +4626,7 @@ function ItemDrawerOrModal({
                   <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">
                     {isService ? 'Contract Total (Gross):' : 'Line Total:'}
                   </span>
-                  <span className="text-sm font-black text-[#12335f]">
+                  <span className="text-sm font-black text-[#0b2447]">
                     ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
                   </span>
                 </div>
@@ -4638,7 +4638,7 @@ function ItemDrawerOrModal({
           <div className="lg:col-span-5 border-t lg:border-t-0 lg:border-l border-slate-100 lg:pl-6 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-black uppercase text-slate-800 tracking-wide flex items-center gap-1.5">
-                <FileText className="h-4 w-4 text-[#12335f]" />
+                <FileText className="h-4 w-4 text-[#0b2447]" />
                 Specs & Drawings
               </h4>
               <span className="text-[10px] font-bold text-slate-400">
@@ -4662,7 +4662,7 @@ function ItemDrawerOrModal({
         <div className="px-6 py-3.5 border-t border-slate-100 bg-slate-50/80 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0">
           <div className="text-xs font-bold text-slate-600 text-left w-full sm:w-auto">
             <span className="text-slate-400 font-semibold">Line Total: </span>
-            <span className="text-base font-black text-[#12335f]">
+            <span className="text-base font-black text-[#0b2447]">
               ₹{totalLineValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
             </span>
           </div>
@@ -4680,7 +4680,7 @@ function ItemDrawerOrModal({
               type="button"
               variant="outline"
               onClick={handleSaveAndAddClick}
-              className="h-9 px-4 text-xs font-bold border-[#12335f]/40 text-[#12335f] hover:bg-[#12335f]/5"
+              className="h-9 px-4 text-xs font-bold border-[#0b2447]/30 text-[#0b2447] hover:bg-[#0b2447]/5"
             >
               <Plus className="h-3.5 w-3.5 mr-1" />
               Save & Add Another
@@ -4688,7 +4688,7 @@ function ItemDrawerOrModal({
             <Button
               type="button"
               onClick={handleSaveClick}
-              className="h-9 px-6 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-md transition-all"
+              className="h-9 px-6 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shadow-md transition-all"
             >
               {formData.name ? 'Update Line Item' : 'Save Line Item'}
             </Button>
@@ -5277,13 +5277,13 @@ function ItemsDetailsForm({
       {
         key: 'type',
         header: 'Type',
-        width: isServiceMode ? 'w-[7%] min-w-[75px]' : 'w-[6%] min-w-[70px]',
+        width: isServiceMode ? 'w-[7%] min-w-[70px]' : 'w-[6%] min-w-[65px]',
         cell: (item: any) => (
           <span className={cn(
             "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider whitespace-nowrap shadow-3xs",
             item.itemType === 'Service'
-              ? "border border-purple-200 bg-purple-50 text-purple-700"
-              : "border border-blue-200 bg-blue-50 text-blue-700"
+              ? "border border-blue-200 bg-blue-50 text-blue-800"
+              : "border border-slate-200 bg-slate-100 text-slate-800"
           )}>
             {item.itemType || 'Product'}
           </span>
@@ -5292,7 +5292,7 @@ function ItemsDetailsForm({
       {
         key: 'name',
         header: isServiceMode ? 'Service Title' : 'Item / Product Name',
-        width: isServiceMode ? 'w-[18%] min-w-[170px]' : 'w-[16%] min-w-[160px]',
+        width: isServiceMode ? 'w-[17%] min-w-[160px]' : 'w-[16%] min-w-[150px]',
         cell: (item: any) => (
           <div className="font-bold text-slate-900 text-xs leading-snug break-words line-clamp-2 max-w-full" title={item.name}>
             {item.name || <span className="text-rose-500 italic font-normal">{isServiceMode ? 'Unnamed Service' : 'Unnamed Item'}</span>}
@@ -5302,7 +5302,7 @@ function ItemsDetailsForm({
       {
         key: 'specifications',
         header: isServiceMode ? 'Scope & Deliverables' : 'Specifications / Scope',
-        width: isServiceMode ? 'w-[20%] min-w-[180px]' : 'w-[16%] min-w-[160px]',
+        width: isServiceMode ? 'w-[18%] min-w-[170px]' : 'w-[16%] min-w-[150px]',
         cellClassName: 'text-slate-600 font-medium',
         cell: (item: any) => {
           const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
@@ -5316,7 +5316,7 @@ function ItemsDetailsForm({
       {
         key: 'quantity',
         header: isServiceMode ? 'Billing Qty' : 'Qty & UOM',
-        width: isServiceMode ? 'w-[8%] min-w-[85px]' : 'w-[7%] min-w-[80px]',
+        width: isServiceMode ? 'w-[8%] min-w-[80px]' : 'w-[8%] min-w-[80px]',
         align: 'center',
         cell: (item: any) => (
           <div className="whitespace-nowrap text-center">
@@ -5328,7 +5328,7 @@ function ItemsDetailsForm({
       {
         key: 'rate',
         header: isServiceMode ? 'Est. Service Fee' : 'Est. Unit Rate',
-        width: isServiceMode ? 'w-[14%] min-w-[130px]' : 'w-[11%] min-w-[115px]',
+        width: isServiceMode ? 'w-[13%] min-w-[120px]' : 'w-[12%] min-w-[115px]',
         align: 'right',
         cellClassName: 'font-extrabold text-slate-900',
         cell: (item: any) => {
@@ -5344,7 +5344,7 @@ function ItemsDetailsForm({
               className="text-right whitespace-nowrap group cursor-pointer inline-block"
               title="Click to edit fee"
             >
-              <div className="font-extrabold text-slate-900 text-xs group-hover:text-purple-700 transition-colors">
+              <div className="font-extrabold text-slate-900 text-xs group-hover:text-[#0b2447] transition-colors">
                 ₹{rate.toLocaleString('en-IN')}
               </div>
               <div className="text-[9.5px] font-bold text-slate-500">+{gst}% GST</div>
@@ -5357,7 +5357,7 @@ function ItemsDetailsForm({
                   setSelectedItemForEdit(item);
                   setShowItemDrawer(true);
                 }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-black text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 shadow-3xs transition-all cursor-pointer whitespace-nowrap"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-black text-[#0b2447] bg-slate-100 hover:bg-slate-200 border border-slate-200 shadow-3xs transition-all cursor-pointer whitespace-nowrap"
                 title="Click to set estimated benchmark fee for this service"
               >
                 <Plus className="h-3 w-3" />
@@ -5370,7 +5370,7 @@ function ItemsDetailsForm({
       {
         key: 'total',
         header: isServiceMode ? 'Total (Incl. GST)' : 'Line Total (Incl. GST)',
-        width: isServiceMode ? 'w-[13%] min-w-[125px]' : 'w-[12%] min-w-[120px]',
+        width: isServiceMode ? 'w-[13%] min-w-[120px]' : 'w-[13%] min-w-[120px]',
         align: 'right',
         cellClassName: 'font-extrabold text-slate-900',
         cell: (item: any) => {
@@ -5381,7 +5381,7 @@ function ItemsDetailsForm({
           const total = base * (1 + gst / 100);
           return total > 0 ? (
             <div className="text-right whitespace-nowrap">
-              <div className="font-black text-[#12335f] text-xs">₹{Math.round(total).toLocaleString('en-IN')}</div>
+              <div className="font-black text-[#0b2447] text-xs">₹{Math.round(total).toLocaleString('en-IN')}</div>
               <div className="text-[9.5px] font-semibold text-slate-400">Base: ₹{base.toLocaleString('en-IN')}</div>
             </div>
           ) : (
@@ -5394,7 +5394,7 @@ function ItemsDetailsForm({
       {
         key: 'hsn',
         header: isServiceMode ? 'SAC Code' : 'HSN Code',
-        width: isServiceMode ? 'w-[8%] min-w-[80px]' : 'w-[7%] min-w-[75px]',
+        width: isServiceMode ? 'w-[7%] min-w-[75px]' : 'w-[7%] min-w-[75px]',
         align: 'center',
         cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
         cell: (item: any) => {
@@ -5403,7 +5403,7 @@ function ItemsDetailsForm({
             <span className={cn(
               "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-tight inline-block",
               item.itemType === 'Service'
-                ? "bg-purple-50 text-purple-700 border border-purple-200"
+                ? "bg-blue-50 text-blue-800 border border-blue-200"
                 : "bg-slate-100 text-slate-700 border border-slate-200"
             )}>
               {item.itemType === 'Service' && !String(code).startsWith('SAC') ? `SAC ${code}` : code}
@@ -5420,7 +5420,7 @@ function ItemsDetailsForm({
       baseColumns.push({
         key: 'brand',
         header: 'Brand & Policy',
-        width: 'w-[9%] min-w-[100px]',
+        width: 'w-[9%] min-w-[95px]',
         cell: (item: any) => (
           <div className="min-w-0">
             <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
@@ -5480,12 +5480,12 @@ function ItemsDetailsForm({
             <button
               type="button"
               onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-slate-50/80 px-2.5 py-1 text-[10px] font-bold text-slate-600 hover:border-[#12335f] hover:bg-blue-50/60 hover:text-[#12335f] transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
               title="Attach specification or drawing"
               aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
             >
-              <FilePlus className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
-              <span>+ Attach</span>
+              <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+              <span>Attach</span>
             </button>
           );
         }
@@ -5493,27 +5493,27 @@ function ItemsDetailsForm({
       {
         key: 'actions',
         header: 'Actions',
-        width: isServiceMode ? 'w-[7%] min-w-[85px]' : 'w-[7%] min-w-[85px]',
+        width: isServiceMode ? 'w-[10%] min-w-[110px]' : 'w-[10%] min-w-[110px]',
         align: 'right',
         cell: (item: any) => (
-          <div className="flex items-center justify-end gap-1 whitespace-nowrap shrink-0">
+          <div className="flex items-center justify-end gap-1.5 whitespace-nowrap shrink-0">
             <button
               type="button"
               onClick={() => {
                 setSelectedItemForEdit(item);
                 setShowItemDrawer(true);
               }}
-              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10px] font-black uppercase text-[#12335f] hover:bg-[#12335f]/10 transition-colors cursor-pointer shrink-0"
-              title="Edit specifications and fee"
+              className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[10.5px] font-bold text-[#0b2447] bg-[#0b2447]/5 hover:bg-[#0b2447]/10 border border-[#0b2447]/15 transition-colors cursor-pointer shrink-0"
+              title="Edit specifications and pricing"
               aria-label={`Edit ${item.name || 'line item'}`}
             >
-              <Pencil className="h-3 w-3" aria-hidden="true" />
+              <Pencil className="h-3 w-3 text-[#0b2447]" aria-hidden="true" />
               <span>Edit</span>
             </button>
             <button
               type="button"
               onClick={() => handleDuplicateItem(item)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer shrink-0"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
               title="Duplicate line item"
               aria-label={`Duplicate ${item.name || 'line item'}`}
             >
@@ -5522,7 +5522,7 @@ function ItemsDetailsForm({
             <button
               type="button"
               onClick={() => handleRemoveItem(item.id)}
-              className="flex h-7 w-7 items-center justify-center rounded-md text-rose-400 hover:bg-rose-50 hover:text-rose-600 transition-colors cursor-pointer shrink-0"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors cursor-pointer shrink-0"
               title="Delete line item"
               aria-label={`Delete ${item.name || 'line item'}`}
             >
@@ -5732,22 +5732,22 @@ function ItemsDetailsForm({
   const hasSowDoc = Boolean(draft.serviceDetails.sowFileAssetId || draft.serviceDetails.sowFileName);
 
   const serviceDetailsPanel = (whatBuying === 'Service' || draft.type === 'RFP') ? (
-    <div className="space-y-4 rounded-2xl p-3.5 sm:p-5 border border-purple-200/90 bg-gradient-to-br from-purple-50/60 via-white to-purple-50/30 w-full min-w-0 max-w-full shadow-3xs">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-purple-100 pb-3 gap-2">
+    <div className="space-y-4 rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/40 w-full min-w-0 max-w-full shadow-3xs">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 gap-2">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-100 text-purple-700 shadow-3xs">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#0b2447]/10 text-[#0b2447] shadow-3xs">
             <Wrench className="h-4.5 w-4.5" aria-hidden="true" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">
+              <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide">
                 {isRateContract ? 'Service Scope of Work (SOW) & SLA Parameters' : 'Master Service Contract Terms & SOW'}
               </h4>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20">
                 {isRateContract ? 'Rate Contract / Schedule of Rates' : 'Enterprise Sourcing Standard'}
               </span>
             </div>
-            <p className="text-[11px] text-purple-700/90 font-medium">
+            <p className="text-[11px] text-slate-600 font-medium">
               {isRateContract
                 ? 'Define service scope, deliverables, operational SLA response targets, and technical boundaries for call-off releases'
                 : 'Define overall SLA, deliverables scope, duration, and penalty terms'}
@@ -5818,11 +5818,11 @@ function ItemsDetailsForm({
       )}
 
       {/* SOW Document Upload Bar (SAP Ariba / GeM fast-track pattern) */}
-      <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 space-y-2.5 shadow-3xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="space-y-0.5 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+              <FileText className="h-4 w-4 text-[#0b2447] shrink-0" aria-hidden="true" />
               <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
                 Scope of Work (SOW) / RFP Dossier Document
               </span>
@@ -5848,18 +5848,18 @@ function ItemsDetailsForm({
             <label
               htmlFor="sow-document-upload"
               className={cn(
-                "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-xs font-bold text-purple-900 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-purple-400",
+                "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 text-xs font-bold text-slate-800 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-[#0b2447]/20",
                 uploadingSow && "opacity-50 pointer-events-none"
               )}
             >
               {uploadingSow ? (
                 <>
-                  <Loader2 className="h-4 w-4 animate-spin mr-1.5 text-purple-600" aria-hidden="true" />
+                  <Loader2 className="h-4 w-4 animate-spin mr-1.5 text-slate-600" aria-hidden="true" />
                   <span>Uploading SOW...</span>
                 </>
               ) : (
                 <>
-                  <Upload className="h-4 w-4 mr-1.5 text-purple-600" aria-hidden="true" />
+                  <Upload className="h-4 w-4 mr-1.5 text-slate-600" aria-hidden="true" />
                   <span>{draft.serviceDetails.sowFileName ? 'Replace SOW File' : 'Upload SOW Document'}</span>
                 </>
               )}
@@ -5876,7 +5876,7 @@ function ItemsDetailsForm({
               <button
                 type="button"
                 onClick={() => handlePreviewDoc({ fileAssetId: draft.serviceDetails.sowFileAssetId, fileName: draft.serviceDetails.sowFileName }, 'Scope of Work')}
-                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#12335f] hover:underline ml-2 shrink-0 cursor-pointer"
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-[#0b2447] hover:underline ml-2 shrink-0 cursor-pointer"
                 title="Preview uploaded SOW file"
               >
                 <Eye className="h-3.5 w-3.5" aria-hidden="true" /> Preview
@@ -5951,7 +5951,7 @@ function ItemsDetailsForm({
                     const cur = draft.serviceDetails.deliverables.trim();
                     updateService('deliverables', cur ? `${cur}\n• ${preset}` : `• ${preset}`);
                   }}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
                 >
                   + {preset}
                 </button>
@@ -5992,7 +5992,7 @@ function ItemsDetailsForm({
                   key={preset}
                   type="button"
                   onClick={() => updateService('slaResponseTime', preset)}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
                 >
                   {preset}
                 </button>
@@ -6042,7 +6042,7 @@ function ItemsDetailsForm({
                     key={preset}
                     type="button"
                     onClick={() => updateService('duration', preset)}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
                   >
                     {preset}
                   </button>
@@ -6069,22 +6069,22 @@ function ItemsDetailsForm({
         </Field>
 
         {isRateContract ? (
-          <div className="rounded-xl border border-purple-200/90 bg-purple-50/60 p-3.5 space-y-2 shadow-3xs flex flex-col justify-between">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2 shadow-3xs flex flex-col justify-between">
             <div className="flex items-center gap-2">
-              <Scale className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
-              <span className="text-xs font-black text-purple-950 uppercase tracking-wide">
+              <Scale className="h-4 w-4 text-[#0b2447] shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
                 Liquidated Damages &amp; Penalties
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20">
                 Governed in Step 7
               </span>
             </div>
-            <p className="text-[11px] text-purple-900/90 font-medium leading-relaxed">
+            <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
               Standard liquidated damages and SLA penalty terms for periodic release call-off orders are configured under <strong>Step 7 (Commercial Terms)</strong>.
             </p>
             {draft.terms.penaltyClause ? (
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-950 bg-white/80 border border-purple-200 px-2.5 py-1 rounded-lg">
-                <CheckCircle2 className="h-3.5 w-3.5 text-purple-600 shrink-0" aria-hidden="true" />
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
                 <span className="truncate max-w-[280px]">Configured: <strong>{draft.terms.penaltyClause}</strong></span>
               </div>
             ) : (
@@ -6128,7 +6128,7 @@ function ItemsDetailsForm({
                         terms: { ...c.terms, penaltyClause: c.terms.penaltyClause || preset },
                       }));
                     }}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
                   >
                     {preset}
                   </button>
@@ -6148,28 +6148,37 @@ function ItemsDetailsForm({
       <div className="border-b border-slate-100 pb-3.5 space-y-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                Procurement Schedule & Specifications
+                {isRateContract ? 'Schedule of Rates (SOR) & Item Specifications' : 'Procurement Schedule & Specifications'}
               </h3>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
                 {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
               </span>
+              {isRateContract && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20">
+                  Rate Agreement Baseline
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
-              Add product/service items, configure pricing and GST, and attach technical specifications & drawings.
+              {isRateContract
+                ? 'Establish unit rates and indicative consumption volumes. Rates are locked for all future call-off purchase orders.'
+                : 'Add product/service items, configure pricing and GST, and attach technical specifications & drawings.'}
             </p>
           </div>
         </div>
 
         {(whatBuying === 'Service' || draft.type === 'RFP') && draft.items.length === 0 && (
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-purple-50/80 border border-purple-200 rounded-xl text-xs text-purple-950 animate-fadeIn">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50/90 border border-slate-200 rounded-xl text-xs text-slate-900 animate-fadeIn">
             <div className="space-y-0.5">
-              <span className="font-extrabold uppercase text-purple-900 tracking-wide block">
-                Initialize Single Lump-Sum SOW Contract Item
+              <span className="font-extrabold uppercase text-[#0b2447] tracking-wide block">
+                {isRateContract ? 'Initialize Master Service Rate Item (SOR)' : 'Initialize Single Lump-Sum SOW Contract Item'}
               </span>
-              <p className="text-[11px] text-purple-800/90 font-medium">
-                Auto-generate the single Lump-Sum line item (1 Job / Set) synchronized with your contract title and internal benchmark.
+              <p className="text-[11px] text-slate-600 font-medium">
+                {isRateContract
+                  ? 'Auto-generate a master service rate line item with indicative annual volume synchronized with your scope of work.'
+                  : 'Auto-generate the single Lump-Sum line item (1 Job / Set) synchronized with your contract title and internal benchmark.'}
               </p>
             </div>
             <Button
@@ -6189,7 +6198,7 @@ function ItemsDetailsForm({
                   name: title,
                   specification: draft.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) specification document and SLA terms.',
                   quantity: 1,
-                  unit: 'Job',
+                  unit: isRateContract ? 'Job' : 'Job',
                   unitPrice: baseVal,
                   gst: gst,
                   deliveryDate: nextFortnight,
@@ -6204,15 +6213,15 @@ function ItemsDetailsForm({
                 });
 
                 if (estVal <= 0) {
-                  toast.info('SOW Line initialized with benchmark ₹0. Bidders will quote pricing in bid.');
+                  toast.info(isRateContract ? 'Rate item initialized with benchmark ₹0. Bidders will quote unit rates in bid.' : 'SOW Line initialized with benchmark ₹0. Bidders will quote pricing in bid.');
                 } else {
-                  toast.success('Initialized 1 Lump-Sum SOW line synchronized with tender budget.');
+                  toast.success(isRateContract ? 'Initialized Master Service Rate Item (SOR) synchronized with tender budget.' : 'Initialized 1 Lump-Sum SOW line synchronized with tender budget.');
                 }
               }}
-              className="bg-purple-700 hover:bg-purple-800 text-white font-black text-xs shrink-0 cursor-pointer shadow-3xs"
+              className="bg-[#0b2447] hover:bg-[#12335f] text-white font-black text-xs shrink-0 cursor-pointer shadow-3xs"
             >
               <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
-              Initialize SOW Item (1 Set)
+              {isRateContract ? 'Initialize Rate Item (SOR)' : 'Initialize SOW Item (1 Set)'}
             </Button>
           </div>
         )}
@@ -6230,7 +6239,7 @@ function ItemsDetailsForm({
                     type="button"
                     size="sm"
                     onClick={() => handleAddNewItem('Product')}
-                    className="h-8.5 px-3.5 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shadow-3xs shrink-0 whitespace-nowrap"
+                    className="h-8.5 px-3.5 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shadow-3xs shrink-0 whitespace-nowrap"
                   >
                     <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product
                   </Button>
@@ -6241,9 +6250,9 @@ function ItemsDetailsForm({
                     type="button"
                     size="sm"
                     onClick={() => handleAddNewItem('Service')}
-                    className="h-8.5 px-3.5 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shadow-3xs shrink-0 whitespace-nowrap"
+                    className="h-8.5 px-3.5 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shadow-3xs shrink-0 whitespace-nowrap"
                   >
-                    <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+                    <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> {isRateContract ? 'Add SOR Service Line' : 'Add Service Line'}
                   </Button>
                 )}
               </div>
@@ -6260,7 +6269,7 @@ function ItemsDetailsForm({
                       className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 shrink-0 whitespace-nowrap"
                       title="Import catalogue items from your active cart"
                     >
-                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-blue-600" aria-hidden="true" />
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-[#0b2447]" aria-hidden="true" />
                       {isCartLoading ? 'Reading Cart...' : productCartCount ? `Import Cart (${productCartCount})` : 'Import Cart'}
                     </Button>
 
@@ -6275,7 +6284,7 @@ function ItemsDetailsForm({
                       />
                       <label
                         htmlFor="item-template-import"
-                        className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#12335f]/20 shrink-0 whitespace-nowrap"
+                        className="cursor-pointer inline-flex h-8.5 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 sm:px-3 text-xs font-bold text-slate-700 shadow-3xs transition hover:bg-slate-50 focus-within:ring-2 focus-within:ring-[#0b2447]/20 shrink-0 whitespace-nowrap"
                         title="Import items from Excel (.xlsx) or CSV spreadsheet"
                       >
                         <FileSpreadsheet className="h-3.5 w-3.5 mr-1 text-emerald-600" aria-hidden="true" /> Import Excel / CSV
@@ -6301,16 +6310,16 @@ function ItemsDetailsForm({
                       variant="outline"
                       onClick={handleImportCartItems}
                       disabled={isCartLoading}
-                      className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-purple-800 border-purple-200 hover:bg-purple-50 shrink-0 whitespace-nowrap"
+                      className="h-8.5 px-2.5 sm:px-3 text-xs font-bold text-slate-700 border-slate-200 hover:bg-slate-50 shrink-0 whitespace-nowrap"
                       title="Import service items from your active cart"
                     >
-                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-purple-600" aria-hidden="true" />
+                      <ShoppingCart className="h-3.5 w-3.5 mr-1 text-[#0b2447]" aria-hidden="true" />
                       {isCartLoading ? 'Reading Cart...' : serviceCartCount ? `Import Services (${serviceCartCount})` : 'Import Services from Cart'}
                     </Button>
 
-                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-purple-900 bg-purple-100/80 border border-purple-200 px-3 py-1.5 rounded-lg shadow-3xs">
-                      <Wrench className="h-3.5 w-3.5 text-purple-700 shrink-0" />
-                      <span>Service & SOW Mode</span>
+                    <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#0b2447] bg-[#0b2447]/10 border border-[#0b2447]/20 px-3 py-1.5 rounded-lg shadow-3xs">
+                      <Wrench className="h-3.5 w-3.5 text-[#0b2447] shrink-0" />
+                      <span>{isRateContract ? 'Schedule of Rates Mode' : 'Service & SOW Mode'}</span>
                     </div>
                   </div>
                 )}
@@ -6323,20 +6332,37 @@ function ItemsDetailsForm({
       {/* Helpful Hint Cards - Contextually Gated */}
       <div className="grid gap-3 sm:grid-cols-3">
         {whatBuying === 'Service' ? (
-          <>
-            <div className="rounded-xl border border-purple-100 bg-purple-50/60 p-3 text-xs font-semibold text-purple-950 flex items-start gap-2.5">
-              <FileText className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" />
-              <span><strong>Scope of Work (SOW):</strong> Upload your SOW dossier or type specifications above to govern deliverables and operational boundaries.</span>
-            </div>
-            <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
-              <IndianRupee className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
-              <span><strong>Lump-Sum Commercials:</strong> Add your service line with agreed billing unit (1 Job / Set / Year) and GST rate.</span>
-            </div>
-            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3 text-xs font-semibold text-emerald-950 flex items-start gap-2.5">
-              <Clock className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
-              <span><strong>SLA & Penalties:</strong> Configure contract duration, response times, and downtime penalties in the terms panel above.</span>
-            </div>
-          </>
+          isRateContract ? (
+            <>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-800 flex items-start gap-2.5 shadow-3xs">
+                <FileText className="h-4 w-4 text-[#0b2447] shrink-0 mt-0.5" />
+                <span><strong>Schedule of Rates (SOR):</strong> Define service rate items. Quoted unit rates form the legally locked price ceiling for all future release orders.</span>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs font-semibold text-blue-950 flex items-start gap-2.5 shadow-3xs">
+                <Repeat className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+                <span><strong>Indicative Quantities &amp; Call-Offs:</strong> Quantities represent estimated annual volume for bid evaluation. Actual billing occurs per release order.</span>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs font-semibold text-emerald-950 flex items-start gap-2.5 shadow-3xs">
+                <Scale className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                <span><strong>Decoupled Terms:</strong> Agreement validity duration is managed in <strong>Step 6</strong>, while SLA downtime and liquidated damages are in <strong>Step 7</strong>.</span>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-800 flex items-start gap-2.5 shadow-3xs">
+                <FileText className="h-4 w-4 text-[#0b2447] shrink-0 mt-0.5" />
+                <span><strong>Scope of Work (SOW):</strong> Upload your SOW dossier or type specifications above to govern deliverables and operational boundaries.</span>
+              </div>
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-3 text-xs font-semibold text-blue-950 flex items-start gap-2.5 shadow-3xs">
+                <IndianRupee className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+                <span><strong>Lump-Sum Commercials:</strong> Add your service line with agreed billing unit (1 Job / Set / Year) and GST rate.</span>
+              </div>
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/70 p-3 text-xs font-semibold text-emerald-950 flex items-start gap-2.5 shadow-3xs">
+                <Clock className="h-4 w-4 text-emerald-700 shrink-0 mt-0.5" />
+                <span><strong>SLA &amp; Penalties:</strong> Operational response targets are defined above, with liquidated damages governed in Step 7.</span>
+              </div>
+            </>
+          )
         ) : (
           <>
             <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs font-semibold text-[#12335f] flex items-start gap-2.5">
@@ -6361,13 +6387,15 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth={whatBuying === 'Service' ? 'min-w-[1050px]' : 'min-w-[1240px]'}
+        minWidth={whatBuying === 'Service' ? 'min-w-[1100px]' : 'min-w-[1240px]'}
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle={whatBuying === 'Service' ? "No service contract lines added yet" : "No product items added yet"}
         emptyDescription={
           whatBuying === 'Service'
-            ? "Click 'Add Service Line' or use the 1-click Initialize button above to configure your lump-sum contract item."
+            ? (isRateContract
+                ? "Click 'Add SOR Service Line' or use the 1-click Initialize button above to configure your Schedule of Rates baseline."
+                : "Click 'Add Service Line' or use the 1-click Initialize button above to configure your lump-sum contract item.")
             : "Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
         }
         footer={
@@ -6378,7 +6406,7 @@ function ItemsDetailsForm({
                   type="button"
                   size="sm"
                   onClick={() => handleAddNewItem('Product')}
-                  className="h-8 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap"
+                  className="h-8 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap"
                 >
                   <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
                 </Button>
@@ -6388,14 +6416,14 @@ function ItemsDetailsForm({
                   type="button"
                   size="sm"
                   onClick={() => handleAddNewItem('Service')}
-                  className="h-8 px-3 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shrink-0 whitespace-nowrap"
+                  className="h-8 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap"
                 >
-                  <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Service Line
+                  <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> {isRateContract ? 'Add SOR Service Line' : 'Add Service Line'}
                 </Button>
               )}
             </div>
             <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
-              {draft.items.length} {whatBuying === 'Service' ? 'service line' : 'line item'}{draft.items.length === 1 ? '' : 's'} scheduled
+              {draft.items.length} {whatBuying === 'Service' ? (isRateContract ? 'SOR line' : 'service line') : 'line item'}{draft.items.length === 1 ? '' : 's'} scheduled
             </span>
           </div>
         }
@@ -6436,21 +6464,21 @@ function ItemsDetailsForm({
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Applicable GST (Taxes)</span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
-                  <span className="text-sm font-black text-purple-700">
+                  <span className="text-sm font-black text-[#0b2447]">
                     {totals.gstAmount > 0
                       ? `+${new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.gstAmount)}`
                       : '+18% GST'}
                   </span>
-                  <span className="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">Taxes</span>
+                  <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">Taxes</span>
                 </div>
               </div>
 
               <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#12335f]">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">
                   {whatBuying === 'Service' ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)'}
                 </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
-                  <span className="text-base font-black text-[#12335f]">
+                  <span className="text-base font-black text-[#0b2447]">
                     {totals.grossValue > 0
                       ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(totals.grossValue)
                       : <span className="text-blue-900/80 font-black text-xs">Disclosed in Bid</span>}
@@ -6463,9 +6491,9 @@ function ItemsDetailsForm({
             {/* Reconciliation Banner between Step 2 estimate & Schedule */}
             {draft.items.length > 0 && (
               totals.grossValue === 0 ? (
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-purple-200 bg-purple-50/70 p-3 text-xs">
-                  <div className="flex items-center gap-2 text-purple-950 font-semibold">
-                    <Info className="h-4 w-4 text-purple-700 shrink-0" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-800 font-semibold">
+                    <Info className="h-4 w-4 text-[#0b2447] shrink-0" />
                     <span>
                       {whatBuying === 'Service' ? (
                         <>
@@ -6487,7 +6515,7 @@ function ItemsDetailsForm({
                         setShowItemDrawer(true);
                       }
                     }}
-                    className="h-7.5 px-3 text-xs font-black bg-purple-700 text-white hover:bg-purple-800 shrink-0 whitespace-nowrap shadow-3xs cursor-pointer"
+                    className="h-7.5 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap shadow-3xs cursor-pointer"
                   >
                     <IndianRupee className="h-3.5 w-3.5 mr-1" /> Set Estimated Benchmark Fee
                   </Button>
@@ -6518,7 +6546,7 @@ function ItemsDetailsForm({
                       }));
                       toast.success(whatBuying === 'Service' ? 'Tender estimated budget synced with Service Schedule Total!' : 'Tender estimated budget synced with Schedule Total!');
                     }}
-                    className="h-7.5 px-3 text-xs font-black bg-[#12335f] text-white hover:bg-[#0b2445] shrink-0 whitespace-nowrap shadow-3xs"
+                    className="h-7.5 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap shadow-3xs"
                   >
                     <RefreshCw className="h-3.5 w-3.5 mr-1" /> {whatBuying === 'Service' ? 'Sync Tender Budget with Service Schedule' : 'Sync Tender Budget with BOQ'}
                   </Button>
