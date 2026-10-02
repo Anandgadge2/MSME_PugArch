@@ -7535,14 +7535,19 @@ function ScheduleStepForm({
                 ))}
               </div>
 
-              <Field label="Supplier Selection Strategy" required className="sm:col-span-2 lg:col-span-3">
-                <select
-                  value={draft.rateContractConfig.supplierSelectionStrategy}
-                  onChange={e => updateRateContract('supplierSelectionStrategy', e.target.value as RateContractConfig['supplierSelectionStrategy'])}
-                  className={inputClass}
-                >
-                  <option value="SINGLE_SUPPLIER">Single Supplier (L1 Award)</option>
-                </select>
+              <Field label="Supplier Selection Strategy" className="sm:col-span-2 lg:col-span-3">
+                <div className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50/80 px-3.5 flex items-center justify-between text-xs font-semibold text-slate-800 select-none">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                    <span className="font-bold text-slate-900 shrink-0">Single Supplier (L1 Award)</span>
+                    <span className="text-[11px] text-slate-500 font-normal truncate hidden sm:inline">
+                      &mdash; Standard single vendor framework agreement awarded to lowest conforming L1 bidder.
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 bg-slate-200/80 px-2 py-0.5 rounded shrink-0">
+                    Default
+                  </span>
+                </div>
               </Field>
             </div>
           </div>
