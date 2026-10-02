@@ -11679,7 +11679,7 @@ export function ProcurementDetailUnifiedView(
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] font-medium text-emerald-200/90 leading-tight mt-0.5 truncate max-w-xl">
+                      <p className="text-[11px] font-medium text-emerald-200/90 leading-tight mt-0.5  max-w-xl">
                         Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) issued formal award. Accept or decline to proceed to Purchase Order.
                       </p>
                     </div>
@@ -11821,66 +11821,7 @@ export function ProcurementDetailUnifiedView(
             </div>
           )}
 
-          {/* Seller: Participating Bidder but Unsuccessful / Not Awarded */}
-          {!isBuyerSide && isLosingBidder && (
-            <div
-              id="award-outcome-section"
-              className="relative overflow-hidden rounded-xl border border-slate-300 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-800 px-3.5 py-3 sm:px-4 sm:py-3.5 text-white shadow-md animate-fadeIn"
-            >
-              <div className="relative z-10 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                <div className="flex items-start gap-3 min-w-0">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-500/20 border border-indigo-400/40 text-indigo-300">
-                    <Scale className="h-5 w-5" aria-hidden="true" />
-                  </div>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                      <span className="inline-flex items-center rounded-md bg-indigo-500/20 border border-indigo-400/30 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-indigo-200">
-                        Commercial Evaluation Concluded
-                      </span>
-                      <h3 className="text-xs sm:text-sm font-black text-white tracking-tight">
-                        Contract Award Placed with L1 Bidder
-                      </h3>
-                      {activeAward?.awardedAmount && (
-                        <span className="text-xs font-mono font-bold text-amber-300">
-                          • Winning L1 Rate: {formatCurrency(Number(activeAward.awardedAmount))}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs font-medium text-slate-300 mt-1 max-w-2xl leading-relaxed">
-                      Evaluation has finished and formal contract award has been issued to the lowest compliant landed bidder. We thank your organization for participating in this procurement.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  {linkedAuction && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const raCode = (linkedAuction as any).auctionCode || linkedAuction.id;
-                        router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/results`);
-                      }}
-                      className="h-8 px-3 text-xs font-bold rounded-lg border-indigo-400/40 bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/30 shadow-2xs gap-1.5 flex items-center cursor-pointer"
-                    >
-                      <Trophy className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />
-                      <span>View Final Rankings</span>
-                    </Button>
-                  )}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleOpenMyQuotationModal}
-                    className="h-8 px-3 text-xs font-bold rounded-lg border-white/20 bg-white/10 text-white hover:bg-white/20 shadow-2xs gap-1.5 flex items-center cursor-pointer"
-                  >
-                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                    <span>View My Proposal</span>
-                  </Button>
-                </div>
-              </div>
-            </div>
-          )}
+
 
           {/* Seller: Non-Participant on Closed / Awarded Requisition */}
           {!isBuyerSide && isNonParticipant && (isBiddingClosed || isDeadlinePassed || isAwardConcluded) && (
@@ -12972,24 +12913,7 @@ export function ProcurementDetailUnifiedView(
                   const isConcluded = ["CLOSED", "CONCLUDED", "ENDED", "COMPLETED", "AWARDED", "FINANCIAL_EVALUATION"].includes(auctionStatus) || isBidAwarded;
                   const isLive = ["LIVE", "RUNNING", "ACTIVE", "PAUSED"].includes(auctionStatus);
 
-                  if (isConcluded) {
-                    return (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
-                          router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/results`);
-                        }}
-                        className="h-8 px-3 text-xs font-bold rounded-lg border-purple-200 bg-purple-50 text-purple-900 hover:bg-purple-100 hover:border-purple-300 shadow-2xs gap-1.5 flex items-center cursor-pointer transition-all active:scale-95"
-                        title="View Final Auction Rankings & L1 Outcomes"
-                      >
-                        <Trophy className="h-3.5 w-3.5 text-purple-600" aria-hidden="true" />
-                        <span>View Auction Results</span>
-                      </Button>
-                    );
-                  }
+
 
                   if (isLive) {
                     return (
