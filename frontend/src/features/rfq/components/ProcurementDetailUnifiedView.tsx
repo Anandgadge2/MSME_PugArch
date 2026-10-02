@@ -7254,6 +7254,17 @@ export function ProcurementDetailUnifiedView(
         lower.includes("deliveryterm") ||
         lower === "freightterms" ||
         lower === "freightincluded" ||
+        // Penalty / liquidated damages already rendered in dedicated Penalty Clause field
+        lower === "penaltyclause" ||
+        lower === "penaltyterms" ||
+        lower === "penalty" ||
+        lower === "delaypenalty" ||
+        lower === "liquidateddamages" ||
+        lower === "penaltyrateperweek" ||
+        lower === "penaltygracedays" ||
+        lower === "maxpenaltycappercentage" ||
+        lower.includes("penalty") ||
+        lower.includes("liquidateddamage") ||
         // RFQ / RFP / Rate Contract specific exclusions: Project Duration, Service Details, Service Title
         ((isRfqType || isRfpType || isRateContractType) &&
           (lower === "projectduration" ||
@@ -13029,97 +13040,7 @@ export function ProcurementDetailUnifiedView(
                   />
                 )}
 
-              {/* Executive Service & SLA Highlights for Services Procurements */}
-              {isServices &&
-                (serviceDetails.slaResponseTime ||
-                  serviceDetails.duration ||
-                  serviceDetails.scopeOfWork ||
-                  serviceDetails.sowFileName) && (
-                  <div className="rounded-xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-white p-3.5 sm:p-4 shadow-2xs">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-indigo-100/80 pb-3">
-                      <div className="flex items-center gap-2.5">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-600 text-white shadow-2xs">
-                          <Briefcase className="h-4 w-4" />
-                        </span>
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-indigo-700 bg-indigo-100/80 px-2 py-0.5 rounded-md">
-                              Service SOW &amp; SLA Overview
-                            </span>
-                            {serviceDetails.duration && (
-                              <span className="text-[10px] font-bold text-slate-600 bg-white border border-slate-200 px-2 py-0.5 rounded-md flex items-center gap-1">
-                                <Clock className="h-3 w-3 text-indigo-600" />
-                                {serviceDetails.duration}
-                              </span>
-                            )}
-                          </div>
-                          <h4 className="text-xs sm:text-[13px] font-bold text-slate-900 mt-0.5">
-                            {serviceDetails.serviceTitle ||
-                              props.subject ||
-                              "Service Contract Requirements"}
-                          </h4>
-                        </div>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setActiveTab("scope_docs")}
-                        className="border-indigo-300 text-indigo-700 bg-white hover:bg-indigo-50 font-bold text-xs h-8 cursor-pointer"
-                      >
-                        <FileText className="h-3.5 w-3.5 mr-1" />
-                        View Full SOW &amp; SLA
-                      </Button>
-                    </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-3 text-xs">
-                      <div>
-                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                          SLA Response
-                        </span>
-                        <span className="font-bold text-slate-800">
-                          {serviceDetails.slaResponseTime ||
-                            "Standard Business Hours"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                          Penalty Clause
-                        </span>
-                        <span
-                          className="font-bold text-slate-800 truncate block"
-                          title={
-                            serviceDetails.penaltyClause ||
-                            "Standard Liquidated Damages"
-                          }
-                        >
-                          {serviceDetails.penaltyClause ||
-                            "Standard Liquidated Damages"}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                          Pricing Basis
-                        </span>
-                        <span className="font-bold text-emerald-700">
-                          Lump-Sum SOW Fee
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10.5px] font-semibold text-slate-500 uppercase tracking-wider block">
-                          SOW Document
-                        </span>
-                        <span
-                          className="font-bold text-indigo-600 truncate block"
-                          title={
-                            serviceDetails.sowFileName || "Detailed in Scope Tab"
-                          }
-                        >
-                          {serviceDetails.sowFileName || "Detailed in Scope Tab"}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                )}
+             
 
               <div className="grid gap-3.5 sm:gap-4 lg:grid-cols-2">
                 <DataCard
@@ -13564,8 +13485,16 @@ export function ProcurementDetailUnifiedView(
                     })()}
                   {/* Commercial Terms: Penalty / Liquidation damages */}
                   {(() => {
-                    const penaltyVal =
-                      terms.penaltyClause || serviceDetails?.penaltyClause;
+                    const penaltyVal = firstPresent(
+                      terms.penaltyClause,
+                      serviceDetails?.penaltyClause,
+                      payload.rateContractConfig?.penaltyClause,
+                      payload.rateContract?.penaltyClause,
+                      (props.rawBid as any)?.penaltyClause,
+                      (props.rawBid?.payload as any)?.terms?.penaltyClause,
+                      (props.rawBid?.payload as any)?.penaltyClause,
+                      (props.procurementData as any)?.penaltyClause,
+                    );
                     if (
                       !penaltyVal ||
                       penaltyVal === "—" ||
@@ -13584,9 +13513,8 @@ export function ProcurementDetailUnifiedView(
                   })()}
                   {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
                   {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
-                  <PropertyItem
-                    label="Terms & Conditions"
-                    value={cleanBuyerTerms(
+                  {(() => {
+                    const cleanedTerms = cleanBuyerTerms(
                       props.termsAndConditions ||
                         (props as any).terms ||
                         (props.rawBid as any)?.termsAndConditions ||
@@ -13596,9 +13524,16 @@ export function ProcurementDetailUnifiedView(
                         terms.termsAndConditions ||
                         terms.terms ||
                         payload.terms,
-                    )}
-                    fullWidth
-                  />
+                    );
+                    if (!hasDetailData(cleanedTerms)) return null;
+                    return (
+                      <PropertyItem
+                        label="Terms & Conditions"
+                        value={cleanedTerms}
+                        fullWidth
+                      />
+                    );
+                  })()}
                   {hasDetailData(
                     props.eligibilityCriteria ||
                       (props.rawBid as any)?.eligibilityCriteria ||
