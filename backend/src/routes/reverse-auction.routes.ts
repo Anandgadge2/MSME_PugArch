@@ -732,10 +732,6 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
 
     const auctionInclude = {
       winnerSeller: { select: { id: true, name: true, email: true } },
-      participants: {
-        where: { currentRank: 1 },
-        select: { id: true, status: true, sellerUserId: true, sellerOrgId: true, lastBidAmount: true, currentRank: true, acceptedAt: true }
-      },
       bids: {
         orderBy: { createdAt: 'desc' },
         take: 10
@@ -750,6 +746,7 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
           { referenceNo: `RFQ-${rawId}` },
           { referenceNo: `REQ-${rawId}` },
           { referenceNo: `RA-${rawId}` },
+          { referenceNo: `RFP-${rawId}` },
           { auctionCode: rawId },
           { auctionCode: `RA-${rawId}` },
         ]
@@ -759,21 +756,42 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     });
 
     let pb: any = null;
+    let reqItem: any = null;
 
     // 2. If not found by reference string, resolve via specific linked entity
-    if (!auction && Number.isFinite(numId) && numId > 0) {
-      // Check if numeric ID is a ProcurementBid
-      pb = await db.procurementBid.findUnique({
-        where: { id: numId },
-        select: {
-          id: true,
-          bidNumber: true,
-          allowReverseAuction: true,
-          estimatedValue: true,
-          technicalPacket: true,
-          procurementMethod: true
-        }
-      }).catch(() => null);
+    if (!auction) {
+      if (Number.isFinite(numId) && numId > 0) {
+        pb = await db.procurementBid.findUnique({
+          where: { id: numId },
+          select: {
+            id: true,
+            bidNumber: true,
+            allowReverseAuction: true,
+            estimatedValue: true,
+            technicalPacket: true,
+            procurementMethod: true
+          }
+        }).catch(() => null);
+      }
+      if (!pb && rawId) {
+        pb = await db.procurementBid.findFirst({
+          where: {
+            OR: [
+              { bidNumber: rawId },
+              { bidNumber: `RFQ-${rawId}` },
+              { bidNumber: `RFP-${rawId}` },
+            ]
+          },
+          select: {
+            id: true,
+            bidNumber: true,
+            allowReverseAuction: true,
+            estimatedValue: true,
+            technicalPacket: true,
+            procurementMethod: true
+          }
+        }).catch(() => null);
+      }
 
       if (pb) {
         auction = await db.auction.findFirst({
@@ -790,10 +808,24 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
 
       // If still not found, check Requirement
       if (!auction) {
-        const reqItem = await (db as any).requirement.findUnique({
-          where: { id: numId },
-          select: { id: true, requirementNumber: true }
-        }).catch(() => null);
+        if (Number.isFinite(numId) && numId > 0) {
+          reqItem = await (db as any).requirement.findUnique({
+            where: { id: numId },
+            select: { id: true, requirementNumber: true, payload: true }
+          }).catch(() => null);
+        }
+        if (!reqItem && rawId) {
+          reqItem = await (db as any).requirement.findFirst({
+            where: {
+              OR: [
+                { requirementNumber: rawId },
+                { requirementNumber: `REQ-${rawId}` },
+                { requirementNumber: `RFP-${rawId}` },
+              ]
+            },
+            select: { id: true, requirementNumber: true, payload: true }
+          }).catch(() => null);
+        }
 
         if (reqItem) {
           auction = await db.auction.findFirst({
@@ -811,49 +843,40 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     }
 
     if (!auction) {
-      // SAP Ariba Follow-On Pattern: Check if the requirement has reverse auction
+      // SAP Ariba Follow-On Pattern: Check if the requirement or bid has reverse auction
       // configured but the auction hasn't been created yet (follow-on pattern).
-      // Return lightweight metadata so the frontend shows the correct informational UI
-      // and can pre-populate the launch modal with buyer-configured defaults.
-      if (Number.isFinite(numId) && numId > 0) {
-        // 1. Check procurementBid for planned reverse auction
-        if (pb) {
-          const techPacket = (pb.technicalPacket || {}) as any;
-          const isPlannedOnBid = Boolean(
-            pb.allowReverseAuction ||
-            pb.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
-            techPacket.allowReverseAuction ||
-            techPacket.basics?.isReverseAuctionNeeded ||
-            techPacket.rules?.allowReverseAuction
-          );
+      if (pb) {
+        const techPacket = (pb.technicalPacket || {}) as any;
+        const isPlannedOnBid = Boolean(
+          pb.allowReverseAuction ||
+          pb.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+          techPacket.allowReverseAuction ||
+          techPacket.basics?.isReverseAuctionNeeded ||
+          techPacket.rules?.allowReverseAuction
+        );
 
-          if (isPlannedOnBid) {
-            const auctionConfig = techPacket.auctionConfig || techPacket.rules?.auctionConfig || {};
-            const plannedData = {
-              auctionPlanned: true,
-              procurementBidId: pb.id,
-              startPrice: Number(auctionConfig.startingBidPrice || techPacket.rules?.startPrice || pb.estimatedValue || 0),
-              minDecrementAmount: Number(auctionConfig.minimumBidDecrement || techPacket.rules?.minimumDecrement || 0),
-              autoExtensionEnabled: Boolean(auctionConfig.autoExtensionEnabled !== false),
-              extensionTriggerMinutes: auctionConfig.extensionTriggerMinutes || 5,
-              extensionDurationMinutes: auctionConfig.extensionDurationMinutes || 5,
-              maximumExtensions: auctionConfig.maximumExtensions || 3,
-              rankVisibility: auctionConfig.rankVisibility || 'SHOW_RANK_ONLY',
-              durationMinutes: auctionConfig.durationMinutes || 60,
-              triggerConfiguration: auctionConfig.triggerConfiguration || {},
-            };
-            procurementAuctionCache.set(rawId, { data: plannedData, expiresAt: Date.now() + 30_000 });
-            return apiResponse.success(res, plannedData);
-          }
+        if (isPlannedOnBid) {
+          const auctionConfig = techPacket.auctionConfig || techPacket.rules?.auctionConfig || {};
+          const plannedData = {
+            auctionPlanned: true,
+            procurementBidId: pb.id,
+            startPrice: Number(auctionConfig.startingBidPrice || techPacket.rules?.startPrice || pb.estimatedValue || 0),
+            minDecrementAmount: Number(auctionConfig.minimumBidDecrement || techPacket.rules?.minimumDecrement || 0),
+            autoExtensionEnabled: Boolean(auctionConfig.autoExtensionEnabled !== false),
+            extensionTriggerMinutes: auctionConfig.extensionTriggerMinutes || 5,
+            extensionDurationMinutes: auctionConfig.extensionDurationMinutes || 5,
+            maximumExtensions: auctionConfig.maximumExtensions || 3,
+            rankVisibility: auctionConfig.rankVisibility || 'SHOW_RANK_ONLY',
+            durationMinutes: auctionConfig.durationMinutes || 60,
+            triggerConfiguration: auctionConfig.triggerConfiguration || {},
+          };
+          procurementAuctionCache.set(rawId, { data: plannedData, expiresAt: Date.now() + 30_000 });
+          return apiResponse.success(res, plannedData);
         }
+      }
 
-        // 2. Check requirement for planned reverse auction
-        const requirement = await db.requirement.findFirst({
-          where: { id: numId },
-          select: { id: true, payload: true }
-        }).catch(() => null);
-
-        const reqPayload = (requirement?.payload || {}) as any;
+      if (reqItem) {
+        const reqPayload = (reqItem.payload || {}) as any;
         const isPlanned = Boolean(
           reqPayload.allowReverseAuction ||
           reqPayload.basics?.isReverseAuctionNeeded ||
@@ -864,7 +887,7 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
           const auctionConfig = reqPayload.auctionConfig || reqPayload.rules?.auctionConfig || {};
           const plannedData = {
             auctionPlanned: true,
-            requirementId: requirement!.id,
+            requirementId: reqItem.id,
             startPrice: Number(auctionConfig.startingBidPrice || reqPayload.rules?.startPrice || 0),
             minDecrementAmount: Number(auctionConfig.minimumBidDecrement || reqPayload.rules?.minimumDecrement || 0),
             autoExtensionEnabled: Boolean(auctionConfig.autoExtensionEnabled),
@@ -885,7 +908,11 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     }
 
     const effective = await withEffectiveStatus(auction);
-    const winnerPart = (auction.participants && auction.participants.length > 0) ? auction.participants[0] : null;
+    const winnerPart = await db.auctionParticipant.findFirst({
+      where: { auctionId: auction.id, currentRank: 1 },
+      select: { id: true, status: true, sellerUserId: true, sellerOrgId: true, lastBidAmount: true, currentRank: true, acceptedAt: true }
+    }).catch(() => null);
+
     if (winnerPart && String(winnerPart.status || '').toUpperCase() === 'ACCEPTED') {
       (effective as any).winnerStatus = 'ACCEPTED';
       (effective as any).isAwardAccepted = true;

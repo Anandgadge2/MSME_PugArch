@@ -4799,9 +4799,17 @@ export function ProcurementDetailUnifiedView(
   };
 
   const [activeTab, setActiveTabState] = useState<ProcurementDetailTab>(resolveInitialTab);
+  const activeTabRef = useRef<ProcurementDetailTab>(activeTab);
+  activeTabRef.current = activeTab;
+
+  const lastSyncedSearchTabRef = useRef<string | null>(
+    normalizeProcurementTab(searchParams?.get("tab"))
+  );
 
   const setActiveTab = useCallback(
     (newTab: ProcurementDetailTab) => {
+      activeTabRef.current = newTab;
+      lastSyncedSearchTabRef.current = newTab;
       setActiveTabState(newTab);
       if (typeof window !== "undefined") {
         try {
@@ -4816,46 +4824,62 @@ export function ProcurementDetailUnifiedView(
     [targetId],
   );
 
+  // Synchronize when targetId updates asynchronously (e.g. displayId loads from API)
   useEffect(() => {
-    const fromParams = normalizeProcurementTab(searchParams?.get("tab"));
-    if (fromParams && fromParams !== activeTab) {
-      setActiveTabState(fromParams);
-      try {
-        sessionStorage.setItem(`procurement_active_tab_${targetId}`, fromParams);
-        sessionStorage.setItem("last_active_procurement_tab", fromParams);
-      } catch {}
-    }
-  }, [searchParams, targetId, activeTab]);
+    try {
+      sessionStorage.setItem(`procurement_active_tab_${targetId}`, activeTabRef.current);
+    } catch {}
+  }, [targetId]);
 
+  // Synchronize when searchParams changes via Next.js router navigation without reverting user clicks
+  const searchTabParam = normalizeProcurementTab(searchParams?.get("tab"));
+  useEffect(() => {
+    if (searchTabParam && searchTabParam !== lastSyncedSearchTabRef.current) {
+      lastSyncedSearchTabRef.current = searchTabParam;
+      if (searchTabParam !== activeTabRef.current) {
+        activeTabRef.current = searchTabParam;
+        setActiveTabState(searchTabParam);
+        try {
+          sessionStorage.setItem(`procurement_active_tab_${targetId}`, searchTabParam);
+          sessionStorage.setItem("last_active_procurement_tab", searchTabParam);
+        } catch {}
+      }
+    }
+  }, [searchTabParam, targetId]);
+
+  // Handle browser Back / Forward navigation
   useEffect(() => {
     const handlePopState = () => {
       try {
         const urlParams = new URLSearchParams(window.location.search);
         const fromWin = normalizeProcurementTab(urlParams.get("tab"));
-        if (fromWin) {
-          setActiveTabState(fromWin);
-        } else {
-          const tenderKey = `procurement_active_tab_${targetId}`;
-          const stored = normalizeProcurementTab(sessionStorage.getItem(tenderKey));
-          if (stored) setActiveTabState(stored);
-        }
+        const targetTab =
+          fromWin ||
+          normalizeProcurementTab(
+            sessionStorage.getItem(`procurement_active_tab_${targetId}`)
+          ) ||
+          "overview";
+        activeTabRef.current = targetTab;
+        lastSyncedSearchTabRef.current = targetTab;
+        setActiveTabState(targetTab);
       } catch {}
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [targetId]);
 
+  // On initial mount, ensure URL query matches active tab if resolved from storage
   useEffect(() => {
     if (typeof window !== "undefined") {
       try {
         const url = new URL(window.location.href);
-        if (!url.searchParams.get("tab") && activeTab !== "overview") {
-          url.searchParams.set("tab", activeTab);
+        if (!url.searchParams.get("tab") && activeTabRef.current !== "overview") {
+          url.searchParams.set("tab", activeTabRef.current);
           window.history.replaceState(window.history.state, "", url.toString());
         }
       } catch {}
     }
-  }, [activeTab]);
+  }, []);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<
     any | null
   >(null);
