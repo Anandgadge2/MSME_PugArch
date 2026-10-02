@@ -798,7 +798,7 @@ export default function BidParticipationPage() {
         ` }} />
       <main className="mx-auto w-full max-w-7xl scroll-smooth font-sans animate-in fade-in duration-500">
         {/* Sticky Top Summary & Stepper */}
-        <div className="sticky top-0 z-40 border-b border-slate-200/60 bg-white/85 p-5 shadow-sm backdrop-blur-xl transition-all">
+        <div className="sticky top-0 z-20 border-b border-slate-200/60 bg-white/85 p-5 shadow-sm backdrop-blur-xl transition-all">
           <div className="mx-auto max-w-6xl">
             {/* Header Area */}
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">

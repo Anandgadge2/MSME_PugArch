@@ -2876,7 +2876,7 @@ export default function SubmitQuotationPage() {
       ) : null}
 
       {/* ── Navigation Tabs Bar (Portal Theme) ── */}
-      <div className="sticky top-3 z-40 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
+      <div className="sticky top-3 z-20 bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-xl p-1 shadow-2xs" role="tablist" aria-label="Quotation Sections">
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {(hasLineItems ? [
             {

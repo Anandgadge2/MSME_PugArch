@@ -722,7 +722,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
       {isOpen && (
         <div
           aria-hidden="true"
-          className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm z-40 lg:hidden"
+          className="fixed inset-0 bg-blue-800/50 backdrop-blur-sm z-[70] lg:hidden"
           onClick={onClose}
         />
       )}
@@ -733,7 +733,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         className={cn(
-          "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-50 transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
+          "gov-sidebar-surface text-white flex flex-col shrink-0 h-full fixed left-0 top-0 z-[80] transition-[width,transform] duration-300 ease-in-out lg:translate-x-0 border-r border-white/5 shadow-xl shadow-slate-900/10",
           effectivelyCollapsed ? "w-64 lg:w-20" : "w-64",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}>
@@ -1171,7 +1171,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
   };
 
   return (
-    <header className="liquid-glass-header z-40">
+    <header className="liquid-glass-header z-50">
       <div className="h-14 px-4 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <button
@@ -1249,7 +1249,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
             </button>
 
             {isNotificationsOpen && (
-              <div className="fixed left-3 right-3 top-16 z-50 max-h-[75dvh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
+              <div className="fixed left-3 right-3 top-16 z-[60] max-h-[75dvh] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-200 sm:absolute sm:left-auto sm:right-0 sm:top-auto sm:mt-2 sm:w-96">
                 <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                   <h3 className="text-xs font-black uppercase tracking-widest text-[#0b2447]">Notifications</h3>
                   <div className="flex items-center gap-1.5">
@@ -1418,7 +1418,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
 
             {isProfileDropdownOpen && (
               <div 
-                className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-50 origin-top-right"
+                className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-2xl border border-slate-200/90 py-1.5 overflow-hidden animate-in fade-in zoom-in-95 slide-in-from-top-2 duration-200 z-[60] origin-top-right"
                 role="menu"
                 aria-orientation="vertical"
               >

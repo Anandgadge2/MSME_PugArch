@@ -277,7 +277,7 @@ export default function PublicBuyerRequirements({ buyerId }: PublicBuyerRequirem
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-slate-100/60 to-blue-50/20 text-slate-900 pb-24 relative selection:bg-blue-500 selection:text-white">
       {/* Top Floating Navigation Bar */}
-      <div className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
+      <div className="sticky top-0 z-20 bg-white/80 backdrop-blur-md border-b border-slate-200/70 px-4 sm:px-8 py-3.5 flex items-center justify-between shadow-xs">
         <Button
           onClick={() => window.history.back()}
           className="bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-950 font-black uppercase text-[11px] tracking-wider h-9 px-4 rounded-xl shadow-xs border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
