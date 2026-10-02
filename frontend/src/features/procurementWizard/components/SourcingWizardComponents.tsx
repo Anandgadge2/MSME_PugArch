@@ -819,6 +819,49 @@ interface DocumentRequirementBuilderProps {
   isEmergencyPriority?: boolean;
 }
 
+const STANDARD_DOC_PRESETS = [
+  {
+    name: 'GST Registration Certificate',
+    required: true,
+    instructions: 'Upload active GSTIN registration certificate showing registered business address.'
+  },
+  {
+    name: 'Permanent Account Number (PAN)',
+    required: true,
+    instructions: 'Upload copy of PAN card matching the business / legal entity name.'
+  },
+  {
+    name: 'Udyam MSME Registration Certificate',
+    required: false,
+    instructions: 'Upload valid Udyam certificate for claiming MSME purchase preference & EMD exemption.'
+  },
+  {
+    name: 'OEM Authorization / MAF Form',
+    required: true,
+    instructions: 'Manufacturer Authorization Form (MAF) from OEM certifying authorization to bid and supply warranty.'
+  },
+  {
+    name: '3 Yrs Audited Financials & CA Certificate',
+    required: true,
+    instructions: 'Audited Balance Sheet, Profit & Loss statements, and CA net-worth certificate for the last 3 financial years.'
+  },
+  {
+    name: 'Past Work Order & Completion Certificate',
+    required: true,
+    instructions: 'Copies of successfully completed past purchase orders / contracts for similar goods or services.'
+  },
+  {
+    name: 'Non-Blacklisting Undertaking Affidavit',
+    required: true,
+    instructions: 'Self-declaration affidavit on company letterhead confirming entity is not debarred or blacklisted by any Government or PSU.'
+  },
+  {
+    name: 'ISO 9001:2015 Quality Certificate',
+    required: false,
+    instructions: 'Valid ISO 9001:2015 quality management system certification copy.'
+  }
+];
+
 export function DocumentRequirementBuilder({
   documents,
   onToggleRequired,
@@ -878,6 +921,50 @@ export function DocumentRequirementBuilder({
           </div>
         )
       )}
+
+      {/* Quick Add Standard Compliance Presets */}
+      <div className="rounded-xl border border-slate-200/90 bg-slate-50/80 p-3 sm:p-4 space-y-2.5">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-black uppercase text-slate-700 tracking-wider">
+              Quick Presets: Standard Compliance Documents
+            </span>
+            <span className="text-[10px] font-semibold text-slate-500">1-click attach</span>
+          </div>
+          <span className="text-[10px] text-slate-400 font-medium">
+            * denotes mandatory compliance
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5">
+          {STANDARD_DOC_PRESETS.map(preset => {
+            const alreadyAdded = documents.some(
+              d => d.name.trim().toLowerCase() === preset.name.trim().toLowerCase()
+            );
+            return (
+              <button
+                key={preset.name}
+                type="button"
+                disabled={alreadyAdded}
+                onClick={() => onAddCustomDoc(preset.name, preset.required, preset.instructions)}
+                title={alreadyAdded ? 'Already included in checklist' : preset.instructions}
+                className={cn(
+                  "text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all flex items-center gap-1.5",
+                  alreadyAdded
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800 opacity-80 cursor-default"
+                    : "border-slate-200 bg-white hover:border-[#0b2447] hover:bg-[#0b2447] hover:text-white text-slate-700 shadow-xs cursor-pointer active:scale-95"
+                )}
+              >
+                <span>{alreadyAdded ? '✓' : '+'}</span>
+                <span>{preset.name}</span>
+                {preset.required && !alreadyAdded && (
+                  <span className="text-[10px] text-rose-500 font-black">*</span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       <form onSubmit={handleSubmit} className="flex flex-col md:flex-row md:items-end justify-between gap-3 border border-slate-200 rounded-xl p-3 sm:p-4 bg-slate-50/50">
         <label className="w-full md:w-5/12 block space-y-1">
           <span className="text-[9px] font-black uppercase text-slate-450 tracking-wider">Document Name</span>

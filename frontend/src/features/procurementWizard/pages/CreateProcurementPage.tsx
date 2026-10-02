@@ -2910,6 +2910,29 @@ function BasicsStepForm({
                   )}
                   placeholder="Explain why this event is restricted to a limited vendor list (minimum 15 characters)..."
                 />
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                  {[
+                    'Proprietary OEM Item / Sole Distributor Channel',
+                    'Urgent Operational Requirement / Immediate Business Need',
+                    'Standardized Equipment Compatibility & Maintenance',
+                    'Limited Empaneled & Pre-Qualified Sourcing Pool'
+                  ].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateDraft(c => ({ ...c, limitedTenderJustification: preset }))}
+                      className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                        draft.limitedTenderJustification === preset
+                          ? "border-[#0b2447] bg-[#0b2447] text-white"
+                          : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                      )}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
                 <div className="flex items-center justify-between text-[11px] px-0.5">
                   <span className={cn(
                     "font-semibold",
@@ -2986,6 +3009,31 @@ function BasicsStepForm({
             className={inputClass}
             placeholder="0"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              { label: '₹2.5L', value: 250000 },
+              { label: '₹5L', value: 500000 },
+              { label: '₹10L', value: 1000000 },
+              { label: '₹25L', value: 2500000 },
+              { label: '₹50L', value: 5000000 },
+              { label: '₹1 Cr', value: 10000000 },
+            ].map(p => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: p.value } }))}
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                  draft.basics.estimatedValue === p.value
+                    ? "border-[#0b2447] bg-[#0b2447] text-white"
+                    : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
           {draft.items.length > 0 && (() => {
             const itemTotals = computeProcurementTotals(draft.items);
             const grossRounded = Math.round(itemTotals.grossValue);
@@ -3125,6 +3173,31 @@ function BasicsStepForm({
             onChange={val => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: val } }))}
             placeholder="Select required date & time (12-hr AM/PM)"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              { label: '+15 Days', days: 15 },
+              { label: '+30 Days (1 Mo)', days: 30 },
+              { label: '+60 Days (2 Mo)', days: 60 },
+              { label: '+90 Days (Quarter)', days: 90 },
+            ].map(p => {
+              const target = new Date(Date.now() + p.days * 86400000);
+              const year = target.getFullYear();
+              const month = String(target.getMonth() + 1).padStart(2, '0');
+              const day = String(target.getDate()).padStart(2, '0');
+              const isoVal = `${year}-${month}-${day}T17:00`;
+              return (
+                <button
+                  key={p.days}
+                  type="button"
+                  onClick={() => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: isoVal } }))}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <div className="sm:col-span-2 space-y-4 w-full min-w-0">
@@ -3638,6 +3711,30 @@ function InternalDetailsForm({
             className={inputClass}
             placeholder="Chief Sourcing Officer"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              'Department Head / HOD',
+              'Chief Procurement Officer (CPO)',
+              'Managing Director / CEO',
+              'Finance Director / CFO',
+              'Tender Committee'
+            ].map(preset => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => updateInternal('approvalAuthority', preset)}
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                  draft.internal.approvalAuthority === preset
+                    ? "border-[#0b2447] bg-[#0b2447] text-white"
+                    : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                )}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
         </Field>
 
         {/* Government specific fields commented out as requested
@@ -3670,14 +3767,39 @@ function InternalDetailsForm({
         */}
 
         <Field label="Purchase justification & compliance reason" className="sm:col-span-2" required>
-          <textarea
-            value={draft.internal.justification}
-            onChange={e => updateInternal('justification', e.target.value)}
-            rows={4}
-            maxLength={1000}
-            className={textareaClass}
-            placeholder="State business justification, urgency reason, or GFR rule compliance justification..."
-          />
+          <div className="space-y-1.5">
+            <textarea
+              value={draft.internal.justification}
+              onChange={e => updateInternal('justification', e.target.value)}
+              rows={4}
+              maxLength={1000}
+              className={textareaClass}
+              placeholder="State business justification, urgency reason, or GFR rule compliance justification..."
+            />
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+              {[
+                'Annual replenishment for operational continuity',
+                'Capex modernization & capacity expansion',
+                'Statutory compliance & safety standard upgrade',
+                'Emergency breakdown replacement & continuity'
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => updateInternal('justification', preset)}
+                  className={cn(
+                    "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                    draft.internal.justification === preset
+                      ? "border-[#0b2447] bg-[#0b2447] text-white"
+                      : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                  )}
+                >
+                  {preset}
+                </button>
+              ))}
+            </div>
+          </div>
         </Field>
       </div>
 
@@ -6757,6 +6879,28 @@ function VendorsStepForm({
             className={inputClass}
             placeholder="3"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              { label: '2 Bids (Expedited)', val: 2 },
+              { label: '3 Bids (GFR Standard)', val: 3 },
+              { label: '5 Bids (Competitive)', val: 5 },
+            ].map(p => (
+              <button
+                key={p.val}
+                type="button"
+                onClick={() => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: p.val } }))}
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                  Number(draft.schedule.minimumBidders) === p.val
+                    ? "border-[#0b2447] bg-[#0b2447] text-white"
+                    : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </Field>
       </div>
 
@@ -7699,6 +7843,34 @@ function ScheduleStepForm({
             error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
             placeholder="Select submission deadline date & time"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              { label: '+7 Days (Urgent)', days: 7 },
+              { label: '+14 Days (Standard)', days: 14 },
+              { label: '+21 Days (GFR Open)', days: 21 },
+              { label: '+30 Days (Global)', days: 30 },
+            ].map(p => {
+              const baseTime = draft.schedule.submissionStartDate
+                ? new Date(draft.schedule.submissionStartDate).getTime()
+                : Date.now();
+              const target = new Date(baseTime + p.days * 86400000);
+              const year = target.getFullYear();
+              const month = String(target.getMonth() + 1).padStart(2, '0');
+              const day = String(target.getDate()).padStart(2, '0');
+              const isoVal = `${year}-${month}-${day}T17:00`;
+              return (
+                <button
+                  key={p.days}
+                  type="button"
+                  onClick={() => updateSchedule('submissionDate', isoVal)}
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                >
+                  {p.label}
+                </button>
+              );
+            })}
+          </div>
         </Field>
 
         <Field label="Bid Validity Period (Days)">
@@ -7724,6 +7896,30 @@ function ScheduleStepForm({
             className={inputClass}
             placeholder="90"
           />
+          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+            {[
+              { label: '30 Days (Fast-Track)', days: 30 },
+              { label: '60 Days (Short Cycle)', days: 60 },
+              { label: '90 Days (GFR Standard)', days: 90 },
+              { label: '120 Days (Multi-stage)', days: 120 },
+              { label: '180 Days (Turnkey/Major)', days: 180 },
+            ].map(p => (
+              <button
+                key={p.days}
+                type="button"
+                onClick={() => updateSchedule('validityDays', p.days)}
+                className={cn(
+                  "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                  Number(draft.schedule.validityDays) === p.days
+                    ? "border-[#0b2447] bg-[#0b2447] text-white"
+                    : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                )}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
         </Field>
 
         {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (() => {
@@ -8389,6 +8585,17 @@ function CommercialTermsForm({
           serviceDetails: { ...c.serviceDetails, penaltyClause: val }
         };
       }
+      if (key === 'securityDeposit') {
+        return {
+          ...c,
+          terms: updatedTerms,
+          rateContractConfig: {
+            ...c.rateContractConfig,
+            securityDepositAmount: Number(val) || 0,
+            securityDepositRequired: Boolean(Number(val) > 0)
+          }
+        };
+      }
       return { ...c, terms: updatedTerms };
     });
   };
@@ -8443,6 +8650,41 @@ function CommercialTermsForm({
             >
               {DELIVERY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
+          </Field>
+
+          <Field label="Warranty Terms & Support Obligation">
+            <div className="space-y-1.5">
+              <input
+                value={draft.terms.warrantyTerms || ''}
+                onChange={e => updateTerms('warrantyTerms', e.target.value)}
+                className={inputClass}
+                placeholder="e.g. 1 Year Comprehensive Onsite Warranty"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                {[
+                  '1 Year Comprehensive Onsite Warranty',
+                  '2 Years Comprehensive OEM Warranty',
+                  '3 Years Standard Warranty & Support',
+                  '5 Years Extended Enterprise Warranty',
+                  'Not Applicable (Consumable / Pure Service)'
+                ].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => updateTerms('warrantyTerms', preset)}
+                    className={cn(
+                      "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                      draft.terms.warrantyTerms === preset
+                        ? "border-[#0b2447] bg-[#0b2447] text-white"
+                        : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                    )}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
           </Field>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
@@ -8552,7 +8794,12 @@ function CommercialTermsForm({
                       key={preset}
                       type="button"
                       onClick={() => updateTerms('penaltyClause', preset)}
-                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-purple-400"
+                      className={cn(
+                        "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-[#0b2447]",
+                        effectivePenaltyClause === preset
+                          ? "border-[#0b2447] bg-[#0b2447] text-white"
+                          : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                      )}
                     >
                       {preset}
                     </button>
@@ -8565,6 +8812,58 @@ function CommercialTermsForm({
                 ? 'Centralized liquidated damages clause applicable across all staggered release call-off orders and service SLA milestones under this agreement.'
                 : 'Specify the standard liquidated damages or penalty clause applicable in case of delays in delivery or completion.'}
             </p>
+
+            <Field label="Performance Security / Security Deposit (PBG ₹ Amount)">
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-slate-400 font-bold text-xs pointer-events-none">₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draft.terms.securityDeposit || ''}
+                    onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
+                    className={cn(inputClass, 'pl-7')}
+                    placeholder="0"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                  {[
+                    { label: '0% (Exempt / MSE Waiver)', pct: 0 },
+                    { label: '3% (GFR Rule 171 Standard)', pct: 3 },
+                    { label: '5% (Standard Goods & Works)', pct: 5 },
+                    { label: '10% (Major / Turnkey)', pct: 10 },
+                  ].map(p => {
+                    const est = Number(draft.basics.estimatedValue || 0);
+                    const calcAmount = est > 0 ? Math.round((est * p.pct) / 100) : 0;
+                    const isActive = est > 0
+                      ? draft.terms.securityDeposit === calcAmount
+                      : (p.pct === 0 && (!draft.terms.securityDeposit || draft.terms.securityDeposit === 0));
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => {
+                          const amt = est > 0 ? Math.round((est * p.pct) / 100) : 0;
+                          updateTerms('securityDeposit', amt);
+                        }}
+                        className={cn(
+                          "text-[10px] font-bold px-2 py-0.5 rounded-full border transition-colors cursor-pointer",
+                          isActive
+                            ? "border-[#0b2447] bg-[#0b2447] text-white"
+                            : "border-slate-200 bg-white hover:bg-slate-100 text-slate-700"
+                        )}
+                      >
+                        {p.label} {est > 0 && p.pct > 0 ? `(₹${calcAmount.toLocaleString('en-IN')})` : ''}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10.5px] text-slate-500 font-medium leading-tight">
+                  Performance Security protects buyer against contractual default. Automatically calculated based on estimated value (GFR Rule 171 recommends 3% to 5%).
+                </p>
+              </div>
+            </Field>
           </div>
         </div>
       </div>
