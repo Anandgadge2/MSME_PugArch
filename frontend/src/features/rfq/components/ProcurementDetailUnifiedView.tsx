@@ -3521,8 +3521,9 @@ function LineItemsTable({
       },
       {
         key: "name",
-        header: "Item / Service Name",
-        width: "w-[28%] min-w-[180px]",
+        header: isServicesMode ? "Service Name / Title" : "Item / Service Name",
+        headerClassName: "whitespace-normal",
+        width: isServicesMode ? "w-[26%] min-w-[160px]" : "w-[28%] min-w-[180px]",
         cell: (item, idx) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3560,8 +3561,9 @@ function LineItemsTable({
       },
       {
         key: "spec",
-        header: "Specifications / Scope",
-        width: "w-[24%] min-w-[160px]",
+        header: isServicesMode ? "Scope of Work / Deliverables" : "Specifications / Scope",
+        headerClassName: "whitespace-normal",
+        width: isServicesMode ? "w-[28%] min-w-[170px]" : "w-[24%] min-w-[160px]",
         cell: (item) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3625,7 +3627,8 @@ function LineItemsTable({
           : ctx.isRateContractType
             ? "Est. Annual Qty & UOM"
             : "Qty & UOM",
-        width: ctx.isRateContractType ? "w-28 min-w-[110px]" : "w-24 min-w-[100px]",
+        headerClassName: "whitespace-normal",
+        width: ctx.isRateContractType ? "w-28 min-w-[105px]" : "w-24 min-w-[95px]",
         align: "center",
         cell: (item) => {
           const sp =
@@ -3669,18 +3672,18 @@ function LineItemsTable({
           return (
             <div className="flex flex-col items-center justify-center min-w-0 max-w-full">
               <div className="flex items-center justify-center gap-1">
-                <span className="font-bold text-slate-900 tabular-nums shrink-0">
+                <span className="font-extrabold text-slate-900 tabular-nums shrink-0">
                   {qtyDisplay}
                 </span>{" "}
                 <span
-                  className="text-[9.5px] font-bold text-slate-500 uppercase truncate max-w-[65px] shrink"
+                  className="text-[9.5px] font-bold text-slate-600 uppercase tracking-wide truncate max-w-[65px] shrink"
                   title={unit ? String(unit) : undefined}
                 >
                   {cleanUom}
                 </span>
               </div>
               {ctx.isRateContractType && (
-                <span className="text-[8.5px] font-black uppercase text-indigo-600 tracking-tight">
+                <span className="text-[8.5px] font-black uppercase text-indigo-700 bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.5 rounded-full tracking-tight mt-0.5 whitespace-nowrap">
                   Annual Offtake
                 </span>
               )}
@@ -3690,8 +3693,9 @@ function LineItemsTable({
       },
       {
         key: "rate",
-        header: isServicesMode ? "Est. Service Fee (Lump-Sum)" : "Est. Unit Rate",
-        width: isServicesMode ? "w-40 min-w-[160px]" : "w-24 min-w-[95px]",
+        header: isServicesMode ? "Est. Service Fee" : "Est. Unit Rate",
+        headerClassName: "whitespace-normal",
+        width: isServicesMode ? "w-32 min-w-[125px]" : "w-24 min-w-[95px]",
         align: "right",
         cell: (item) => {
           if (!shouldShowCost) {
@@ -3727,15 +3731,24 @@ function LineItemsTable({
               ? Number(rawRate)
               : null;
           return (
-            <div className="font-bold text-slate-900 whitespace-nowrap">
+            <div className="flex flex-col items-end justify-center whitespace-nowrap">
               {rateNumber !== null ? (
-                <span>₹{rateNumber.toLocaleString("en-IN")}</span>
+                <>
+                  <span className="font-bold text-slate-900 text-xs tabular-nums">
+                    ₹{rateNumber.toLocaleString("en-IN")}
+                  </span>
+                  {isServicesMode && (
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-tight">
+                      Lump-Sum
+                    </span>
+                  )}
+                </>
               ) : isServicesMode ? (
                 <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200/80 px-2 py-0.5 text-[9.5px] font-bold text-indigo-700 whitespace-nowrap">
-                  Price Discovery (Bidders to Quote)
+                  Price Discovery
                 </span>
               ) : (
-                <span className="text-slate-400 font-normal">-</span>
+                <span className="text-slate-400 font-normal">—</span>
               )}
             </div>
           );
@@ -3744,6 +3757,7 @@ function LineItemsTable({
       {
         key: "hsn",
         header: isServicesMode ? "SAC Code" : "HSN / SAC",
+        headerClassName: "whitespace-normal",
         width: "w-24 min-w-[85px]",
         align: "center",
         cell: (item) => {
@@ -3782,16 +3796,23 @@ function LineItemsTable({
             )
               .toLowerCase()
               .includes("service");
+          if (
+            !cleanHsnCode ||
+            cleanHsnCode === "-" ||
+            cleanHsnCode === "N/A" ||
+            cleanHsnCode === "null" ||
+            cleanHsnCode === "undefined"
+          ) {
+            return <span className="text-slate-400 font-normal">—</span>;
+          }
           const displayHsn =
-            cleanHsnCode !== "-"
-              ? isItemService && !cleanHsnCode.toUpperCase().startsWith("SAC")
-                ? `SAC ${cleanHsnCode}`
-                : cleanHsnCode
-              : "-";
+            isItemService && !cleanHsnCode.toUpperCase().startsWith("SAC")
+              ? `SAC ${cleanHsnCode}`
+              : cleanHsnCode;
           return (
             <span
-              className="font-mono text-[10.5px] font-medium text-slate-600 truncate max-w-[85px] block"
-              title={displayHsn !== "-" ? displayHsn : undefined}
+              className="inline-flex items-center px-1.5 py-0.5 rounded font-mono text-[10.5px] font-bold tracking-tight bg-slate-100 text-slate-700 border border-slate-200 truncate max-w-[85px]"
+              title={displayHsn}
             >
               {displayHsn}
             </span>
@@ -3880,8 +3901,10 @@ function LineItemsTable({
       },
       {
         key: "docs",
-        header: "Documents & Specs",
-        width: "w-36 min-w-[120px]",
+        header: isServicesMode ? "Attachments" : "Documents & Specs",
+        headerClassName: "whitespace-normal",
+        width: isServicesMode ? "w-28 min-w-[105px]" : "w-36 min-w-[120px]",
+        align: "center",
         cell: (item, idx) => {
           const sp =
             typeof item.specifications === "object" && item.specifications
@@ -3910,7 +3933,7 @@ function LineItemsTable({
           const allFiles = getUniqueItemFiles(item, sp, name);
           const fileCount = allFiles.length;
           if (fileCount === 0)
-            return <span className="text-slate-400 font-normal">-</span>;
+            return <span className="text-slate-400 font-normal">—</span>;
           return (
             <button
               type="button"
@@ -3957,7 +3980,7 @@ function LineItemsTable({
     ];
 
     if (isServicesMode) {
-      return baseColumns.filter((c) => c.key !== "brand");
+      return baseColumns.filter((c) => c.key !== "brand" && c.key !== "type");
     }
     return baseColumns;
   }, [defaultSubject, shouldShowCost, isServicesMode, ctx.isRateContractType]);
@@ -3979,8 +4002,8 @@ function LineItemsTable({
         mobileLayout="cards"
         showSrNo={true}
         srNoHeader="#"
-        srNoWidth="w-12"
-        minWidth="min-w-[1000px]"
+        srNoWidth="w-10"
+        minWidth={isServicesMode ? "min-w-[800px]" : "min-w-[1000px]"}
         emptyTitle={isServicesMode ? "No service lines" : "No line items"}
         emptyDescription={
           isServicesMode

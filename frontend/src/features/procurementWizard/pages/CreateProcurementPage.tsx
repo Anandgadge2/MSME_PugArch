@@ -4914,7 +4914,7 @@ function ItemsDetailsForm({
       brandPolicy: 'Equivalent allowed',
       technicalSpecification: '',
       specificationFileName: '',
-      hsn_sac_code: itemType === 'Service' ? '9987' : '',
+      hsn_sac_code: '',
       brand_preference: '',
       brand_flexible: 'Yes',
       fileAssetId: null,
@@ -5520,7 +5520,7 @@ function ItemsDetailsForm({
         align: 'center',
         cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
         cell: (item: any) => {
-          const code = item.hsn_sac_code || (item.itemType === 'Service' ? '9987' : '');
+          const code = item.hsn_sac_code || '';
           return code ? (
             <span className={cn(
               "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-bold tracking-tight inline-block",
@@ -6327,7 +6327,7 @@ function ItemsDetailsForm({
                   brandPolicy: 'Equivalent allowed',
                   technicalSpecification: draft.serviceDetails.scopeOfWork || '',
                   specificationFileName: draft.serviceDetails.sowFileName || '',
-                  hsn_sac_code: '9987',
+                  hsn_sac_code: '',
                   brand_preference: '',
                   brand_flexible: 'Yes',
                   fileAssetId: draft.serviceDetails.sowFileAssetId || null,
