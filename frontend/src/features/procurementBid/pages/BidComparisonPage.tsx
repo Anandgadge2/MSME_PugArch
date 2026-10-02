@@ -1352,10 +1352,6 @@ export default function BidComparisonPage() {
                     ))}
                   </tr>
 
-
-
-
-
                   {/* ======================================================== */}
                   {/* CATEGORY 3: TECHNICAL SPECIFICATIONS & COMPLIANCE */}
                   {/* ======================================================== */}
