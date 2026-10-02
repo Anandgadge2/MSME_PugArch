@@ -177,8 +177,16 @@ export function BuyerProcurementMonitor() {
         }
       }
 
-      const procDetailId = bid.auctionCode || bid.id;
-      let actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+      let displayBidNumber = cleanCanonicalRefId(bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || String(bid.id || ''));
+      if (!displayBidNumber || displayBidNumber.toLowerCase().startsWith('bid-req') || /^\d+$/.test(displayBidNumber)) {
+        const pfx = deriveMethodPrefix(rawMethod, displayBidNumber, 'RFQ');
+        displayBidNumber = formatRefId(pfx, bid.id || idx, displayBidNumber, rawMethod);
+      }
+
+      // Canonical bid reference identifier — strictly avoid numeric database IDs in URLs
+      const canonicalBidRef = bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || displayBidNumber || bid.auctionCode || String(bid.id);
+      const canonicalTypeParam = typeLabel.toUpperCase().replace(/\s+/g, '_');
+      let actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}`;
       let stage: BuyerProcurementItem['stage'] = 'published';
       let stageLabel = 'Bidding Open';
       let urgentAction = false;
@@ -194,7 +202,7 @@ export function BuyerProcurementMonitor() {
         bid.linkedAuctionCode
       );
 
-      const auctionTargetCode = bid.linkedAuctionCode || bid.linkedAuctionId || bid.auctionCode || procDetailId;
+      const auctionTargetCode = bid.linkedAuctionCode || bid.linkedAuctionId || bid.auctionCode || canonicalBidRef;
       const linkedStatus = String(bid.linkedAuctionStatus || '').toUpperCase();
       const isTerminalAuction = ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'FINALIZED', 'COMPLETED', 'ENDED'].includes(linkedStatus) || rawStatus.includes('CLOSED') || rawStatus.includes('AWARD') || rawStatus.includes('CANCELLED');
       const isLiveAuction = !isTerminalAuction && (rawStatus.includes('LIVE') || rawStatus === 'REVERSE_AUCTION_ACTIVE' || linkedStatus === 'LIVE');
@@ -211,19 +219,19 @@ export function BuyerProcurementMonitor() {
         stageLabel = 'Technical Evaluation';
         actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'Review Bids';
         urgentAction = true;
-        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+        actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}&tab=scope_docs`;
       } else if (rawStatus.includes('FINANCIAL')) {
         stage = 'financial_eval';
         stageLabel = 'Financial Opening';
         actionLabel = 'Compare Commercials';
         urgentAction = true;
-        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+        actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}&tab=terms_schedule`;
       } else if (rawStatus.includes('AWARD') || rawStatus.includes('RECOMMEND')) {
         stage = 'awarded';
         stageLabel = 'Award Pending';
         actionLabel = 'Issue PO';
         urgentAction = true;
-        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
+        actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}`;
       } else if (rawStatus.includes('CLOSED') || rawStatus.includes('COMPLETED') || bid.purchaseOrderId || bid.orderId) {
         stage = 'closed';
         stageLabel = 'Completed';
@@ -239,13 +247,7 @@ export function BuyerProcurementMonitor() {
         stage = 'published';
         stageLabel = participantsCount > 0 ? `${participantsCount} Bids Received` : 'Awaiting Bids';
         actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'View Details';
-        actionHref = `/buyer/procurement/${methodSlug}/${encodeURIComponent(String(procDetailId))}`;
-      }
-
-      let displayBidNumber = cleanCanonicalRefId(bid.bidNumber || bid.referenceNumber || bid.requisitionNumber || String(bid.id || ''));
-      if (!displayBidNumber || displayBidNumber.toLowerCase().startsWith('bid-req') || /^\d+$/.test(displayBidNumber)) {
-        const pfx = deriveMethodPrefix(rawMethod, displayBidNumber, 'RFQ');
-        displayBidNumber = formatRefId(pfx, bid.id || idx, displayBidNumber, rawMethod);
+        actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}`;
       }
 
       // Hybrid multi-stage linkage (e.g. RC-2026-43265 • RA-2026-22846)

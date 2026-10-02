@@ -1216,8 +1216,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
     }
     const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
     if (!id) { toast.error('Procurement ID not found'); return; }
-    const param = requestId || rawBid?.bidNumber ? 'requestId' : 'requirementId';
-    router.push(`/seller/procurement/rfq/${encodeURIComponent(String(id))}/respond`);
+    router.push(`/bids/${encodeURIComponent(String(id))}/participate`);
   };
 
   const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({

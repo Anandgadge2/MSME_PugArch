@@ -252,7 +252,7 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
       toast.error('Unable to locate the participation record for this RFP.');
       return;
     }
-    router.push(`/seller/procurement/rfp/${targetBidId}/respond`);
+    router.push(`/bids/${encodeURIComponent(String(targetBidId))}/participate`);
   };
 
   const rawStatus = String(bid.status || reqObj.status || 'OPEN').toUpperCase();

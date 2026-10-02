@@ -255,6 +255,14 @@ const noisyDetailKeys = new Set([
   "security_deposit_percentage",
   "securityDepositRequired",
   "security_deposit_required",
+  "sowFileUrl",
+  "sow_file_url",
+  "sowFileName",
+  "sow_file_name",
+  "sowFileAssetId",
+  "sow_file_asset_id",
+  "boqFileAssetId",
+  "boqFileName",
 ]);
 
 function humanizeKey(key: string): string {
@@ -3112,9 +3120,15 @@ function ServiceDossierCard({
             {manpowerRequired && (
               <PropertyItem label="Manpower Required" value={formatPrimitiveValue(manpowerRequired)} />
             )}
-            {experienceRequired && (
-              <PropertyItem label="Experience Required" value={formatPrimitiveValue(experienceRequired)} />
-            )}
+            {experienceRequired != null &&
+              experienceRequired !== "" &&
+              experienceRequired !== 0 &&
+              experienceRequired !== "0" && (
+                <PropertyItem
+                  label="Experience Required"
+                  value={formatPrimitiveValue(experienceRequired)}
+                />
+              )}
             {location && (
               <PropertyItem label="Service Location" value={location} />
             )}
@@ -4880,6 +4894,44 @@ export function ProcurementDetailUnifiedView(
       } catch {}
     }
   }, []);
+
+  // Canonical URL enforcement: Ensure the browser URL always strictly reflects the canonical
+  // domain reference /bids/{displayId}?type={procurementType}&tab={activeTab}
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const canonicalRef =
+      props.displayId && props.displayId !== "N/A" && props.displayId !== "—"
+        ? props.displayId
+        : (!/^\d+$/.test(String(props.id)) ? String(props.id) : null);
+
+    if (!canonicalRef) return;
+
+    try {
+      const url = new URL(window.location.href);
+      let changed = false;
+      const expectedPath = `/bids/${encodeURIComponent(canonicalRef)}`;
+
+      if (url.pathname !== expectedPath) {
+        url.pathname = expectedPath;
+        changed = true;
+      }
+
+      const expectedType = String(props.procurementType || "").toUpperCase();
+      if (expectedType && !url.searchParams.has("type")) {
+        url.searchParams.set("type", expectedType);
+        changed = true;
+      }
+
+      if (!url.searchParams.get("tab") && activeTabRef.current && activeTabRef.current !== "overview") {
+        url.searchParams.set("tab", activeTabRef.current);
+        changed = true;
+      }
+
+      if (changed) {
+        window.history.replaceState(window.history.state, "", url.toString());
+      }
+    } catch {}
+  }, [props.displayId, props.id, props.procurementType]);
   const [selectedQuotationForReview, setSelectedQuotationForReview] = useState<
     any | null
   >(null);
@@ -13434,74 +13486,26 @@ export function ProcurementDetailUnifiedView(
                         />
                       );
                     })()}
-                  {/* Service Parameters & Related Terms */}
-                  {(hasDetailData(serviceDetails) ||
-                    String(buyingType || "")
-                      .toLowerCase()
-                      .includes("service")) &&
-                    !isRfqType && (
-                      <>
-                        <PropertyItem
-                          label="Service Title"
-                          value={
-                            serviceDetails.serviceTitle || serviceDetails.title
-                          }
-                        />
-                        <PropertyItem
-                          label="SLA Response Time"
-                          value={serviceDetails.slaResponseTime}
-                        />
-                        <PropertyItem
-                          label="Penalty Clause"
-                          value={
-                            serviceDetails.penaltyClause || terms.penaltyClause
-                          }
-                        />
-                        <PropertyItem
-                          label="Manpower Required"
-                          value={formatPrimitiveValue(
-                            serviceDetails.manpowerRequired,
-                          )}
-                        />
-                        <PropertyItem
-                          label="Experience Required"
-                          value={formatPrimitiveValue(
-                            serviceDetails.experienceRequired,
-                          )}
-                        />
-                        {(() => {
-                          const {
-                            duration: _dur,
-                            projectDuration: _projDur,
-                            contractPeriod: _cPer,
-                            penaltyClause: _pen,
-                            slaResponseTime: _sla,
-                            manpowerRequired: _man,
-                            experienceRequired: _exp,
-                            milestones: _miles,
-                            warranty: _warr,
-                            warrantyTerms: _warrT,
-                            warrantyPeriod: _warrP,
-                            paymentTerms: _payT,
-                            serviceTitle: _sTitle,
-                            title: _t,
-                            scopeOfWork: _sow,
-                            description: _desc,
-                            ...restService
-                          } = serviceDetails || {};
-                          const extraEntries = detailEntries(
-                            compactObject(restService),
-                          );
-                          return extraEntries.map(([k, v]) => (
-                            <PropertyItem
-                              key={k}
-                              label={humanizeKey(k)}
-                              value={v}
-                            />
-                          ));
-                        })()}
-                      </>
-                    )}
+                  {/* Commercial Terms: Penalty / Liquidation damages */}
+                  {(() => {
+                    const penaltyVal =
+                      terms.penaltyClause || serviceDetails?.penaltyClause;
+                    if (
+                      !penaltyVal ||
+                      penaltyVal === "—" ||
+                      penaltyVal === "N/A" ||
+                      penaltyVal === "null" ||
+                      penaltyVal === "undefined"
+                    ) {
+                      return null;
+                    }
+                    return (
+                      <PropertyItem
+                        label="Penalty Clause"
+                        value={penaltyVal}
+                      />
+                    );
+                  })()}
                   {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
                   {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
                   <PropertyItem

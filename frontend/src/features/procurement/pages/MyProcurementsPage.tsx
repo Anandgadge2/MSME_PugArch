@@ -565,7 +565,7 @@ export default function MyProcurementsPage() {
       const consolidated = getConsolidatedType(p);
       const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
-        route = `/tenders?tender=${targetId}`;
+        route = `/bids/${targetId}?type=${consolidated === 'Limited Tender' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}`;
       } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
         route = `/bids/${targetId}?type=RFQ`;
       } else if (consolidated === 'RFP' || methodLower === 'rfp') {
@@ -576,9 +576,13 @@ export default function MyProcurementsPage() {
     } else if (typeLower === 'requirement') {
       const targetId = encodeURIComponent(p.referenceNumber || p.id);
       if (methodLower === 'rfp') {
-        route = `/buyer/rfp/detail?requirementId=${targetId}`;
+        route = `/bids/${targetId}?type=RFP`;
+      } else if (methodLower === 'open_tender' || methodLower === 'open-tender') {
+        route = `/bids/${targetId}?type=OPEN_TENDER`;
+      } else if (methodLower === 'limited_tender' || methodLower === 'limited-tender') {
+        route = `/bids/${targetId}?type=LIMITED_TENDER`;
       } else {
-        route = `/buyer/rfq/detail?requirementId=${targetId}`;
+        route = `/bids/${targetId}?type=RFQ`;
       }
     }
 

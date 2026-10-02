@@ -828,6 +828,13 @@ export default function App({
       }
     }
 
+    {
+      const legacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/procurement\/[^/]+\/([^/]+)\/respond$/i);
+      if (legacyRespondMatch) {
+        return <Redirect to={`/bids/${encodeURIComponent(legacyRespondMatch[1])}/participate`} />;
+      }
+    }
+
     // ── URL Normalization: redirect reverse auction URLs with spaces or %20 to canonical hyphenated slug ──
     {
       const spaceAuctionMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(?:reverse(?:%20|\s+|_)+auction)\/([^/]+)(\/(?:live|results?))?\/?$/i);
@@ -837,28 +844,31 @@ export default function App({
       }
     }
 
-    // ── Canonical procurement detail routes: /{role}/procurement/{type}/{id} ──
+    // ── Canonical procurement detail routes: redirect legacy /{role}/procurement/{type}/{id} → /bids/{id}?type={type} ──
     {
       const procDetailMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/(rfq|rfp|(?:open[-_]tenders?)|(?:limited[-_]tenders?)|(?:rate[-_]contracts?)|(?:reverse[-_]auctions?)|tenders?)\/([^/]+)\/?$/i);
       if (procDetailMatch) {
-        const [, role, rawTypeSlug, rawId] = procDetailMatch;
+        const [, , rawTypeSlug, rawId] = procDetailMatch;
         const typeSlug = rawTypeSlug.toLowerCase().replace(/_/g, '-').replace(/s$/, '');
         const id = decodeURIComponent(rawId);
         if (id.toLowerCase() === 'new' || id.toLowerCase() === 'create') {
           const methodParam = typeSlug ? `?method=${typeSlug.toUpperCase()}` : '';
           return <Redirect to={`/buyer/procurement/create${methodParam}`} />;
         }
-        switch (typeSlug) {
-          case 'rfq':              return <RfqDetailPage />;
-          case 'rfp':              return <RfpDetailPage />;
-          case 'tender':
-          case 'open-tender':      return <OpenTenderDetailPage />;
-          case 'limited-tender':   return <LimitedTenderDetailPage />;
-          case 'rate-contract':    return <Redirect to={`/bids/${id}`} />;
-          case 'reverse-auction': {
-            if (id) return <ReverseAuctionDetailPage id={id} />;
-            break;
+        if (typeSlug === 'reverse-auction') {
+          if (id) return <ReverseAuctionDetailPage id={id} />;
+        } else {
+          const methodType = typeSlug === 'rfp' ? 'RFP'
+            : typeSlug === 'rfq' ? 'RFQ'
+            : typeSlug === 'rate-contract' ? 'RATE_CONTRACT'
+            : typeSlug === 'limited-tender' ? 'LIMITED_TENDER'
+            : 'OPEN_TENDER';
+          const queryParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+          if (!queryParams.has('type')) {
+            queryParams.set('type', methodType);
           }
+          const qs = queryParams.toString();
+          return <Redirect to={`/bids/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`} />;
         }
       }
       const procAuctionLiveMatch = pathname.match(/^\/(seller|shg|buyer|admin)\/procurement\/reverse[-_]auctions?\/([^/]+)\/live\/?$/i);
@@ -879,20 +889,65 @@ export default function App({
       if (legacyTopProcMatch) {
         const rawKind = legacyTopProcMatch[1].toLowerCase().replace(/_/g, '-').replace(/s$/, '');
         const id = decodeURIComponent(legacyTopProcMatch[2]);
-        const targetRole = user?.role === 'buyer' ? 'buyer' : 'seller';
         if (id && id !== 'create') {
-          return <Redirect to={`/${targetRole}/procurement/${rawKind}/${encodeURIComponent(id)}`} />;
+          if (rawKind === 'reverse-auction') {
+            return <Redirect to={`/seller/procurement/reverse-auction/${encodeURIComponent(id)}`} />;
+          }
+          const methodType = rawKind === 'rfp' ? 'RFP'
+            : rawKind === 'rfq' ? 'RFQ'
+            : rawKind === 'limited-tender' ? 'LIMITED_TENDER'
+            : 'OPEN_TENDER';
+          const queryParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+          if (!queryParams.has('type')) {
+            queryParams.set('type', methodType);
+          }
+          const qs = queryParams.toString();
+          return <Redirect to={`/bids/${encodeURIComponent(id)}${qs ? `?${qs}` : ''}`} />;
         }
       }
     }
 
     // ── Legacy procurement routes → redirect to canonical URLs ──
-    if (pathname === '/seller/rfq' || pathname === '/shg/rfq') return <RfqDetailPage />;
-    if (pathname === '/seller/rfp' || pathname === '/shg/rfp') return <RfpDetailPage />;
+    if (pathname === '/seller/rfq' || pathname === '/shg/rfq') {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');
+      if (reqId) {
+        sp.delete('requestId');
+        sp.delete('requirementId');
+        sp.delete('id');
+        sp.delete('bidId');
+        sp.set('type', 'RFQ');
+        const qs = sp.toString();
+        return <Redirect to={`/bids/${encodeURIComponent(reqId)}${qs ? `?${qs}` : ''}`} />;
+      }
+      return <Redirect to="/seller/procurement/opportunities?type=rfq" />;
+    }
+    if (pathname === '/seller/rfp' || pathname === '/shg/rfp') {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');
+      if (reqId) {
+        sp.delete('requestId');
+        sp.delete('requirementId');
+        sp.delete('id');
+        sp.delete('bidId');
+        sp.set('type', 'RFP');
+        const qs = sp.toString();
+        return <Redirect to={`/bids/${encodeURIComponent(reqId)}${qs ? `?${qs}` : ''}`} />;
+      }
+      return <Redirect to="/seller/procurement/opportunities?type=rfp" />;
+    }
     if (pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') {
       const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
       const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');
-      if (reqId) return <Redirect to={`/bids/${reqId}`} />;
+      if (reqId) {
+        sp.delete('requestId');
+        sp.delete('requirementId');
+        sp.delete('id');
+        sp.delete('bidId');
+        sp.set('type', 'RATE_CONTRACT');
+        const qs = sp.toString();
+        return <Redirect to={`/bids/${encodeURIComponent(reqId)}${qs ? `?${qs}` : ''}`} />;
+      }
       return <Redirect to="/seller/procurement/opportunities?type=rate-contract" />;
     }
     {
@@ -1081,8 +1136,34 @@ export default function App({
     }
     if (pathname === '/buyer/procurement' && roleOk(user.role, ['buyer'])) return <Redirect to="/buyer/procurement/create" />;
     if (pathname === '/buyer/my-procurements' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><MyProcurementsPage /></PermissionRouteGuard>;
-    if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RfqDetailPage /></PermissionRouteGuard>;
-    if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RfpDetailPage /></PermissionRouteGuard>;
+    if (pathname === '/buyer/rfq/detail' && roleOk(user.role, ['buyer'])) {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const targetId = sp.get('requirementId') || sp.get('id') || sp.get('requestId') || sp.get('bidId');
+      if (targetId) {
+        sp.delete('requirementId');
+        sp.delete('id');
+        sp.delete('requestId');
+        sp.delete('bidId');
+        if (!sp.has('type')) sp.set('type', 'RFQ');
+        const qs = sp.toString();
+        return <Redirect to={`/bids/${encodeURIComponent(targetId)}${qs ? `?${qs}` : ''}`} />;
+      }
+      return <PermissionRouteGuard permission="requirement.view"><RfqDetailPage /></PermissionRouteGuard>;
+    }
+    if (pathname === '/buyer/rfp/detail' && roleOk(user.role, ['buyer'])) {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      const targetId = sp.get('requirementId') || sp.get('id') || sp.get('requestId') || sp.get('bidId');
+      if (targetId) {
+        sp.delete('requirementId');
+        sp.delete('id');
+        sp.delete('requestId');
+        sp.delete('bidId');
+        if (!sp.has('type')) sp.set('type', 'RFP');
+        const qs = sp.toString();
+        return <Redirect to={`/bids/${encodeURIComponent(targetId)}${qs ? `?${qs}` : ''}`} />;
+      }
+      return <PermissionRouteGuard permission="requirement.view"><RfpDetailPage /></PermissionRouteGuard>;
+    }
     if (pathname === '/buyer/rate-contracts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.view"><RateContractsPage /></PermissionRouteGuard>;
     if ((pathname === '/buyer/checkout' || pathname === '/buyer/direct-purchase/checkout') && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="cart.view"><DirectCheckoutPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/procurement/checkout' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="cart.view"><ProcurementCheckoutPage /></PermissionRouteGuard>;

@@ -818,41 +818,42 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         else if (isBidDirectPurchase) opportunityType = 'Direct Purchase';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
+        const canonicalBidId = bid.bidNumber || bid.referenceNumber || bid.id;
         let actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
-        let href = `/bids/${bid.id}/participate`;
-        let detailsHref = `/bids/${bid.id}`;
+        let href = `/bids/${canonicalBidId}/participate`;
+        let detailsHref = `/bids/${canonicalBidId}`;
 
         if (opportunityType === 'Rate Contract') {
-          href = sellerRoutes.respond('RATE_CONTRACT', bid.id);
-          detailsHref = sellerRoutes.detail('RATE_CONTRACT', bid.id);
+          href = sellerRoutes.respond('RATE_CONTRACT', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RATE_CONTRACT', canonicalBidId);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Rate';
         } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
           href = `/seller/tenders/${bid.sourceId}/bid`;
-          detailsHref = `/tenders?tender=${bid.sourceId}`;
+          detailsHref = `/bids/${bid.sourceId}?type=OPEN_TENDER`;
           actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
         } else if (method === 'RFP' || opportunityType === 'RFP') {
-          href = sellerRoutes.detail('RFP', bid.id);
-          detailsHref = sellerRoutes.detail('RFP', bid.id);
+          href = sellerRoutes.detail('RFP', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RFP', canonicalBidId);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Proposal';
         } else if (opportunityType === 'Open Tender') {
-          href = sellerRoutes.detail('OPEN_TENDER', bid.id);
-          detailsHref = sellerRoutes.detail('OPEN_TENDER', bid.id);
+          href = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
+          detailsHref = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
         } else if (opportunityType === 'Limited Tender') {
-          href = sellerRoutes.detail('LIMITED_TENDER', bid.id);
-          detailsHref = sellerRoutes.detail('LIMITED_TENDER', bid.id);
+          href = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
+          detailsHref = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
           actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
         } else if (opportunityType === 'Reverse Auction') {
           href = sellerRoutes.auctionLive(bid.id);
           detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
           actionLabel = 'Join Auction';
         } else if (opportunityType === 'Direct Purchase') {
-          href = `/bids/${bid.id}`;
-          detailsHref = `/bids/${bid.id}`;
+          href = `/bids/${canonicalBidId}`;
+          detailsHref = `/bids/${canonicalBidId}`;
           actionLabel = 'View Purchase';
         } else {
-          href = bid.participated ? sellerRoutes.respond('RFQ', bid.id) : sellerRoutes.detail('RFQ', bid.id);
-          detailsHref = sellerRoutes.detail('RFQ', bid.id);
+          href = bid.participated ? sellerRoutes.respond('RFQ', canonicalBidId) : sellerRoutes.detail('RFQ', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RFQ', canonicalBidId);
           actionLabel = bid.participated ? 'View Quotation' : 'Submit Quote';
         }
 

@@ -191,13 +191,13 @@ export function LiveOpportunityRadar() {
           actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(bid.auctionCode || linkedAuction || bid.id))}/live`;
           actionLabel = isExpired ? 'View Results' : 'Join Auction';
         } else if (type === 'Rate Contract') {
-          actionHref = `${rolePrefix}/procurement/rate-contract/${encodeURIComponent(String(bid.id))}`;
+          actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=RATE_CONTRACT`;
           actionLabel = isExpired ? 'View Contract' : 'Quote Rate';
         } else if (type === 'RFQ') {
-          actionHref = `${rolePrefix}/procurement/rfq/${encodeURIComponent(String(bid.id))}`;
+          actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=RFQ`;
           actionLabel = isExpired ? 'View Details' : 'Quote Now';
         } else {
-          actionHref = `${rolePrefix}/procurement/open-tender/${encodeURIComponent(String(bid.id))}`;
+          actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=OPEN_TENDER`;
           actionLabel = isExpired ? 'View Details' : 'Bid Now';
         }
 

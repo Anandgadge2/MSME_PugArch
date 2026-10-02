@@ -97,6 +97,49 @@ export default function BidDetailsPage() {
     staleTime: 60_000,
   });
 
+  // Canonical URL enforcement: If accessed via numeric ID (e.g. /bids/318) or alias,
+  // seamlessly rewrite the URL in place to canonical /bids/{bidNumber}?type={method}&...
+  React.useEffect(() => {
+    if (!bidData || typeof window === 'undefined') return;
+    const resolvedRef =
+      bidData.bidNumber ||
+      bidData.referenceNumber ||
+      bidData.requirementNumber ||
+      bidData.auctionCode ||
+      null;
+
+    if (!resolvedRef) return;
+
+    try {
+      const currentUrl = new URL(window.location.href);
+      const targetPath = `/bids/${encodeURIComponent(resolvedRef)}`;
+      let changed = false;
+
+      if (currentUrl.pathname !== targetPath) {
+        currentUrl.pathname = targetPath;
+        changed = true;
+      }
+
+      const canonicalType = (
+        bidData.procurementMethod ||
+        bidData.procurementType ||
+        bidData.bidType ||
+        searchParams?.get('type') ||
+        searchParams?.get('method') ||
+        ''
+      ).toUpperCase();
+
+      if (canonicalType && !currentUrl.searchParams.has('type')) {
+        currentUrl.searchParams.set('type', canonicalType);
+        changed = true;
+      }
+
+      if (changed) {
+        window.history.replaceState(window.history.state, '', currentUrl.toString());
+      }
+    } catch {}
+  }, [bidData, searchParams]);
+
   if (isLoading) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Procurement Opportunity" />;
   }

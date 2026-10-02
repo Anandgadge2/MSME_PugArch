@@ -2673,15 +2673,15 @@ export default function SubmitQuotationPage() {
     }
     const targetId = requirementId || rfqData?.requirementNumber || rfqData?.id || extractedPathId;
     if (isOpenTender) {
-      navigateTo(`${rolePrefix}/procurement/open-tender/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=OPEN_TENDER`);
     } else if (isLimitedTender) {
-      navigateTo(`${rolePrefix}/procurement/limited-tender/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=LIMITED_TENDER`);
     } else if (isRfp) {
-      navigateTo(`${rolePrefix}/procurement/rfp/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RFP`);
     } else if (isRateContract) {
-      navigateTo(`/bids/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RATE_CONTRACT`);
     } else {
-      navigateTo(`${rolePrefix}/procurement/rfq/${encodeURIComponent(String(targetId))}`);
+      navigateTo(`/bids/${encodeURIComponent(String(targetId))}?type=RFQ`);
     }
   }, [user?.role, isMarketplaceQuoteFlow, rfqData, conversationId, requirementId, extractedPathId, isOpenTender, isLimitedTender, isRfp, isRateContract, navigateTo]);
 

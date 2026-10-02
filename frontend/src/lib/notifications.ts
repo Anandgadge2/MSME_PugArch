@@ -273,15 +273,12 @@ export const routeForNotification = (
   ) {
     if (quoteRequestId) {
       if (userRole === 'seller' || userRole === 'shg') {
-        return `/seller/rfq/submit-quotation?quoteRequestId=${encodeURIComponent(quoteRequestId)}`;
+        return `/bids/${encodeURIComponent(quoteRequestId)}/participate`;
       }
-      return `/buyer/rfq/detail?requirementId=${encodeURIComponent(quoteRequestId)}&tab=clarifications`;
+      return `/bids/${encodeURIComponent(quoteRequestId)}?type=RFQ&tab=clarifications`;
     }
     if (bidId) {
-      if (userRole === 'seller' || userRole === 'shg') {
-        return `/seller/procurement/rfq/${encodeURIComponent(bidId)}`;
-      }
-      return `/bids/${encodeURIComponent(bidId)}`;
+      return `/bids/${encodeURIComponent(bidId)}?type=RFQ`;
     }
     if (userRole === 'buyer') return '/buyer/my-procurements';
     return '/seller/opportunities/rfqs';
@@ -315,12 +312,12 @@ export const routeForNotification = (
   ) {
     if (bidId) {
       if (userRole === 'seller' || userRole === 'shg') {
-        return `/bids/${encodeURIComponent(bidId)}`;
+        return `/bids/${encodeURIComponent(bidId)}?type=RATE_CONTRACT`;
       }
       if (userRole === 'buyer') {
         return `/buyer/rate-contracts?search=${encodeURIComponent(bidId)}`;
       }
-      return `/bids/${encodeURIComponent(bidId)}`;
+      return `/bids/${encodeURIComponent(bidId)}?type=RATE_CONTRACT`;
     }
     return userRole === 'buyer' ? '/buyer/rate-contracts' : '/seller/opportunities/rate-contracts';
   }
@@ -335,16 +332,14 @@ export const routeForNotification = (
     type.includes('opportunity')
   ) {
     if (bidId) {
-      if (userRole === 'seller' || userRole === 'shg') {
-        if (text.includes('open tender') || bidId.startsWith('TND-') || bidId.startsWith('TENDER-')) {
-          return `/seller/procurement/open-tender/${encodeURIComponent(bidId)}`;
-        }
-        if (text.includes('limited tender') || bidId.startsWith('LTND-')) {
-          return `/seller/procurement/limited-tender/${encodeURIComponent(bidId)}`;
-        }
-        if (text.includes('rfp') || bidId.startsWith('RFP-')) {
-          return `/seller/procurement/rfp/${encodeURIComponent(bidId)}`;
-        }
+      if (text.includes('open tender') || bidId.startsWith('TND-') || bidId.startsWith('TENDER-')) {
+        return `/bids/${encodeURIComponent(bidId)}?type=OPEN_TENDER`;
+      }
+      if (text.includes('limited tender') || bidId.startsWith('LTND-')) {
+        return `/bids/${encodeURIComponent(bidId)}?type=LIMITED_TENDER`;
+      }
+      if (text.includes('rfp') || bidId.startsWith('RFP-')) {
+        return `/bids/${encodeURIComponent(bidId)}?type=RFP`;
       }
       return `/bids/${encodeURIComponent(bidId)}`;
     }

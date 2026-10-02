@@ -55,22 +55,19 @@ export const sellerRoutes = {
       ? `/seller/procurement/opportunities?type=${methodToSlug(type)}`
       : '/seller/procurement/opportunities',
 
-  /** Procurement detail view: /seller/procurement/{type}/{id} or /bids/{id} */
+  /** Procurement detail view: canonical /bids/{id}?type={type} */
   detail: (type: string, id: string | number) => {
     const slug = methodToSlug(type);
-    if (slug === 'rate-contract') {
-      return `/bids/${encodeURIComponent(String(id))}`;
+    if (slug === 'reverse-auction') {
+      return `/seller/procurement/reverse-auction/${encodeURIComponent(String(id))}`;
     }
-    return `/seller/procurement/${slug}/${encodeURIComponent(String(id))}`;
+    const canonicalMethod = slugToMethod(slug) || type.toUpperCase();
+    return `/bids/${encodeURIComponent(String(id))}?type=${encodeURIComponent(canonicalMethod)}`;
   },
 
-  /** Respond / submit quotation: /seller/procurement/{type}/{id}/respond or /bids/{id}/participate */
-  respond: (type: string, id: string | number) => {
-    const slug = methodToSlug(type);
-    if (slug === 'rate-contract') {
-      return `/bids/${encodeURIComponent(String(id))}/participate`;
-    }
-    return `/seller/procurement/${slug}/${encodeURIComponent(String(id))}/respond`;
+  /** Respond / submit quotation: canonical /bids/{id}/participate */
+  respond: (_type: string, id: string | number) => {
+    return `/bids/${encodeURIComponent(String(id))}/participate`;
   },
 
   /** Reverse auction live room */
@@ -90,9 +87,15 @@ export const sellerRoutes = {
 } as const;
 
 export const buyerRoutes = {
-  /** Buyer procurement detail view */
-  detail: (type: string, id: string | number) =>
-    `/buyer/procurement/${methodToSlug(type)}/${encodeURIComponent(String(id))}`,
+  /** Buyer procurement detail view: canonical /bids/{id}?type={type} */
+  detail: (type: string, id: string | number) => {
+    const slug = methodToSlug(type);
+    if (slug === 'reverse-auction') {
+      return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(id))}`;
+    }
+    const canonicalMethod = slugToMethod(slug) || type.toUpperCase();
+    return `/bids/${encodeURIComponent(String(id))}?type=${encodeURIComponent(canonicalMethod)}`;
+  },
 
   /** Create procurement (with optional method preset) */
   create: (method?: ProcurementMethodId) =>
@@ -134,44 +137,41 @@ export function resolveLegacyUrl(
 ): LegacyRedirectResult | null {
   const requestId = searchParams.get('requestId') || searchParams.get('requirementId') || searchParams.get('id') || searchParams.get('bidId') || searchParams.get('rfqId');
 
-  // /seller/rfq?requestId=... → /seller/procurement/rfq/{id}
-  // NOTE: We can't distinguish Open/Limited Tender from RFQ at the URL level alone;
-  // the page component will need to handle the type resolution after data fetch.
+  // /seller/rfq?requestId=... → /bids/{id}?type=RFQ
   if (pathname === '/seller/rfq' && requestId) {
-    return { to: sellerRoutes.detail('RFQ', requestId), permanent: false };
+    return { to: `/bids/${encodeURIComponent(requestId)}?type=RFQ`, permanent: false };
   }
   if (pathname === '/seller/rfp' && requestId) {
-    return { to: sellerRoutes.detail('RFP', requestId), permanent: false };
+    return { to: `/bids/${encodeURIComponent(requestId)}?type=RFP`, permanent: false };
   }
   if ((pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') && requestId) {
-    return { to: `/bids/${requestId}`, permanent: true };
+    return { to: `/bids/${encodeURIComponent(requestId)}?type=RATE_CONTRACT`, permanent: true };
   }
   if ((pathname === '/seller/rate-contract' || pathname === '/shg/rate-contract') && !requestId) {
     return { to: '/seller/procurement/opportunities?type=rate-contract', permanent: true };
   }
 
-  // /seller/rfq/submit-quotation?requestId=... → /seller/procurement/rfq/{id}/respond
-  if (pathname === '/seller/rfq/submit-quotation' && requestId) {
-    return { to: sellerRoutes.respond('RFQ', requestId), permanent: false };
-  }
-  if (pathname === '/seller/rfp/submit-quotation' && requestId) {
-    return { to: sellerRoutes.respond('RFP', requestId), permanent: false };
+  // /seller/rfq/submit-quotation?requestId=... → /bids/{id}/participate
+  if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation') && requestId) {
+    return { to: `/bids/${encodeURIComponent(requestId)}/participate`, permanent: false };
   }
   if ((pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rate-contract/submit-quotation')) && requestId) {
-    return { to: `/bids/${requestId}/participate`, permanent: true };
+    return { to: `/bids/${encodeURIComponent(requestId)}/participate`, permanent: true };
   }
   if (pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation') {
     return { to: '/seller/procurement/opportunities?type=rate-contract', permanent: true };
   }
 
-  // /seller/procurement/rate-contract/:id → /bids/:id
-  const rcLegacyDetailMatch = pathname.match(/^\/(?:seller|shg)\/procurement\/rate-contract\/([^/]+)$/i);
-  if (rcLegacyDetailMatch) {
-    return { to: `/bids/${rcLegacyDetailMatch[1]}`, permanent: true };
+  // /(seller|shg|buyer|admin)/procurement/:type/:id → /bids/:id?type=:type
+  const procLegacyDetailMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/procurement\/(rfq|rfp|(?:open[-_]tenders?)|(?:limited[-_]tenders?)|(?:rate[-_]contracts?)|tenders?)\/([^/]+)$/i);
+  if (procLegacyDetailMatch) {
+    const rawSlug = procLegacyDetailMatch[1].toLowerCase().replace(/_/g, '-').replace(/s$/, '');
+    const canonicalMethod = slugToMethod(rawSlug) || rawSlug.toUpperCase();
+    return { to: `/bids/${encodeURIComponent(procLegacyDetailMatch[2])}?type=${encodeURIComponent(canonicalMethod)}`, permanent: true };
   }
-  const rcLegacyRespondMatch = pathname.match(/^\/(?:seller|shg)\/procurement\/rate-contract\/([^/]+)\/respond$/i);
-  if (rcLegacyRespondMatch) {
-    return { to: `/bids/${rcLegacyRespondMatch[1]}/participate`, permanent: true };
+  const procLegacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/procurement\/[^/]+\/([^/]+)\/respond$/i);
+  if (procLegacyRespondMatch) {
+    return { to: `/bids/${encodeURIComponent(procLegacyRespondMatch[1])}/participate`, permanent: true };
   }
 
   // /reverse-auctions/:id → /seller/procurement/reverse-auction/:id

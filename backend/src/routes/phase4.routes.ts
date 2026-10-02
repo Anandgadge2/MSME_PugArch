@@ -13234,7 +13234,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
             return `/buyer/procurement/reverse-auction/${encodeURIComponent(String(la.auctionCode || la.id))}/results`;
           }
         }
-        return `/bids/${b.id}`;
+        const effectiveBidRef = bidRef || b.bidNumber || String(b.id);
+        return `/bids/${encodeURIComponent(effectiveBidRef)}?type=${encodeURIComponent(methodCanonical)}`;
       })(),
       evaluationMethod: 'L1 Basis',
       documents,
@@ -13689,7 +13690,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
           }
           return `/reverse-auctions/${linkedAuction.id}`;
         }
-        return `/buyer/requirements`;
+        const effectiveReqRef = reqRef || r.requirementNumber || String(r.id);
+        return `/bids/${encodeURIComponent(effectiveReqRef)}?type=${encodeURIComponent(reqMethod.toUpperCase())}`;
       })(),
       documents: [...documents, ...(requirementAssets[r.id] || [])],
       items,
