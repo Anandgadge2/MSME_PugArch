@@ -380,7 +380,16 @@ export default function BidComparisonPage() {
     };
     const paymentTerms = formatPay(rawPay);
 
-    const warranty = first(
+    const buyerWarranty = first(
+      bid?.terms?.warrantyTerms,
+      bid?.technicalPacket?.terms?.warrantyTerms,
+      bid?.payload?.terms?.warrantyTerms,
+      bid?.payload?.warrantyTerms,
+      bid?.tender?.warrantyTerms,
+      bid?.warrantyRequirement
+    );
+
+    const rawWarranty = first(
       p.warrantyDetails,
       p.warranty,
       respData.warranty,
@@ -389,14 +398,11 @@ export default function BidComparisonPage() {
       details.warrantyDetails,
       ackData.warranty,
       firstItem.warranty
-    ) || '—';
+    );
 
-    const serviceSupport = first(
-      p.serviceSupport,
-      details.serviceSupport,
-      respData.serviceSupport,
-      ackData.serviceSupport
-    ) || '—';
+    const warranty = rawWarranty
+      ? String(rawWarranty)
+      : (buyerWarranty ? String(buyerWarranty) : '—');
 
     // Technical
     const rawMake = first(
@@ -565,7 +571,6 @@ export default function BidComparisonPage() {
       deliveryTerms,
       paymentTerms,
       warranty,
-      serviceSupport,
       makeBrand,
       model,
       techSpecs,
@@ -699,7 +704,13 @@ export default function BidComparisonPage() {
       ['Payment Terms', ...filteredAndSortedItems.map(p => p.paymentTerms)],
       ['Warranty Terms', ...filteredAndSortedItems.map(p => p.warranty)],
       ['Technical Status', ...filteredAndSortedItems.map(p => p.techStatus)],
-      ['Compliance Statement', ...filteredAndSortedItems.map(p => p.complianceStatement)],
+      ['Compliance Statement', ...filteredAndSortedItems.map(p => {
+        const comp = String(p.complianceStatement || '').toUpperCase();
+        if (comp === 'WITH_DEVIATION' || comp === 'DEVIATION') return 'Minor Deviation';
+        if (comp === 'ALTERNATIVE_OFFERED' || comp === 'ALTERNATIVE') return 'Alternative Offered';
+        if (comp === 'COMPLIANT' || comp === 'FULL_COMPLIANCE' || p.techStatus === 'QUALIFIED') return 'Compliant';
+        return p.complianceStatement || '—';
+      })],
       ['Make / Brand', ...filteredAndSortedItems.map(p => p.makeBrand)],
       ['Model / Part Reference', ...filteredAndSortedItems.map(p => p.model)],
       ['Contact Person', ...filteredAndSortedItems.map(p => p.contactPerson)],
@@ -1389,21 +1400,7 @@ export default function BidComparisonPage() {
                     ))}
                   </tr>
 
-                  {/* 2.5 Post-Sale Support */}
-                  <tr className="hover:bg-slate-50/60 transition-colors">
-                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Post-Sale Service Support
-                    </td>
-                    {filteredAndSortedItems.map((p) => (
-                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-medium text-slate-600">
-                        {p.serviceSupport && p.serviceSupport !== '—' ? (
-                          p.serviceSupport
-                        ) : (
-                          <span className="text-slate-400 font-normal italic">—</span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
+
 
                   {/* ======================================================== */}
                   {/* CATEGORY 3: TECHNICAL SPECIFICATIONS & COMPLIANCE */}
@@ -1456,30 +1453,38 @@ export default function BidComparisonPage() {
                     <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
                       Technical Compliance Statement
                     </td>
-                    {filteredAndSortedItems.map((p) => (
-                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
-                        {p.complianceStatement === 'WITH_DEVIATION' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">
-                            <AlertTriangle className="h-3 w-3 text-amber-600" /> Minor Deviation
-                          </span>
-                        ) : p.complianceStatement === 'ALTERNATIVE_OFFERED' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10px] font-bold text-purple-800">
-                            Alternative Offered
-                          </span>
-                        ) : p.complianceStatement === 'COMPLIANT' ? (
-                          <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                            <Check className="h-3 w-3 text-emerald-600" /> Compliant
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-normal italic">—</span>
-                        )}
-                        {p.complianceRemarks && (
-                          <p className="text-[10px] text-slate-500 mt-1 italic">
-                            {p.complianceRemarks}
-                          </p>
-                        )}
-                      </td>
-                    ))}
+                    {filteredAndSortedItems.map((p) => {
+                      const comp = String(p.complianceStatement || '').toUpperCase();
+                      const isQual = p.techStatus === 'QUALIFIED';
+                      const isCompliant = comp === 'COMPLIANT' || comp === 'FULL_COMPLIANCE' || (!comp && isQual);
+                      const isDeviation = comp === 'WITH_DEVIATION' || comp === 'DEVIATION';
+                      const isAlt = comp === 'ALTERNATIVE_OFFERED' || comp === 'ALTERNATIVE';
+
+                      return (
+                        <td key={p.raw.id} className="p-3.5 border-r border-slate-200">
+                          {isDeviation ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-800">
+                              <AlertTriangle className="h-3 w-3 text-amber-600" /> Minor Deviation
+                            </span>
+                          ) : isAlt ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-purple-50 border border-purple-200 px-2 py-0.5 text-[10px] font-bold text-purple-800">
+                              Alternative Offered
+                            </span>
+                          ) : isCompliant ? (
+                            <span className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                              <Check className="h-3 w-3 text-emerald-600" /> Compliant
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic">—</span>
+                          )}
+                          {p.complianceRemarks && (
+                            <p className="text-[10px] text-slate-500 mt-1 italic">
+                              {p.complianceRemarks}
+                            </p>
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
 
                   {/* 3.3 Make / Brand */}
