@@ -1682,7 +1682,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <span>{item.actionLabel}</span>
               </Link>
             )}
-            {closed && participated && (
+            {/* {closed && participated && (
               <Link
                 href={item.href}
                 className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-2xs shrink-0"
@@ -1691,7 +1691,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
                 <span>Track Status</span>
               </Link>
-            )}
+            )} */}
             <Link
               href={item.detailsHref}
               className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-center text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 transition-all duration-200 shrink-0"
