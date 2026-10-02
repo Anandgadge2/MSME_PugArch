@@ -311,7 +311,17 @@ function RoleAwareActionCards() {
                 show: true,
                 priority: false,
                 subtext: 'Invoices under payout'
-            }
+            },
+            ...(Number(data.reverseAuctionsLive || data.reverseAuctionsActive || 0) > 0 ? [{
+                label: 'Live Reverse Auctions',
+                count: data.reverseAuctionsLive ?? data.reverseAuctionsActive ?? 0,
+                href: `${sellerPrefix}/procurement/reverse-auctions`,
+                icon: RotateCcw,
+                tone: 'amber' as KpiCardTone,
+                show: true,
+                priority: true,
+                subtext: 'Active live decrement events'
+            }] : [])
         ];
     }, [data, isBuyer, isShgAccount, sellerPrefix]);
 

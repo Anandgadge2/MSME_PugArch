@@ -337,10 +337,6 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                 {formatProcurementMethod(auction?.procurementMethod)}
               </span>
 
-              <span className="font-mono text-[10.5px] font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
-                {canonicalCode}
-              </span>
-
               {auction?.referenceNo && auction.referenceNo !== canonicalCode && (
                 <Link
                   href={`/bids/${encodeURIComponent(auction.referenceNo)}`}
@@ -394,146 +390,6 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
           </div>
         </div>
       </div>
-
-      {/* 2.1 Interactive Lifecycle Stage Banners */}
-      {/* Seller View: Formal Award Acceptance Action */}
-      {canAcceptAward && (
-        <div className="rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-50 via-teal-50 to-white p-5 sm:p-6 shadow-sm">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="flex items-start gap-3.5">
-              <div className="h-12 w-12 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-                <Trophy className="h-6 w-6 text-amber-300" />
-              </div>
-              <div className="space-y-1">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-emerald-100 text-emerald-900 border border-emerald-300">
-                  <Sparkles className="h-3 w-3 text-emerald-700" /> Award Offer Received
-                </div>
-                <h2 className="text-lg sm:text-xl font-black text-slate-950">
-                  Congratulations! Your Organization has been Awarded the Contract
-                </h2>
-                <p className="text-xs sm:text-sm font-semibold text-slate-600 max-w-2xl leading-relaxed">
-                  The buyer has evaluated the reverse auction outcomes and formally offered the contract award to your organization at <span className="font-mono font-black text-emerald-700">{formatCurrency(winningParticipant?.lastBidAmount || highlightedParticipant?.lastBidAmount || 0)}</span>. Please formally accept the award to initiate official Purchase Order issuance.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 shrink-0">
-              <Button
-                onClick={() => acceptAwardMutation.mutate()}
-                disabled={acceptAwardMutation.isPending || declineAwardMutation.isPending}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs uppercase tracking-wider h-10 px-5 shadow-sm"
-                aria-label="Formally accept contract award offer"
-              >
-                {acceptAwardMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Accepting Award…
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle2 className="mr-2 h-4 w-4" /> Formally Accept Award
-                  </>
-                )}
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => setShowDeclineModal(true)}
-                disabled={acceptAwardMutation.isPending || declineAwardMutation.isPending}
-                className="border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs h-10 px-4"
-                aria-label="Decline contract award offer"
-              >
-                <X className="mr-1.5 h-3.5 w-3.5" /> Decline Award
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Seller View: Award Accepted, Awaiting Buyer PO */}
-      {isWinningSeller && isAwardAccepted && !purchaseOrder && (
-        <div className="rounded-2xl border border-indigo-200 bg-indigo-50/80 p-5 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="h-10 w-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <CheckCircle2 className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-indigo-950">
-                Award Acceptance Confirmed — Awaiting Purchase Order Issuance
-              </h3>
-              <p className="text-xs font-semibold text-indigo-800/90 mt-0.5">
-                You have formally accepted the contract award. The buyer is now finalizing and issuing the official Purchase Order. You will receive an immediate notification when the PO is issued.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Seller View: Non-winning participating suppliers on standby */}
-      {!isWinningSeller && !isManager && isAwardOffered && !purchaseOrder && (
-        <div className="rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
-              <Clock className="h-4 w-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-black text-blue-950">
-                Auction Under Final Award Formalities (Supplier Standby)
-              </h3>
-              <p className="text-xs font-semibold text-blue-800/90 mt-0.5">
-                The buyer is actively finalizing award formalities with the selected supplier. Your quote remains on evaluated standby until final PO issuance.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Buyer View: Supplier Accepted Award, Ready to Generate PO */}
-      {canGeneratePo && (
-        <div className="rounded-2xl border-2 border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-5 sm:p-6 text-white shadow-md">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/30 border border-emerald-400/40 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-emerald-200">
-                <Award className="h-3 w-3 text-emerald-300" /> Supplier Accepted Contract Award
-              </div>
-              <h2 className="text-lg sm:text-xl font-black text-white">
-                Supplier Accepted Award — Ready to Generate Purchase Order
-              </h2>
-              <p className="text-xs sm:text-sm font-medium text-blue-100 max-w-2xl leading-relaxed">
-                <strong className="text-white">{winningParticipant?.sellerOrgName || highlightedParticipant?.sellerOrgName}</strong> has formally accepted the contract award offer. Generate the official Purchase Order to initiate fulfillment and delivery tracking.
-              </p>
-            </div>
-            <div className="shrink-0">
-              <Button
-                onClick={() => {
-                  setSelectedParticipantForAward(winningParticipant || highlightedParticipant);
-                  setAwardActionType('generate_po');
-                }}
-                className="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs uppercase tracking-wider h-11 px-6 shadow-lg border border-emerald-300 gap-2 cursor-pointer transition-transform active:scale-95"
-                aria-label="Generate official Purchase Order"
-              >
-                <Receipt className="h-4 w-4" /> Generate Purchase Order (PO)
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Buyer View: Award Offered, Waiting for Seller Acceptance */}
-      {isManager && isAwardOffered && !isAwardAccepted && (
-        <div className="rounded-2xl border border-amber-300 bg-amber-50/80 p-5 shadow-sm">
-          <div className="flex items-center gap-3.5">
-            <div className="h-10 w-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm">
-              <Clock className="h-5 w-5" />
-            </div>
-            <div>
-              <h3 className="text-sm sm:text-base font-black text-amber-950">
-                Contract Award Offered — Awaiting Supplier Formal Acceptance
-              </h3>
-              <p className="text-xs font-semibold text-amber-900/90 mt-0.5">
-                You have issued the award offer to <strong className="font-bold">{winningParticipant?.sellerOrgName || highlightedParticipant?.sellerOrgName}</strong>. As soon as the supplier confirms acceptance, the option to generate the official Purchase Order will unlock automatically.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* 3. Executive KPI Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3" role="region" aria-label="Auction Key Performance Indicators">
@@ -618,61 +474,105 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
         </div>
       </div>
 
-      {/* 4. Evaluation Spotlight Card: Discretionary Award & Standing Notice */}
+      {/* 4. Unified Evaluation & Contract Award Action Card */}
       {highlightedParticipant && (
-        <div className={`rounded-2xl border-2 p-5 sm:p-6 shadow-sm ${
+        <div className={`rounded-2xl border-2 p-4 sm:p-5 shadow-2xs ${
           isAwardConcluded
-            ? 'border-emerald-200 bg-gradient-to-r from-emerald-50/70 via-teal-50/30 to-white'
-            : 'border-indigo-200 bg-gradient-to-r from-indigo-50/70 via-blue-50/30 to-white'
+            ? 'border-emerald-300 bg-gradient-to-r from-emerald-50/80 via-teal-50/40 to-white'
+            : isAwardAccepted
+            ? 'border-indigo-300 bg-gradient-to-r from-indigo-50/80 via-blue-50/40 to-white'
+            : isAwardOffered
+            ? 'border-amber-300 bg-gradient-to-r from-amber-50/80 via-orange-50/30 to-white'
+            : 'border-slate-250 bg-gradient-to-r from-slate-50/80 via-blue-50/30 to-white'
         }`}>
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-start gap-4">
-              <div className={`h-12 w-12 rounded-2xl text-white flex items-center justify-center shrink-0 shadow-sm ${
-                isAwardConcluded ? 'bg-emerald-600' : 'bg-indigo-600'
+            <div className="flex items-start gap-3.5">
+              <div className={`h-11 w-11 rounded-xl text-white flex items-center justify-center shrink-0 shadow-2xs ${
+                isAwardConcluded || isAwardAccepted
+                  ? 'bg-emerald-600'
+                  : isAwardOffered
+                  ? 'bg-amber-500'
+                  : 'bg-indigo-600'
               }`}>
-                {isAwardConcluded ? <ShieldCheck className="h-6 w-6" /> : <Award className="h-6 w-6" />}
+                {isAwardConcluded || isAwardAccepted ? (
+                  <CheckCircle2 className="h-5 w-5" />
+                ) : isAwardOffered ? (
+                  <Clock className="h-5 w-5" />
+                ) : (
+                  <Trophy className="h-5 w-5 text-amber-300" />
+                )}
               </div>
+
               <div className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className={`text-xs font-black uppercase tracking-wider ${
-                    isAwardConcluded ? 'text-emerald-900' : 'text-indigo-900'
+                  <span className={`text-[10.5px] font-black uppercase tracking-wider ${
+                    isAwardConcluded
+                      ? 'text-emerald-900'
+                      : isAwardAccepted
+                      ? 'text-indigo-900'
+                      : isAwardOffered
+                      ? 'text-amber-900'
+                      : 'text-indigo-900'
                   }`}>
-                    {isAwardConcluded ? 'Contract Awarded Supplier' : 'Lowest Commercial Offer (L1 Benchmark)'}
+                    {isAwardConcluded
+                      ? 'Contract Awarded Supplier'
+                      : isAwardAccepted
+                      ? 'Award Accepted — Ready for Purchase Order'
+                      : isAwardOffered
+                      ? 'Contract Award Offered — Awaiting Supplier Formal Acceptance'
+                      : 'Lowest Commercial Offer (L1 Benchmark)'}
                   </span>
+
                   {highlightedParticipant.isCurrentViewer && (
-                    <span className="px-2 py-0.5 text-[10px] font-black uppercase rounded-full bg-blue-600 text-white shadow-sm">
+                    <span className="px-2 py-0.5 text-[9.5px] font-black uppercase rounded-full bg-blue-600 text-white shadow-2xs">
                       Your Organization
                     </span>
                   )}
+
                   {isAwardConcluded && (highlightedParticipant.currentRank || 1) !== 1 && (
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                    <span className="px-2 py-0.5 text-[9.5px] font-bold uppercase rounded-full bg-amber-100 text-amber-900 border border-amber-300">
                       Discretionary Non-L1 Award
-                    </span>
-                  )}
-                  {!isAwardConcluded && (
-                    <span className="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-amber-100 text-amber-900 border border-amber-300">
-                      Award Discretionary
                     </span>
                   )}
                 </div>
 
-                <h2 className="text-lg sm:text-xl font-black text-slate-950">
+                <h2 className="text-base sm:text-lg font-black text-slate-950">
                   {highlightedParticipant.sellerOrgName}
                 </h2>
 
                 <p className="text-xs font-semibold text-slate-600">
-                  {isAwardConcluded ? 'Awarded Contract Amount: ' : 'Final Bid Amount: '}
-                  <span className="font-black text-emerald-700">{formatCurrency(highlightedParticipant.lastBidAmount || 0)}</span>
-                  {' · '}{isAwardConcluded ? 'Auction Standings: ' : 'Rank: '}
-                  <span className="font-black text-slate-900">L{highlightedParticipant.currentRank || 1}</span>
+                  {isAwardConcluded || isAwardAccepted ? 'Contract Amount: ' : 'Final Bid Amount: '}
+                  <span className="font-black text-emerald-700 font-mono">
+                    {formatCurrency(highlightedParticipant.lastBidAmount || 0)}
+                  </span>
+                  {' · '}Rank: <span className="font-bold text-slate-900">L{highlightedParticipant.currentRank || 1}</span>
                 </p>
+
+                {/* Contextual Status Messages without duplication */}
+                {isManager && isAwardOffered && !isAwardAccepted && (
+                  <p className="text-xs font-medium text-amber-900/90 pt-0.5">
+                    Award offer has been issued to <strong>{highlightedParticipant.sellerOrgName}</strong>. As soon as the supplier confirms formal acceptance, Purchase Order generation will unlock.
+                  </p>
+                )}
+
+                {canGeneratePo && (
+                  <p className="text-xs font-medium text-indigo-900/90 pt-0.5">
+                    <strong>{highlightedParticipant.sellerOrgName}</strong> has formally accepted the contract award offer. Generate the official Purchase Order to initiate fulfillment.
+                  </p>
+                )}
+
+                {isWinningSeller && isAwardAccepted && !purchaseOrder && (
+                  <p className="text-xs font-medium text-indigo-900/90 pt-0.5">
+                    You have formally accepted the contract award. The buyer is finalizing the official Purchase Order and you will be notified upon issuance.
+                  </p>
+                )}
 
                 {/* Non-L1 Justification Note when awarded */}
                 {isAwardConcluded && auction?.overrideReason && (
-                  <div className="mt-2 p-3 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-950">
-                    <div className="font-black flex items-center gap-1.5 mb-0.5 text-amber-900 text-[11px] uppercase tracking-wide">
-                      <AlertTriangle className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                      Recorded Procurement Policy Justification:
+                  <div className="mt-1.5 p-2.5 rounded-xl bg-amber-50/90 border border-amber-200 text-xs text-amber-950">
+                    <div className="font-black flex items-center gap-1.5 mb-0.5 text-amber-900 text-[10.5px] uppercase tracking-wide">
+                      <AlertTriangle className="h-3 w-3 text-amber-600 shrink-0" />
+                      Recorded Policy Justification:
                     </div>
                     <p className="font-medium text-amber-900 text-xs leading-relaxed">{auction.overrideReason}</p>
                   </div>
@@ -680,8 +580,8 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
 
                 {/* Linked Purchase Order Info & Quick Navigation */}
                 {purchaseOrder && (
-                  <div className="mt-3 flex flex-wrap items-center gap-2.5 pt-1">
-                    <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono font-bold bg-emerald-100 text-emerald-950 border border-emerald-300 shadow-xs">
+                  <div className="mt-2 flex flex-wrap items-center gap-2 pt-0.5">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-mono font-bold bg-emerald-100 text-emerald-950 border border-emerald-300">
                       <Receipt className="h-3.5 w-3.5 text-emerald-700" />
                       PO: {purchaseOrder.poNumber}
                     </span>
@@ -696,37 +596,74 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                   </div>
                 )}
 
-                {/* Important Procurement Discretion Notice */}
-                {!isAwardConcluded && (
-                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed pt-1">
+                {/* Policy Notice when pending offer */}
+                {!isAwardOffered && !isAwardAccepted && !isAwardConcluded && !canAcceptAward && (
+                  <p className="text-[11px] text-slate-500 font-medium leading-relaxed pt-0.5">
                     <Info className="inline h-3.5 w-3.5 text-blue-600 mr-1 -mt-0.5" />
-                    <strong>Procurement Policy Note:</strong> In reverse auctions, awarding to L1 is not mandatory. The buyer possesses discretionary authority to evaluate technical capability, delivery timelines, capacity, or enforce MSE purchase preference before formal contract allocation.
+                    <strong>Procurement Discretion:</strong> Buyers may award contract to L1 or exercise policy preference (e.g. MSE price match) with written justification.
                   </p>
                 )}
               </div>
             </div>
 
-            {canOfferAward && (
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-2 shrink-0 self-start sm:self-center">
+              {canOfferAward && (
                 <Button
                   onClick={() => {
                     setSelectedParticipantForAward(highlightedParticipant);
                     setIsPriceMatchMode(false);
                     setAwardActionType('recommend');
                   }}
-                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-xs uppercase tracking-wider px-5 py-2.5 shadow-sm flex items-center gap-1.5 transition-transform active:scale-95"
+                  className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs uppercase tracking-wider px-4 py-2 shadow-2xs flex items-center gap-1.5 transition-transform active:scale-95"
                 >
-                  <Award className="h-4 w-4" /> Issue Contract Award Offer (L1)
+                  <Award className="h-4 w-4" /> Issue Award Offer (L1)
                 </Button>
-              </div>
-            )}
-            {isAwardAccepted && !purchaseOrder && (
-              <div className="flex flex-wrap items-center gap-2 self-start sm:self-center shrink-0">
-                <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-emerald-100 text-emerald-950 font-black text-xs border border-emerald-300 shadow-xs">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-700" /> Award Accepted (PO Issuance Pending)
-                </span>
-              </div>
-            )}
+              )}
+
+              {canGeneratePo && (
+                <Button
+                  onClick={() => {
+                    setSelectedParticipantForAward(winningParticipant || highlightedParticipant);
+                    setAwardActionType('generate_po');
+                  }}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider h-9 px-4 rounded-xl shadow-2xs border border-emerald-400 gap-1.5 cursor-pointer"
+                  aria-label="Generate official Purchase Order"
+                >
+                  <Receipt className="h-4 w-4" /> Generate Purchase Order (PO)
+                </Button>
+              )}
+
+              {canAcceptAward && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    onClick={() => acceptAwardMutation.mutate()}
+                    disabled={acceptAwardMutation.isPending || declineAwardMutation.isPending}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs uppercase tracking-wider h-9 px-4 rounded-xl shadow-2xs"
+                    aria-label="Formally accept contract award offer"
+                  >
+                    {acceptAwardMutation.isPending ? (
+                      <>
+                        <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Accepting…
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Accept Contract Award
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowDeclineModal(true)}
+                    disabled={acceptAwardMutation.isPending || declineAwardMutation.isPending}
+                    className="border-slate-300 text-slate-700 hover:bg-slate-100 font-bold text-xs h-9 px-3 rounded-xl"
+                    aria-label="Decline contract award offer"
+                  >
+                    <X className="mr-1.5 h-3.5 w-3.5" /> Decline
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

@@ -4705,6 +4705,8 @@ export interface ProcurementDetailUnifiedViewProps {
 
   lifecycleStage?: string;
   rawBid?: any;
+  purchaseOrders?: any[];
+  activeOrder?: any;
   quantity?: number | string;
   unit?: string;
 
@@ -4718,7 +4720,6 @@ export interface ProcurementDetailUnifiedViewProps {
   termsAndConditions?: any;
   eligibilityCriteria?: any;
   utilization?: any;
-  purchaseOrders?: any[];
 }
 
 export type ProcurementDetailTab =
@@ -5026,6 +5027,39 @@ export function ProcurementDetailUnifiedView(
   const [isSubmittingAward, setIsSubmittingAward] = useState(false);
   const [isAcceptingPO, setIsAcceptingPO] = useState(false);
 
+  const linkedAuctionQuery = useQuery({
+    queryKey: ["linked-reverse-auction", targetId],
+    queryFn: () => reverseAuctionApi.getByProcurement(targetId),
+    staleTime: 30000,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      const status = String(
+        data?.statusEnum || data?.status || "",
+      ).toUpperCase();
+      return status === "LIVE" ? 3000 : false;
+    },
+    enabled: Boolean(targetId) && !props.linkedAuction,
+  });
+  const linkedAuction = props.linkedAuction ?? linkedAuctionQuery.data;
+
+  const currentUserId = currentUser?.id ? String(currentUser.id) : "";
+  const currentOrgId = String(
+    currentUser?.organizationId ||
+      currentUser?.organization?.id ||
+      currentUser?.sellerProfile?.id ||
+      currentUser?.sellerProfile?.organizationId ||
+      "",
+  );
+
+  // Dedicated seller awards query to capture issued awards even if omitted from generalized bid data
+  const { data: sellerAwardsData } = useQuery({
+    queryKey: ["seller-pending-awards", currentUser?.id],
+    queryFn: () => getApi<any>("/api/seller/awards"),
+    enabled: !isBuyerSide && Boolean(currentUser?.id),
+    staleTime: 10_000,
+  });
+
   const { data: fallbackBidData } = useQuery({
     queryKey: ["procurement-detail-fallback-bid", targetId],
     queryFn: async () => {
@@ -5054,21 +5088,12 @@ export function ProcurementDetailUnifiedView(
           ? fallbackBidData.participations
           : [];
 
-  const currentUserId = currentUser?.id ? String(currentUser.id) : "";
-  const currentOrgId = String(
-    currentUser?.organizationId ||
-      currentUser?.organization?.id ||
-      currentUser?.sellerProfile?.id ||
-      currentUser?.sellerProfile?.organizationId ||
-      "",
-  );
-
   const myParticipation = React.useMemo(() => {
     if (isBuyerSide || !currentUser || (!currentUserId && !currentOrgId)) return null;
     return rawParticipations.find(
       (p: any) => {
-        const pUserId = p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id;
-        const pOrgId = p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId || p.sellerOrgId;
+        const pUserId = p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id || p.vendorId || p.supplierId;
+        const pOrgId = p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId || p.sellerOrgId || p.organizationId;
         const pProfileId = p.sellerProfileId || p.sellerId;
         const userProfileId = currentUser.sellerProfile?.id;
         const userProfileOrgId = currentUser.sellerProfile?.organizationId;
@@ -5103,8 +5128,8 @@ export function ProcurementDetailUnifiedView(
     }
 
     // Strict ownership verification: must belong to the active seller
-    const respUserId = props.ownResponse.sellerUserId || props.ownResponse.sellerId || props.ownResponse.userId || props.ownResponse.seller?.id;
-    const respOrgId = props.ownResponse.sellerOrganizationId || props.ownResponse.organizationId || props.ownResponse.seller?.organizationId;
+    const respUserId = props.ownResponse.sellerUserId || props.ownResponse.sellerId || props.ownResponse.userId || props.ownResponse.seller?.id || props.ownResponse.vendorId;
+    const respOrgId = props.ownResponse.sellerOrganizationId || props.ownResponse.organizationId || props.ownResponse.seller?.organizationId || props.ownResponse.sellerOrgId;
     const matchesUser = Boolean(currentUserId && respUserId && String(respUserId) === currentUserId);
     const matchesOrg = Boolean(currentOrgId && respOrgId && String(respOrgId) === currentOrgId);
     if (!matchesUser && !matchesOrg && props.ownResponse._isFromUserParticipation !== true) {
@@ -5116,8 +5141,8 @@ export function ProcurementDetailUnifiedView(
 
   const verifiedOwnParticipation = React.useMemo(() => {
     if (!props.ownParticipation || isBuyerSide || !currentUser) return null;
-    const pUserId = props.ownParticipation.sellerId || props.ownParticipation.sellerUserId || props.ownParticipation.seller?.id;
-    const pOrgId = props.ownParticipation.organizationId || props.ownParticipation.sellerOrganizationId || props.ownParticipation.seller?.organizationId;
+    const pUserId = props.ownParticipation.sellerId || props.ownParticipation.sellerUserId || props.ownParticipation.seller?.id || props.ownParticipation.vendorId || props.ownParticipation.supplierId;
+    const pOrgId = props.ownParticipation.organizationId || props.ownParticipation.sellerOrganizationId || props.ownParticipation.seller?.organizationId || props.ownParticipation.sellerOrgId;
     const matchesUser = Boolean(currentUserId && pUserId && String(pUserId) === currentUserId);
     const matchesOrg = Boolean(currentOrgId && pOrgId && String(pOrgId) === currentOrgId);
     if (!matchesUser && !matchesOrg && props.ownParticipation._isFromUserParticipation !== true) {
@@ -5132,29 +5157,120 @@ export function ProcurementDetailUnifiedView(
     effectiveMyParticipation || (isBuyerSide ? props.hasSubmittedProposal : false)
   );
 
-  const rawAwards: any[] = Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0
-    ? props.rawBid.awards
-    : Array.isArray(props.awards) && props.awards.length > 0
-      ? props.awards
-      : Array.isArray((props as any)?.awards) && (props as any).awards.length > 0
-        ? (props as any).awards
-        : Array.isArray(fallbackBidData?.awards) && fallbackBidData.awards.length > 0
-          ? fallbackBidData.awards
-          : [];
+  const rawAwards: any[] = React.useMemo(() => {
+    const list: any[] = [];
+    if (Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0) {
+      list.push(...props.rawBid.awards);
+    }
+    if (Array.isArray(props.awards) && props.awards.length > 0) {
+      list.push(...props.awards);
+    }
+    if (Array.isArray((props as any)?.awards) && (props as any).awards.length > 0) {
+      list.push(...(props as any).awards);
+    }
+    if (Array.isArray(fallbackBidData?.awards) && fallbackBidData.awards.length > 0) {
+      list.push(...fallbackBidData.awards);
+    }
+    if (Array.isArray(props.ownParticipation?.awards) && props.ownParticipation.awards.length > 0) {
+      list.push(...props.ownParticipation.awards);
+    }
+    if (Array.isArray(myParticipation?.awards) && myParticipation.awards.length > 0) {
+      list.push(...myParticipation.awards);
+    }
+    if (props.ownParticipation?.award) {
+      list.push(props.ownParticipation.award);
+    }
+    if (myParticipation?.award) {
+      list.push(myParticipation.award);
+    }
+
+    // Incorporate awards from seller-specific awards endpoint
+    const sellerAwardsList = Array.isArray(sellerAwardsData?.awards)
+      ? sellerAwardsData.awards
+      : Array.isArray(sellerAwardsData)
+        ? sellerAwardsData
+        : [];
+    for (const sa of sellerAwardsList) {
+      if (
+        String(sa.bidId) === String(targetId) ||
+        String(sa.bidNumber || '').toLowerCase() === String(targetId).toLowerCase() ||
+        String(sa.bidNumber || '').toLowerCase() === String(props.displayId || '').toLowerCase() ||
+        String(sa.bidId) === String(props.id) ||
+        (props.rawBid?.id && Number(sa.bidId) === Number(props.rawBid.id)) ||
+        (props.rawBid?.bidNumber && String(sa.bidNumber || '').toLowerCase() === String(props.rawBid.bidNumber).toLowerCase())
+      ) {
+        list.push(sa);
+      }
+    }
+
+    // Synthesize reverse auction award if linkedAuction has winner/award status
+    if (
+      linkedAuction &&
+      ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED', 'AWARD_ACCEPTED'].includes(
+        String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
+      )
+    ) {
+      const winnerUserId = linkedAuction.winnerSellerId || linkedAuction.winnerSeller?.id || linkedAuction.lowestBidderId;
+      const winnerOrgId = linkedAuction.winningSellerOrgId || linkedAuction.winnerSeller?.organizationId;
+      if (winnerUserId || winnerOrgId) {
+        list.push({
+          id: linkedAuction.id,
+          bidId: linkedAuction.linkedBidId || targetId,
+          sellerId: winnerUserId,
+          sellerUserId: winnerUserId,
+          awardedSellerId: winnerUserId,
+          sellerOrgId: winnerOrgId,
+          sellerOrganizationId: winnerOrgId,
+          awardedAmount: linkedAuction.winningBidAmount || linkedAuction.currentLowestBid || linkedAuction.startPrice,
+          awardStatus: String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ? 'ACCEPTED' : 'OFFERED',
+          isReverseAuctionAward: true,
+          linkedAuctionId: linkedAuction.id,
+          remarks: 'Reverse Auction Award'
+        });
+      }
+    }
+
+    // De-duplicate by unique award identifier
+    const map = new Map<string, any>();
+    for (const item of list) {
+      if (!item) continue;
+      const key = String(item.id || `${item.bidId || targetId}-${item.sellerId || item.participationId || 'single'}`);
+      if (!map.has(key)) {
+        map.set(key, item);
+      }
+    }
+    return Array.from(map.values());
+  }, [
+    props.rawBid?.awards,
+    props.awards,
+    (props as any)?.awards,
+    fallbackBidData?.awards,
+    props.ownParticipation?.awards,
+    props.ownParticipation?.award,
+    myParticipation?.awards,
+    myParticipation?.award,
+    sellerAwardsData,
+    linkedAuction,
+    targetId,
+    props.displayId,
+    props.id,
+    props.rawBid?.id,
+    props.rawBid?.bidNumber
+  ]);
 
   const myAward = !isBuyerSide
     ? rawAwards.find((a: any) => {
         const aSellerId = String(
-          a.awardedSellerId || a.sellerId || a.seller?.id || a.participation?.sellerId || "",
+          a.awardedSellerId || a.sellerId || a.sellerUserId || a.vendorId || a.supplierId || a.seller?.id || a.seller?.userId || a.participation?.sellerId || a.participation?.sellerUserId || "",
         );
         const aOrgId = String(
-          a.seller?.organizationId || a.participation?.sellerOrganizationId || "",
+          a.sellerOrgId || a.sellerOrganizationId || a.organizationId || a.seller?.organizationId || a.seller?.sellerProfile?.organizationId || a.participation?.sellerOrganizationId || a.participation?.sellerOrgId || a.participation?.organizationId || "",
         );
         const aPartId = a.participationId || a.participation?.id;
         const myPartId = myParticipation?.id || effectiveMyParticipation?.id || props.ownParticipation?.id;
         return (
-          (aSellerId && (aSellerId === currentUserId || aSellerId === currentOrgId)) ||
-          (aOrgId && aOrgId === currentOrgId) ||
+          (currentUserId && aSellerId && (aSellerId === currentUserId || aSellerId === currentOrgId)) ||
+          (currentOrgId && (aSellerId === currentOrgId || (aOrgId && aOrgId === currentOrgId))) ||
           (myPartId && aPartId && Number(aPartId) === Number(myPartId))
         );
       })
@@ -5164,10 +5280,11 @@ export function ProcurementDetailUnifiedView(
     myAward ||
     rawAwards.find(
       (a: any) =>
-        a.awardStatus === "OFFERED" ||
-        a.awardStatus === "ACCEPTED" ||
-        a.awardStatus === "RECOMMENDED" ||
-        a.counterOfferStatus === "PENDING",
+        ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED", "AWARDED", "AWARD_OFFERED", "PENDING", "PENDING_ACCEPTANCE", "ISSUED", "ACCEPTED", "AWARD_ACCEPTED"].includes(
+          String(a.awardStatus || a.status || "").toUpperCase()
+        ) ||
+        a.counterOfferStatus === "PENDING" ||
+        a.counterOfferStatus === "PENDING_SUPPLIER",
     ) ||
     rawAwards[0] ||
     null;
@@ -5185,33 +5302,71 @@ export function ProcurementDetailUnifiedView(
   }, [rawActiveAward, locallyAcceptedAwardIds, targetId]);
 
   const isAwardedToMe = Boolean(
-    activeAward &&
-    !isBuyerSide &&
-    ((activeAward.awardedSellerId &&
-      (String(activeAward.awardedSellerId) === currentUserId ||
-        String(activeAward.awardedSellerId) === currentOrgId)) ||
-      (activeAward.sellerId &&
-        (String(activeAward.sellerId) === currentUserId ||
-          String(activeAward.sellerId) === currentOrgId)) ||
-      (activeAward.seller?.id &&
-        (String(activeAward.seller.id) === currentUserId ||
-          String(activeAward.seller.id) === currentOrgId)) ||
-      (activeAward.seller?.organizationId &&
-        String(activeAward.seller.organizationId) === currentOrgId) ||
-      (activeAward.participation?.sellerId &&
-        (String(activeAward.participation.sellerId) === currentUserId ||
-          String(activeAward.participation.sellerId) === currentOrgId)) ||
-      (activeAward.participation?.sellerOrganizationId &&
-        String(activeAward.participation.sellerOrganizationId) === currentOrgId) ||
-      (myParticipation?.id &&
-        activeAward.participationId &&
-        Number(activeAward.participationId) === Number(myParticipation.id)) ||
-      (effectiveMyParticipation?.id &&
-        activeAward.participationId &&
-        Number(activeAward.participationId) === Number(effectiveMyParticipation.id)) ||
-      (props.ownParticipation?.id &&
-        activeAward.participationId &&
-        Number(activeAward.participationId) === Number(props.ownParticipation.id))),
+    !isBuyerSide && (
+      Boolean(myAward) ||
+      (activeAward && (
+        (activeAward.awardedSellerId &&
+          (String(activeAward.awardedSellerId) === currentUserId ||
+            String(activeAward.awardedSellerId) === currentOrgId)) ||
+        (activeAward.sellerId &&
+          (String(activeAward.sellerId) === currentUserId ||
+            String(activeAward.sellerId) === currentOrgId)) ||
+        (activeAward.sellerUserId &&
+          (String(activeAward.sellerUserId) === currentUserId ||
+            String(activeAward.sellerUserId) === currentOrgId)) ||
+        (activeAward.vendorId &&
+          (String(activeAward.vendorId) === currentUserId ||
+            String(activeAward.vendorId) === currentOrgId)) ||
+        (activeAward.seller?.id &&
+          (String(activeAward.seller.id) === currentUserId ||
+            String(activeAward.seller.id) === currentOrgId)) ||
+        (activeAward.seller?.userId &&
+          (String(activeAward.seller.userId) === currentUserId ||
+            String(activeAward.seller.userId) === currentOrgId)) ||
+        (activeAward.seller?.organizationId &&
+          String(activeAward.seller.organizationId) === currentOrgId) ||
+        (activeAward.sellerOrgId &&
+          String(activeAward.sellerOrgId) === currentOrgId) ||
+        (activeAward.sellerOrganizationId &&
+          String(activeAward.sellerOrganizationId) === currentOrgId) ||
+        (activeAward.organizationId &&
+          String(activeAward.organizationId) === currentOrgId) ||
+        (activeAward.participation?.sellerId &&
+          (String(activeAward.participation.sellerId) === currentUserId ||
+            String(activeAward.participation.sellerId) === currentOrgId)) ||
+        (activeAward.participation?.sellerUserId &&
+          (String(activeAward.participation.sellerUserId) === currentUserId ||
+            String(activeAward.participation.sellerUserId) === currentOrgId)) ||
+        (activeAward.participation?.sellerOrgId &&
+          String(activeAward.participation.sellerOrgId) === currentOrgId) ||
+        (activeAward.participation?.sellerOrganizationId &&
+          String(activeAward.participation.sellerOrganizationId) === currentOrgId) ||
+        (activeAward.participation?.organizationId &&
+          String(activeAward.participation.organizationId) === currentOrgId) ||
+        (myParticipation?.id &&
+          activeAward.participationId &&
+          Number(activeAward.participationId) === Number(myParticipation.id)) ||
+        (effectiveMyParticipation?.id &&
+          activeAward.participationId &&
+          Number(activeAward.participationId) === Number(effectiveMyParticipation.id)) ||
+        (props.ownParticipation?.id &&
+          activeAward.participationId &&
+          Number(activeAward.participationId) === Number(props.ownParticipation.id))
+      )) ||
+      (linkedAuction &&
+        ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED', 'AWARD_ACCEPTED'].includes(
+          String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
+        ) && (
+          (linkedAuction.winnerSellerId && (String(linkedAuction.winnerSellerId) === currentUserId || String(linkedAuction.winnerSellerId) === currentOrgId)) ||
+          (linkedAuction.lowestBidderId && (String(linkedAuction.lowestBidderId) === currentUserId || String(linkedAuction.lowestBidderId) === currentOrgId)) ||
+          (linkedAuction.winningSellerOrgId && String(linkedAuction.winningSellerOrgId) === currentOrgId)
+        )
+      ) ||
+      (['AWARDED', 'AWARD_OFFERED', 'AWARD_ACCEPTED'].includes(String(props.status || props.rawBid?.status || '').toUpperCase()) &&
+        (isSellerParticipated || props.hasSubmittedProposal) &&
+        (rawAwards.length <= 1)
+      )
+    )
   );
 
   const rawOrders: any[] = Array.isArray(props.rawBid?.purchaseOrders)
@@ -5634,7 +5789,17 @@ export function ProcurementDetailUnifiedView(
   const handleAcceptAward = async (awardId: string) => {
     try {
       setIsAcceptingAction(true);
-      await procurementBidApi.acceptAward(targetId, awardId);
+      const isReverseAuction =
+        activeAward?.isReverseAuctionAward ||
+        String(targetId).toUpperCase().startsWith("RA-") ||
+        (linkedAuction && String(activeAward?.id) === String(linkedAuction?.id));
+
+      if (isReverseAuction) {
+        const auctionIdToUse = linkedAuction?.id || targetId;
+        await postApi(`/api/reverse-auctions/${encodeURIComponent(String(auctionIdToUse))}/accept-award`, {});
+      } else {
+        await procurementBidApi.acceptAward(targetId, awardId);
+      }
       toast.success(
         "Bid award accepted! Buyer will now issue the Purchase Order.",
       );
@@ -5642,11 +5807,9 @@ export function ProcurementDetailUnifiedView(
       setLocallyAcceptedAwardIds((prev) => new Set(prev).add(effId).add(String(targetId)));
       window.dispatchEvent(new CustomEvent("award:accepted", { detail: { bidId: targetId, awardId: effId } }));
       window.dispatchEvent(new CustomEvent("orders:updated", { detail: { bidId: targetId, awardId: effId } }));
+      window.dispatchEvent(new CustomEvent("awards:updated", { detail: { bidId: targetId, awardId: effId } }));
       window.dispatchEvent(new CustomEvent("notifications:updated"));
-      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
-      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
-      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
-      await queryClient.invalidateQueries({ queryKey: ["procurement-active-order"] });
+      await queryClient.invalidateQueries();
     } catch (err: any) {
       toast.error(err.message || "Failed to accept award.");
     } finally {
@@ -5662,11 +5825,23 @@ export function ProcurementDetailUnifiedView(
     }
     try {
       setDeclineModal((prev) => ({ ...prev, submitting: true }));
-      await procurementBidApi.declineAward(
-        targetId,
-        declineModal.awardId,
-        declineModal.reason.trim(),
-      );
+      const isReverseAuction =
+        activeAward?.isReverseAuctionAward ||
+        String(targetId).toUpperCase().startsWith("RA-") ||
+        (linkedAuction && String(declineModal.awardId) === String(linkedAuction?.id));
+
+      if (isReverseAuction) {
+        const auctionIdToUse = linkedAuction?.id || targetId;
+        await postApi(`/api/reverse-auctions/${encodeURIComponent(String(auctionIdToUse))}/decline-award`, {
+          reason: declineModal.reason.trim(),
+        });
+      } else {
+        await procurementBidApi.declineAward(
+          targetId,
+          declineModal.awardId,
+          declineModal.reason.trim(),
+        );
+      }
       toast.success("Award declined. Tender returned to evaluation.");
       setDeclineModal({
         show: false,
@@ -5675,10 +5850,10 @@ export function ProcurementDetailUnifiedView(
         reason: "",
         submitting: false,
       });
-      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
-      await queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
-      await queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
+      await queryClient.invalidateQueries();
       window.dispatchEvent(new CustomEvent("orders:updated"));
+      window.dispatchEvent(new CustomEvent("awards:updated"));
+      window.dispatchEvent(new CustomEvent("notifications:updated"));
     } catch (err: any) {
       toast.error(err.message || "Failed to decline award.");
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
@@ -5775,22 +5950,6 @@ export function ProcurementDetailUnifiedView(
       setDeclineModal((prev) => ({ ...prev, submitting: false }));
     }
   };
-
-  const linkedAuctionQuery = useQuery({
-    queryKey: ["linked-reverse-auction", targetId],
-    queryFn: () => reverseAuctionApi.getByProcurement(targetId),
-    staleTime: 30000,
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      if (!data) return false;
-      const status = String(
-        data?.statusEnum || data?.status || "",
-      ).toUpperCase();
-      return status === "LIVE" ? 3000 : false;
-    },
-    enabled: Boolean(targetId) && !props.linkedAuction,
-  });
-  const linkedAuction = props.linkedAuction ?? linkedAuctionQuery.data;
 
   const { data: fetchedParticipants } = useQuery({
     queryKey: ["buyer-unified-participations", props.procurementType, targetId],
@@ -10510,45 +10669,71 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             Boolean(activeAward) &&
-            ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED"].includes(
-              String(activeAward?.awardStatus || "").toUpperCase(),
+            ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED", "AWARDED", "AWARD_OFFERED", "PENDING", "PENDING_ACCEPTANCE", "ISSUED"].includes(
+              String(activeAward?.awardStatus || activeAward?.status || "").toUpperCase(),
             ) &&
-            activeAward?.counterOfferStatus !== "PENDING" && (
-              <div className="relative overflow-hidden rounded-xl border border-emerald-400 bg-gradient-to-r from-emerald-600 via-teal-600 to-[#12335f] p-3 sm:p-4 text-white shadow-md animate-fadeIn">
-                <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-1">
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-black/20 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider backdrop-blur-xs">
-                      <Trophy className="h-3 w-3 text-amber-300" />
-                      Bid Award Offered
+            activeAward?.counterOfferStatus !== "PENDING" &&
+            activeAward?.counterOfferStatus !== "PENDING_SUPPLIER" && (
+              <div
+                id="award-acceptance-section"
+                className="relative overflow-hidden rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-700 via-teal-700 to-[#12335f] p-4 sm:p-5 text-white shadow-lg animate-fadeIn"
+              >
+                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 border border-emerald-300/40 px-3 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 backdrop-blur-xs">
+                      <Trophy className="h-3.5 w-3.5 text-amber-300 animate-bounce" />
+                      Bid Award Issued — Formal Acceptance Required
                     </div>
-                    <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
-                      Congratulations! Your Organization has been Awarded the
-                      Contract
+                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white leading-snug">
+                      Congratulations! Your Organization has been Awarded the Contract
                     </h3>
-                    <p className="text-xs font-medium text-emerald-100 max-w-2xl">
-                      The Buyer has recommended and awarded this tender to your
-                      organization. Please formally accept the award to initiate
-                      official Purchase Order issuance.
+                    <p className="text-xs sm:text-sm font-medium text-emerald-100 max-w-2xl leading-relaxed">
+                      The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) has officially awarded this tender to your organization. Please review the award details below and formally accept or decline the contract award.
                     </p>
+                    
+                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
+                      <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
+                        <span className="text-emerald-200 font-semibold">Awarded Value: </span>
+                        <span className="font-extrabold text-white text-sm">
+                          {formatCurrency(Number(activeAward?.awardedAmount || activeAward?.amount || activeAward?.counterOfferAmount || props.estimatedValue || 0))}
+                        </span>
+                      </div>
+                      {activeAward?.id && (
+                        <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
+                          <span className="text-emerald-200 font-semibold">Award Ref: </span>
+                          <span className="font-bold text-white">
+                            {String(activeAward.id).startsWith('RA-') ? String(activeAward.id) : `AWD-${activeAward.id}`}
+                          </span>
+                        </div>
+                      )}
+                      {activeAward?.remarks && (
+                        <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
+                          <span className="text-emerald-200 font-semibold">Remarks: </span>
+                          <span className="font-medium text-emerald-100">
+                            {activeAward.remarks}
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                  <div className="flex flex-wrap items-center gap-3 shrink-0 pt-2 lg:pt-0">
                     <Button
                       type="button"
                       disabled={isAcceptingAction}
                       onClick={() =>
                         handleAcceptAward(String(activeAward?.id || ""))
                       }
-                      className="h-9 bg-white hover:bg-emerald-50 text-emerald-900 font-bold text-xs px-4 shadow-sm gap-1.5 rounded-lg cursor-pointer transition-transform active:scale-95"
+                      className="h-10 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs sm:text-sm px-5 shadow-md gap-2 rounded-xl cursor-pointer transition-transform active:scale-95"
                       aria-label="Formally accept contract award"
                     >
                       {isAcceptingAction ? (
                         <Loader2
-                          className="h-3.5 w-3.5 animate-spin text-emerald-600"
+                          className="h-4 w-4 animate-spin text-emerald-600"
                           aria-hidden="true"
                         />
                       ) : (
                         <CheckCircle2
-                          className="h-3.5 w-3.5 text-emerald-600"
+                          className="h-4 w-4 text-emerald-600"
                           aria-hidden="true"
                         />
                       )}
@@ -10566,10 +10751,10 @@ export function ProcurementDetailUnifiedView(
                           submitting: false,
                         })
                       }
-                      className="h-9 bg-black/30 hover:bg-black/50 text-white font-bold text-xs px-3.5 border border-white/30 gap-1.5 rounded-lg cursor-pointer"
+                      className="h-10 bg-black/30 hover:bg-black/50 text-white font-bold text-xs sm:text-sm px-4 border border-white/30 gap-1.5 rounded-xl cursor-pointer transition-colors"
                       aria-label="Decline contract award"
                     >
-                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      <XCircle className="h-4 w-4" aria-hidden="true" />
                       Decline Award
                     </Button>
                   </div>
@@ -10580,30 +10765,36 @@ export function ProcurementDetailUnifiedView(
           {/* Seller: Award Accepted — Awaiting Buyer Purchase Order Issuance */}
           {!isBuyerSide &&
             isAwardedToMe &&
-            activeAward?.awardStatus === "ACCEPTED" &&
+            Boolean(activeAward) &&
+            ["ACCEPTED", "AWARD_ACCEPTED"].includes(
+              String(activeAward?.awardStatus || activeAward?.status || "").toUpperCase()
+            ) &&
             !effectiveActiveOrder && (
-              <div className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-3 sm:p-3.5 shadow-2xs animate-fadeIn">
+              <div
+                id="award-acceptance-section"
+                className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-3.5 sm:p-4 shadow-sm animate-fadeIn"
+              >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex items-start gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
-                      <Clock className="h-4 w-4" />
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
+                      <Clock className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="inline-flex items-center gap-1 rounded-md bg-blue-100/80 border border-blue-200 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-blue-900 mb-1">
+                      <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-100/80 border border-blue-200 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-blue-900 mb-1">
                         <CheckCircle2 className="h-3 w-3 text-blue-700" />
                         Award Accepted
                       </div>
-                      <h4 className="text-xs sm:text-[13px] font-extrabold text-blue-950 leading-tight">
+                      <h4 className="text-sm sm:text-base font-extrabold text-blue-950 leading-tight">
                         Award Acceptance Confirmed — Awaiting Buyer&apos;s Purchase Order
                       </h4>
-                      <p className="text-[11px] sm:text-xs font-medium text-blue-800/90 mt-0.5 leading-snug">
+                      <p className="text-xs sm:text-[13px] font-medium text-blue-800/90 mt-0.5 leading-snug max-w-2xl">
                         You have formally accepted the contract award. The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) has been notified to generate and issue the official Purchase Order. You will review and accept the PO once issued.
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-300 px-3 py-1.5 text-xs font-bold text-blue-900 shadow-2xs">
-                      <Clock className="h-3.5 w-3.5 text-blue-600 animate-pulse" />
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-300 px-3.5 py-2 text-xs font-bold text-blue-900 shadow-2xs">
+                      <Clock className="h-4 w-4 text-blue-600 animate-pulse" />
                       Pending Buyer PO Release
                     </span>
                   </div>

@@ -437,6 +437,11 @@ export default function TenderDetailPage() {
       procurementLabel={tender.category?.includes('LIMITED') || tender.visibility === 'LIMITED' ? 'Limited Tender' : 'Open Tender'}
       id={tender.id}
       displayId={tenderIdString}
+      rawBid={tender}
+      awards={(tender as any).awards || []}
+      purchaseOrders={(tender as any).purchaseOrders || []}
+      activeOrder={(tender as any).activeOrder || null}
+      lifecycleStage={(tender as any).lifecycleStage}
       subject={title}
       status={tender.status || 'OPEN'}
       buyerName={tender.buyer?.buyerProfile?.contactPerson || tender.buyer?.name}

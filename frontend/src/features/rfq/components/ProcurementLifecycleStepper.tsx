@@ -587,6 +587,22 @@ export function ProcurementLifecycleStepper({
       case 2: {
         // Stage 2: Award & PO
         const poExists = Boolean(effectiveActiveOrder) || (purchaseOrders && purchaseOrders.length > 0);
+        const isAwardOfferedToSeller =
+          !isBuyer &&
+          Boolean(activeAward) &&
+          ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'].includes(
+            String(activeAward?.awardStatus || activeAward?.status || '').toUpperCase()
+          ) &&
+          activeAward?.counterOfferStatus !== 'PENDING' &&
+          activeAward?.counterOfferStatus !== 'PENDING_SUPPLIER';
+
+        const isAwardAcceptedBySeller =
+          !isBuyer &&
+          Boolean(activeAward) &&
+          ['ACCEPTED', 'AWARD_ACCEPTED'].includes(
+            String(activeAward?.awardStatus || activeAward?.status || '').toUpperCase()
+          );
+
         if (poExists) {
           return {
             hasAction: true,
@@ -598,10 +614,26 @@ export function ProcurementLifecycleStepper({
             },
             isPrimary: currentStageId === 2
           };
+        } else if (isAwardOfferedToSeller) {
+          return {
+            hasAction: true,
+            actionLabel: 'Accept Award Offer',
+            actionHint: 'Review and formally accept the contract award',
+            onClick: () => {
+              const el = document.getElementById('award-acceptance-section') || document.getElementById('procurement-action-banner');
+              if (el) el.scrollIntoView({ behavior: 'smooth' });
+            },
+            isPrimary: true
+          };
+        } else if (isAwardAcceptedBySeller) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Awaiting Buyer PO'
+          };
         } else {
           return {
             hasAction: false,
-            idleStatusText: currentStageId < 2 ? 'Pending Evaluation' : 'Pending PO Issue'
+            idleStatusText: currentStageId < 2 ? 'Pending Evaluation' : (isBuyer ? 'Pending PO Issue' : 'Pending PO Issue')
           };
         }
       }

@@ -828,6 +828,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         procurementLabel="Rate Contract"
         id={rcData.id || requirementId || requestId || 'RC'}
         displayId={contractNumber || String(rcData.id)}
+        rawBid={rcData || bid}
+        awards={(rcData as any).awards || bid?.awards || []}
+        purchaseOrders={contractData?.purchaseOrders || (rcData as any).purchaseOrders || bid?.purchaseOrders || []}
+        activeOrder={(rcData as any).activeOrder || bid?.activeOrder || null}
+        lifecycleStage={rcData.lifecycleStage || bid?.lifecycleStage}
         subject={subject}
         status={rcData.status || 'OPEN'}
         buyerName={contactName}
@@ -917,7 +922,6 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         terms={terms}
         contractDocument={contractDoc}
         utilization={contractData?.utilization || rcData?.utilization || null}
-        purchaseOrders={contractData?.purchaseOrders || rcData?.purchaseOrders || []}
       />
       {canCancel && (
         <CancelProcurementModal

@@ -279,6 +279,9 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       }
       utilization={(bid as any).utilization || (bid as any).contractData?.utilization}
       purchaseOrders={(bid as any).purchaseOrders || (bid as any).contractData?.purchaseOrders}
+      awards={(bid as any).awards || []}
+      activeOrder={(bid as any).activeOrder || null}
+      lifecycleStage={bid.lifecycleStage}
     />
   );
 }

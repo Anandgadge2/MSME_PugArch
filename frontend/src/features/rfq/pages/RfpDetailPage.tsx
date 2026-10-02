@@ -316,6 +316,12 @@ export default function RfpDetailPage({ initialData }: { initialData?: any } = {
         procurementLabel="Request for Proposal"
         id={bid.id || reqObj.id || requestId || 'RFP'}
         displayId={rfpNumber}
+        rawBid={bid}
+        awards={bid.awards || reqObj.awards || (Array.isArray(bid?.participations) ? bid.participations.flatMap((p: any) => p.awards || []) : []) || []}
+        purchaseOrders={bid.purchaseOrders || []}
+        activeOrder={bid.activeOrder || null}
+        lifecycleStage={bid.lifecycleStage || reqObj.lifecycleStage}
+        linkedAuction={bid.linkedAuction || reqObj.linkedAuction}
         subject={title}
         status={bid.status || reqObj.status || 'OPEN'}
         buyerName={resolvedContactPerson}
