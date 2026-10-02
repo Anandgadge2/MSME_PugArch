@@ -574,35 +574,6 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
     }
   ], [isBuyerOrAdmin, currentLowest]);
 
-  if (loading) return <LoadingState label="Loading live auction..." />;
-  if (summary.error) return <InlineError message={(summary.error as Error).message} onRetry={() => summary.refetch()} />;
-  if (!auction) return <EmptyState title="Auction not found" />;
-
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextAmount = Number(amount);
-    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
-      setLocalError('Please enter a valid positive bid amount');
-      return;
-    }
-    if (minNextBid > 0 && nextAmount > minNextBid) {
-      setLocalError(`Bid amount cannot exceed the permitted maximum of ${formatCurrency(minNextBid)}`);
-      return;
-    }
-    if (!acceptedTerms) {
-      setLocalError('Please accept the auction terms and bidding rules before placing a bid');
-      return;
-    }
-    setLocalError('');
-    setShowConfirmModal(true);
-  };
-
-  const confirmSubmit = () => {
-    const nextAmount = Number(amount);
-    setShowConfirmModal(false);
-    bid.mutate(nextAmount);
-  };
-
   // Process data for the real-time bid chart:
   // For initial baseline bids submitted at the same time, higher quotes come first so downward progression is accurately reflected.
   const sortedBidRows = useMemo(() => {
@@ -654,23 +625,57 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   // Compute padded Y-Axis domain to ensure curve and dots have vertical breathing room
   const { chartYMin, chartYMax } = useMemo(() => {
     if (chartData.length === 0) return { chartYMin: 0, chartYMax: 100 };
-    const amounts = chartData.map(d => d.amount);
-    if (startPrice > 0) amounts.push(startPrice);
-    if (currentLowest > 0) amounts.push(currentLowest);
+    const amounts = chartData
+      .map(d => Number(d.amount))
+      .filter(v => Number.isFinite(v) && v > 0);
+    if (Number.isFinite(startPrice) && startPrice > 0) amounts.push(startPrice);
+    if (Number.isFinite(currentLowest) && currentLowest > 0) amounts.push(currentLowest);
+    if (amounts.length === 0) return { chartYMin: 0, chartYMax: 100 };
     const minVal = Math.min(...amounts);
     const maxVal = Math.max(...amounts);
     const range = maxVal - minVal;
     const padding = range > 0 ? range * 0.15 : (minVal * 0.05 || 5000);
+    const yMin = Math.max(0, Math.floor(minVal - padding));
+    const yMax = Math.ceil(maxVal + padding);
     return {
-      chartYMin: Math.max(0, Math.floor(minVal - padding)),
-      chartYMax: Math.ceil(maxVal + padding),
+      chartYMin: Number.isFinite(yMin) ? yMin : 0,
+      chartYMax: Number.isFinite(yMax) && yMax > yMin ? yMax : (Number.isFinite(yMin) ? yMin + 1000 : 1000),
     };
   }, [chartData, startPrice, currentLowest]);
 
   // Determine if Start Price and L1 coincide closely to prevent overlapping ReferenceLine labels
   const startAndL1Same = useMemo(() => {
-    return startPrice > 0 && currentLowest > 0 && Math.abs(startPrice - currentLowest) < 1;
+    return Number.isFinite(startPrice) && startPrice > 0 && Number.isFinite(currentLowest) && currentLowest > 0 && Math.abs(startPrice - currentLowest) < 1;
   }, [startPrice, currentLowest]);
+
+  if (loading) return <LoadingState label="Loading live auction..." />;
+  if (summary.error) return <InlineError message={(summary.error as Error).message} onRetry={() => summary.refetch()} />;
+  if (!auction) return <EmptyState title="Auction not found" />;
+
+  const submit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const nextAmount = Number(amount);
+    if (!Number.isFinite(nextAmount) || nextAmount <= 0) {
+      setLocalError('Please enter a valid positive bid amount');
+      return;
+    }
+    if (minNextBid > 0 && nextAmount > minNextBid) {
+      setLocalError(`Bid amount cannot exceed the permitted maximum of ${formatCurrency(minNextBid)}`);
+      return;
+    }
+    if (!acceptedTerms) {
+      setLocalError('Please accept the auction terms and bidding rules before placing a bid');
+      return;
+    }
+    setLocalError('');
+    setShowConfirmModal(true);
+  };
+
+  const confirmSubmit = () => {
+    const nextAmount = Number(amount);
+    setShowConfirmModal(false);
+    bid.mutate(nextAmount);
+  };
 
   // Quick helper to fill amount
   const handleQuickFill = (targetAmt: number) => {
@@ -1032,11 +1037,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                     fontSize={10} 
                     tickLine={false} 
                     dy={6}
-                    tickFormatter={(val) => {
-                      const item = chartData[val - 1];
-                      if (!item) return `Bid #${val}`;
-                      if (chartData.length <= 4) return `Bid #${val} (${item.shortTime})`;
-                      return `Bid #${val}`;
+                    tickFormatter={(val: any) => {
+                      const idx = Number(val);
+                      if (!Number.isFinite(idx)) return String(val ?? '');
+                      const item = chartData[idx - 1];
+                      if (!item) return `Bid #${idx}`;
+                      if (chartData.length <= 4 && item.shortTime) return `Bid #${idx} (${item.shortTime})`;
+                      return `Bid #${idx}`;
                     }}
                   />
                   <YAxis 
@@ -1044,7 +1051,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                     fontSize={10} 
                     tickLine={false} 
                     domain={[chartYMin, chartYMax]}
-                    tickFormatter={(val) => val <= 0 ? '₹0' : `₹${val >= 100000 ? (val / 100000).toFixed(1) + 'L' : val.toLocaleString('en-IN')}`}
+                    tickFormatter={(val: any) => {
+                      const num = Number(val);
+                      if (!Number.isFinite(num) || num <= 0) return '₹0';
+                      if (num >= 100000) return `₹${(num / 100000).toFixed(1)}L`;
+                      return `₹${num.toLocaleString('en-IN')}`;
+                    }}
                     dx={-5}
                   />
                   
@@ -1056,7 +1068,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                       strokeDasharray="4 4" 
                       strokeWidth={1.5}
                       label={{ 
-                        value: `Start Benchmark: ₹${startPrice.toLocaleString('en-IN')}`, 
+                        value: `Start Benchmark: ${formatCurrency(startPrice)}`, 
                         position: 'top', 
                         fill: '#64748b', 
                         fontSize: 10, 
@@ -1073,7 +1085,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                       strokeDasharray="3 3" 
                       strokeWidth={1.5}
                       label={{ 
-                        value: `Current L1 Floor: ₹${currentLowest.toLocaleString('en-IN')}`, 
+                        value: `Current L1 Floor: ${formatCurrency(currentLowest)}`, 
                         position: 'bottom', 
                         fill: '#059669', 
                         fontSize: 10, 
@@ -1083,14 +1095,14 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   )}
 
                   {/* Single unified benchmark line when Start and L1 are identical */}
-                  {startAndL1Same && (
+                  {startAndL1Same && currentLowest > 0 && (
                     <ReferenceLine 
                       y={currentLowest} 
                       stroke="#059669" 
                       strokeDasharray="3 3" 
                       strokeWidth={1.5}
                       label={{ 
-                        value: `Opening & L1 Floor: ₹${currentLowest.toLocaleString('en-IN')}`, 
+                        value: `Opening & L1 Floor: ${formatCurrency(currentLowest)}`, 
                         position: 'top', 
                         fill: '#059669', 
                         fontSize: 10, 
@@ -1568,9 +1580,16 @@ function RuleItem({ label, value, className }: { label: string; value: string; c
 
 // Custom Tooltip for the Animated Area Chart
 function CustomChartTooltip({ active, payload }: any) {
-  if (active && payload && payload.length) {
-    const data = payload[0].payload;
+  if (active && Array.isArray(payload) && payload.length > 0) {
+    const data = payload[0]?.payload;
+    if (!data) return null;
+
     const isLead = data.rank === 1 || data.isLowest;
+    const dropPrev = Number(data.dropFromPrev || 0);
+    const dropPrevPct = Number(data.dropFromPrevPct || 0);
+    const dropStart = Number(data.dropFromStart || 0);
+    const dropStartPct = Number(data.dropFromStartPct || 0);
+    const amt = Number(data.amount || 0);
 
     return (
       <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-4 shadow-2xl backdrop-blur-md text-xs space-y-2.5 min-w-[240px] max-w-[300px] animate-in fade-in zoom-in-95 duration-150">
@@ -1578,10 +1597,10 @@ function CustomChartTooltip({ active, payload }: any) {
         <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-2">
           <div className="flex items-center gap-1.5">
             <span className="flex h-5 w-5 items-center justify-center rounded-md bg-slate-100 text-[10px] font-black text-slate-700">
-              #{data.bidNumber}
+              #{data.bidNumber || data.index || 1}
             </span>
             <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              of {data.totalBids} Bids
+              of {data.totalBids || 1} Bids
             </span>
           </div>
           <span className={cn(
@@ -1602,15 +1621,15 @@ function CustomChartTooltip({ active, payload }: any) {
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Commercial Offer</p>
           <div className="text-lg font-black font-mono text-slate-900 tracking-tight mt-0.5">
-            {formatCurrency(data.amount)}
+            {formatCurrency(amt)}
           </div>
           
           {/* Price drop pill */}
-          {data.dropFromPrev > 0 ? (
+          {dropPrev > 0 ? (
             <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70 mt-1">
               <TrendingDown className="h-3 w-3 shrink-0" />
-              <span>▼ {formatCurrency(data.dropFromPrev)}</span>
-              <span className="font-mono text-[10px] opacity-80">(-{data.dropFromPrevPct.toFixed(1)}%)</span>
+              <span>▼ {formatCurrency(dropPrev)}</span>
+              <span className="font-mono text-[10px] opacity-80">(-{dropPrevPct.toFixed(1)}%)</span>
             </div>
           ) : data.isFirstBid ? (
             <div className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1">
@@ -1628,18 +1647,18 @@ function CustomChartTooltip({ active, payload }: any) {
                 YOU (Your Org)
               </span>
             ) : (
-              <span className="font-bold text-slate-800 truncate max-w-[160px]" title={data.sellerOrgName || data.label}>
-                {data.sellerOrgName || data.label}
+              <span className="font-bold text-slate-800 truncate max-w-[160px]" title={data.sellerOrgName || data.label || 'Bidder'}>
+                {data.sellerOrgName || data.label || 'Bidder'}
               </span>
             )}
           </div>
 
           {/* Cumulative Drop vs Start Price */}
-          {data.dropFromStart > 0 && (
+          {dropStart > 0 && (
             <div className="flex items-center justify-between text-[10.5px]">
               <span className="text-slate-400 font-medium">Drop vs Start:</span>
               <span className="font-mono font-bold text-emerald-600">
-                -{formatCurrency(data.dropFromStart)} ({data.dropFromStartPct.toFixed(1)}%)
+                -{formatCurrency(dropStart)} ({dropStartPct.toFixed(1)}%)
               </span>
             </div>
           )}
@@ -1650,7 +1669,7 @@ function CustomChartTooltip({ active, payload }: any) {
           <span className="flex items-center gap-1">
             <Clock3 className="h-3 w-3 text-slate-400" /> Time
           </span>
-          <span className="font-semibold text-slate-700 font-mono">{data.fullTime || data.time}</span>
+          <span className="font-semibold text-slate-700 font-mono">{data.fullTime || data.time || '—'}</span>
         </div>
       </div>
     );
@@ -1661,11 +1680,13 @@ function CustomChartTooltip({ active, payload }: any) {
 // Custom Dot for AreaChart: Highlights user's own bids, lowest point, and competitors
 function CustomizedDot(props: any) {
   const { cx, cy, payload } = props;
-  if (!cx || !cy) return null;
+  if (!Number.isFinite(cx) || !Number.isFinite(cy)) return null;
+
+  const key = `dot-${payload?.index || payload?.bidNumber || 'default'}`;
 
   if (payload?.isMyBid) {
     return (
-      <g key={`dot-my-${payload.index}`}>
+      <g key={key}>
         <circle cx={cx} cy={cy} r={8.5} fill="#3b82f6" fillOpacity={0.25} />
         <circle cx={cx} cy={cy} r={5} fill="#2563eb" stroke="#ffffff" strokeWidth={2} />
       </g>
@@ -1674,7 +1695,7 @@ function CustomizedDot(props: any) {
 
   if (payload?.isLowest || payload?.rank === 1) {
     return (
-      <g key={`dot-low-${payload.index}`}>
+      <g key={key}>
         <circle cx={cx} cy={cy} r={8} fill="#10b981" fillOpacity={0.3} />
         <circle cx={cx} cy={cy} r={5} fill="#059669" stroke="#ffffff" strokeWidth={2} />
       </g>
@@ -1682,7 +1703,7 @@ function CustomizedDot(props: any) {
   }
 
   return (
-    <g key={`dot-other-${payload.index}`}>
+    <g key={key}>
       <circle cx={cx} cy={cy} r={4} fill="#10b981" stroke="#ffffff" strokeWidth={1.5} />
     </g>
   );
