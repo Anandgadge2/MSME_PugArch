@@ -871,13 +871,15 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         }}
         estimatedValue={rcData.estimatedValue}
         discloseEstimatedCost={Boolean(rcData.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? payload.basics?.discloseEstimatedCost ?? false)}
-        deadlineDate={periodEnd || rcData.deadlineDate}
+        deadlineDate={schedule.submissionClosingDate || schedule.submissionDeadline || schedule.submissionDate || schedule.bidClosingDate || rcData.deadlineDate || periodEnd}
         createdAt={periodStart || rcData.createdAt}
         publishedDate={periodStart || rcData.createdAt || rcData.publishedAt}
         submissionStartDate={schedule.submissionStartDate || rcData.startDate}
-        closingDate={schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd}
+        closingDate={schedule.submissionClosingDate || schedule.submissionDeadline || schedule.submissionDate || schedule.bidClosingDate || rcData.deadlineDate || periodEnd}
         clarificationDate={schedule.clarificationEndDate || schedule.clarificationDeadline || schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd}
-        technicalDate={schedule.technicalOpeningDate}
+        technicalDate={schedule.technicalOpeningDate || schedule.technicalEvaluationDate}
+        financialDate={schedule.financialOpeningDate || schedule.financialEvaluationDate || schedule.finalEvaluationDate}
+        packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}
         category={rcData.categoryName}
         procurementMethod="Rate Contract"
         buyingType={basics.buyingType || 'Product'}

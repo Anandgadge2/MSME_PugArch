@@ -197,7 +197,14 @@ export default function SellerEventDetailPage({ id }: PageProps) {
       buyer={bid.buyer}
       estimatedValue={bid.estimatedValue}
       discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? (bid.technicalPacket as any)?.discloseEstimatedCost ?? false)}
-      deadlineDate={bid.endDate}
+      deadlineDate={
+        (bid.technicalPacket as any)?.schedule?.submissionClosingDate ||
+        (bid.technicalPacket as any)?.schedule?.submissionDeadline ||
+        (bid.technicalPacket as any)?.schedule?.submissionDate ||
+        (bid as any).submissionClosingDate ||
+        (bid as any).deadlineDate ||
+        bid.endDate
+      }
       createdAt={(bid as any).createdAt || bid.startDate}
       publishedDate={(bid as any).publishedAt || (bid as any).createdAt ? String((bid as any).publishedAt || (bid as any).createdAt) : (bid.startDate ? String(bid.startDate) : undefined)}
       submissionStartDate={
@@ -207,7 +214,23 @@ export default function SellerEventDetailPage({ id }: PageProps) {
           ? String((bid.technicalPacket as any)?.schedule?.submissionStartDate || (bid as any).submissionStartDate || (bid.technicalPacket as any)?.tender?.bidStartDate)
           : undefined
       }
-      closingDate={bid.endDate ? String(bid.endDate) : undefined}
+      closingDate={
+        (bid.technicalPacket as any)?.schedule?.submissionClosingDate ||
+        (bid.technicalPacket as any)?.schedule?.submissionDeadline ||
+        (bid.technicalPacket as any)?.schedule?.submissionDate ||
+        (bid as any).submissionClosingDate ||
+        (bid as any).deadlineDate ||
+        bid.endDate
+          ? String(
+              (bid.technicalPacket as any)?.schedule?.submissionClosingDate ||
+              (bid.technicalPacket as any)?.schedule?.submissionDeadline ||
+              (bid.technicalPacket as any)?.schedule?.submissionDate ||
+              (bid as any).submissionClosingDate ||
+              (bid as any).deadlineDate ||
+              bid.endDate
+            )
+          : undefined
+      }
       technicalDate={
         (bid as any).technicalOpeningDate ||
         (bid.technicalPacket as any)?.schedule?.technicalOpeningDate ||

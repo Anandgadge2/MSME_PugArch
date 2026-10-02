@@ -834,9 +834,9 @@ function DeadlineCountdown({
         )}
         <span className="font-mono">
           <span className="text-sky-900/80 font-bold">{startLabel}</span>
-          {timerState.days > 0 ? `${timerState.days}d ` : ""}
-          {String(timerState.hours).padStart(2, "0")}h{" "}
-          {String(timerState.minutes).padStart(2, "0")}m{" "}
+          {timerState.days > 0 ? `${String(timerState.days).padStart(2, "0")}D ` : ""}
+          {String(timerState.hours).padStart(2, "0")}H{" "}
+          {String(timerState.minutes).padStart(2, "0")}M{" "}
           {String(timerState.seconds).padStart(2, "0")}s
         </span>
       </span>
@@ -864,10 +864,307 @@ function DeadlineCountdown({
       )}
       <span className="font-mono">
         <span className="text-amber-900/80 font-bold">{label}</span>
-        {timerState.days > 0 ? `${timerState.days}d ` : ""}
-        {String(timerState.hours).padStart(2, "0")}h{" "}
-        {String(timerState.minutes).padStart(2, "0")}m{" "}
+        {timerState.days > 0 ? `${String(timerState.days).padStart(2, "0")}D ` : ""}
+        {String(timerState.hours).padStart(2, "0")}H{" "}
+        {String(timerState.minutes).padStart(2, "0")}M{" "}
         {String(timerState.seconds).padStart(2, "0")}s left
+      </span>
+    </span>
+  );
+}
+
+export interface ProcurementLifecycleCountdownProps {
+  submissionStartDate?: Date | string | null;
+  submissionClosingDate?: Date | string | null;
+  technicalOpeningDate?: Date | string | null;
+  financialOpeningDate?: Date | string | null;
+  isTwoPacket?: boolean;
+  isTechEvalCompleted?: boolean;
+  status?: string;
+  onPhaseChange?: () => void;
+  className?: string;
+  showIcon?: boolean;
+}
+
+export function ProcurementLifecycleCountdown({
+  submissionStartDate,
+  submissionClosingDate,
+  technicalOpeningDate,
+  financialOpeningDate,
+  isTwoPacket = false,
+  isTechEvalCompleted = false,
+  status = "OPEN",
+  onPhaseChange,
+  className,
+  showIcon = true,
+}: ProcurementLifecycleCountdownProps) {
+  const subStartObj = useMemo(
+    () => parseDateValue(submissionStartDate, true),
+    [submissionStartDate],
+  );
+  const subCloseObj = useMemo(
+    () => parseDateValue(submissionClosingDate, false),
+    [submissionClosingDate],
+  );
+  const techOpenObj = useMemo(
+    () => parseDateValue(technicalOpeningDate, false),
+    [technicalOpeningDate],
+  );
+  const finOpenObj = useMemo(
+    () => parseDateValue(financialOpeningDate, false),
+    [financialOpeningDate],
+  );
+
+  const [currentMs, setCurrentMs] = useState<number>(() => Date.now());
+  const lastPhaseRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentMs(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const statusUpper = String(status || "").toUpperCase();
+  const isConcludedOrCancelled = [
+    "CANCELLED",
+    "WITHDRAWN",
+    "CLOSED",
+    "AWARDED",
+    "PO_GENERATED",
+    "COMPLETED",
+  ].includes(statusUpper);
+
+  // Determine current active phase and countdown target
+  type PhaseInfo =
+    | {
+        phase: "SUBMISSION_STARTS_SOON";
+        targetMs: number;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress?: boolean;
+      }
+    | {
+        phase: "SUBMISSION_CLOSES_SOON";
+        targetMs: number;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress?: boolean;
+      }
+    | {
+        phase: "TECHNICAL_EVALUATION_STARTS";
+        targetMs: number;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress?: boolean;
+      }
+    | {
+        phase: "TECHNICAL_EVALUATION_IN_PROGRESS";
+        targetMs: null;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress: true;
+      }
+    | {
+        phase: "FINANCIAL_EVALUATION_STARTS";
+        targetMs: number;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress?: boolean;
+      }
+    | {
+        phase: "FINANCIAL_EVALUATION_IN_PROGRESS";
+        targetMs: null;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress: true;
+      }
+    | null;
+
+  const currentPhaseInfo: PhaseInfo = (() => {
+    if (isConcludedOrCancelled) {
+      return null;
+    }
+
+    // 1. Before Submission Starts
+    if (subStartObj && subStartObj.getTime() > currentMs) {
+      return {
+        phase: "SUBMISSION_STARTS_SOON",
+        targetMs: subStartObj.getTime(),
+        label: "submission starts soon in ",
+        colorClass: "text-sky-800",
+        borderClass: "border-sky-200",
+        bgClass: "bg-sky-50",
+        textClass: "text-sky-950",
+        iconClass: "text-sky-600",
+      };
+    }
+
+    // 2. Submission Open (Window Active)
+    if (subCloseObj && subCloseObj.getTime() > currentMs) {
+      return {
+        phase: "SUBMISSION_CLOSES_SOON",
+        targetMs: subCloseObj.getTime(),
+        label: "submission closes soon in ",
+        colorClass: "text-amber-800",
+        borderClass: "border-amber-200",
+        bgClass: "bg-amber-50",
+        textClass: "text-amber-950",
+        iconClass: "text-amber-600",
+      };
+    }
+
+    // 3. Submission Closed -> Technical Evaluation Opening Countdown
+    if (!isTechEvalCompleted) {
+      if (techOpenObj && techOpenObj.getTime() > currentMs) {
+        return {
+          phase: "TECHNICAL_EVALUATION_STARTS",
+          targetMs: techOpenObj.getTime(),
+          label: "technical evaluation starts in ",
+          colorClass: "text-indigo-800",
+          borderClass: "border-indigo-200",
+          bgClass: "bg-indigo-50",
+          textClass: "text-indigo-950",
+          iconClass: "text-indigo-600",
+        };
+      }
+      // If technical opening time has passed or no opening time specified, technical evaluation is in progress
+      return {
+        phase: "TECHNICAL_EVALUATION_IN_PROGRESS",
+        targetMs: null,
+        label: "technical evaluation in progress",
+        colorClass: "text-indigo-800",
+        borderClass: "border-indigo-200",
+        bgClass: "bg-indigo-50",
+        textClass: "text-indigo-950",
+        iconClass: "text-indigo-600",
+        isInProgress: true,
+      };
+    }
+
+    // 4. Technical Evaluation Completed -> Financial Evaluation Countdown (for two-packet or when financial date present)
+    if (isTwoPacket || Boolean(finOpenObj)) {
+      if (finOpenObj && finOpenObj.getTime() > currentMs) {
+        return {
+          phase: "FINANCIAL_EVALUATION_STARTS",
+          targetMs: finOpenObj.getTime(),
+          label: "financial evaluation starts in ",
+          colorClass: "text-emerald-800",
+          borderClass: "border-emerald-200",
+          bgClass: "bg-emerald-50",
+          textClass: "text-emerald-950",
+          iconClass: "text-emerald-600",
+        };
+      }
+      if (
+        statusUpper === "FINANCIAL_EVALUATION" ||
+        statusUpper === "L1_GENERATED" ||
+        statusUpper === "AWARD_RECOMMENDED"
+      ) {
+        return {
+          phase: "FINANCIAL_EVALUATION_IN_PROGRESS",
+          targetMs: null,
+          label: "financial evaluation in progress",
+          colorClass: "text-emerald-800",
+          borderClass: "border-emerald-200",
+          bgClass: "bg-emerald-50",
+          textClass: "text-emerald-950",
+          iconClass: "text-emerald-600",
+          isInProgress: true,
+        };
+      }
+    }
+
+    // Otherwise all countdown phases have concluded
+    return null;
+  })();
+
+  // Fire onPhaseChange if phase transitions
+  useEffect(() => {
+    if (currentPhaseInfo) {
+      if (
+        lastPhaseRef.current !== null &&
+        lastPhaseRef.current !== currentPhaseInfo.phase
+      ) {
+        onPhaseChange?.();
+      }
+      lastPhaseRef.current = currentPhaseInfo.phase;
+    }
+  }, [currentPhaseInfo?.phase, onPhaseChange]);
+
+  if (!currentPhaseInfo) {
+    return null;
+  }
+
+  // Format time remaining
+  let timeStr = "";
+  if (currentPhaseInfo.targetMs !== null) {
+    const diffMs = Math.max(0, currentPhaseInfo.targetMs - currentMs);
+    const days = Math.floor(diffMs / 86_400_000);
+    const hours = Math.floor((diffMs % 86_400_000) / 3_600_000);
+    const minutes = Math.floor((diffMs % 3_600_000) / 60_000);
+    const seconds = Math.floor((diffMs % 60_000) / 1000);
+
+    const dayPrefix = days > 0 ? `${String(days).padStart(2, "0")}D ` : "";
+    const hStr = `${String(hours).padStart(2, "0")}H`;
+    const mStr = `${String(minutes).padStart(2, "0")}M`;
+    const sStr = `${String(seconds).padStart(2, "0")}s`;
+
+    timeStr = `${dayPrefix}${hStr} ${mStr} ${sStr}`;
+  }
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shadow-2xs",
+        currentPhaseInfo.borderClass,
+        currentPhaseInfo.bgClass,
+        currentPhaseInfo.colorClass,
+        className,
+      )}
+      role="timer"
+      aria-live="polite"
+    >
+      {showIcon && (
+        currentPhaseInfo.isInProgress ? (
+          <Loader2
+            className={cn("h-3 w-3 shrink-0 animate-spin", currentPhaseInfo.iconClass)}
+            aria-hidden="true"
+          />
+        ) : (
+          <Clock
+            className={cn("h-3 w-3 shrink-0 animate-pulse", currentPhaseInfo.iconClass)}
+            aria-hidden="true"
+          />
+        )
+      )}
+      <span className="font-mono">
+        <span className="font-bold">{currentPhaseInfo.label}</span>
+        {timeStr && <span className={cn("font-bold", currentPhaseInfo.textClass)}>{timeStr}</span>}
       </span>
     </span>
   );
@@ -5014,6 +5311,7 @@ export function ProcurementDetailUnifiedView(
   useUserRealtime(currentUser?.id);
 
   const handleTimerExpiry = React.useCallback(() => {
+    setNowMs(Date.now());
     void queryClient.invalidateQueries({ queryKey: ["rfq-buyer-responses-v2"] });
     void queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
     void queryClient.invalidateQueries({ queryKey: ["procurement-bids"] });
@@ -7426,16 +7724,16 @@ export function ProcurementDetailUnifiedView(
   const closingDateValue = (isReverseAuctionType && props.closingDate)
     ? props.closingDate
     : firstPresent(
-        props.rawBid?.endDate,
-        props.endDate,
         schedule.submissionClosingDate,
-        schedule.submissionDate,
         schedule.submissionDeadline,
+        schedule.submissionDate,
         schedule.submissionEndDate,
         schedule.bidClosingDate,
         tender.bidClosingDate,
         props.closingDate,
         props.deadlineDate,
+        props.rawBid?.endDate,
+        props.endDate,
       );
 
   // Clarification window resolution: Check whether bidder clarifications are allowed
@@ -7499,6 +7797,8 @@ export function ProcurementDetailUnifiedView(
   const candidateTechDate = firstPresent(
     props.technicalDate,
     props.technicalOpeningDate,
+    props.rawBid?.technicalOpeningDate,
+    props.rawBid?.technicalPacket?.schedule?.technicalOpeningDate,
     schedule.technicalOpeningDate,
     tender.technicalEvaluationDate,
     payload.technicalOpeningDate,
@@ -7508,6 +7808,8 @@ export function ProcurementDetailUnifiedView(
   const candidateFinDate = firstPresent(
     props.financialDate,
     props.financialOpeningDate,
+    props.rawBid?.financialOpeningDate,
+    props.rawBid?.technicalPacket?.schedule?.financialOpeningDate,
     schedule.financialOpeningDate,
     tender.financialEvaluationDate,
     schedule.finalEvaluationDate,
@@ -7582,12 +7884,12 @@ export function ProcurementDetailUnifiedView(
     props.rawBid?.submissionStartDate,
     props.rawBid?.rawSubmissionStartDate,
     props.rawBid?.technicalPacket?.schedule?.submissionStartDate,
-    props.rawBid?.startDate,
-    props.startDate,
     schedule.submissionStartDate,
     schedule.startDate,
     tender.bidStartDate,
     payload.submissionStartDate,
+    props.rawBid?.startDate,
+    props.startDate,
   );
 
   const submissionStartDateValue = firstPresent(
@@ -12090,21 +12392,17 @@ export function ProcurementDetailUnifiedView(
                       Direct Reverse Auction
                     </span>
                   )}
-                  {(props.deadlineDate || closingDateValue) &&
-                    !isCancelled &&
-                    !isConcludedOrCancelled &&
-                    !isBiddingClosed && (
-                    <DeadlineCountdown
-                      targetDate={props.deadlineDate || closingDateValue || ""}
-                      startDate={rawSubmissionStartDate}
-                      startLabel="Submission Opens in: "
-                      label={
-                        allowsReverseAuction
-                          ? "Stage 1 Quote Due: "
-                          : "Quote Due: "
-                      }
-                      onExpire={handleTimerExpiry}
-                      onStartReached={handleTimerExpiry}
+                  {!isCancelled &&
+                    !isConcludedOrCancelled && (
+                    <ProcurementLifecycleCountdown
+                      submissionStartDate={rawSubmissionStartDate}
+                      submissionClosingDate={closingDateValue || props.deadlineDate}
+                      technicalOpeningDate={technicalDateValue}
+                      financialOpeningDate={financialDateValue}
+                      isTwoPacket={isTwoPacket}
+                      isTechEvalCompleted={isTechEvalCompleted}
+                      status={statusUpper}
+                      onPhaseChange={handleTimerExpiry}
                     />
                   )}
                   {!isBuyerSide ? (
