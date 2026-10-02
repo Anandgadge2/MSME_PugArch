@@ -15,6 +15,7 @@ import {
   FileSpreadsheet,
   Clock,
   Ban,
+  XCircle,
   ChevronDown,
   ChevronUp
 } from 'lucide-react';
@@ -55,6 +56,10 @@ export interface ProcurementLifecycleStepperProps {
   myParticipation?: any;
   canSubmitBid?: boolean;
   submittedBidsCount?: number;
+  isDisqualified?: boolean;
+  disqualificationReason?: string;
+  isLosingBidder?: boolean;
+  isNonParticipant?: boolean;
   onSubmitClick?: () => void;
   onViewQuotationClick?: () => void;
 
@@ -422,6 +427,10 @@ export function ProcurementLifecycleStepper({
   myParticipation,
   canSubmitBid = false,
   submittedBidsCount,
+  isDisqualified = false,
+  disqualificationReason,
+  isLosingBidder = false,
+  isNonParticipant = false,
   onSubmitClick,
   onViewQuotationClick,
   onNavigateStage,
@@ -514,6 +523,12 @@ export function ProcurementLifecycleStepper({
   const currentStageConfig = stagesList.find(s => s.id === currentStageId) || stagesList[0];
   const stageHint = isCancelled
     ? 'This procurement event has been officially cancelled.'
+    : !isBuyer && isDisqualified
+    ? `Technical Scrutiny: Non-Responsive — ${disqualificationReason || 'Proposal disqualified from further evaluation'}`
+    : !isBuyer && isLosingBidder
+    ? 'Commercial Outcome: Contract awarded to L1 bidder'
+    : !isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))
+    ? 'Public Tender Record: Bidding concluded (Archived in public domain)'
     : isContractSettled
     ? 'All contract milestones successfully completed & funds settled'
     : isBuyer
@@ -541,7 +556,19 @@ export function ProcurementLifecycleStepper({
       case 1: {
         // Stage 1: Evaluation / Quotation
         if (!isBuyer) {
-          if (isSellerParticipated) {
+          if (isDisqualified) {
+            return {
+              hasAction: true,
+              actionLabel: 'Disqualified',
+              idleStatusText: 'Non-Responsive',
+              actionHint: disqualificationReason || 'Did not meet mandatory technical criteria',
+              onClick: () => {
+                if (onViewEvaluation) onViewEvaluation();
+                else if (onViewQuotationClick) onViewQuotationClick();
+              },
+              isPrimary: false
+            };
+          } else if (isSellerParticipated) {
             return {
               hasAction: true,
               actionLabel: 'Quotation Submitted',
@@ -564,7 +591,7 @@ export function ProcurementLifecycleStepper({
           } else {
             return {
               hasAction: false,
-              idleStatusText: isDeadlinePassed ? 'Window Closed' : 'Awaiting Window'
+              idleStatusText: (isDeadlinePassed || currentStageId >= 2) ? 'Did Not Participate' : 'Awaiting Window'
             };
           }
         } else {
@@ -671,6 +698,21 @@ export function ProcurementLifecycleStepper({
             hasAction: false,
             idleStatusText: 'Reserve Standby'
           };
+        } else if (!isBuyer && isDisqualified) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Ineligible / Excluded'
+          };
+        } else if (!isBuyer && isLosingBidder) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Not Awarded'
+          };
+        } else if (!isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Award Finalized'
+          };
         } else if (!isBuyer && isAwardedToSeller === false) {
           return {
             hasAction: false,
@@ -731,6 +773,13 @@ export function ProcurementLifecycleStepper({
           Boolean(hasCreatedGrn) ||
           grnCreated
         );
+
+        if (!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Not Applicable'
+          };
+        }
 
         if (!isDeliveryPhase) {
           return {
@@ -944,7 +993,11 @@ export function ProcurementLifecycleStepper({
         } else {
           return {
             hasAction: false,
-            idleStatusText: isBuyer ? 'Awaiting Invoice' : 'PO Required'
+            idleStatusText: isBuyer
+              ? 'Awaiting Invoice'
+              : (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)
+              ? 'Not Applicable'
+              : 'PO Required'
           };
         }
       }
@@ -1047,7 +1100,9 @@ export function ProcurementLifecycleStepper({
           }
           return {
             hasAction: false,
-            idleStatusText: 'Awaiting Buyer Payment'
+            idleStatusText: (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)
+              ? 'Not Applicable'
+              : 'Awaiting Buyer Payment'
           };
         }
       }
@@ -1080,7 +1135,17 @@ export function ProcurementLifecycleStepper({
               Procurement Highway
             </h2>
             <span className="inline-flex items-center rounded-md bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-100 px-2 py-0.5 text-[9.5px] font-extrabold text-indigo-900 shadow-2xs">
-              {isCancelled ? 'Procurement Cancelled' : isContractSettled ? '5 / 5 Completed' : `Stage ${currentStageId}/5: ${currentStageConfig.name}`}
+              {isCancelled
+                ? 'Procurement Cancelled'
+                : !isBuyer && isDisqualified
+                ? 'Evaluation: Disqualified'
+                : !isBuyer && isLosingBidder
+                ? 'Outcome: Not Awarded'
+                : !isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))
+                ? 'Public Record: Concluded'
+                : isContractSettled
+                ? '5 / 5 Completed'
+                : `Stage ${currentStageId}/5: ${currentStageConfig.name}`}
             </span>
             <span className="hidden md:inline-block text-[10px] text-slate-300">|</span>
             <p className="hidden md:inline-block text-[11px] font-medium text-slate-600 leading-tight truncate">
@@ -1094,6 +1159,21 @@ export function ProcurementLifecycleStepper({
             <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10.5px] font-black text-rose-800 border border-rose-200 shadow-2xs">
               <Ban className="h-3.5 w-3.5 text-rose-600 shrink-0" aria-hidden="true" />
               Procurement Cancelled
+            </span>
+          ) : !isBuyer && isDisqualified ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-0.5 text-[10.5px] font-black text-rose-800 border border-rose-200 shadow-2xs">
+              <XCircle className="h-3.5 w-3.5 text-rose-600 shrink-0" aria-hidden="true" />
+              Technical Disqualified
+            </span>
+          ) : !isBuyer && isLosingBidder ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10.5px] font-bold text-slate-800 border border-slate-200 shadow-2xs">
+              <Scale className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+              Awarded to L1 Bidder
+            </span>
+          ) : !isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2))) ? (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 text-[10.5px] font-bold text-slate-700 border border-slate-200 shadow-2xs">
+              <Eye className="h-3.5 w-3.5 text-slate-500 shrink-0" aria-hidden="true" />
+              Public Record
             </span>
           ) : isContractSettled ? (
             <span className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 px-3 py-1 text-[11px] font-black text-emerald-800 border border-emerald-300 shadow-2xs">
@@ -1229,14 +1309,21 @@ export function ProcurementLifecycleStepper({
                 <span
                   className={cn(
                     'text-[8px] sm:text-[8.5px] font-bold uppercase tracking-wider shrink-0 px-1 sm:px-1.5 py-0.2 rounded transition-colors',
-                    isCompleted && theme.completedBadge,
-                    isActive && theme.activeBadge,
-                    isUpcoming && 'text-slate-400 bg-slate-100/80 border border-slate-200/60'
+                    !isBuyer && isDisqualified && stage.id === 1 && 'text-rose-700 bg-rose-100 border border-rose-200',
+                    !isBuyer && isDisqualified && stage.id > 1 && 'text-slate-400 bg-slate-100/60 border border-slate-200/40',
+                    !isBuyer && isLosingBidder && stage.id === 2 && 'text-slate-700 bg-slate-100 border border-slate-200',
+                    !isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2))) && 'text-slate-500 bg-slate-100 border border-slate-200',
+                    !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isCompleted && theme.completedBadge,
+                    !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isActive && theme.activeBadge,
+                    !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isUpcoming && 'text-slate-400 bg-slate-100/80 border border-slate-200/60'
                   )}
                 >
                   {isCancelled && 'Cancelled'}
-                  {!isCancelled && isCompleted && (stage.id === 5 ? 'Settled ✓' : 'Done ✓')}
-                  {!isCancelled && isActive && (
+                  {!isCancelled && !isBuyer && isDisqualified && (stage.id === 1 ? 'Failed ✗' : 'Ineligible')}
+                  {!isCancelled && !isBuyer && isLosingBidder && (stage.id === 1 ? 'Done ✓' : stage.id === 2 ? 'Not Awarded' : 'N/A')}
+                  {!isCancelled && !isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2))) && (stage.id === 1 ? 'Closed' : stage.id === 2 ? 'Finalized' : 'N/A')}
+                  {!isCancelled && !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isCompleted && (stage.id === 5 ? 'Settled ✓' : 'Done ✓')}
+                  {!isCancelled && !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isActive && (
                     <span className="flex items-center gap-1 font-black">
                       <span className="relative flex h-1.5 w-1.5 shrink-0">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
@@ -1245,7 +1332,7 @@ export function ProcurementLifecycleStepper({
                       <span className="truncate">{isStandby && stage.id === 2 ? 'Standby' : 'Active'}</span>
                     </span>
                   )}
-                  {!isCancelled && isUpcoming && 'Pending'}
+                  {!isCancelled && !(!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) && isUpcoming && 'Pending'}
                 </span>
               </div>
 
