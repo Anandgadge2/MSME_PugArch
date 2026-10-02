@@ -11513,33 +11513,6 @@ export function ProcurementDetailUnifiedView(
               </div>
             )}
 
-          {/* Seller: Participating Bidder on Standby */}
-          {!isBuyerSide &&
-            myParticipation &&
-            !isAwardedToMe &&
-            activeAward &&
-            (activeAward.counterOfferStatus === "PENDING" ||
-              activeAward.awardStatus === "OFFERED") && (
-              <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-2.5 sm:p-3 shadow-2xs animate-fadeIn">
-                <div className="flex items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-600 text-white shadow-2xs">
-                    <Clock className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs sm:text-[13px] font-extrabold text-blue-950 leading-tight">
-                      Tender Under Final Award Evaluation (Backup Supplier
-                      Standby)
-                    </h4>
-                    <p className="text-[11px] sm:text-xs font-medium text-blue-800/90 mt-0.5 leading-snug">
-                      The buyer is actively finalizing award formalities. Your
-                      proposal remains valid, responsive, and safely on standby
-                      under evaluation. Final tender status will be updated upon
-                      PO issuance.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
 
           {/* Buyer: Award Accepted — Ready to Issue PO */}
           {isBuyerSide &&
