@@ -271,10 +271,32 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
 export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award: any, bid: any) => {
   logger.info({ awardId: award?.id, bidId: bid?.id }, '[CREATE_PO] Starting PO creation for award');
 
-  const existing = await db.purchaseOrder.findFirst({
+  // Check 1: direct PO for this award
+  let existing = await db.purchaseOrder.findFirst({
     where: { sourceType: 'procurement_bid_award', sourceId: award.id },
     include: poInclude
   });
+
+  // Check 2: PO generated via linked reverse auction for this bid
+  if (!existing && bid?.id) {
+    const linkedAuction = await db.auction.findFirst({
+      where: {
+        OR: [
+          { linkedBidId: bid.id },
+          { linkedRequirementId: bid.id }
+        ]
+      },
+      select: { id: true }
+    });
+
+    if (linkedAuction) {
+      existing = await db.purchaseOrder.findFirst({
+        where: { sourceType: 'auction', sourceId: linkedAuction.id },
+        include: poInclude
+      });
+    }
+  }
+
   if (existing) {
     logger.info({ poId: existing.id, poNumber: existing.poNumber }, '[CREATE_PO] Existing PO found, reusing');
     return { purchaseOrder: existing, reused: true };
@@ -670,7 +692,7 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
     };
   });
 
-  const formattedPOs = pendingPOs.map((po: any) => ({
+  const rawPOs = pendingPOs.map((po: any) => ({
     id: po.id,
     poNumber: po.poNumber,
     title: po.title || 'Purchase Order',
@@ -679,8 +701,37 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
     poStatus: po.poStatus,
     createdAt: po.createdAt,
     buyerName: po.buyer?.name || 'Buyer',
-    buyerOrganizationName: po.buyer?.organization?.organizationName || (po.metadata as any)?.buyerOrganizationName || 'Buyer Organization'
+    buyerOrganizationName: po.buyer?.organization?.organizationName || (po.metadata as any)?.buyerOrganizationName || 'Buyer Organization',
+    metadata: po.metadata
   }));
+
+  // Deduplicate POs: If multiple POs exist for the same transaction (e.g. PO-PB and PO-RA for the same tender/auction),
+  // collapse to a single canonical PO so the seller is never prompted twice.
+  const formattedPOs: typeof rawPOs = [];
+  const seenPoKeys = new Set<string>();
+
+  for (const po of rawPOs) {
+    const meta: any = (po.metadata as any) || {};
+    const bidKey = meta.bidId ? `bid-${meta.bidId}` : null;
+    const auctionKey = meta.auctionId ? `auction-${meta.auctionId}` : null;
+
+    const normalizedTitle = String(po.title || '')
+      .replace(/^Purchase Order - Reverse Auction [^ ]+ \(/i, '')
+      .replace(/\)$/, '')
+      .replace(/^Reverse Auction — /i, '')
+      .trim()
+      .toLowerCase();
+    const semanticKey = `${po.buyerOrganizationName || po.buyerName}-${Number(po.amount).toFixed(2)}-${normalizedTitle}`;
+
+    if (bidKey && seenPoKeys.has(bidKey)) continue;
+    if (auctionKey && seenPoKeys.has(auctionKey)) continue;
+    if (seenPoKeys.has(semanticKey)) continue;
+
+    if (bidKey) seenPoKeys.add(bidKey);
+    if (auctionKey) seenPoKeys.add(auctionKey);
+    seenPoKeys.add(semanticKey);
+    formattedPOs.push(po);
+  }
 
   return {
     hasPending: formattedAwards.length > 0 || formattedPOs.length > 0,
@@ -739,6 +790,39 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
         version: { increment: 1 }
       }
     });
+
+    // Synchronize any duplicate sibling PO created for this same transaction so neither is left pending
+    if (bidId && !isNaN(Number(bidId))) {
+      const bidAwards = await tx.procurementBidAward.findMany({
+        where: { bidId: Number(bidId) },
+        select: { id: true }
+      }).catch(() => []);
+      const siblingAwardIds = bidAwards.map((a: any) => a.id);
+
+      const linkedAuction = await tx.auction.findFirst({
+        where: {
+          OR: [{ linkedBidId: Number(bidId) }, { linkedRequirementId: Number(bidId) }]
+        },
+        select: { id: true }
+      }).catch(() => null);
+
+      await tx.purchaseOrder.updateMany({
+        where: {
+          id: { not: po.id },
+          sellerId: po.sellerId,
+          status: { in: ['issued', 'generated', 'pending_acceptance'] },
+          OR: [
+            ...(siblingAwardIds.length > 0 ? [{ sourceType: 'procurement_bid_award', sourceId: { in: siblingAwardIds } }] : []),
+            ...(linkedAuction ? [{ sourceType: 'auction', sourceId: linkedAuction.id }] : [])
+          ]
+        },
+        data: {
+          status: 'accepted',
+          poStatus: 'ACCEPTED',
+          acceptedAt: now()
+        }
+      }).catch(() => null);
+    }
 
     if (awardId && !isNaN(Number(awardId))) {
       await tx.procurementBidAward.update({

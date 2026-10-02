@@ -3753,57 +3753,91 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     const buyerId = req.user?.id || auction.createdByUserId;
     if (!buyerId) throw new ApiError(400, 'Buyer identity not found', 'BUYER_NOT_FOUND');
 
-    const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
     const isNonL1 = (winner.currentRank || 1) !== 1;
 
-    // Create PurchaseOrder record
-    const po = await db.purchaseOrder.create({
-      data: {
-        poNumber,
-        buyerId,
-        sellerId: sellerUserId,
-        title: `Purchase Order - Reverse Auction ${auction.auctionCode || auction.id} (${auction.title || 'Official Award'})`,
-        amount: winningAmount,
-        totalValue: Number(winningAmount),
-        currency: auction.currency || 'INR',
-        status: 'generated',
-        poStatus: 'ISSUED',
-        sourceType: 'auction',
-        sourceId: auction.id,
-        metadata: {
-          bidId: auction.linkedBidId || null,
-          auctionId: auction.id,
-          auctionCode: auction.auctionCode,
-          winningBid: Number(winningAmount),
-          winnerParticipantId: winner.id,
-          winnerSellerOrgId: winner.sellerOrgId,
-          isNonL1Award: isNonL1,
-          rankAtAward: winner.currentRank || 1,
-          overrideReason: isNonL1 ? payload.remarks : null,
-          remarks: payload.remarks || (isNonL1 ? 'Accepted discretionary quote from Reverse Auction and generated Purchase Order.' : 'Accepted L1 quote from Reverse Auction and generated Purchase Order.')
-        },
-        items: {
-          create: [
+    // Check if a Purchase Order already exists for this auction or linked procurement bid
+    const bidAwards = auction.linkedBidId ? await db.procurementBidAward.findMany({
+      where: { bidId: auction.linkedBidId },
+      select: { id: true }
+    }) : [];
+    const bidAwardIds = bidAwards.map((a: any) => a.id);
+
+    let po = await db.purchaseOrder.findFirst({
+      where: {
+        OR: [
+          { sourceType: 'auction', sourceId: id },
+          ...(bidAwardIds.length > 0 ? [
             {
-              itemName: auction.title || 'Reverse Auction Sourced Items',
-              description: auction.description || 'Awarded items per Reverse Auction specification',
-              quantity: 1,
-              unitOfMeasure: 'LOT',
-              unitPrice: Number(winningAmount),
-              totalAmount: Number(winningAmount)
+              sourceType: 'procurement_bid_award',
+              sourceId: { in: bidAwardIds }
             }
-          ]
-        }
+          ] : [])
+        ]
+      },
+      include: {
+        items: true,
+        buyer: { select: { id: true, name: true, organization: { select: { organizationName: true } } } },
+        seller: { select: { id: true, name: true, organization: { select: { organizationName: true } } } }
       }
     });
 
-    // Create delivery workflow tracking
-    await db.deliveryWorkflow.create({
-      data: {
-        purchaseOrderId: po.id,
-        status: 'created'
-      }
-    }).catch(() => null);
+    if (!po) {
+      const poNumber = `PO-RA-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+
+      // Create PurchaseOrder record
+      po = await db.purchaseOrder.create({
+        data: {
+          poNumber,
+          buyerId,
+          sellerId: sellerUserId,
+          title: `Purchase Order - Reverse Auction ${auction.auctionCode || auction.id} (${auction.title || 'Official Award'})`,
+          amount: winningAmount,
+          totalValue: Number(winningAmount),
+          currency: auction.currency || 'INR',
+          status: 'generated',
+          poStatus: 'ISSUED',
+          sourceType: 'auction',
+          sourceId: auction.id,
+          metadata: {
+            bidId: auction.linkedBidId || null,
+            auctionId: auction.id,
+            auctionCode: auction.auctionCode,
+            winningBid: Number(winningAmount),
+            winnerParticipantId: winner.id,
+            winnerSellerOrgId: winner.sellerOrgId,
+            isNonL1Award: isNonL1,
+            rankAtAward: winner.currentRank || 1,
+            overrideReason: isNonL1 ? payload.remarks : null,
+            remarks: payload.remarks || (isNonL1 ? 'Accepted discretionary quote from Reverse Auction and generated Purchase Order.' : 'Accepted L1 quote from Reverse Auction and generated Purchase Order.')
+          },
+          items: {
+            create: [
+              {
+                itemName: auction.title || 'Reverse Auction Sourced Items',
+                description: auction.description || 'Awarded items per Reverse Auction specification',
+                quantity: 1,
+                unitOfMeasure: 'LOT',
+                unitPrice: Number(winningAmount),
+                totalAmount: Number(winningAmount)
+              }
+            ]
+          }
+        },
+        include: {
+          items: true,
+          buyer: { select: { id: true, name: true, organization: { select: { organizationName: true } } } },
+          seller: { select: { id: true, name: true, organization: { select: { organizationName: true } } } }
+        }
+      });
+
+      // Create delivery workflow tracking
+      await db.deliveryWorkflow.create({
+        data: {
+          purchaseOrderId: po.id,
+          status: 'created'
+        }
+      }).catch(() => null);
+    }
 
     // Finalize auction status
     const updatedAuction = await db.auction.update({
@@ -3863,7 +3897,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     }
 
     // Write audit event
-    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${poNumber} generated for winning seller (Rank L${winner.currentRank || 1})`, {
+    await writeAuctionEvent(req, id, 'po_generated', `Purchase Order ${po.poNumber} generated for winning seller (Rank L${winner.currentRank || 1})`, {
       poNumber: po.poNumber,
       poId: po.id,
       winningAmount: Number(winningAmount),

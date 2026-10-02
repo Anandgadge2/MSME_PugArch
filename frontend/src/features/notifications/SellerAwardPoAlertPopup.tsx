@@ -126,7 +126,22 @@ export default function SellerAwardPoAlertPopup() {
     try {
       const res = await getApi<PendingResponse>('/api/seller/pending-awards-and-pos');
       const pendingAwards = Array.isArray(res?.awards) ? res.awards : [];
-      const pendingPOs = Array.isArray(res?.purchaseOrders) ? res.purchaseOrders : [];
+      const rawPendingPOs = Array.isArray(res?.purchaseOrders) ? res.purchaseOrders : [];
+
+      // Deduplicate POs in popup so duplicate POs for the same transaction are never shown twice
+      const seenPoKeys = new Set<string>();
+      const pendingPOs = rawPendingPOs.filter((p) => {
+        const cleanTitle = String(p.title || '')
+          .replace(/^Purchase Order - Reverse Auction [^ ]+ \(/i, '')
+          .replace(/\)$/, '')
+          .replace(/^Reverse Auction — /i, '')
+          .trim()
+          .toLowerCase();
+        const key = `${p.buyerOrganizationName || p.buyerName}-${Number(p.amount).toFixed(2)}-${cleanTitle}`;
+        if (seenPoKeys.has(key)) return false;
+        seenPoKeys.add(key);
+        return true;
+      });
 
       setAwards(pendingAwards);
       setPOs(pendingPOs);
