@@ -1197,7 +1197,7 @@ export default function RfqDetailPage({ initialData }: { initialData?: any } = {
         signatoryMode: 'single',
         singleSignatoryTitle: buyerOrg !== '—' ? buyerOrg : 'Procuring Entity',
         singleSignatoryName: contact && contact !== '—' ? `${contact} (Authorized Procurement Officer)` : 'Authorized Sourcing Authority',
-        footerNote: 'MSME Enterprise Unified Sourcing & Procurement Portal',
+        footerNote: 'JSGSMILE Enterprise Procurement Portal',
       });
       doc.save(`${ref.replace(/[^a-zA-Z0-9-]/g, '_')}-RFQ.pdf`);
       toast.success('Procurement document downloaded successfully.', { id: toastId });

@@ -27,7 +27,7 @@ export function generateGrnPdf(grn: GrnDto, options: GrnPdfOptions = {}): jsPDF 
     orientation: 'p'
   });
 
-  const portalName = options.portalName || 'JSGSMILE · MSME PROCUREMENT PORTAL';
+  const portalName = options.portalName || 'JSGSMILE ENTERPRISE PROCUREMENT PORTAL';
   const portalSubtitle = options.portalSubtitle || 'Jharsuguda Synergy for MSME and Industry Linkage Ecosystem';
   const authorityName = options.authorityName || 'Government of Odisha · District Administration Jharsuguda';
 

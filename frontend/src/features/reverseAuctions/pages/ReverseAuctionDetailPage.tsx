@@ -688,7 +688,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         ],
         signatoryMode: 'single',
         singleSignatoryTitle: auctionData.buyerOrganizationName || 'Procuring Authority',
-        footerNote: 'MSME Enterprise Procurement Portal - Reverse Auction Console',
+        footerNote: 'JSGSMILE Enterprise Procurement Portal - Reverse Auction Console',
       });
       doc.save(`${(auctionData.auctionCode || `RA-${effectiveId}`).replace(/[^a-zA-Z0-9-]/g, '_')}-Notice.pdf`);
       toast.success('Notice PDF downloaded successfully.', { id: toastId });

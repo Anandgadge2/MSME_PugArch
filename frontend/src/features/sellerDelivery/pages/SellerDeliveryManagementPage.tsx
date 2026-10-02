@@ -1544,9 +1544,10 @@ const generateTaxInvoiceForDelivery = async (delivery: DeliveryDto) => {
             grandTotal
         },
         notes: [
-            '1. Computer-generated Tax Invoice produced for MSME Procurement Dispatch.',
+            '1. Computer-generated Tax Invoice produced for JSGSMILE Enterprise Procurement Portal Dispatch.',
             '2. Payment release is governed by portal escrow settlement upon buyer acceptance & GRN verification.'
         ],
+        footerNote: 'JSGSMILE Enterprise Procurement Portal',
         signatures: {
             sellerTitle: 'Seller Signature & Stamp',
             sellerName: po?.seller?.name || 'Authorized Signatory',

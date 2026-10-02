@@ -146,8 +146,9 @@ export default function RoleReportsPage() {
               tableData: tableData,
               notes: [
                 'This report contains procurement lifecycle readiness data including delivery, GRN, and invoice statuses.',
-                'Generated automatically by JSGSMILE MSME Procurement.'
+                'Generated automatically by JSGSMILE Enterprise Procurement Portal.'
               ],
+              footerNote: 'JSGSMILE Enterprise Procurement Portal',
               signatoryMode: 'none' as const,
             };
 
@@ -197,7 +198,7 @@ export default function RoleReportsPage() {
               })),
               notes: [
                 'This report contains procurement lifecycle readiness data including delivery, GRN, and invoice statuses.',
-                'Generated automatically by JSG SMILE MSME Procurement.'
+                'Generated automatically by JSGSMILE Enterprise Procurement Portal.'
               ]
             };
 

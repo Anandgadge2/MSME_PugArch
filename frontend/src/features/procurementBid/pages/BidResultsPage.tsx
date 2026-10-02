@@ -629,7 +629,7 @@ export default function BidResultsPage() {
   //         sellerSignatureUrl: sellerSignature,
   //         sellerStampUrl: sellerStamp,
   //       },
-  //       footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
+  //       footerNote: 'JSGSMILE Enterprise Procurement Portal — Official Quotation Record',
   //     });
 
   //     doc.save(`Quotation_${(result.sellerName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}_${bidId}.pdf`);

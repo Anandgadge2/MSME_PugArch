@@ -1,7 +1,7 @@
 # Comprehensive Procurement Matrix, Lifecycle & Edge Cases Specification
 
 ## Executive Summary
-This document provides an exhaustive, production-grade technical specification of the procurement framework implemented across the **MSME Enterprise Procurement Portal**. It covers all **6 procurement methods**, all **dropdown permutation matrices**, the **end-to-end operational lifecycle** (from creation to delivery and offline payment slip verification), and documents all known **edge cases, bottlenecks, and defensive security measures**.
+This document provides an exhaustive, production-grade technical specification of the procurement framework implemented across the **JSGSMILE Enterprise Procurement Portal**. It covers all **6 procurement methods**, all **dropdown permutation matrices**, the **end-to-end operational lifecycle** (from creation to delivery and offline payment slip verification), and documents all known **edge cases, bottlenecks, and defensive security measures**.
 
 ---
 

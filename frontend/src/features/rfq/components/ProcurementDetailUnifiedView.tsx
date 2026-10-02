@@ -10298,7 +10298,7 @@ export function ProcurementDetailUnifiedView(
         signatoryMode: "single",
         singleSignatoryTitle: buyerOrgName !== "N/A" ? buyerOrgName : "Procuring Entity",
         singleSignatoryName: contactPerson !== "N/A" ? `${contactPerson} (Authorized Procurement Officer)` : "Authorized Sourcing Authority",
-        footerNote: "MSME Enterprise Unified Sourcing & Procurement Portal",
+        footerNote: "JSGSMILE Enterprise Procurement Portal",
       });
       doc.save(
         `${displayIdStr.replace(/[^a-zA-Z0-9-]/g, "_")}-${procurementTypeLabel.replace(/\s+/g, "_")}.pdf`,
@@ -10519,7 +10519,7 @@ export function ProcurementDetailUnifiedView(
         },
         terms: message ? [`Supplier Remarks: ${message}`] : [],
         footerNote:
-          "MSME Enterprise Procurement Portal — Official Quotation Record",
+          "JSGSMILE Enterprise Procurement Portal — Official Quotation Record",
       });
 
       doc.save(
@@ -16311,7 +16311,7 @@ export function SellerQuotationReviewModal({
         },
         terms: message ? [`Supplier Remarks: ${message}`] : [],
         footerNote:
-          "MSME Enterprise Procurement Portal — Official Quotation Record",
+          "JSGSMILE Enterprise Procurement Portal — Official Quotation Record",
       });
 
       doc.save(

@@ -777,7 +777,7 @@ export function PaymentReceiptViewModal({
         <body>
           <div class="header">
             <div>
-              <div class="portal-title">GOVERNMENT MSME PROCUREMENT PORTAL</div>
+              <div class="portal-title">JSGSMILE ENTERPRISE PROCUREMENT PORTAL</div>
               <div class="title">Official Payment &amp; Remittance Receipt</div>
               <div class="subtitle">System certified audit receipt for reference: <strong>${ref}</strong></div>
             </div>
@@ -873,7 +873,7 @@ export function PaymentReceiptViewModal({
           ` : ''}
 
           <div class="footer">
-            <p>This is a computer-generated official receipt from the Government MSME Procurement Portal.</p>
+            <p>This is a computer-generated official receipt from the JSGSMILE Enterprise Procurement Portal.</p>
             <p>Certified valid for tax filing, statutory audits, bank reconciliation, and escrow settlement verification.</p>
             <div class="watermark">Digital Verification Hash: MSME-${ref}-${Date.now().toString(36).toUpperCase()}</div>
           </div>

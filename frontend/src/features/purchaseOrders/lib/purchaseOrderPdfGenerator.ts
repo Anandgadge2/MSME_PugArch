@@ -484,7 +484,7 @@ export async function generateOfficialPurchaseOrderPdf(data: PurchaseOrderPdfDat
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(140, 150, 160);
-    doc.text(`${sanitizePdfText(data.issuerName || 'Enterprise Procurement')} · Official Document`, marginX, pageHeight - 4.5);
+    doc.text(`${sanitizePdfText(data.issuerName || 'JSGSMILE Enterprise Procurement Portal')} · Official Document`, marginX, pageHeight - 4.5);
     doc.text(`Page ${i} of ${pageCount}`, rightX, pageHeight - 4.5, { align: 'right' });
   }
 

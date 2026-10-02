@@ -1,7 +1,7 @@
 import { formatDateTime } from '../features/shared/format';
 
 /**
- * Enterprise Excel Engine for MSME Procurement Portal
+ * Enterprise Excel Engine for JSGSMILE Enterprise Procurement Portal
  * Generates properly formatted `.xlsx` reports.
  */
 
@@ -49,7 +49,7 @@ export class ExcelEngine {
   public async generate(config: ExcelDocumentConfig): Promise<Blob> {
     const ExcelJS = (await import('exceljs')).default;
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = 'JSG SMILE MSME Procurement';
+    workbook.creator = 'JSGSMILE Enterprise Procurement Portal';
     workbook.created = new Date();
 
     const sheet = workbook.addWorksheet('Report', {
@@ -61,7 +61,7 @@ export class ExcelEngine {
     // 1. TOP REPORT HEADER
     sheet.mergeCells(`A${currentRow}:L${currentRow + 1}`);
     const titleCell = sheet.getCell(`A${currentRow}`);
-    titleCell.value = `JSG SMILE\nMSME Marketplace Portal\n\nPROCUREMENT / PURCHASE ORDER REPORT\nGenerated On: ${config.dateStr}`;
+    titleCell.value = `JSGSMILE Enterprise Procurement Portal\n\nPROCUREMENT / PURCHASE ORDER REPORT\nGenerated On: ${config.dateStr}`;
     titleCell.font = { name: 'Arial', size: 14, bold: true, color: { argb: WHITE_TEXT } };
     titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: NAVY_BG } };
     titleCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };

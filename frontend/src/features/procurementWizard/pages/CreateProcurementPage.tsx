@@ -5046,7 +5046,7 @@ function ItemsDetailsForm({
     try {
       const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'MSME Procurement Portal';
+      workbook.creator = 'JSGSMILE Enterprise Procurement Portal';
       workbook.created = new Date();
       const sheet = workbook.addWorksheet('Schedule Items', { views: [{ showGridLines: true }] });
 

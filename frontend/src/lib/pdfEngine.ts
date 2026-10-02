@@ -4,7 +4,7 @@ import { maskPAN, maskGSTIN } from './maskPii';
 import { resolveMediaUrl } from './api';
 
 /**
- * Enterprise PDF Engine for MSME Procurement Portal
+ * Enterprise PDF Engine for JSGSMILE Enterprise Procurement Portal
  * Generates SAP/Odoo style enterprise procurement ERP documents.
  */
 
@@ -774,7 +774,7 @@ export class PdfEngine {
       this.doc.setDrawColor(200, 200, 200);
       this.doc.line(14, this.pageHeight - 12, this.pageWidth - 14, this.pageHeight - 12);
       
-      const footerText = (this as any)._footerNote || 'Enterprise Procurement & Supply Chain ERP';
+      const footerText = (this as any)._footerNote || 'JSGSMILE Enterprise Procurement Portal';
       this.doc.text(footerText, 14, this.pageHeight - 8);
       this.doc.text(`Page ${i} of ${pageCount}`, this.pageWidth - 14, this.pageHeight - 8, { align: 'right' });
     }
@@ -782,7 +782,7 @@ export class PdfEngine {
 
   public async generate(config: DocumentConfig): Promise<jsPDF> {
     (this as any)._currentCurrency = config.currency || 'INR';
-    (this as any)._footerNote = config.footerNote || (config.issuerName ? `${config.issuerName} · Official Document` : 'Enterprise Procurement & Supply Chain ERP');
+    (this as any)._footerNote = config.footerNote || (config.issuerName ? `${config.issuerName} · Official Document` : 'JSGSMILE Enterprise Procurement Portal');
     const sellerSigUrl = config.sellerSignatureUrl || config.signatures?.sellerSignatureUrl;
     const sellerStampUrl = config.sellerStampUrl || config.signatures?.sellerStampUrl;
     const buyerSigUrl = config.buyerSignatureUrl || config.signatures?.buyerSignatureUrl;

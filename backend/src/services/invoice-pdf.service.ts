@@ -886,7 +886,7 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       currentY += 12;
 
       const terms = [
-        '1. This document is generated from the MSME enterprise procurement workflow and must be read with linked GRN, invoice and payment records.',
+        '1. This document is generated from the JSGSMILE Enterprise Procurement Portal workflow and must be read with linked GRN, invoice and payment records.',
         '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
         '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
       ];
@@ -930,7 +930,7 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       // Page bottom footer
       doc.strokeColor('#cbd5e1').lineWidth(0.5);
       doc.moveTo(pageMargin, 810).lineTo(rightX, 810).stroke();
-      doc.fillColor('#94a3b8').fontSize(7).font('Helvetica').text('Enterprise Procurement & Supply Chain ERP - Government MSME Portal', pageMargin, 816);
+      doc.fillColor('#94a3b8').fontSize(7).font('Helvetica').text('JSGSMILE Enterprise Procurement Portal', pageMargin, 816);
       doc.text('Page 1 of 1', pageMargin, 816, { width: contentWidth, align: 'right' });
 
       doc.end();
