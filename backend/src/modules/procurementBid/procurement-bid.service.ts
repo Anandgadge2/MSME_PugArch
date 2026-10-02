@@ -1681,38 +1681,38 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
     }) : undefined,
     participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
-      if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
+      if (isAdmin || isBuyerOwner) return true;
       if (actorRole === 'seller') {
-        const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+        const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         // During bidding and before financial evaluation, sellers must only see their own participation
         if (!financialOpenStatuses.includes(bid.status)) {
           return isOwn;
         }
-        return true;
+        return options.includeParticipants ? true : isOwn;
       }
       return false;
     }).map((p: any) => {
-      const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+      const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
       const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
-      const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : isBuyerOwner);
+      const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
     results: canSeeParticipants ? (bid.participations || [])
       .filter((p: any) => {
         const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
         if (subStatus === 'DRAFT' || p.isWithdrawn) return false;
-        if (options.includeParticipants || isAdmin || isBuyerOwner) return true;
+        if (isAdmin || isBuyerOwner) return true;
         if (actorRole === 'seller') {
-          const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+          const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
           if (!financialOpenStatuses.includes(bid.status)) return isOwn;
-          return true;
+          return options.includeParticipants ? true : isOwn;
         }
         return false;
       })
       .map((p: any) => {
-        const isOwn = Number(p.sellerId) === Number(actor?.id) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
+        const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
-        const allowFinancial = options.includeFinancial || isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : isBuyerOwner);
+        const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
         return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
       })
       .sort((a: any, b: any) => {

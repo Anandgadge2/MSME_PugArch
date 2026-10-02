@@ -5171,7 +5171,6 @@ export function ProcurementDetailUnifiedView(
   const currentOrgId = String(
     currentUser?.organizationId ||
       currentUser?.organization?.id ||
-      currentUser?.sellerProfile?.id ||
       currentUser?.sellerProfile?.organizationId ||
       "",
   );
@@ -5218,16 +5217,11 @@ export function ProcurementDetailUnifiedView(
       (p: any) => {
         const pUserId = p.sellerUserId || p.sellerId || p.seller?.id || p.sellerUser?.id || p.vendorId || p.supplierId;
         const pOrgId = p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId || p.sellerOrgId || p.organizationId;
-        const pProfileId = p.sellerProfileId || p.sellerId;
-        const userProfileId = currentUser.sellerProfile?.id;
-        const userProfileOrgId = currentUser.sellerProfile?.organizationId;
 
-        return (
-          (currentUserId && pUserId && String(pUserId) === currentUserId) ||
-          (currentOrgId && pOrgId && String(pOrgId) === currentOrgId) ||
-          (userProfileId && pProfileId && String(pProfileId) === String(userProfileId)) ||
-          (userProfileOrgId && pOrgId && String(pOrgId) === String(userProfileOrgId))
-        );
+        const matchesUser = Boolean(currentUserId && pUserId && String(pUserId) === currentUserId);
+        const matchesOrg = Boolean(currentOrgId && pOrgId && String(pOrgId) === currentOrgId);
+
+        return matchesUser || matchesOrg;
       },
     );
   }, [
@@ -5239,46 +5233,48 @@ export function ProcurementDetailUnifiedView(
   ]);
 
   const verifiedOwnResponse = React.useMemo(() => {
-    if (!props.ownResponse || isBuyerSide || !currentUser) return null;
+    const candidate = props.ownResponse || props.rawBid?.ownResponse || (props as any)?.ownResponse;
+    if (!candidate || isBuyerSide || !currentUser) return null;
     const currentBidId = props.rawBid?.id || (props as any)?.bidId;
     const currentReqId = (props as any)?.requirementId || (props as any)?.sourceRequirementId;
-    if (props.ownResponse.bidId && currentBidId && Number(props.ownResponse.bidId) !== Number(currentBidId)) {
+    if (candidate.bidId && currentBidId && Number(candidate.bidId) !== Number(currentBidId)) {
       return null;
     }
-    if (props.ownResponse.requirementId && currentReqId && Number(props.ownResponse.requirementId) !== Number(currentReqId)) {
-      if (!props.ownResponse.bidId || !currentBidId || Number(props.ownResponse.bidId) !== Number(currentBidId)) {
+    if (candidate.requirementId && currentReqId && Number(candidate.requirementId) !== Number(currentReqId)) {
+      if (!candidate.bidId || !currentBidId || Number(candidate.bidId) !== Number(currentBidId)) {
         return null;
       }
     }
 
     // Strict ownership verification: must belong to the active seller
-    const respUserId = props.ownResponse.sellerUserId || props.ownResponse.sellerId || props.ownResponse.userId || props.ownResponse.seller?.id || props.ownResponse.vendorId;
-    const respOrgId = props.ownResponse.sellerOrganizationId || props.ownResponse.organizationId || props.ownResponse.seller?.organizationId || props.ownResponse.sellerOrgId;
+    const respUserId = candidate.sellerUserId || candidate.sellerId || candidate.userId || candidate.seller?.id || candidate.vendorId;
+    const respOrgId = candidate.sellerOrganizationId || candidate.organizationId || candidate.seller?.organizationId || candidate.sellerOrgId;
     const matchesUser = Boolean(currentUserId && respUserId && String(respUserId) === currentUserId);
     const matchesOrg = Boolean(currentOrgId && respOrgId && String(respOrgId) === currentOrgId);
-    if (!matchesUser && !matchesOrg && props.ownResponse._isFromUserParticipation !== true) {
+    if (!matchesUser && !matchesOrg) {
       return null;
     }
 
-    return props.ownResponse;
-  }, [props.ownResponse, props.rawBid?.id, (props as any)?.bidId, (props as any)?.requirementId, (props as any)?.sourceRequirementId, isBuyerSide, currentUser, currentUserId, currentOrgId]);
+    return candidate;
+  }, [props.ownResponse, props.rawBid?.ownResponse, (props as any)?.ownResponse, props.rawBid?.id, (props as any)?.bidId, (props as any)?.requirementId, (props as any)?.sourceRequirementId, isBuyerSide, currentUser, currentUserId, currentOrgId]);
 
   const verifiedOwnParticipation = React.useMemo(() => {
-    if (!props.ownParticipation || isBuyerSide || !currentUser) return null;
-    const pUserId = props.ownParticipation.sellerId || props.ownParticipation.sellerUserId || props.ownParticipation.seller?.id || props.ownParticipation.vendorId || props.ownParticipation.supplierId;
-    const pOrgId = props.ownParticipation.organizationId || props.ownParticipation.sellerOrganizationId || props.ownParticipation.seller?.organizationId || props.ownParticipation.sellerOrgId;
+    const candidate = props.ownParticipation || props.rawBid?.myParticipation || (props as any)?.myParticipation;
+    if (!candidate || isBuyerSide || !currentUser) return null;
+    const pUserId = candidate.sellerId || candidate.sellerUserId || candidate.seller?.id || candidate.vendorId || candidate.supplierId;
+    const pOrgId = candidate.organizationId || candidate.sellerOrganizationId || candidate.seller?.organizationId || candidate.sellerOrgId;
     const matchesUser = Boolean(currentUserId && pUserId && String(pUserId) === currentUserId);
     const matchesOrg = Boolean(currentOrgId && pOrgId && String(pOrgId) === currentOrgId);
-    if (!matchesUser && !matchesOrg && props.ownParticipation._isFromUserParticipation !== true) {
+    if (!matchesUser && !matchesOrg) {
       return null;
     }
-    return props.ownParticipation;
-  }, [props.ownParticipation, isBuyerSide, currentUser, currentUserId, currentOrgId]);
+    return candidate;
+  }, [props.ownParticipation, props.rawBid?.myParticipation, (props as any)?.myParticipation, isBuyerSide, currentUser, currentUserId, currentOrgId]);
 
   const effectiveMyParticipation =
     verifiedOwnParticipation || verifiedOwnResponse || myParticipation;
   const isSellerParticipated = Boolean(
-    effectiveMyParticipation || (isBuyerSide ? props.hasSubmittedProposal : false)
+    !isBuyerSide && effectiveMyParticipation
   );
 
   const rawAwards: any[] = React.useMemo(() => {
@@ -8706,6 +8702,13 @@ export function ProcurementDetailUnifiedView(
       toast.error("Submitted quotation details not found.");
       return;
     }
+    const pUserId = targetPart.sellerUserId || targetPart.sellerId || targetPart.seller?.id || targetPart.sellerUser?.id;
+    const pOrgId = targetPart.sellerOrganizationId || targetPart.sellerOrganization?.id || targetPart.seller?.organizationId || targetPart.sellerOrgId || targetPart.organizationId;
+    const isOwner = Boolean((currentUserId && pUserId && String(pUserId) === currentUserId) || (currentOrgId && pOrgId && String(pOrgId) === currentOrgId));
+    if (!isBuyerOrAdmin && !isOwner) {
+      toast.error("You are not authorized to view this proposal.");
+      return;
+    }
     setSelectedQuotationForReview(targetPart);
   }, [
     effectiveMyParticipation,
@@ -8713,6 +8716,7 @@ export function ProcurementDetailUnifiedView(
     allParticipationsList,
     currentUserId,
     currentOrgId,
+    isBuyerOrAdmin,
   ]);
 
   const handleConfirmAwardSubmit = async () => {
@@ -9758,7 +9762,7 @@ export function ProcurementDetailUnifiedView(
     },
   ];
 
-  const defaultSubmitBtnLabel = props.hasSubmittedProposal
+  const defaultSubmitBtnLabel = isSellerParticipated
     ? props.procurementType === "RFQ"
       ? "Quotation Submitted"
       : props.procurementType === "RATE_CONTRACT"
@@ -10041,6 +10045,14 @@ export function ProcurementDetailUnifiedView(
 
     if (!targetPart) {
       toast.error("Submitted quotation details not found.");
+      return;
+    }
+
+    const pUserId = targetPart.sellerUserId || targetPart.sellerId || targetPart.seller?.id || targetPart.sellerUser?.id;
+    const pOrgId = targetPart.sellerOrganizationId || targetPart.sellerOrganization?.id || targetPart.seller?.organizationId || targetPart.sellerOrgId || targetPart.organizationId;
+    const isOwner = Boolean((currentUserId && pUserId && String(pUserId) === currentUserId) || (currentOrgId && pOrgId && String(pOrgId) === currentOrgId));
+    if (!isBuyerOrAdmin && !isOwner) {
+      toast.error("You are not authorized to download this proposal.");
       return;
     }
 

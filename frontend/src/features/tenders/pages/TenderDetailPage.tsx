@@ -401,21 +401,28 @@ export default function TenderDetailPage() {
   }));
 
   const tenderParticipations = (tender as any).participations || (tender as any).responses || [];
-  const ownParticipation = tenderParticipations.find((p: any) =>
-    user?.id && (
-      Number(p.sellerId || p.sellerUserId) === Number(user.id) ||
-      Number(p.seller?.id || p.sellerUser?.id) === Number(user.id) ||
-      (user.organizationId && Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id) === Number(user.organizationId))
-    )
-  );
+  const ownParticipation = (() => {
+    const candidate = (tender as any).myParticipation;
+    if (candidate) {
+      const pUserId = candidate.sellerId || candidate.sellerUserId || candidate.seller?.id || candidate.sellerUser?.id;
+      const pOrgId = candidate.sellerOrgId || candidate.sellerOrganizationId || candidate.sellerOrganization?.id;
+      const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
+      const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
+      if (matchUser || matchOrg) return candidate;
+    }
+    return tenderParticipations.find((p: any) => {
+      const pUserId = p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id;
+      const pOrgId = p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id;
+      const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
+      const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
+      return matchUser || matchOrg;
+    }) || null;
+  })();
   const isOwnSubmitted = Boolean(
     ownParticipation &&
     String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
   );
-  const hasSubmittedProposal = Boolean(
-    (tender as any).hasSubmittedProposal ||
-    isOwnSubmitted
-  );
+  const hasSubmittedProposal = isOwnSubmitted;
 
   const isUnitOfMeasure = (val?: string) => {
     if (!val) return false;

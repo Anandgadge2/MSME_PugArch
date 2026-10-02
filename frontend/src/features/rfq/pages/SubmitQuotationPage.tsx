@@ -351,11 +351,11 @@ const participationToOwnResponse = (participation: any) => {
 
 const isBelongingToUser = (resp: any, currentUser: any) => {
   if (!resp || !currentUser) return false;
-  if (resp._isFromUserParticipation) return true;
   const sellerId = resp.sellerId || resp.seller?.id || resp.sellerUserId || resp.userId;
   const orgId = resp.organizationId || resp.sellerOrganizationId || resp.seller?.organizationId || resp.seller?.organization?.id;
-  return (currentUser.id && String(sellerId || '') === String(currentUser.id)) ||
-    (currentUser.organizationId && String(orgId || '') === String(currentUser.organizationId));
+  const matchUser = Boolean(currentUser.id && sellerId && String(sellerId) === String(currentUser.id));
+  const matchOrg = Boolean(currentUser.organizationId && orgId && String(orgId) === String(currentUser.organizationId));
+  return matchUser || matchOrg;
 };
 
 const chooseOwnResponse = (primary: any, fallback: any) => {

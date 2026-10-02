@@ -205,15 +205,23 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
 
   const ownParticipation: any = user?.role === 'seller'
-    ? [
-        ...(bidData?.myParticipation ? [bidData.myParticipation] : []),
-        ...(Array.isArray(bidData?.participations) ? bidData.participations : [])
-      ].find((p: any) =>
-        (user?.id && Number(p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id) === Number(user.id)) ||
-        (user?.organizationId && (
-          Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id) === Number(user.organizationId)
-        ))
-      ) || null
+    ? (() => {
+        const candidate = bidData?.myParticipation;
+        if (candidate) {
+          const pUserId = candidate.sellerId || candidate.sellerUserId || candidate.seller?.id || candidate.sellerUser?.id;
+          const pOrgId = candidate.organizationId || candidate.sellerOrganizationId || candidate.seller?.organizationId || candidate.seller?.organization?.id;
+          const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
+          const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
+          if (matchUser || matchOrg) return candidate;
+        }
+        return (Array.isArray(bidData?.participations) ? bidData.participations : []).find((p: any) => {
+          const pUserId = p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id;
+          const pOrgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
+          const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
+          const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
+          return matchUser || matchOrg;
+        }) || null;
+      })()
     : null;
 
   const rawReqOwnResp = reqData?.ownResponse || bidReqData?.ownResponse;

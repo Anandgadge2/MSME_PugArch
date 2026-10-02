@@ -271,11 +271,12 @@ router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'b
 
 router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
   const actor = await optionalActor(req);
+  const currentActor = (req as any).user || actor;
   const originalToken = req.params.bidId;
   let token = originalToken;
 
   const shouldSkipCache = req.query.skipCache === 'true' || req.headers['cache-control']?.includes('no-cache') || req.headers['pragma'] === 'no-cache';
-  const cacheKey = `cache:proc_bid_${originalToken}_${actor?.id || 'anon'}_${actor?.role || 'guest'}`;
+  const cacheKey = `cache:proc_bid_${originalToken}_${currentActor?.id || 'anon'}_${currentActor?.role || 'guest'}_${currentActor?.organizationId || 'no_org'}`;
   const cachedResponse = shouldSkipCache ? null : await getCache<any>(cacheKey);
   if (cachedResponse) {
     return apiResponse.success(res, cachedResponse, 200, 'Procurement bid details fetched successfully');
@@ -285,8 +286,19 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   try {
     const directBid = await service.resolveBid(originalToken, service.leanBidInclude);
     if (directBid) {
-      await enrichBidsWithResponses([directBid], actor?.id);
-      const serialized = service.serializeBid(directBid, { actor: (req as any).user || actor, includeParticipants: true, includeFinancial: true });
+      if (!service.canActorViewBid(currentActor as any, directBid)) {
+        throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
+      }
+      await enrichBidsWithResponses([directBid], currentActor?.role === 'buyer' ? Number(currentActor.id) : undefined);
+      const isBuyerOrAdmin = currentActor?.role === 'buyer' || currentActor?.role === 'admin' || currentActor?.role === 'master_admin' || (!!currentActor?.id && Number(directBid.buyerId) === Number(currentActor.id));
+      const sellerCanSeeParticipants = currentActor?.role === 'seller' && (directBid.participations || []).some((p: any) => (currentActor.id && p.sellerId === Number(currentActor.id)) || (currentActor.organizationId && p.seller?.organizationId === currentActor.organizationId));
+      const sellerCanSeeCompetitors = sellerCanSeeParticipants && service.financialOpenStatuses.includes(directBid.status);
+      const includeParticipants = isBuyerOrAdmin || sellerCanSeeCompetitors;
+      const includeFinancial = isBuyerOrAdmin || sellerCanSeeCompetitors;
+
+      const sellerIds = (directBid.participations || []).map((p: any) => p.sellerId);
+      const sellerRatings = await service.getAverageRatingsForSellers(sellerIds);
+      const serialized = service.serializeBid(directBid, { actor: currentActor || undefined, detail: true, includeParticipants, includeFinancial, sellerRatings });
       if (directBid.awards && directBid.awards.length > 0) {
         const awardIds = directBid.awards.map((a: any) => a.id);
         const pos = await (prisma as any).purchaseOrder.findMany({
@@ -1248,15 +1260,15 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
   // Access gate: public bids are viewable by anyone; private (invite-only) bids only by
   // the owner, an invited seller, a participant, or an admin. 404 (not 403) to avoid
   // leaking the existence of a private procurement.
-  const currentActor = (req as any).user || actor;
   if (!service.canActorViewBid(currentActor as any, bid)) {
     throw new ApiError(404, 'Bid not found', 'BID_NOT_FOUND');
   }
   await enrichBidsWithResponses([bid], currentActor?.role === 'buyer' ? Number(currentActor.id) : undefined);
   const isBuyerOrAdmin = currentActor?.role === 'buyer' || currentActor?.role === 'admin' || currentActor?.role === 'master_admin' || (!!currentActor?.id && Number(bid.buyerId) === Number(currentActor.id));
-  const sellerCanSeeParticipants = currentActor?.role === 'seller' && (bid.participations || []).some((p: any) => p.sellerId === Number(currentActor.id) || (currentActor.organizationId && p.seller?.organizationId === currentActor.organizationId));
-  const includeParticipants = isBuyerOrAdmin || sellerCanSeeParticipants;
-  const includeFinancial = isBuyerOrAdmin || (sellerCanSeeParticipants && ['FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(bid.status));
+  const sellerCanSeeParticipants = currentActor?.role === 'seller' && (bid.participations || []).some((p: any) => (currentActor.id && p.sellerId === Number(currentActor.id)) || (currentActor.organizationId && p.seller?.organizationId === currentActor.organizationId));
+  const sellerCanSeeCompetitors = sellerCanSeeParticipants && service.financialOpenStatuses.includes(bid.status);
+  const includeParticipants = isBuyerOrAdmin || sellerCanSeeCompetitors;
+  const includeFinancial = isBuyerOrAdmin || sellerCanSeeCompetitors;
 
   const sellerIds = (bid.participations || []).map((p: any) => p.sellerId);
   const sellerRatings = await service.getAverageRatingsForSellers(sellerIds);
