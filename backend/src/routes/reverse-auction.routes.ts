@@ -17,6 +17,7 @@ import { env } from '../config/env.js';
 import { numberSeries } from '../services/workflow/workflow-common.js';
 import { broadcastToAuction, broadcastToProcurement, broadcastToUser } from '../services/websocket.service.js';
 import { formatIstDateTime } from '../services/email-template.builder.js';
+import { invalidateBidCaches } from '../modules/procurementBid/procurement-bid.routes.js';
 
 const router = Router();
 const db = prisma as any;
@@ -729,6 +730,18 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
       return apiResponse.success(res, cached.data);
     }
 
+    const auctionInclude = {
+      winnerSeller: { select: { id: true, name: true, email: true } },
+      participants: {
+        where: { currentRank: 1 },
+        select: { id: true, status: true, sellerUserId: true, sellerOrgId: true, lastBidAmount: true, currentRank: true, acceptedAt: true }
+      },
+      bids: {
+        orderBy: { createdAt: 'desc' },
+        take: 10
+      }
+    };
+
     // 1. Direct match by referenceNo or auctionCode first (prevents integer ID cross-contamination between bids & requirements)
     let auction = await db.auction.findFirst({
       where: {
@@ -741,13 +754,7 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
           { auctionCode: `RA-${rawId}` },
         ]
       },
-      include: {
-        winnerSeller: { select: { id: true, name: true, email: true } },
-        bids: {
-          orderBy: { createdAt: 'desc' },
-          take: 10
-        }
-      },
+      include: auctionInclude,
       orderBy: { id: 'desc' }
     });
 
@@ -776,10 +783,7 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
               ...(pb.bidNumber ? [{ referenceNo: pb.bidNumber }, { auctionCode: pb.bidNumber }] : [])
             ]
           },
-          include: {
-            winnerSeller: { select: { id: true, name: true, email: true } },
-            bids: { orderBy: { createdAt: 'desc' }, take: 10 }
-          },
+          include: auctionInclude,
           orderBy: { id: 'desc' }
         });
       }
@@ -799,10 +803,7 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
                 ...(reqItem.requirementNumber ? [{ referenceNo: reqItem.requirementNumber }] : [])
               ]
             },
-            include: {
-              winnerSeller: { select: { id: true, name: true, email: true } },
-              bids: { orderBy: { createdAt: 'desc' }, take: 10 }
-            },
+            include: auctionInclude,
             orderBy: { id: 'desc' }
           });
         }
@@ -884,6 +885,16 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
     }
 
     const effective = await withEffectiveStatus(auction);
+    const winnerPart = (auction.participants && auction.participants.length > 0) ? auction.participants[0] : null;
+    if (winnerPart && String(winnerPart.status || '').toUpperCase() === 'ACCEPTED') {
+      (effective as any).winnerStatus = 'ACCEPTED';
+      (effective as any).isAwardAccepted = true;
+      (effective as any).winnerParticipant = winnerPart;
+      effective.status = 'AWARD_ACCEPTED';
+    } else if (String(auction.status || auction.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED') {
+      (effective as any).winnerStatus = 'ACCEPTED';
+      (effective as any).isAwardAccepted = true;
+    }
     const result = maskSensitive(effective);
     const isLive = String(effective.statusEnum || effective.status || '').toUpperCase() === 'LIVE';
     procurementAuctionCache.set(rawId, { data: result, expiresAt: Date.now() + (isLive ? 5_000 : 30_000) });
@@ -3186,14 +3197,15 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
               awardStatus: 'OFFERED',
               awardedAmount: awardAmount,
               originalBidAmount: Number(winner.lastBidAmount || awardAmount),
+              isPriceMatched: isPriceMatch,
+              priceMatchTargetPrice: isPriceMatch ? awardAmount : null,
               counterOfferStatus: isPriceMatch ? 'PENDING_SUPPLIER' : 'NONE',
-              counterOfferAmount: isPriceMatch ? awardAmount : null,
-              counterOfferRemarks: isPriceMatch ? awardRemarks : null,
+              counterOfferNotes: isPriceMatch ? awardRemarks : null,
               justificationReason: isNonL1 ? payload.remarks : null,
               remarks: awardRemarks,
               awardedAt: new Date()
             }
-          }).catch(() => null);
+          }).catch((err: any) => console.error('[award-recommendation] Error updating award:', err));
         } else {
           await db.procurementBidAward.create({
             data: {
@@ -3202,16 +3214,17 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
               sellerId: finalSellerUserId,
               awardedAmount: awardAmount,
               originalBidAmount: Number(winner.lastBidAmount || awardAmount),
+              isPriceMatched: isPriceMatch,
+              priceMatchTargetPrice: isPriceMatch ? awardAmount : null,
               counterOfferStatus: isPriceMatch ? 'PENDING_SUPPLIER' : 'NONE',
-              counterOfferAmount: isPriceMatch ? awardAmount : null,
-              counterOfferRemarks: isPriceMatch ? awardRemarks : null,
+              counterOfferNotes: isPriceMatch ? awardRemarks : null,
               justificationReason: isNonL1 ? payload.remarks : null,
               awardStatus: 'OFFERED',
               awardedById: req.user!.id,
               remarks: awardRemarks,
               awardedAt: new Date()
             }
-          }).catch(() => null);
+          }).catch((err: any) => console.error('[award-recommendation] Error creating award:', err));
         }
         await db.procurementBidParticipation.update({
           where: { id: bidParticipation.id },
@@ -3225,6 +3238,10 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
           lifecycleStage: 'AWARD_RECOMMENDED'
         }
       }).catch(() => null);
+
+      await invalidateBidCaches(auction.linkedBidId, auction.referenceNo).catch(() => null);
+      if (auction.referenceNo) await invalidateBidCaches(auction.referenceNo).catch(() => null);
+      if (auction.auctionCode) await invalidateBidCaches(auction.auctionCode).catch(() => null);
     }
 
     await writeAuctionEvent(req, id, 'award_offered', `Contract award offer issued for participant #${winner.id} (Rank L${winner.currentRank || 1})`, {
@@ -3255,24 +3272,25 @@ router.post('/reverse-auctions/:id/award-recommendation', requirePermission('rev
         status: 'AWARDED',
         timestamp: new Date().toISOString()
       });
-      if (auction.linkedBidId) {
-        broadcastToProcurement(auction.linkedBidId, {
+      const targets = [auction.linkedBidId, auction.referenceNo, auction.auctionCode, auction.linkedRequirementId].filter(Boolean);
+      targets.forEach((tid) => {
+        broadcastToProcurement(tid, {
           type: 'PROCUREMENT_AWARDED',
-          procurementId: auction.linkedBidId,
+          procurementId: auction.linkedBidId || auction.id,
           status: 'AWARD_OFFERED',
           sellerOrgId: winner.sellerOrgId,
           sellerUserId,
           awardedAmount: awardAmount,
           timestamp: new Date().toISOString()
         });
-        broadcastToProcurement(auction.linkedBidId, {
+        broadcastToProcurement(tid, {
           type: 'PROCUREMENT_UPDATED',
-          procurementId: auction.linkedBidId,
-          requirementId: auction.linkedBidId,
+          procurementId: auction.linkedBidId || auction.id,
+          requirementId: auction.linkedRequirementId || auction.linkedBidId || auction.id,
           status: 'AWARD_OFFERED',
           timestamp: new Date().toISOString()
         });
-      }
+      });
       if (sellerUserId) {
         broadcastToUser(sellerUserId, {
           type: 'AWARD_RECEIVED',
@@ -3354,7 +3372,7 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
       where: { id: winner.id },
       data: {
         status: 'ACCEPTED',
-        acceptedAt: new Date()
+        acceptedAt: winner.acceptedAt || new Date()
       }
     });
 
@@ -3368,6 +3386,50 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
         }
       }).catch(() => null);
 
+      const existingAward = await db.procurementBidAward.findFirst({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            { sellerId: winner.sellerUserId || auction.winnerSellerId || 0 },
+            ...(winner.sellerOrgId ? [{ sellerId: winner.sellerOrgId }] : [])
+          ]
+        }
+      });
+
+      if (existingAward) {
+        await db.procurementBidAward.update({
+          where: { id: existingAward.id },
+          data: { awardStatus: 'ACCEPTED', acceptedAt: existingAward.acceptedAt || new Date() }
+        }).catch(() => null);
+      } else {
+        const winningAmount = Number(winner.lastBidAmount || auction.currentLowestAmount || auction.currentLowestBid || auction.currentBid || 0);
+        const pbPart = await db.procurementBidParticipation.findFirst({
+          where: {
+            bidId: auction.linkedBidId,
+            OR: [
+              { sellerId: winner.sellerUserId || auction.winnerSellerId || 0 },
+              ...(winner.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
+            ]
+          }
+        });
+        if (pbPart) {
+          await db.procurementBidAward.create({
+            data: {
+              bidId: auction.linkedBidId,
+              participationId: pbPart.id,
+              sellerId: pbPart.sellerId || winner.sellerUserId || auction.winnerSellerId || 0,
+              awardedAmount: winningAmount > 0 ? winningAmount : Number(auction.startPrice || 0),
+              originalBidAmount: Number(winner.lastBidAmount || winningAmount),
+              awardStatus: 'ACCEPTED',
+              awardedById: auction.createdByUserId || 1,
+              awardedAt: new Date(),
+              acceptedAt: new Date(),
+              remarks: 'Reverse Auction Award'
+            }
+          }).catch((err) => console.error('[accept-award] Failed to create missing award:', err));
+        }
+      }
+
       await db.procurementBidAward.updateMany({
         where: {
           bidId: auction.linkedBidId,
@@ -3376,7 +3438,7 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
             ...(winner.sellerOrgId ? [{ sellerId: winner.sellerOrgId }] : [])
           ]
         },
-        data: { awardStatus: 'ACCEPTED', awardedAt: new Date() }
+        data: { awardStatus: 'ACCEPTED' }
       }).catch(() => null);
 
       if (winner.sellerOrgId) {
@@ -3385,7 +3447,7 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
             bidId: auction.linkedBidId,
             seller: { organizationId: winner.sellerOrgId }
           },
-          data: { awardStatus: 'ACCEPTED', awardedAt: new Date() }
+          data: { awardStatus: 'ACCEPTED' }
         }).catch(() => null);
       }
 
@@ -3399,6 +3461,10 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
         },
         data: { finalStatus: 'AWARD_ACCEPTED' }
       }).catch(() => null);
+
+      await invalidateBidCaches(auction.linkedBidId, auction.referenceNo).catch(() => null);
+      if (auction.referenceNo) await invalidateBidCaches(auction.referenceNo).catch(() => null);
+      if (auction.auctionCode) await invalidateBidCaches(auction.auctionCode).catch(() => null);
     }
 
     await writeAuctionEvent(req, id, 'award_accepted', `Contract award offer accepted by supplier organization #${winner.sellerOrgId || winner.sellerUserId}`, {
@@ -3432,22 +3498,33 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
         status: 'AWARD_ACCEPTED',
         timestamp: new Date().toISOString()
       });
-      if (auction.linkedBidId) {
-        broadcastToProcurement(auction.linkedBidId, {
+      const targets = [auction.linkedBidId, auction.referenceNo, auction.auctionCode, auction.linkedRequirementId].filter(Boolean);
+      targets.forEach((tid) => {
+        broadcastToProcurement(tid, {
+          type: 'AWARD_ACCEPTED',
+          procurementId: auction.linkedBidId || auction.id,
+          requirementId: auction.linkedRequirementId || auction.linkedBidId || auction.id,
+          status: 'AWARD_ACCEPTED',
+          sellerOrgId: winner.sellerOrgId,
+          sellerUserId: winner.sellerUserId,
+          timestamp: new Date().toISOString()
+        });
+        broadcastToProcurement(tid, {
           type: 'BID_ACCEPTED',
-          procurementId: auction.linkedBidId,
+          procurementId: auction.linkedBidId || auction.id,
+          requirementId: auction.linkedRequirementId || auction.linkedBidId || auction.id,
           status: 'AWARD_ACCEPTED',
           sellerOrgId: winner.sellerOrgId,
           timestamp: new Date().toISOString()
         });
-        broadcastToProcurement(auction.linkedBidId, {
+        broadcastToProcurement(tid, {
           type: 'PROCUREMENT_UPDATED',
-          procurementId: auction.linkedBidId,
-          requirementId: auction.linkedBidId,
+          procurementId: auction.linkedBidId || auction.id,
+          requirementId: auction.linkedRequirementId || auction.linkedBidId || auction.id,
           status: 'AWARD_ACCEPTED',
           timestamp: new Date().toISOString()
         });
-      }
+      });
       if (auction.createdByUserId) {
         broadcastToUser(auction.createdByUserId, {
           type: 'BID_STATUS_CHANGED',

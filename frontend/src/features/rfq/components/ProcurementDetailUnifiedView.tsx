@@ -5236,10 +5236,11 @@ export function ProcurementDetailUnifiedView(
           String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ||
           linkedAuction.winnerParticipant?.status === 'ACCEPTED' ||
           linkedAuction.winnerStatus === 'ACCEPTED' ||
+          linkedAuction.isAwardAccepted === true ||
           (Array.isArray(linkedAuction.participants) &&
             linkedAuction.participants.some((p: any) =>
               String(p.status).toUpperCase() === 'ACCEPTED' &&
-              (String(p.sellerUserId) === currentUserId || String(p.sellerOrgId) === currentOrgId)
+              (!isBuyerSide ? (String(p.sellerUserId) === currentUserId || String(p.sellerOrgId) === currentOrgId) : true)
             )) ||
           String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
           String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
@@ -5250,6 +5251,24 @@ export function ProcurementDetailUnifiedView(
           locallyAcceptedAwardIds.has(String(props.id)) ||
           locallyAcceptedAwardIds.has(String(props.displayId));
 
+        const effectiveAwardAmount = Number(
+          linkedAuction.winningBidAmount ||
+          linkedAuction.currentLowestAmount ||
+          linkedAuction.currentLowestBid ||
+          linkedAuction.currentBid ||
+          linkedAuction.startPrice ||
+          props.estimatedValue ||
+          0
+        );
+        const resolvedWinnerSellerName =
+          linkedAuction.winnerSeller?.name ||
+          linkedAuction.winnerSeller?.organizationName ||
+          linkedAuction.winnerSellerName ||
+          linkedAuction.winningSellerName ||
+          (linkedAuction.winnerSeller?.registrationDetails as any)?.businessName ||
+          (linkedAuction.winnerSeller?.registrationDetails as any)?.legalName ||
+          null;
+
         list.push({
           id: linkedAuction.id,
           bidId: linkedAuction.linkedBidId || targetId,
@@ -5258,7 +5277,13 @@ export function ProcurementDetailUnifiedView(
           awardedSellerId: winnerUserId,
           sellerOrgId: winnerOrgId,
           sellerOrganizationId: winnerOrgId,
-          awardedAmount: linkedAuction.winningBidAmount || linkedAuction.currentLowestBid || linkedAuction.startPrice,
+          sellerName: resolvedWinnerSellerName,
+          awardedSellerName: resolvedWinnerSellerName,
+          awardedAmount: effectiveAwardAmount,
+          amount: effectiveAwardAmount,
+          finalAmount: effectiveAwardAmount,
+          awardAmount: effectiveAwardAmount,
+          originalBidAmount: effectiveAwardAmount,
           awardStatus: isAuctionAlreadyAccepted ? 'ACCEPTED' : 'OFFERED',
           isReverseAuctionAward: true,
           linkedAuctionId: linkedAuction.id,
@@ -5371,6 +5396,11 @@ export function ProcurementDetailUnifiedView(
       String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
       String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
       String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      String(linkedAuction?.status || linkedAuction?.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      linkedAuction?.winnerStatus === 'ACCEPTED' ||
+      linkedAuction?.isAwardAccepted === true ||
+      (Array.isArray(linkedAuction?.participants) &&
+        linkedAuction.participants.some((p: any) => String(p.status).toUpperCase() === 'ACCEPTED')) ||
       Boolean(props.activeOrder || props.rawBid?.activeOrder || localCreatedOrder) ||
       (Array.isArray(props.purchaseOrders) && props.purchaseOrders.length > 0);
     if (isAcceptedLocally) {
@@ -5386,6 +5416,7 @@ export function ProcurementDetailUnifiedView(
     props.status,
     props.lifecycleStage,
     props.rawBid,
+    linkedAuction,
     props.activeOrder,
     localCreatedOrder,
     props.purchaseOrders
@@ -5995,7 +6026,7 @@ export function ProcurementDetailUnifiedView(
       }
 
       toast.success(
-        "Purchase Order issued successfully! Non-selected bidders notified.",
+        "Purchase Order issued successfully! Awaiting supplier acceptance before final contract activation.",
       );
       if (created && (created.id || created.poNumber)) {
         setLocalCreatedOrder(created);
@@ -10120,6 +10151,14 @@ export function ProcurementDetailUnifiedView(
             )}
             onSubmitClick={props.onSubmitClick}
             onViewQuotationClick={handleOpenMyQuotationModal}
+            onIssuePO={() => {
+              if (activeAward?.id) {
+                handleGeneratePOFromBanner(activeAward.id);
+              } else {
+                const el = document.getElementById("po-issuance-section") || document.getElementById("award-acceptance-section");
+                if (el) el.scrollIntoView({ behavior: "smooth" });
+              }
+            }}
             onNavigateStage={(stageId) => {
               if (stageId === 1) {
                 setActiveTab("clarifications");
@@ -10133,7 +10172,11 @@ export function ProcurementDetailUnifiedView(
                 if (effectiveActiveOrder) {
                   setIsReceiptModalOpen(true);
                 } else if (isBuyerSide) {
-                  router.push("/buyer/orders");
+                  if (activeAward) {
+                    handleGeneratePOFromBanner(activeAward.id);
+                  } else {
+                    router.push("/buyer/orders");
+                  }
                 } else {
                   router.push("/seller/orders");
                 }
@@ -10388,7 +10431,19 @@ export function ProcurementDetailUnifiedView(
           {/* Buyer: Award Offered to Seller, Waiting for Acceptance */}
           {isBuyerSide &&
             activeAward &&
-            activeAward.awardStatus === "OFFERED" &&
+            (activeAward.awardStatus === "OFFERED" ||
+              activeAward.awardStatus === "RECOMMENDED" ||
+              activeAward.awardStatus === "AWARD_OFFERED") &&
+            activeAward.awardStatus !== "ACCEPTED" &&
+            activeAward.awardStatus !== "AWARD_ACCEPTED" &&
+            String(props.status || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.lifecycleStage || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.rawBid?.status || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.rawBid?.lifecycleStage || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(linkedAuction?.status || linkedAuction?.statusEnum || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            linkedAuction?.winnerStatus !== 'ACCEPTED' &&
+            linkedAuction?.isAwardAccepted !== true &&
+            !(Array.isArray(linkedAuction?.participants) && linkedAuction.participants.some((p: any) => String(p.status).toUpperCase() === 'ACCEPTED')) &&
             activeAward.counterOfferStatus !== "PENDING" && (
               <div className="relative overflow-hidden rounded-xl border border-amber-400 bg-gradient-to-r from-amber-600 via-orange-600 to-slate-900 p-3 sm:p-4 text-white shadow-md animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -10403,14 +10458,22 @@ export function ProcurementDetailUnifiedView(
                         activeAward.seller?.name ||
                         activeAward.awardedSellerName ||
                         activeAward.sellerOrganization?.name ||
+                        linkedAuction?.winnerSeller?.name ||
+                        linkedAuction?.winnerSellerName ||
                         "Selected Supplier"}
                     </h3>
                     <p className="text-xs font-medium text-amber-100 max-w-2xl">
                       The formal contract award has been offered for ₹
                       {Number(
-                        activeAward.finalAmount ||
+                        activeAward.awardedAmount ||
+                          activeAward.amount ||
+                          activeAward.finalAmount ||
                           activeAward.awardAmount ||
                           activeAward.originalBidAmount ||
+                          linkedAuction?.winningBidAmount ||
+                          linkedAuction?.currentLowestAmount ||
+                          linkedAuction?.currentLowestBid ||
+                          props.estimatedValue ||
                           0,
                       ).toLocaleString("en-IN")}
                       . Waiting for supplier acceptance before Purchase Order
@@ -10966,7 +11029,16 @@ export function ProcurementDetailUnifiedView(
           {/* Buyer: Award Accepted — Ready to Issue PO */}
           {isBuyerSide &&
             activeAward &&
-            activeAward.awardStatus === "ACCEPTED" &&
+            (activeAward.awardStatus === "ACCEPTED" ||
+              activeAward.awardStatus === "AWARD_ACCEPTED" ||
+              String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(linkedAuction?.status || linkedAuction?.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              linkedAuction?.winnerStatus === 'ACCEPTED' ||
+              linkedAuction?.isAwardAccepted === true ||
+              (Array.isArray(linkedAuction?.participants) && linkedAuction.participants.some((p: any) => String(p.status).toUpperCase() === 'ACCEPTED'))) &&
             !effectiveActiveOrder && (
               <div className="relative overflow-hidden rounded-xl border border-indigo-400 bg-gradient-to-r from-indigo-900 via-blue-900 to-slate-900 p-3 sm:p-4 text-white shadow-md animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -10977,10 +11049,26 @@ export function ProcurementDetailUnifiedView(
                     </div>
                     <h3 className="text-base sm:text-lg font-black tracking-tight text-white">
                       Contract Ready for Purchase Order Generation
+                      {activeAward.sellerName || activeAward.seller?.name || linkedAuction?.winnerSeller?.name ? (
+                        <span className="text-emerald-300 font-semibold text-sm block sm:inline sm:ml-2">
+                          ({activeAward.sellerName || activeAward.seller?.name || linkedAuction?.winnerSeller?.name})
+                        </span>
+                      ) : null}
                     </h3>
                     <p className="text-xs font-medium text-slate-200 max-w-2xl">
-                      The awarded supplier has formally accepted the award
-                      terms. Generate and issue the Purchase Order to bind the
+                      The awarded supplier has formally accepted the contract award for ₹
+                      {Number(
+                        activeAward.awardedAmount ||
+                          activeAward.amount ||
+                          activeAward.finalAmount ||
+                          activeAward.awardAmount ||
+                          activeAward.originalBidAmount ||
+                          linkedAuction?.winningBidAmount ||
+                          linkedAuction?.currentLowestAmount ||
+                          linkedAuction?.currentLowestBid ||
+                          props.estimatedValue ||
+                          0,
+                      ).toLocaleString("en-IN")}. Generate and issue the Purchase Order to bind the
                       contract and automatically notify all participating
                       suppliers.
                     </p>
@@ -11779,7 +11867,11 @@ export function ProcurementDetailUnifiedView(
                   {isTwoStageReverseAuction && (
                     <span className="inline-flex items-center gap-1 rounded-full border border-purple-200 bg-purple-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-purple-700">
                       <Layers className="h-3 w-3" aria-hidden="true" />
-                      {isTwoPacketMode
+                      {hasRfqPrefix || isRfqType
+                        ? (isTwoPacketMode ? "Two-Packet RFQ + Reverse Auction" : "RFQ + Reverse Auction")
+                        : hasRfpPrefix || isRfpType
+                        ? (isTwoPacketMode ? "Two-Stage RFP + Reverse Auction" : "RFP + Reverse Auction")
+                        : isTwoPacketMode
                         ? "Two-Stage Tender + Reverse Auction"
                         : "Single-Packet Tender + Reverse Auction"}
                     </span>
@@ -11879,7 +11971,11 @@ export function ProcurementDetailUnifiedView(
                     displayIdStr !== "—" && (
                       <span className="rounded px-1.5 py-0.5 font-mono text-slate-700 text-[10.5px] font-bold bg-slate-100 border border-slate-200/60 inline-flex items-center gap-1">
                         <span className="text-slate-400 font-sans font-medium text-[9px] uppercase tracking-wider">
-                          {props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
+                          {hasRfqPrefix || isRfqType
+                            ? 'RFQ Ref:'
+                            : hasRfpPrefix || isRfpType
+                            ? 'RFP Ref:'
+                            : props.procurementType === "REVERSE_AUCTION" || isDirectReverseAuction || isTwoStageReverseAuction
                             ? (displayIdStr.startsWith('RA-') ? 'Auction Ref:' : 'Tender Ref:')
                             : isRateContractType
                             ? 'Tender Notice:'
@@ -11888,6 +11984,15 @@ export function ProcurementDetailUnifiedView(
                         <span>{displayIdStr}</span>
                       </span>
                     )}
+
+                  {/* Companion Linked RA Room badge */}
+                  {linkedAuction && (
+                    <span className="rounded px-1.5 py-0.5 font-mono text-purple-800 text-[10.5px] font-bold bg-purple-50 border border-purple-200 inline-flex items-center gap-1">
+                      <Gavel className="h-3 w-3 text-purple-600" aria-hidden="true" />
+                      <span className="text-purple-500 font-sans font-medium text-[9px] uppercase tracking-wider">RA Room:</span>
+                      <span>{String((linkedAuction as any).auctionCode || (linkedAuction as any).auctionNumber || (linkedAuction as any).id)}</span>
+                    </span>
+                  )}
                   {displayIdStr && displayIdStr !== "N/A" && displayIdStr !== "—" && (
                     <span aria-hidden="true">•</span>
                   )}

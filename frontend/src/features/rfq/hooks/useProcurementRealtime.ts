@@ -87,6 +87,12 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-participants'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-bids'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-result'] });
+      void queryClient.invalidateQueries({ queryKey: ['linked-reverse-auction'] });
+      void queryClient.invalidateQueries({ queryKey: ['procurement-awards'] });
+      void queryClient.invalidateQueries({ queryKey: ['seller-awards'] });
+      void queryClient.invalidateQueries({ queryKey: ['purchase-orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['procurement-orders'] });
+      void queryClient.invalidateQueries({ queryKey: ['direct-purchase-orders'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
       void queryClient.invalidateQueries({ queryKey: ['navigation-counts'] });
 
@@ -96,8 +102,10 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
         if (data.type === 'CORRIGENDUM_ISSUED') {
           window.dispatchEvent(new CustomEvent('procurement:corrigendum', { detail: data }));
         }
-        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED') {
+        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED' || data.type === 'BID_ACCEPTED' || data.type === 'AWARD_ACCEPTED') {
           window.dispatchEvent(new CustomEvent('procurement:updated', { detail: data }));
+          window.dispatchEvent(new CustomEvent('award:accepted', { detail: data }));
+          window.dispatchEvent(new CustomEvent('awards:updated', { detail: data }));
         }
       }
 

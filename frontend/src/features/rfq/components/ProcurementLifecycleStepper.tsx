@@ -61,6 +61,7 @@ export interface ProcurementLifecycleStepperProps {
   onNavigateStage?: (stageId: LifecycleStageId) => void;
   onViewEvaluation?: () => void;
   onViewPO?: () => void;
+  onIssuePO?: () => void;
   onNavigateDelivery?: () => void;
   onViewGrn?: (grn?: any) => void;
   onNavigateInvoice?: (invoice?: any) => void;
@@ -424,6 +425,7 @@ export function ProcurementLifecycleStepper({
   onNavigateStage,
   onViewEvaluation,
   onViewPO,
+  onIssuePO,
   onNavigateDelivery,
   onViewGrn,
   onNavigateInvoice,
@@ -587,6 +589,34 @@ export function ProcurementLifecycleStepper({
       case 2: {
         // Stage 2: Award & PO
         const poExists = Boolean(effectiveActiveOrder) || (purchaseOrders && purchaseOrders.length > 0);
+
+        const isAwardAcceptedGeneral =
+          ['ACCEPTED', 'AWARD_ACCEPTED'].includes(
+            String(activeAward?.awardStatus || activeAward?.status || '').toUpperCase()
+          ) ||
+          Boolean(
+            awards &&
+              awards.some(a =>
+                ['ACCEPTED', 'AWARD_ACCEPTED'].includes(
+                  String(a.awardStatus || a.status || '').toUpperCase()
+                )
+              )
+          ) ||
+          ['AWARD_ACCEPTED', 'PO_PENDING'].includes(
+            String(status || '').toUpperCase()
+          ) ||
+          ['AWARD_ACCEPTED', 'PO_PENDING'].includes(
+            String(lifecycleStage || '').toUpperCase()
+          );
+
+        const isAwardOfferedByBuyer =
+          isBuyer &&
+          !isAwardAcceptedGeneral &&
+          (Boolean(activeAward) || (awards && awards.length > 0) || ['AWARD_OFFERED', 'AWARDED', 'AWARD_RECOMMENDED'].includes(String(status || '').toUpperCase())) &&
+          ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'].includes(
+            String(activeAward?.awardStatus || activeAward?.status || awards?.[0]?.awardStatus || awards?.[0]?.status || status || '').toUpperCase()
+          );
+
         const isAwardOfferedToSeller =
           !isBuyer &&
           Boolean(activeAward) &&
@@ -614,6 +644,22 @@ export function ProcurementLifecycleStepper({
             },
             isPrimary: currentStageId === 2
           };
+        } else if (isBuyer && isAwardAcceptedGeneral) {
+          return {
+            hasAction: true,
+            actionLabel: 'Issue Purchase Order',
+            actionHint: 'Generate and release formal Purchase Order to supplier',
+            onClick: () => {
+              if (onIssuePO) {
+                onIssuePO();
+              } else {
+                const el = document.getElementById('award-acceptance-section') || document.getElementById('procurement-action-banner');
+                if (el) el.scrollIntoView({ behavior: 'smooth' });
+                else if (onNavigateStage) onNavigateStage(2);
+              }
+            },
+            isPrimary: true
+          };
         } else if (isAwardOfferedToSeller) {
           return {
             hasAction: true,
@@ -629,6 +675,11 @@ export function ProcurementLifecycleStepper({
           return {
             hasAction: false,
             idleStatusText: 'Awaiting Buyer PO'
+          };
+        } else if (isAwardOfferedByBuyer) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Awaiting Vendor Acceptance'
           };
         } else {
           return {

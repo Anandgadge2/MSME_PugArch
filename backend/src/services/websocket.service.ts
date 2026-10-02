@@ -21,6 +21,7 @@ export type ProcurementSocketEvent =
   | { type: 'QUOTATION_STATUS_CHANGED'; requirementId?: number | string; procurementId?: number | string; responseId: number; status: string; updatedBy?: string; timestamp: string }
   | { type: 'PROCUREMENT_UPDATED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
   | { type: 'PROCUREMENT_AWARDED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; sellerUserId?: number | null; awardedAmount?: number; timestamp: string }
+  | { type: 'AWARD_ACCEPTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; sellerUserId?: number | null; timestamp: string }
   | { type: 'BID_ACCEPTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; timestamp: string }
   | { type: 'BID_REJECTED'; requirementId?: number | string; procurementId?: number | string; status: string; sellerOrgId?: number | null; timestamp: string }
   | { type: 'TECHNICAL_EVALUATION_STARTED'; requirementId?: number | string; procurementId?: number | string; status?: string; timestamp: string }
