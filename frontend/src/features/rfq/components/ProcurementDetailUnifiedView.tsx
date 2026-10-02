@@ -5583,6 +5583,90 @@ export function ProcurementDetailUnifiedView(
     !isBuyerSide && effectiveMyParticipation
   );
 
+  // Explicit seller persona lifecycle derivations
+  const isDisqualified = Boolean(
+    !isBuyerSide &&
+    (
+      (effectiveMyParticipation && (
+        Boolean(effectiveMyParticipation.isDisqualified) ||
+        ['DISQUALIFIED', 'REJECTED', 'NON_RESPONSIVE', 'FAILED', 'NOT_QUALIFIED'].includes(
+          String(
+            effectiveMyParticipation.technicalStatus ||
+            effectiveMyParticipation.evaluationStatus ||
+            effectiveMyParticipation.qualificationStatus ||
+            effectiveMyParticipation.status ||
+            effectiveMyParticipation.submissionStatus ||
+            ''
+          ).toUpperCase()
+        )
+      )) ||
+      (myParticipation && (
+        Boolean(myParticipation.isDisqualified) ||
+        ['DISQUALIFIED', 'REJECTED', 'NON_RESPONSIVE', 'FAILED', 'NOT_QUALIFIED'].includes(
+          String(
+            myParticipation.technicalStatus ||
+            myParticipation.evaluationStatus ||
+            myParticipation.qualificationStatus ||
+            myParticipation.status ||
+            myParticipation.submissionStatus ||
+            ''
+          ).toUpperCase()
+        )
+      )) ||
+      (props.ownParticipation && (
+        Boolean(props.ownParticipation.isDisqualified) ||
+        ['DISQUALIFIED', 'REJECTED', 'NON_RESPONSIVE', 'FAILED', 'NOT_QUALIFIED'].includes(
+          String(
+            props.ownParticipation.technicalStatus ||
+            props.ownParticipation.evaluationStatus ||
+            props.ownParticipation.qualificationStatus ||
+            props.ownParticipation.status ||
+            props.ownParticipation.submissionStatus ||
+            ''
+          ).toUpperCase()
+        )
+      )) ||
+      (verifiedOwnParticipation && (
+        Boolean(verifiedOwnParticipation.isDisqualified) ||
+        ['DISQUALIFIED', 'REJECTED', 'NON_RESPONSIVE', 'FAILED', 'NOT_QUALIFIED'].includes(
+          String(
+            verifiedOwnParticipation.technicalStatus ||
+            verifiedOwnParticipation.evaluationStatus ||
+            verifiedOwnParticipation.qualificationStatus ||
+            verifiedOwnParticipation.status ||
+            verifiedOwnParticipation.submissionStatus ||
+            ''
+          ).toUpperCase()
+        )
+      )) ||
+      (Array.isArray(props.rawBid?.technicalEvaluations) &&
+        props.rawBid.technicalEvaluations.some((te: any) => {
+          const teSellerId = String(te.sellerId || te.sellerUserId || te.vendorId || "");
+          const teOrgId = String(te.organizationId || te.sellerOrgId || te.sellerOrganizationId || "");
+          const matches =
+            (currentUserId && teSellerId && teSellerId === String(currentUserId)) ||
+            (currentOrgId && ((teSellerId && teSellerId === String(currentOrgId)) || (teOrgId && teOrgId === String(currentOrgId))));
+          return matches && ['DISQUALIFIED', 'REJECTED', 'FAILED', 'NOT_QUALIFIED'].includes(String(te.status || te.technicalStatus || te.result || "").toUpperCase());
+        })
+      )
+    )
+  );
+
+  const disqualificationReason =
+    effectiveMyParticipation?.disqualificationReason ||
+    effectiveMyParticipation?.technicalRemarks ||
+    effectiveMyParticipation?.rejectionReason ||
+    effectiveMyParticipation?.remarks ||
+    myParticipation?.disqualificationReason ||
+    myParticipation?.technicalRemarks ||
+    myParticipation?.rejectionReason ||
+    myParticipation?.remarks ||
+    props.ownParticipation?.disqualificationReason ||
+    props.ownParticipation?.technicalRemarks ||
+    props.ownParticipation?.rejectionReason ||
+    props.ownParticipation?.remarks ||
+    'Proposal did not satisfy mandatory technical criteria or documentation requirements.';
+
   const rawAwards: any[] = React.useMemo(() => {
     const list: any[] = [];
     if (Array.isArray(props.rawBid?.awards) && props.rawBid.awards.length > 0) {
@@ -5760,7 +5844,7 @@ export function ProcurementDetailUnifiedView(
     currentOrgId
   ]);
 
-  const myAward = !isBuyerSide
+  const myAward = (!isBuyerSide && !isDisqualified)
     ? rawAwards.find((a: any) => {
         const aSellerId = String(
           a.awardedSellerId || a.sellerId || a.sellerUserId || a.vendorId || a.supplierId || a.seller?.id || a.seller?.userId || a.participation?.sellerId || a.participation?.sellerUserId || "",
@@ -5830,7 +5914,8 @@ export function ProcurementDetailUnifiedView(
   ]);
 
   const isAwardedToMe = Boolean(
-    !isBuyerSide && (
+    !isBuyerSide &&
+    !isDisqualified && (
       Boolean(myAward) ||
       (activeAward && (
         (activeAward.awardedSellerId &&
@@ -5892,31 +5977,6 @@ export function ProcurementDetailUnifiedView(
       )
     )
   );
-
-  // Explicit seller persona lifecycle derivations
-  const isDisqualified = Boolean(
-    !isBuyerSide &&
-    effectiveMyParticipation &&
-    (
-      Boolean(effectiveMyParticipation.isDisqualified) ||
-      ['DISQUALIFIED', 'REJECTED', 'NON_RESPONSIVE', 'FAILED'].includes(
-        String(
-          effectiveMyParticipation.technicalStatus ||
-          effectiveMyParticipation.evaluationStatus ||
-          effectiveMyParticipation.qualificationStatus ||
-          effectiveMyParticipation.status ||
-          ''
-        ).toUpperCase()
-      )
-    )
-  );
-
-  const disqualificationReason =
-    effectiveMyParticipation?.disqualificationReason ||
-    effectiveMyParticipation?.technicalRemarks ||
-    effectiveMyParticipation?.rejectionReason ||
-    effectiveMyParticipation?.remarks ||
-    'Proposal did not satisfy mandatory technical criteria or documentation requirements.';
 
   const isAwardConcluded = Boolean(
     ['AWARDED', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'COMPLETED', 'PO_ISSUED', 'PO_GENERATED', 'CLOSED'].includes(
@@ -6310,6 +6370,10 @@ export function ProcurementDetailUnifiedView(
   }, [targetId, activeAward?.id, queryClient]);
 
   const handleAcceptPriceMatch = async (awardId: string) => {
+    if (isDisqualified) {
+      toast.error("Disqualified proposals are ineligible for price-match awards.");
+      return;
+    }
     try {
       setIsAcceptingAction(true);
       await procurementBidApi.acceptPriceMatchCounterOffer(targetId, awardId);
@@ -6361,6 +6425,10 @@ export function ProcurementDetailUnifiedView(
   };
 
   const handleAcceptAward = async (awardId: string) => {
+    if (isDisqualified) {
+      toast.error("This proposal was disqualified during evaluation. Disqualified proposals cannot accept awards.");
+      return;
+    }
     try {
       setIsAcceptingAction(true);
       const isReverseAuction =
@@ -9058,9 +9126,19 @@ export function ProcurementDetailUnifiedView(
       toast.error("Submitted quotation details not found.");
       return;
     }
-    const pUserId = targetPart.sellerUserId || targetPart.sellerId || targetPart.seller?.id || targetPart.sellerUser?.id;
+    const isTargetOwnPart = Boolean(
+      (effectiveMyParticipation && targetPart === effectiveMyParticipation) ||
+      (verifiedOwnParticipation && targetPart === verifiedOwnParticipation) ||
+      (myParticipation && targetPart === myParticipation) ||
+      (props.ownParticipation && targetPart === props.ownParticipation)
+    );
+    const pUserId = targetPart.sellerUserId || targetPart.sellerId || targetPart.seller?.id || targetPart.sellerUser?.id || targetPart.userId;
     const pOrgId = targetPart.sellerOrganizationId || targetPart.sellerOrganization?.id || targetPart.seller?.organizationId || targetPart.sellerOrgId || targetPart.organizationId;
-    const isOwner = Boolean((currentUserId && pUserId && String(pUserId) === currentUserId) || (currentOrgId && pOrgId && String(pOrgId) === currentOrgId));
+    const isOwner = isTargetOwnPart || Boolean(
+      (currentUserId && pUserId && String(pUserId) === String(currentUserId)) ||
+      (currentOrgId && pOrgId && String(pOrgId) === String(currentOrgId)) ||
+      (currentOrgId && pUserId && String(pUserId) === String(currentOrgId))
+    );
     if (!isBuyerOrAdmin && !isOwner) {
       toast.error("You are not authorized to view this proposal.");
       return;
@@ -9068,6 +9146,9 @@ export function ProcurementDetailUnifiedView(
     setSelectedQuotationForReview(targetPart);
   }, [
     effectiveMyParticipation,
+    verifiedOwnParticipation,
+    myParticipation,
+    props.ownParticipation,
     submittedParticipations,
     allParticipationsList,
     currentUserId,
@@ -9868,6 +9949,7 @@ export function ProcurementDetailUnifiedView(
     // If current user is explicitly a seller and not viewing as buyer, show their authentic submission & evaluation status
     if (currentUser?.role === "seller" && !isBuyerSide) {
       if (isSellerParticipated) {
+        if (isDisqualified) return "Technical Disqualified";
         if (isAwardedToMe) return "Awarded to You";
         if (activeAward && !isAwardedToMe && !effectiveActiveOrder)
           return "Standby (Under Evaluation)";
@@ -9953,6 +10035,7 @@ export function ProcurementDetailUnifiedView(
     currentUser?.role,
     isBuyerSide,
     isSellerParticipated,
+    isDisqualified,
     isAwardedToMe,
     activeAward,
     effectiveActiveOrder,
@@ -10161,7 +10244,8 @@ export function ProcurementDetailUnifiedView(
       closingDateFormatted: closingDateFormatted,
       technicalDateFormatted: technicalDateFormatted,
       submitButtonLabel: props.submitButtonLabel || defaultSubmitBtnLabel,
-      isReverseAuction: isReverseAuctionType || Boolean(linkedAuction)
+      isReverseAuction: isReverseAuctionType || Boolean(linkedAuction),
+      isDisqualified: isDisqualified
     });
   }, [
     isBuyerSide,
@@ -10175,6 +10259,7 @@ export function ProcurementDetailUnifiedView(
     isBiddingClosed,
     isEvaluationReady,
     isSellerParticipated,
+    isDisqualified,
     props.hasSubmittedProposal,
     props.participantsCount,
     submittedParticipations.length,
@@ -10698,6 +10783,7 @@ export function ProcurementDetailUnifiedView(
               !isBuyerSide &&
               currentUser?.role === "seller" &&
               !isAwardedToMe &&
+              !isDisqualified &&
               Boolean(activeAward && !effectiveActiveOrder)
             }
             isDeadlinePassed={isBiddingClosed || isDeadlinePassed}
@@ -11541,6 +11627,7 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller: Price-Match Counter-Offer Received */}
           {!isBuyerSide &&
+            !isDisqualified &&
             isAwardedToMe &&
             activeAward?.counterOfferStatus === "PENDING" && (
               <div className="relative overflow-hidden rounded-2xl border-2 border-amber-400 bg-gradient-to-r from-amber-500 via-amber-600 to-orange-600 p-5 text-white shadow-xl animate-fadeIn">
@@ -11622,6 +11709,7 @@ export function ProcurementDetailUnifiedView(
 
           {/* Seller: Award Offered (Ready for Acceptance) */}
           {!isBuyerSide &&
+            !isDisqualified &&
             isAwardedToMe &&
             Boolean(activeAward) &&
             ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED", "AWARDED", "AWARD_OFFERED", "PENDING", "PENDING_ACCEPTANCE", "ISSUED"].includes(
@@ -13528,6 +13616,8 @@ export function ProcurementDetailUnifiedView(
               {!isBuyerOrAdmin &&
                 !isReverseAuctionType &&
                 isSellerParticipated &&
+                !isDisqualified &&
+                !isLosingBidder &&
                 (isBiddingClosed || isDeadlinePassed) &&
                 !isAwardedToMe && (
                   <div
@@ -14939,88 +15029,6 @@ export function ProcurementDetailUnifiedView(
                 </section>
               )}
 
-              {/* Quotation Review Modal Renderer */}
-              {selectedQuotationForReview && (
-                <SellerQuotationReviewModal
-                  isOpen={Boolean(selectedQuotationForReview)}
-                  onClose={() => setSelectedQuotationForReview(null)}
-                  participation={selectedQuotationForReview}
-                  procurementTitle={props.subject || props.procurementLabel}
-                  targetId={targetId}
-                  router={router}
-                  resultsPageUrl={resultsPageUrl}
-                  isTwoPacketMode={isTwoPacketMode}
-                  isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
-                  isBidAwarded={isBidAwarded}
-                  canAward={false}
-                  isBuyer={Boolean(isBuyerSide || isBuyerOrAdmin)}
-                  isOwnQuotation={Boolean(
-                    (!isBuyerSide && !isBuyerOrAdmin) ||
-                    (currentUserId &&
-                      String(
-                        selectedQuotationForReview?.sellerUserId ||
-                          selectedQuotationForReview?.sellerId ||
-                          selectedQuotationForReview?.seller?.id ||
-                          selectedQuotationForReview?.sellerUser?.id,
-                      ) === String(currentUserId)) ||
-                    (currentOrgId &&
-                      String(
-                        selectedQuotationForReview?.sellerOrganizationId ||
-                          selectedQuotationForReview?.sellerOrganization?.id ||
-                          selectedQuotationForReview?.seller?.organizationId ||
-                          selectedQuotationForReview?.sellerOrgId,
-                      ) === String(currentOrgId))
-                  )}
-                  onOpenCompare={
-                    isBuyerSide || isBuyerOrAdmin
-                      ? () => {
-                          setSelectedQuotationForReview(null);
-                          const allIds = submittedParticipations
-                            .map((p: any) => String(p.id || p.sellerId || p.sellerUserId))
-                            .filter(Boolean);
-                          const targetParam = allIds.length > 0 ? `?ids=${encodeURIComponent(allIds.join(','))}` : '';
-                          router.push(`/bids/${targetId}/compare${targetParam}`);
-                        }
-                      : undefined
-                  }
-                  onOpenTechnicalEvaluation={
-                    isBuyerSide || isBuyerOrAdmin
-                      ? (p) => {
-                          setSelectedQuotationForReview(null);
-                          setSelectedForTechnicalEval(p);
-                        }
-                      : undefined
-                  }
-                />
-              )}
-
-              {/* Technical Packet Evaluation Modal Renderer */}
-              {selectedForTechnicalEval && (
-                <TechnicalEvaluationModal
-                  isOpen={Boolean(selectedForTechnicalEval)}
-                  onClose={() => setSelectedForTechnicalEval(null)}
-                  participation={selectedForTechnicalEval}
-                  bidId={targetId}
-                  readOnly={isBidAwarded || !isTechnicalOpeningReady}
-                  isTechnicalOpeningReady={isTechnicalOpeningReady}
-                  technicalOpeningDate={technicalDateValue}
-                  isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
-                  isStage2Active={isTechEvalCompleted || isBidAwarded}
-                  bidStatus={props.status || props.lifecycleStage}
-                  procurementTitle={props.subject || props.procurementLabel}
-                  isTwoPacketMode={isTwoPacketMode}
-                  packetType={isTwoPacketMode ? "TWO_PACKET" : "SINGLE_PACKET"}
-                  onEvaluationSuccess={() => {
-                    queryClient.invalidateQueries({
-                      queryKey: ["buyer-unified-participations"],
-                    });
-                    queryClient.invalidateQueries({
-                      queryKey: ["rfq-buyer-responses-v2"],
-                    });
-                  }}
-                />
-              )}
-
 
 
               {/* Start Reverse Auction Modal */}
@@ -15483,6 +15491,88 @@ export function ProcurementDetailUnifiedView(
                 if (typeof window !== "undefined") {
                   window.location.reload();
                 }
+              }}
+            />
+          )}
+
+          {/* Quotation Review Modal Renderer (Global Root Level) */}
+          {selectedQuotationForReview && (
+            <SellerQuotationReviewModal
+              isOpen={Boolean(selectedQuotationForReview)}
+              onClose={() => setSelectedQuotationForReview(null)}
+              participation={selectedQuotationForReview}
+              procurementTitle={props.subject || props.procurementLabel}
+              targetId={targetId}
+              router={router}
+              resultsPageUrl={resultsPageUrl}
+              isTwoPacketMode={isTwoPacketMode}
+              isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
+              isBidAwarded={isBidAwarded}
+              canAward={false}
+              isBuyer={Boolean(isBuyerSide || isBuyerOrAdmin)}
+              isOwnQuotation={Boolean(
+                (!isBuyerSide && !isBuyerOrAdmin) ||
+                (currentUserId &&
+                  String(
+                    selectedQuotationForReview?.sellerUserId ||
+                      selectedQuotationForReview?.sellerId ||
+                      selectedQuotationForReview?.seller?.id ||
+                      selectedQuotationForReview?.sellerUser?.id,
+                  ) === String(currentUserId)) ||
+                (currentOrgId &&
+                  String(
+                    selectedQuotationForReview?.sellerOrganizationId ||
+                      selectedQuotationForReview?.sellerOrganization?.id ||
+                      selectedQuotationForReview?.seller?.organizationId ||
+                      selectedQuotationForReview?.sellerOrgId,
+                  ) === String(currentOrgId))
+              )}
+              onOpenCompare={
+                isBuyerSide || isBuyerOrAdmin
+                  ? () => {
+                      setSelectedQuotationForReview(null);
+                      const allIds = submittedParticipations
+                        .map((p: any) => String(p.id || p.sellerId || p.sellerUserId))
+                        .filter(Boolean);
+                      const targetParam = allIds.length > 0 ? `?ids=${encodeURIComponent(allIds.join(','))}` : '';
+                      router.push(`/bids/${targetId}/compare${targetParam}`);
+                    }
+                  : undefined
+              }
+              onOpenTechnicalEvaluation={
+                isBuyerSide || isBuyerOrAdmin
+                  ? (p) => {
+                      setSelectedQuotationForReview(null);
+                      setSelectedForTechnicalEval(p);
+                    }
+                  : undefined
+              }
+            />
+          )}
+
+          {/* Technical Packet Evaluation Modal Renderer (Global Root Level) */}
+          {selectedForTechnicalEval && (
+            <TechnicalEvaluationModal
+              isOpen={Boolean(selectedForTechnicalEval)}
+              onClose={() => setSelectedForTechnicalEval(null)}
+              participation={selectedForTechnicalEval}
+              bidId={targetId}
+              readOnly={isBidAwarded || !isTechnicalOpeningReady}
+              isTechnicalOpeningReady={isTechnicalOpeningReady}
+              technicalOpeningDate={technicalDateValue}
+              isFinancialStageOpened={isTechEvalCompleted || isBidAwarded}
+              isStage2Active={isTechEvalCompleted || isBidAwarded}
+              bidStatus={props.status || props.lifecycleStage}
+              procurementTitle={props.subject || props.procurementLabel}
+              isTwoPacketMode={isTwoPacketMode}
+              packetType={isTwoPacketMode ? "TWO_PACKET" : "SINGLE_PACKET"}
+              onEvaluationSuccess={() => {
+                queryClient.invalidateQueries({
+                  queryKey: ["buyer-unified-participations"],
+                });
+                queryClient.invalidateQueries({
+                  queryKey: ["rfq-buyer-responses-v2"],
+                });
               }}
             />
           )}

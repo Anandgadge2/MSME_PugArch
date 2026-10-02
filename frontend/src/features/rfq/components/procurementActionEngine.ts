@@ -48,6 +48,7 @@ export interface DeriveActionParams {
   technicalDateFormatted?: string | null;
   submitButtonLabel?: string | null;
   isReverseAuction?: boolean;
+  isDisqualified?: boolean;
 }
 
 export function deriveProcurementPrimaryAction(
@@ -166,10 +167,22 @@ export function deriveProcurementPrimaryAction(
 
   // 3.1 Seller already submitted quote
   if (isSellerParticipated || hasSubmittedProposal) {
+    if (params.isDisqualified) {
+      return {
+        type: 'SELLER_VIEW_SUBMITTED',
+        label: isRateContract ? 'View Submitted Rate Proposal' : 'View Submitted Quotation',
+        subtext: 'Your proposal was marked as technically non-responsive / disqualified',
+        isExecutable: true,
+        isSealedLock: false,
+        badgeTone: 'rose'
+      };
+    }
     return {
       type: 'SELLER_VIEW_SUBMITTED',
       label: isRateContract ? 'View Submitted Rate Proposal' : 'View Submitted Quotation',
-      subtext: 'Your proposal was securely submitted and is sealed until opening',
+      subtext: isDeadlinePassed || isBiddingClosed
+        ? 'Your proposal is under evaluation or concluded'
+        : 'Your proposal was securely submitted and is sealed until opening',
       isExecutable: true,
       isSealedLock: false,
       badgeTone: 'emerald'
