@@ -11344,10 +11344,27 @@ export function ProcurementDetailUnifiedView(
                     <Button
                       type="button"
                       size="sm"
-                      onClick={() => setActiveTab("evaluation")}
-                      className="h-8.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-3.5 border border-white/30 cursor-pointer rounded-lg"
+                      onClick={() => {
+                        setActiveTab("clarifications");
+                        setTimeout(() => {
+                          const targetEl =
+                            document.getElementById("proposals-section") ||
+                            document.getElementById("tabpanel-clarifications") ||
+                            document.getElementById("tabs-navigation-section");
+                          if (targetEl) {
+                            targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                            targetEl.classList.add("ring-2", "ring-indigo-400", "transition-all", "duration-500");
+                            setTimeout(() => {
+                              targetEl.classList.remove("ring-2", "ring-indigo-400");
+                            }, 1800);
+                          }
+                        }, 80);
+                      }}
+                      className="h-8.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs px-3.5 border border-white/30 cursor-pointer rounded-lg flex items-center gap-1.5 transition-all active:scale-95 shadow-2xs"
+                      aria-label="View evaluated proposals and bidder ranking"
                     >
-                      View Evaluation Details
+                      <span>View Evaluation &amp; Proposals</span>
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -13312,7 +13329,7 @@ export function ProcurementDetailUnifiedView(
             id="tabs-navigation-section"
             role="tablist"
             aria-label="Procurement details navigation"
-            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs scroll-mt-6"
+            className="flex items-center gap-1 overflow-x-auto scrollbar-none rounded-xl border border-slate-200 bg-white p-1 shadow-2xs scroll-mt-20"
           >
             {tabs.map((tab, idx) => {
               const Icon = tab.icon;
@@ -14621,7 +14638,7 @@ export function ProcurementDetailUnifiedView(
               {isBuyerOrAdmin && (
                 <section
                   id="proposals-section"
-                  className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5"
+                  className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs space-y-3.5 scroll-mt-24 sm:scroll-mt-28"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2.5">
                     <div>
