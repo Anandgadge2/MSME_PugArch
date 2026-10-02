@@ -4605,12 +4605,14 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
   const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
   const awardIdFilter = req.body?.awardId ? Number(req.body.awardId) : undefined;
 
+  const PENDING_AWARD_STATUSES = ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'];
+
   let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
       ...(awardIdFilter ? { id: awardIdFilter } : {}),
       sellerId: { in: validSellerIds },
-      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+      awardStatus: { in: PENDING_AWARD_STATUSES }
     },
     include: { participation: true }
   });
@@ -4625,9 +4627,9 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
         validSellerIds.includes(Number(specificAward.sellerId)) ||
         (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
       if (isAuthorized) {
-        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+        if (PENDING_AWARD_STATUSES.includes(specificAward.awardStatus)) {
           award = specificAward;
-        } else if (specificAward.awardStatus === 'ACCEPTED') {
+        } else if (specificAward.awardStatus === 'ACCEPTED' || specificAward.awardStatus === 'AWARD_ACCEPTED') {
           return { award: specificAward, status: 'AWARD_ACCEPTED', message: 'Award offer has already been accepted.' };
         }
       }
@@ -4641,7 +4643,7 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
         bidId: bid.id,
         ...(awardIdFilter ? { id: awardIdFilter } : {}),
         sellerId: { in: validSellerIds },
-        awardStatus: 'ACCEPTED'
+        awardStatus: { in: ['ACCEPTED', 'AWARD_ACCEPTED'] }
       },
       include: { participation: true }
     });
@@ -4670,7 +4672,8 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
     await tx.procurementBid.update({
       where: { id: bid.id },
       data: {
-        status: 'AWARD_ACCEPTED'
+        status: 'AWARD_ACCEPTED',
+        lifecycleStage: 'AWARD_ACCEPTED'
       }
     });
 
@@ -4736,12 +4739,14 @@ export const declineAward = async (req: AuthRequest, bidId: string, body: any = 
   const validSellerIds = Array.from(new Set([...sellerUserIds, ...sellerOrgIds]));
   const awardIdFilter = body?.awardId ? Number(body.awardId) : undefined;
 
+  const PENDING_AWARD_STATUSES = ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'];
+
   let award = await db.procurementBidAward.findFirst({
     where: {
       bidId: bid.id,
       ...(awardIdFilter ? { id: awardIdFilter } : {}),
       sellerId: { in: validSellerIds },
-      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+      awardStatus: { in: PENDING_AWARD_STATUSES }
     },
     include: { participation: true }
   });
@@ -4756,7 +4761,7 @@ export const declineAward = async (req: AuthRequest, bidId: string, body: any = 
         validSellerIds.includes(Number(specificAward.sellerId)) ||
         (specificAward.participation && validSellerIds.includes(Number(specificAward.participation.sellerId)));
       if (isAuthorized) {
-        if (['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(specificAward.awardStatus)) {
+        if (PENDING_AWARD_STATUSES.includes(specificAward.awardStatus)) {
           award = specificAward;
         } else if (specificAward.awardStatus === 'DECLINED') {
           return { award: specificAward, status: 'AWARD_DECLINED', message: 'Award offer has already been declined.' };

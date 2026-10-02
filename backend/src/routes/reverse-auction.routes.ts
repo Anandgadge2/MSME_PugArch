@@ -165,6 +165,7 @@ const assertAuctionManager = (req: AuthRequest, auction: any) => {
  * try the auction primary key first, then fall back to the linked requirement id so a
  * stale/aliased link self-heals instead of 404-ing.
  */
+const TERMINAL_AUCTION_STATUSES = ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARDED', 'AWARD_ACCEPTED'];
 const resolveAuctionId = async (rawId: number | string): Promise<number | null> => {
   const str = String(rawId ?? '').trim();
   if (!str) return null;
@@ -205,7 +206,34 @@ const resolveAuctionId = async (rawId: number | string): Promise<number | null> 
     }
   }
 
-  // 3. Try numeric lookup if valid number
+  // 3. Try lookup via linked ProcurementBid by bidNumber or tenderNumber (e.g. "RFP-2026-26500")
+  const linkedBidRow = await db.procurementBid.findFirst({
+    where: {
+      OR: [
+        { bidNumber: { equals: str, mode: 'insensitive' } },
+        { tenderNumber: { equals: str, mode: 'insensitive' } },
+        { bidNumber: str },
+        { tenderNumber: str }
+      ]
+    },
+    select: { id: true, bidNumber: true }
+  }).catch(() => null);
+
+  if (linkedBidRow) {
+    const auctionForBid = await db.auction.findFirst({
+      where: {
+        OR: [
+          { linkedBidId: linkedBidRow.id },
+          ...(linkedBidRow.bidNumber ? [{ referenceNo: linkedBidRow.bidNumber }, { auctionCode: linkedBidRow.bidNumber }] : [])
+        ]
+      },
+      select: { id: true },
+      orderBy: { id: 'desc' }
+    });
+    if (auctionForBid) return auctionForBid.id;
+  }
+
+  // 4. Try numeric lookup if valid number
   const num = Number(str);
   if (Number.isFinite(num) && num > 0) {
     const direct = await db.auction.findUnique({ where: { id: num }, select: { id: true } });
@@ -250,7 +278,6 @@ const isAuctionPublic = async (auction: any): Promise<boolean> => {
  * label forever. Derive the effective status from the clock at read time and
  * lazily persist it so every consumer (detail, list, live console) agrees.
  */
-const TERMINAL_AUCTION_STATUSES = ['CLOSED', 'CANCELLED', 'AWARD_RECOMMENDED', 'AWARDED'];
 const withEffectiveStatus = async (auction: any) => {
   if (!auction) return auction;
   const current = String(auction.statusEnum || auction.status || 'DRAFT').toUpperCase();
@@ -3287,18 +3314,28 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
       throw new ApiError(404, 'Awarded participant not found for this auction', 'WINNER_NOT_FOUND');
     }
 
+    const userOrgId = req.user?.organizationId ? String(req.user.organizationId) : "";
+    const userId = req.user?.id ? String(req.user.id) : "";
     const isWinningSeller = Boolean(
       req.user && (
         req.user.role === 'admin' ||
-        (auction.winnerSellerId && req.user.id === auction.winnerSellerId) ||
-        (winner.sellerUserId && req.user.id === winner.sellerUserId) ||
-        (winner.sellerOrgId && req.user.organizationId === winner.sellerOrgId)
+        req.user.role === 'master_admin' ||
+        (auction.winnerSellerId && (String(auction.winnerSellerId) === userId || String(auction.winnerSellerId) === userOrgId)) ||
+        (winner.sellerUserId && (String(winner.sellerUserId) === userId || String(winner.sellerUserId) === userOrgId)) ||
+        (winner.sellerOrgId && (String(winner.sellerOrgId) === userOrgId || String(winner.sellerOrgId) === userId))
       )
     );
 
     if (!isWinningSeller) {
       throw new ApiError(403, 'Only the awarded supplier organization can formally accept this award offer', 'FORBIDDEN_AWARD_ACCEPTANCE');
     }
+
+    // Invalidate caches early
+    invalidateProcurementAuctionCache(id);
+    if (auction.referenceNo) invalidateProcurementAuctionCache(auction.referenceNo);
+    if (auction.auctionCode) invalidateProcurementAuctionCache(auction.auctionCode);
+    if (auction.linkedBidId) invalidateProcurementAuctionCache(auction.linkedBidId);
+    if (auction.linkedRequirementId) invalidateProcurementAuctionCache(auction.linkedRequirementId);
 
     // Idempotent check: if already accepted
     if (auction.status === 'AWARD_ACCEPTED' || winner.status === 'ACCEPTED') {
@@ -3325,32 +3362,43 @@ router.post('/reverse-auctions/:id/accept-award', authenticate, async (req: Auth
     if (auction.linkedBidId) {
       await db.procurementBid.update({
         where: { id: auction.linkedBidId },
-        data: { status: 'AWARD_ACCEPTED' }
+        data: {
+          status: 'AWARD_ACCEPTED',
+          lifecycleStage: 'AWARD_ACCEPTED'
+        }
       }).catch(() => null);
 
-      const bidAward = await db.procurementBidAward.findFirst({
+      await db.procurementBidAward.updateMany({
         where: {
           bidId: auction.linkedBidId,
           OR: [
             { sellerId: winner.sellerUserId || auction.winnerSellerId || 0 },
-            ...(winner.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
+            ...(winner.sellerOrgId ? [{ sellerId: winner.sellerOrgId }] : [])
           ]
-        }
-      });
+        },
+        data: { awardStatus: 'ACCEPTED', awardedAt: new Date() }
+      }).catch(() => null);
 
-      if (bidAward) {
-        await db.procurementBidAward.update({
-          where: { id: bidAward.id },
+      if (winner.sellerOrgId) {
+        await db.procurementBidAward.updateMany({
+          where: {
+            bidId: auction.linkedBidId,
+            seller: { organizationId: winner.sellerOrgId }
+          },
           data: { awardStatus: 'ACCEPTED', awardedAt: new Date() }
         }).catch(() => null);
-
-        if (bidAward.participationId) {
-          await db.procurementBidParticipation.update({
-            where: { id: bidAward.participationId },
-            data: { finalStatus: 'AWARD_ACCEPTED' }
-          }).catch(() => null);
-        }
       }
+
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            ...(winner.sellerUserId ? [{ sellerUserId: winner.sellerUserId }] : []),
+            ...(winner.sellerOrgId ? [{ sellerOrganizationId: winner.sellerOrgId }, { organizationId: winner.sellerOrgId }] : [])
+          ]
+        },
+        data: { finalStatus: 'AWARD_ACCEPTED' }
+      }).catch(() => null);
     }
 
     await writeAuctionEvent(req, id, 'award_accepted', `Contract award offer accepted by supplier organization #${winner.sellerOrgId || winner.sellerUserId}`, {
@@ -3444,13 +3492,16 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
       }
     });
 
+    const userOrgId = req.user?.organizationId ? String(req.user.organizationId) : "";
+    const userId = req.user?.id ? String(req.user.id) : "";
     const isWinningSeller = Boolean(
       req.user && (
         req.user.role === 'admin' ||
-        (auction.winnerSellerId && req.user.id === auction.winnerSellerId) ||
+        req.user.role === 'master_admin' ||
+        (auction.winnerSellerId && (String(auction.winnerSellerId) === userId || String(auction.winnerSellerId) === userOrgId)) ||
         (winner && (
-          (winner.sellerUserId && req.user.id === winner.sellerUserId) ||
-          (winner.sellerOrgId && req.user.organizationId === winner.sellerOrgId)
+          (winner.sellerUserId && (String(winner.sellerUserId) === userId || String(winner.sellerUserId) === userOrgId)) ||
+          (winner.sellerOrgId && (String(winner.sellerOrgId) === userOrgId || String(winner.sellerOrgId) === userId))
         ))
       )
     );
@@ -3458,6 +3509,13 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
     if (!isWinningSeller) {
       throw new ApiError(403, 'Only the awarded supplier can decline this award offer', 'FORBIDDEN_AWARD_DECLINE');
     }
+
+    // Invalidate caches
+    invalidateProcurementAuctionCache(id);
+    if (auction.referenceNo) invalidateProcurementAuctionCache(auction.referenceNo);
+    if (auction.auctionCode) invalidateProcurementAuctionCache(auction.auctionCode);
+    if (auction.linkedBidId) invalidateProcurementAuctionCache(auction.linkedBidId);
+    if (auction.linkedRequirementId) invalidateProcurementAuctionCache(auction.linkedRequirementId);
 
     // Reset auction award state to CLOSED so buyer can award another bidder
     const updatedAuction = await db.auction.update({
@@ -3481,34 +3539,34 @@ router.post('/reverse-auctions/:id/decline-award', authenticate, async (req: Aut
     }
 
     if (auction.linkedBidId) {
-      const bidAward = await db.procurementBidAward.findFirst({
+      await db.procurementBidAward.updateMany({
         where: {
           bidId: auction.linkedBidId,
           OR: [
             { sellerId: winner?.sellerUserId || auction.winnerSellerId || 0 },
-            ...(winner?.sellerOrgId ? [{ seller: { organizationId: winner.sellerOrgId } }] : [])
+            ...(winner?.sellerOrgId ? [{ sellerId: winner.sellerOrgId }] : [])
           ]
+        },
+        data: {
+          awardStatus: 'DECLINED',
+          remarks: payload.reason || 'Award declined by supplier'
         }
-      });
-      if (bidAward) {
-        await db.procurementBidAward.update({
-          where: { id: bidAward.id },
-          data: {
-            awardStatus: 'DECLINED',
-            remarks: payload.reason || 'Award declined by supplier'
-          }
-        }).catch(() => null);
+      }).catch(() => null);
 
-        if (bidAward.participationId) {
-          await db.procurementBidParticipation.update({
-            where: { id: bidAward.participationId },
-            data: {
-              finalStatus: 'AWARD_DECLINED',
-              rejectionReason: payload.reason || 'Award declined by supplier'
-            }
-          }).catch(() => null);
+      await db.procurementBidParticipation.updateMany({
+        where: {
+          bidId: auction.linkedBidId,
+          OR: [
+            ...(winner?.sellerUserId ? [{ sellerUserId: winner.sellerUserId }] : []),
+            ...(winner?.sellerOrgId ? [{ sellerOrganizationId: winner.sellerOrgId }, { organizationId: winner.sellerOrgId }] : [])
+          ]
+        },
+        data: {
+          finalStatus: 'AWARD_DECLINED',
+          rejectionReason: payload.reason || 'Award declined by supplier'
         }
-      }
+      }).catch(() => null);
+
       await db.procurementBid.update({
         where: { id: auction.linkedBidId },
         data: { status: 'L1_GENERATED', lifecycleStage: 'EVALUATION' }

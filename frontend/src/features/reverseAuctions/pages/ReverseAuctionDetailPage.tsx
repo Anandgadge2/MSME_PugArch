@@ -272,23 +272,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     onError: (err: any) => toast.error(err.message || 'Failed to join auction'),
   });
 
-  if (auction.isLoading) {
-    return <ProcurementDetailSkeleton />;
-  }
-
-  if (auction.isError || !auction.data) {
-    return (
-      <div className="p-12 text-center space-y-4 max-w-lg mx-auto">
-        <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto" />
-        <p className="text-sm font-bold text-rose-600">Reverse auction not found or inaccessible.</p>
-        <Button type="button" variant="outline" onClick={() => invalidate()}>
-          Retry
-        </Button>
-      </div>
-    );
-  }
-
-  const auctionData = auction.data;
+  const auctionData = auction.data || ({} as any);
   const status = String(auctionData.statusEnum || auctionData.status || 'DRAFT').toUpperCase();
   const isPublicAuction =
     auctionData.auctionType === 'OPEN' || !auctionData.auctionType || auctionData.auctionType === 'ENGLISH_REVERSE';
@@ -1011,6 +995,22 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     linkedBidData.buyingType ||
     (linkedBidData.category && !String(linkedBidData.category).toUpperCase().includes('TENDER') && !String(linkedBidData.category).toUpperCase().includes('AUCTION') ? linkedBidData.category : undefined) ||
     'Goods / Products';
+
+  if (auction.isLoading) {
+    return <ProcurementDetailSkeleton />;
+  }
+
+  if (auction.isError || !auction.data) {
+    return (
+      <div className="p-12 text-center space-y-4 max-w-lg mx-auto">
+        <AlertTriangle className="h-10 w-10 text-rose-500 mx-auto" />
+        <p className="text-sm font-bold text-rose-600">Reverse auction not found or inaccessible.</p>
+        <Button type="button" variant="outline" onClick={() => invalidate()}>
+          Retry
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <>

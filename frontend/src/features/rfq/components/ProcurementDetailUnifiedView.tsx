@@ -4871,7 +4871,26 @@ export function ProcurementDetailUnifiedView(
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
-  const [locallyAcceptedAwardIds, setLocallyAcceptedAwardIds] = useState<Set<string>>(new Set());
+  const [locallyAcceptedAwardIds, setLocallyAcceptedAwardIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = localStorage.getItem("msme_accepted_award_ids");
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const markAwardLocallyAccepted = React.useCallback((ids: (string | number | undefined | null)[]) => {
+    setLocallyAcceptedAwardIds((prev) => {
+      const next = new Set(prev);
+      ids.filter(Boolean).forEach((id) => next.add(String(id)));
+      try {
+        localStorage.setItem("msme_accepted_award_ids", JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+  }, []);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [isTaxInvoiceModalOpen, setIsTaxInvoiceModalOpen] = useState(false);
   const [selectedInvoiceModalId, setSelectedInvoiceModalId] = useState<number | null>(null);
@@ -5206,13 +5225,31 @@ export function ProcurementDetailUnifiedView(
     // Synthesize reverse auction award if linkedAuction has winner/award status
     if (
       linkedAuction &&
-      ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED', 'AWARD_ACCEPTED'].includes(
+      ['AWARD_OFFERED', 'AWARD_RECOMMENDED', 'AWARDED', 'COMPLETED', 'AWARD_ACCEPTED', 'CLOSED'].includes(
         String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase()
       )
     ) {
       const winnerUserId = linkedAuction.winnerSellerId || linkedAuction.winnerSeller?.id || linkedAuction.lowestBidderId;
       const winnerOrgId = linkedAuction.winningSellerOrgId || linkedAuction.winnerSeller?.organizationId;
       if (winnerUserId || winnerOrgId) {
+        const isAuctionAlreadyAccepted =
+          String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+          linkedAuction.winnerParticipant?.status === 'ACCEPTED' ||
+          linkedAuction.winnerStatus === 'ACCEPTED' ||
+          (Array.isArray(linkedAuction.participants) &&
+            linkedAuction.participants.some((p: any) =>
+              String(p.status).toUpperCase() === 'ACCEPTED' &&
+              (String(p.sellerUserId) === currentUserId || String(p.sellerOrgId) === currentOrgId)
+            )) ||
+          String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+          String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+          String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+          String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+          locallyAcceptedAwardIds.has(String(linkedAuction.id)) ||
+          locallyAcceptedAwardIds.has(String(targetId)) ||
+          locallyAcceptedAwardIds.has(String(props.id)) ||
+          locallyAcceptedAwardIds.has(String(props.displayId));
+
         list.push({
           id: linkedAuction.id,
           bidId: linkedAuction.linkedBidId || targetId,
@@ -5222,7 +5259,7 @@ export function ProcurementDetailUnifiedView(
           sellerOrgId: winnerOrgId,
           sellerOrganizationId: winnerOrgId,
           awardedAmount: linkedAuction.winningBidAmount || linkedAuction.currentLowestBid || linkedAuction.startPrice,
-          awardStatus: String(linkedAuction.status || linkedAuction.statusEnum || '').toUpperCase() === 'AWARD_ACCEPTED' ? 'ACCEPTED' : 'OFFERED',
+          awardStatus: isAuctionAlreadyAccepted ? 'ACCEPTED' : 'OFFERED',
           isReverseAuctionAward: true,
           linkedAuctionId: linkedAuction.id,
           remarks: 'Reverse Auction Award'
@@ -5239,7 +5276,29 @@ export function ProcurementDetailUnifiedView(
         map.set(key, item);
       }
     }
-    return Array.from(map.values());
+    return Array.from(map.values()).map((item: any) => {
+      const isItemAccepted =
+        locallyAcceptedAwardIds.has(String(item.id)) ||
+        locallyAcceptedAwardIds.has(String(item.bidId)) ||
+        locallyAcceptedAwardIds.has(String(targetId)) ||
+        locallyAcceptedAwardIds.has(String(props.id)) ||
+        locallyAcceptedAwardIds.has(String(props.displayId)) ||
+        String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+        String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+        String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+        String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+        Boolean(props.activeOrder || props.rawBid?.activeOrder || localCreatedOrder) ||
+        (Array.isArray(props.purchaseOrders) && props.purchaseOrders.length > 0);
+      if (
+        isItemAccepted &&
+        ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'].includes(
+          String(item.awardStatus || item.status || '').toUpperCase()
+        )
+      ) {
+        return { ...item, awardStatus: 'ACCEPTED' };
+      }
+      return item;
+    });
   }, [
     props.rawBid?.awards,
     props.awards,
@@ -5255,7 +5314,18 @@ export function ProcurementDetailUnifiedView(
     props.displayId,
     props.id,
     props.rawBid?.id,
-    props.rawBid?.bidNumber
+    props.rawBid?.bidNumber,
+    props.status,
+    props.lifecycleStage,
+    props.rawBid?.status,
+    props.rawBid?.lifecycleStage,
+    locallyAcceptedAwardIds,
+    props.activeOrder,
+    props.rawBid?.activeOrder,
+    localCreatedOrder,
+    props.purchaseOrders,
+    currentUserId,
+    currentOrgId
   ]);
 
   const myAward = !isBuyerSide
@@ -5294,12 +5364,32 @@ export function ProcurementDetailUnifiedView(
     const isAcceptedLocally =
       (rawActiveAward.id && locallyAcceptedAwardIds.has(String(rawActiveAward.id))) ||
       (rawActiveAward.bidId && locallyAcceptedAwardIds.has(String(rawActiveAward.bidId))) ||
-      locallyAcceptedAwardIds.has(String(targetId));
+      locallyAcceptedAwardIds.has(String(targetId)) ||
+      locallyAcceptedAwardIds.has(String(props.id)) ||
+      locallyAcceptedAwardIds.has(String(props.displayId)) ||
+      String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+      Boolean(props.activeOrder || props.rawBid?.activeOrder || localCreatedOrder) ||
+      (Array.isArray(props.purchaseOrders) && props.purchaseOrders.length > 0);
     if (isAcceptedLocally) {
       return { ...rawActiveAward, awardStatus: "ACCEPTED" };
     }
     return rawActiveAward;
-  }, [rawActiveAward, locallyAcceptedAwardIds, targetId]);
+  }, [
+    rawActiveAward,
+    locallyAcceptedAwardIds,
+    targetId,
+    props.id,
+    props.displayId,
+    props.status,
+    props.lifecycleStage,
+    props.rawBid,
+    props.activeOrder,
+    localCreatedOrder,
+    props.purchaseOrders
+  ]);
 
   const isAwardedToMe = Boolean(
     !isBuyerSide && (
@@ -5792,19 +5882,42 @@ export function ProcurementDetailUnifiedView(
       const isReverseAuction =
         activeAward?.isReverseAuctionAward ||
         String(targetId).toUpperCase().startsWith("RA-") ||
-        (linkedAuction && String(activeAward?.id) === String(linkedAuction?.id));
+        Boolean(linkedAuction && (String(activeAward?.id) === String(linkedAuction?.id) || activeAward?.linkedAuctionId));
 
-      if (isReverseAuction) {
-        const auctionIdToUse = linkedAuction?.id || targetId;
-        await postApi(`/api/reverse-auctions/${encodeURIComponent(String(auctionIdToUse))}/accept-award`, {});
-      } else {
-        await procurementBidApi.acceptAward(targetId, awardId);
+      const effId = String(awardId || activeAward?.id || targetId);
+      markAwardLocallyAccepted([
+        effId,
+        String(targetId),
+        String(props.id),
+        String(props.displayId),
+        String(activeAward?.id),
+        String(linkedAuction?.id),
+        String(props.rawBid?.id)
+      ]);
+
+      const calls: Promise<any>[] = [];
+      if (isReverseAuction || linkedAuction) {
+        const auctionIdToUse = linkedAuction?.id || activeAward?.linkedAuctionId || targetId;
+        calls.push(
+          postApi(`/api/reverse-auctions/${encodeURIComponent(String(auctionIdToUse))}/accept-award`, {}).catch((err: any) => {
+            console.warn('[handleAcceptAward] reverse auction accept notice:', err);
+          })
+        );
       }
+
+      const effectiveBidId = props.rawBid?.id || (props as any)?.bidId || (!String(targetId).toUpperCase().startsWith('RA-') ? targetId : undefined);
+      if (effectiveBidId) {
+        calls.push(
+          procurementBidApi.acceptAward(effectiveBidId, awardId).catch((err: any) => {
+            console.warn('[handleAcceptAward] bid award accept notice:', err);
+          })
+        );
+      }
+
+      await Promise.all(calls);
       toast.success(
         "Bid award accepted! Buyer will now issue the Purchase Order.",
       );
-      const effId = String(awardId || activeAward?.id || targetId);
-      setLocallyAcceptedAwardIds((prev) => new Set(prev).add(effId).add(String(targetId)));
       window.dispatchEvent(new CustomEvent("award:accepted", { detail: { bidId: targetId, awardId: effId } }));
       window.dispatchEvent(new CustomEvent("orders:updated", { detail: { bidId: targetId, awardId: effId } }));
       window.dispatchEvent(new CustomEvent("awards:updated", { detail: { bidId: targetId, awardId: effId } }));
@@ -6527,31 +6640,49 @@ export function ProcurementDetailUnifiedView(
     0
   );
 
-  const rawDocs = asArray(
-    props.documents ||
-      payload.documents ||
-      payload.bidDocuments ||
-      (props as any).rawBid?.documents ||
-      [],
+  const rawDocs = useMemo(
+    () =>
+      asArray(
+        props.documents ||
+          payload.documents ||
+          payload.bidDocuments ||
+          (props as any).rawBid?.documents ||
+          [],
+      ),
+    [
+      props.documents,
+      payload.documents,
+      payload.bidDocuments,
+      (props as any).rawBid?.documents,
+    ],
   );
+
+  const sowFileAssetId =
+    serviceDetails?.sowFileAssetId ||
+    payload.serviceDetails?.sowFileAssetId ||
+    payload.wizardData?.serviceDetails?.sowFileAssetId;
+  const sowFileName =
+    serviceDetails?.sowFileName ||
+    payload.serviceDetails?.sowFileName ||
+    payload.wizardData?.serviceDetails?.sowFileName;
+  const sowFileUrl =
+    serviceDetails?.sowFileUrl ||
+    payload.serviceDetails?.sowFileUrl ||
+    payload.wizardData?.serviceDetails?.sowFileUrl;
+
+  const boqFileAssetId =
+    payload.boqFileAssetId ||
+    payload.wizardData?.boqFileAssetId ||
+    (props as any).boqFileAssetId;
+  const boqFileName =
+    payload.boqFileName ||
+    payload.wizardData?.boqFileName ||
+    (props as any).boqFileName;
 
   const documents = useMemo(() => {
     const list = [...rawDocs];
 
     // Check if serviceDetails has an attached SOW document
-    const sowFileAssetId =
-      serviceDetails?.sowFileAssetId ||
-      payload.serviceDetails?.sowFileAssetId ||
-      payload.wizardData?.serviceDetails?.sowFileAssetId;
-    const sowFileName =
-      serviceDetails?.sowFileName ||
-      payload.serviceDetails?.sowFileName ||
-      payload.wizardData?.serviceDetails?.sowFileName;
-    const sowFileUrl =
-      serviceDetails?.sowFileUrl ||
-      payload.serviceDetails?.sowFileUrl ||
-      payload.wizardData?.serviceDetails?.sowFileUrl;
-
     if (sowFileAssetId || sowFileName || sowFileUrl) {
       const alreadyIncluded = list.some(
         (d: any) =>
@@ -6574,14 +6705,6 @@ export function ProcurementDetailUnifiedView(
     }
 
     // Check if boqTable has an attached BOQ spreadsheet
-    const boqFileAssetId =
-      payload.boqFileAssetId ||
-      payload.wizardData?.boqFileAssetId ||
-      (props as any).boqFileAssetId;
-    const boqFileName =
-      payload.boqFileName ||
-      payload.wizardData?.boqFileName ||
-      (props as any).boqFileName;
     if (boqFileAssetId || boqFileName) {
       const alreadyIncluded = list.some(
         (d: any) =>
@@ -6605,15 +6728,11 @@ export function ProcurementDetailUnifiedView(
     return list;
   }, [
     rawDocs,
-    serviceDetails,
-    payload.serviceDetails,
-    payload.wizardData?.serviceDetails,
-    payload.boqFileAssetId,
-    payload.wizardData?.boqFileAssetId,
-    payload.boqFileName,
-    payload.wizardData?.boqFileName,
-    (props as any).boqFileAssetId,
-    (props as any).boqFileName,
+    sowFileAssetId,
+    sowFileName,
+    sowFileUrl,
+    boqFileAssetId,
+    boqFileName,
   ]);
   const requiredDocuments = firstPresent(
     props.requiredDocuments,
@@ -10672,72 +10791,74 @@ export function ProcurementDetailUnifiedView(
             ["OFFERED", "RECOMMENDED", "ADMIN_APPROVED", "AWARDED", "AWARD_OFFERED", "PENDING", "PENDING_ACCEPTANCE", "ISSUED"].includes(
               String(activeAward?.awardStatus || activeAward?.status || "").toUpperCase(),
             ) &&
+            !["ACCEPTED", "AWARD_ACCEPTED"].includes(
+              String(activeAward?.awardStatus || activeAward?.status || "").toUpperCase(),
+            ) &&
+            !locallyAcceptedAwardIds.has(String(activeAward?.id)) &&
+            !locallyAcceptedAwardIds.has(String(activeAward?.bidId)) &&
+            !locallyAcceptedAwardIds.has(String(targetId)) &&
+            !locallyAcceptedAwardIds.has(String(props.id)) &&
+            !locallyAcceptedAwardIds.has(String(props.displayId)) &&
+            String(props.status || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.lifecycleStage || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.rawBid?.status || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            String(props.rawBid?.lifecycleStage || '').toUpperCase() !== 'AWARD_ACCEPTED' &&
+            !effectiveActiveOrder &&
+            !(Array.isArray(props.purchaseOrders) && props.purchaseOrders.length > 0) &&
             activeAward?.counterOfferStatus !== "PENDING" &&
             activeAward?.counterOfferStatus !== "PENDING_SUPPLIER" && (
               <div
                 id="award-acceptance-section"
-                className="relative overflow-hidden rounded-xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-700 via-teal-700 to-[#12335f] p-4 sm:p-5 text-white shadow-lg animate-fadeIn"
+                className="relative overflow-hidden rounded-xl border border-emerald-500/50 bg-gradient-to-r from-[#063323] via-[#094732] to-[#0d2e47] px-3.5 py-2.5 sm:px-4 sm:py-3 text-white shadow-md animate-fadeIn"
               >
-                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="space-y-2">
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-black/30 border border-emerald-300/40 px-3 py-0.5 text-[11px] font-black uppercase tracking-wider text-emerald-100 backdrop-blur-xs">
-                      <Trophy className="h-3.5 w-3.5 text-amber-300 animate-bounce" />
-                      Bid Award Issued — Formal Acceptance Required
+                <div className="relative z-10 flex flex-col gap-2.5 md:flex-row md:items-center md:justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-400/20 border border-emerald-400/30 text-amber-300">
+                      <Trophy className="h-4 w-4" aria-hidden="true" />
                     </div>
-                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white leading-snug">
-                      Congratulations! Your Organization has been Awarded the Contract
-                    </h3>
-                    <p className="text-xs sm:text-sm font-medium text-emerald-100 max-w-2xl leading-relaxed">
-                      The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) has officially awarded this tender to your organization. Please review the award details below and formally accept or decline the contract award.
-                    </p>
-                    
-                    <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                      <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
-                        <span className="text-emerald-200 font-semibold">Awarded Value: </span>
-                        <span className="font-extrabold text-white text-sm">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                        <span className="inline-flex items-center rounded-md bg-emerald-400/20 border border-emerald-400/30 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-200">
+                          Award Offered
+                        </span>
+                        <h3 className="text-xs sm:text-sm font-black text-white tracking-tight truncate">
+                          Contract Awarded to Your Organization
+                        </h3>
+                        <span className="text-emerald-400 text-xs hidden sm:inline">•</span>
+                        <span className="text-xs font-black text-emerald-300">
                           {formatCurrency(Number(activeAward?.awardedAmount || activeAward?.amount || activeAward?.counterOfferAmount || props.estimatedValue || 0))}
                         </span>
-                      </div>
-                      {activeAward?.id && (
-                        <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
-                          <span className="text-emerald-200 font-semibold">Award Ref: </span>
-                          <span className="font-bold text-white">
-                            {String(activeAward.id).startsWith('RA-') ? String(activeAward.id) : `AWD-${activeAward.id}`}
+                        {activeAward?.id && (
+                          <span className="text-[11px] font-medium text-emerald-200/80 bg-black/30 px-1.5 py-0.5 rounded border border-white/10 hidden md:inline">
+                            Ref: {String(activeAward.id).startsWith('RA-') ? String(activeAward.id) : `AWD-${activeAward.id}`}
                           </span>
-                        </div>
-                      )}
-                      {activeAward?.remarks && (
-                        <div className="rounded-lg bg-black/25 border border-white/20 px-3 py-1.5 backdrop-blur-xs">
-                          <span className="text-emerald-200 font-semibold">Remarks: </span>
-                          <span className="font-medium text-emerald-100">
+                        )}
+                        {activeAward?.remarks && (
+                          <span className="text-[11px] font-medium text-emerald-300/80 bg-black/20 px-1.5 py-0.5 rounded hidden lg:inline">
                             {activeAward.remarks}
                           </span>
-                        </div>
-                      )}
+                        )}
+                      </div>
+                      <p className="text-[11px] font-medium text-emerald-200/90 leading-tight mt-0.5 truncate max-w-xl">
+                        Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) issued formal award. Accept or decline to proceed to Purchase Order.
+                      </p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 shrink-0 pt-2 lg:pt-0">
+
+                  <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
                     <Button
                       type="button"
                       disabled={isAcceptingAction}
-                      onClick={() =>
-                        handleAcceptAward(String(activeAward?.id || ""))
-                      }
-                      className="h-10 bg-white hover:bg-emerald-50 text-emerald-900 font-extrabold text-xs sm:text-sm px-5 shadow-md gap-2 rounded-xl cursor-pointer transition-transform active:scale-95"
+                      onClick={() => handleAcceptAward(String(activeAward?.id || ""))}
+                      className="h-7.5 sm:h-8 bg-emerald-400 hover:bg-emerald-300 text-emerald-950 font-black text-xs px-3 sm:px-3.5 shadow-sm gap-1.5 rounded-lg cursor-pointer transition-all active:scale-95"
                       aria-label="Formally accept contract award"
                     >
                       {isAcceptingAction ? (
-                        <Loader2
-                          className="h-4 w-4 animate-spin text-emerald-600"
-                          aria-hidden="true"
-                        />
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-emerald-950" aria-hidden="true" />
                       ) : (
-                        <CheckCircle2
-                          className="h-4 w-4 text-emerald-600"
-                          aria-hidden="true"
-                        />
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-950" aria-hidden="true" />
                       )}
-                      Formally Accept Award
+                      Accept Award
                     </Button>
                     <Button
                       type="button"
@@ -10751,11 +10872,12 @@ export function ProcurementDetailUnifiedView(
                           submitting: false,
                         })
                       }
-                      className="h-10 bg-black/30 hover:bg-black/50 text-white font-bold text-xs sm:text-sm px-4 border border-white/30 gap-1.5 rounded-xl cursor-pointer transition-colors"
+                      variant="ghost"
+                      className="h-7.5 sm:h-8 text-emerald-200 hover:text-white hover:bg-white/10 font-bold text-xs px-2.5 border border-white/20 gap-1 rounded-lg cursor-pointer transition-colors"
                       aria-label="Decline contract award"
                     >
-                      <XCircle className="h-4 w-4" aria-hidden="true" />
-                      Decline Award
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      Decline
                     </Button>
                   </div>
                 </div>
@@ -10766,35 +10888,46 @@ export function ProcurementDetailUnifiedView(
           {!isBuyerSide &&
             isAwardedToMe &&
             Boolean(activeAward) &&
-            ["ACCEPTED", "AWARD_ACCEPTED"].includes(
+            (["ACCEPTED", "AWARD_ACCEPTED"].includes(
               String(activeAward?.awardStatus || activeAward?.status || "").toUpperCase()
+            ) ||
+              locallyAcceptedAwardIds.has(String(activeAward?.id)) ||
+              locallyAcceptedAwardIds.has(String(activeAward?.bidId)) ||
+              locallyAcceptedAwardIds.has(String(targetId)) ||
+              locallyAcceptedAwardIds.has(String(props.id)) ||
+              locallyAcceptedAwardIds.has(String(props.displayId)) ||
+              String(props.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.rawBid?.status || '').toUpperCase() === 'AWARD_ACCEPTED' ||
+              String(props.rawBid?.lifecycleStage || '').toUpperCase() === 'AWARD_ACCEPTED'
             ) &&
             !effectiveActiveOrder && (
               <div
                 id="award-acceptance-section"
-                className="rounded-xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-3.5 sm:p-4 shadow-sm animate-fadeIn"
+                className="rounded-xl border border-sky-300/70 bg-gradient-to-r from-sky-50 via-indigo-50/40 to-white px-3.5 py-2 sm:px-4 sm:py-2.5 shadow-xs animate-fadeIn"
               >
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="flex items-start gap-3">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-sm">
-                      <Clock className="h-5 w-5" />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg bg-sky-600 text-white shadow-2xs">
+                      <CheckCircle2 className="h-4 w-4" />
                     </div>
-                    <div>
-                      <div className="inline-flex items-center gap-1.5 rounded-md bg-blue-100/80 border border-blue-200 px-2.5 py-0.5 text-[10.5px] font-black uppercase tracking-wider text-blue-900 mb-1">
-                        <CheckCircle2 className="h-3 w-3 text-blue-700" />
-                        Award Accepted
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex items-center rounded-md bg-sky-100 border border-sky-300 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-sky-900">
+                          Award Accepted
+                        </span>
+                        <h4 className="text-xs sm:text-sm font-extrabold text-sky-950 truncate">
+                          Contract Award Accepted — Awaiting Purchase Order
+                        </h4>
                       </div>
-                      <h4 className="text-sm sm:text-base font-extrabold text-blue-950 leading-tight">
-                        Award Acceptance Confirmed — Awaiting Buyer&apos;s Purchase Order
-                      </h4>
-                      <p className="text-xs sm:text-[13px] font-medium text-blue-800/90 mt-0.5 leading-snug max-w-2xl">
-                        You have formally accepted the contract award. The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) has been notified to generate and issue the official Purchase Order. You will review and accept the PO once issued.
+                      <p className="text-[11px] font-medium text-sky-800/90 mt-0.5 truncate max-w-xl">
+                        Award confirmed. The Buyer ({props.orgName || props.buyerName || props.buyer?.name || "Buyer Organization"}) will issue the official PO.
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-300 px-3.5 py-2 text-xs font-bold text-blue-900 shadow-2xs">
-                      <Clock className="h-4 w-4 text-blue-600 animate-pulse" />
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <span className="inline-flex items-center gap-1.5 rounded-lg bg-sky-50 border border-sky-300 px-2.5 py-1 text-xs font-bold text-sky-900 shadow-2xs">
+                      <Clock className="h-3.5 w-3.5 text-sky-600 animate-pulse" />
                       Pending Buyer PO Release
                     </span>
                   </div>
