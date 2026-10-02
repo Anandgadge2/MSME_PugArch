@@ -380,29 +380,7 @@ export default function BidComparisonPage() {
     };
     const paymentTerms = formatPay(rawPay);
 
-    const buyerWarranty = first(
-      bid?.terms?.warrantyTerms,
-      bid?.technicalPacket?.terms?.warrantyTerms,
-      bid?.payload?.terms?.warrantyTerms,
-      bid?.payload?.warrantyTerms,
-      bid?.tender?.warrantyTerms,
-      bid?.warrantyRequirement
-    );
 
-    const rawWarranty = first(
-      p.warrantyDetails,
-      p.warranty,
-      respData.warranty,
-      respData.warrantyDetails,
-      details.warranty,
-      details.warrantyDetails,
-      ackData.warranty,
-      firstItem.warranty
-    );
-
-    const warranty = rawWarranty
-      ? String(rawWarranty)
-      : (buyerWarranty ? String(buyerWarranty) : '—');
 
     // Technical
     const rawMake = first(
@@ -570,7 +548,6 @@ export default function BidComparisonPage() {
       deliveryTimeline,
       deliveryTerms,
       paymentTerms,
-      warranty,
       makeBrand,
       model,
       techSpecs,
@@ -702,7 +679,6 @@ export default function BidComparisonPage() {
       ['Promised Delivery Timeline', ...filteredAndSortedItems.map(p => p.deliveryTimeline)],
       ['Delivery Terms & Freight', ...filteredAndSortedItems.map(p => p.deliveryTerms)],
       ['Payment Terms', ...filteredAndSortedItems.map(p => p.paymentTerms)],
-      ['Warranty Terms', ...filteredAndSortedItems.map(p => p.warranty)],
       ['Technical Status', ...filteredAndSortedItems.map(p => p.techStatus)],
       ['Compliance Statement', ...filteredAndSortedItems.map(p => {
         const comp = String(p.complianceStatement || '').toUpperCase();
@@ -870,15 +846,7 @@ export default function BidComparisonPage() {
               <span>Export CSV</span>
             </button>
 
-            <button
-              type="button"
-              onClick={() => window.print()}
-              className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition cursor-pointer"
-              title="Print / Save as PDF"
-            >
-              <Printer className="h-3.5 w-3.5 text-slate-500" />
-              <span>Print</span>
-            </button>
+
 
             <button
               type="button"
@@ -1384,21 +1352,7 @@ export default function BidComparisonPage() {
                     ))}
                   </tr>
 
-                  {/* 2.4 Warranty & Guarantee */}
-                  <tr className="hover:bg-slate-50/60 transition-colors">
-                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Warranty & Guarantee Terms
-                    </td>
-                    {filteredAndSortedItems.map((p) => (
-                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-800">
-                        {p.warranty && p.warranty !== '—' ? (
-                          p.warranty
-                        ) : (
-                          <span className="text-slate-400 font-normal italic">—</span>
-                        )}
-                      </td>
-                    ))}
-                  </tr>
+
 
 
 
