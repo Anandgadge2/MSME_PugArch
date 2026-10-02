@@ -116,6 +116,10 @@ export default function BidComparisonPage() {
     bid?.financialOpeningDate ||
     bid?.schedule?.financialOpeningDate ||
     bid?.schedule?.financialBidOpeningDate ||
+    bid?.technicalPacket?.schedule?.financialOpeningDate ||
+    bid?.technicalPacket?.financialOpeningDate ||
+    bid?.payload?.dates?.financialOpeningDate ||
+    bid?.payload?.schedule?.financialOpeningDate ||
     bid?.tender?.financialOpeningDate;
 
   const isTwoPacket =
@@ -124,16 +128,91 @@ export default function BidComparisonPage() {
       rawPacketType === "2" ||
       Boolean(candidateFinDate));
 
-  const isFinancialOpened = useMemo(() => {
-    const statusUpper = String(bid?.status || bid?.lifecycleStage || "").toUpperCase();
-    if (['FINANCIAL_EVALUATION', 'FINANCIAL_EVALUATED', 'AWARD_RECOMMENDED', 'AWARD_OFFERED', 'AWARDED', 'COMPLETED'].includes(statusUpper)) {
+  const isTechEvalCompleted = useMemo(() => {
+    if (!bid) return false;
+    const rawStatus = String(bid?.status || '').toUpperCase();
+    const rawStage = String(bid?.lifecycleStage || '').toUpperCase();
+    if (
+      [
+        'TECHNICAL_EVALUATION_COMPLETED',
+        'FINANCIAL_EVALUATION',
+        'FINANCIAL_EVALUATED',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARD_OFFERED',
+        'AWARDED',
+        'PO_GENERATED',
+        'COMPLETED',
+      ].includes(rawStatus) ||
+      [
+        'TECHNICAL_EVALUATION_COMPLETED',
+        'FINANCIAL_EVALUATION',
+        'FINANCIAL_EVALUATED',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARD_OFFERED',
+        'AWARDED',
+        'PO_GENERATED',
+        'COMPLETED',
+      ].includes(rawStage)
+    ) {
       return true;
     }
-    if (candidateFinDate) {
-      return new Date(candidateFinDate).getTime() <= Date.now();
+    // Also verify participation-level evaluation completion
+    const parts = Array.isArray(bid?.participations) ? bid.participations : [];
+    if (parts.length > 0) {
+      const hasPending = parts.some((p: any) => {
+        const t = String(p.technicalStatus || p.details?.techStatus || 'PENDING').toUpperCase();
+        return t === 'PENDING' || t === 'UNDER_REVIEW' || t === 'CLARIFICATION_REQUIRED';
+      });
+      const hasQualified = parts.some((p: any) => {
+        const t = String(p.technicalStatus || p.details?.techStatus || '').toUpperCase();
+        return t === 'QUALIFIED';
+      });
+      if (!hasPending && hasQualified) {
+        return true;
+      }
     }
-    return !isTwoPacket;
-  }, [bid?.status, bid?.lifecycleStage, candidateFinDate, isTwoPacket]);
+    return false;
+  }, [bid]);
+
+  const isFinancialOpeningPending = useMemo(() => {
+    if (!isTwoPacket) return false;
+    const statusUpper = String(bid?.status || bid?.lifecycleStage || "").toUpperCase();
+    // If already in financial evaluation or post-financial stages, opening is concluded
+    if (
+      [
+        'FINANCIAL_EVALUATION',
+        'FINANCIAL_EVALUATED',
+        'L1_GENERATED',
+        'AWARD_RECOMMENDED',
+        'AWARD_OFFERED',
+        'AWARDED',
+        'PO_GENERATED',
+        'COMPLETED',
+      ].includes(statusUpper)
+    ) {
+      return false;
+    }
+
+    // If technical evaluation is NOT complete, financial opening is strictly pending
+    if (!isTechEvalCompleted) {
+      return true;
+    }
+
+    // If technical evaluation is complete, only pending if an explicit future opening date was scheduled
+    if (candidateFinDate) {
+      const d = new Date(candidateFinDate);
+      if (!isNaN(d.getTime())) {
+        return d.getTime() > Date.now();
+      }
+    }
+
+    // Stage 1 complete and no future financial opening date blocking it
+    return false;
+  }, [bid?.status, bid?.lifecycleStage, isTwoPacket, isTechEvalCompleted, candidateFinDate]);
+
+  const isFinancialOpened = !isFinancialOpeningPending;
 
   // Comprehensive Quotation Detail Parser
   const parseQuotationData = useCallback((p: any) => {

@@ -1429,7 +1429,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const isAdmin = actorRole === 'admin' || actorRole === 'master_admin';
   const isBuyerOwner = actorRole === 'buyer' || isAdmin || (!!actor?.id && Number(bid.buyerId) === Number(actor.id));
   const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner || actorRole === 'buyer';
-  const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && financialOpenStatuses.includes(bid.status));
+  const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && (financialOpenStatuses.includes(bid.status) || bid.status === 'TECHNICAL_EVALUATION_COMPLETED'));
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
   const isTwoPacket = String(bid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(bid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
   const linkedRequirementId = Number(packetMeta.sourceRequirementId || packetMeta.requirementId || packetMeta.linkedRequirementId || 0) || null;
@@ -1694,7 +1694,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
     }).map((p: any) => {
       const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
       const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
-      const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
+      const isFinancialStageForBuyer = financialOpenStatuses.includes(bid.status) || bid.status === 'TECHNICAL_EVALUATION_COMPLETED';
+      const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && isFinancialStageForBuyer && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
       return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
     }) : undefined,
     results: canSeeParticipants ? (bid.participations || [])
@@ -1712,11 +1713,12 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       .map((p: any) => {
         const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
-        const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && financialOpenStatuses.includes(bid.status) && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
+        const isFinancialStageForBuyer = financialOpenStatuses.includes(bid.status) || bid.status === 'TECHNICAL_EVALUATION_COMPLETED';
+        const allowFinancial = isAdmin || isOwn || (isTwoPacket ? (isBuyerOwner && isFinancialStageForBuyer && !isDisqualified) : (isBuyerOwner && (options.includeFinancial || financialOpenStatuses.includes(bid.status))));
         return serializeParticipation(p, { canSeeFinancial: allowFinancial, bid, ownView: isOwn });
       })
       .sort((a: any, b: any) => {
-        if (isTwoPacket && !financialOpenStatuses.includes(bid.status)) {
+        if (isTwoPacket && !financialOpenStatuses.includes(bid.status) && !(isBuyerOwner && bid.status === 'TECHNICAL_EVALUATION_COMPLETED')) {
           const aQual = a.technicalStatus === 'QUALIFIED' ? 1 : 0;
           const bQual = b.technicalStatus === 'QUALIFIED' ? 1 : 0;
           if (aQual !== bQual) return bQual - aQual;
@@ -1731,7 +1733,7 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       })
       .map((p: any, idx: number) => {
         const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
-        const isFinSealed = Boolean(p.financialSealed || (isTwoPacket && (!financialOpenStatuses.includes(bid.status) || isDisqualified) && !isAdmin));
+        const isFinSealed = Boolean(p.financialSealed || (isTwoPacket && (!financialOpenStatuses.includes(bid.status) && !(isBuyerOwner && bid.status === 'TECHNICAL_EVALUATION_COMPLETED') || isDisqualified) && !isAdmin));
         const rawQuotedAmt = p.totalAmount ?? p.quotedAmount ?? null;
         const quotedAmt = isFinSealed ? null : (rawQuotedAmt != null ? Number(rawQuotedAmt) : null);
         const sellerOrg = p.sellerName || p.seller?.organization?.organizationName || p.seller?.name || 'Supplier';

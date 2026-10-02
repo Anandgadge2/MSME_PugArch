@@ -1944,9 +1944,12 @@ router.get('/buyer/procurement-bids/:bidId/participants', authenticate, requireA
   await enrichBidsWithResponses([bid], req.user!.role === 'buyer' ? req.user!.id : undefined);
 
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
-  const isTwoPacket = String(bid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(bid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
+  const sched = packetMeta.schedule || {};
+  const candidateFinDate = bid.financialOpeningDate || packetMeta.financialOpeningDate || sched.financialOpeningDate || sched.financialBidOpeningDate;
+  const isFutureFinDate = candidateFinDate && !isNaN(new Date(candidateFinDate).getTime()) && new Date(candidateFinDate).getTime() > Date.now();
+  const isTwoPacket = String(bid.packetType || packetMeta.packetType || sched.packetType || '').toUpperCase().includes('TWO') || Boolean(candidateFinDate);
   const isAdmin = req.user?.role === 'admin' || req.user?.role === 'master_admin';
-  const isFinancialStage = service.financialOpenStatuses.includes(bid.status);
+  const isFinancialStage = (service.financialOpenStatuses.includes(bid.status) || bid.status === 'TECHNICAL_EVALUATION_COMPLETED') && !isFutureFinDate;
 
   return apiResponse.success(res, (bid.participations || []).map((p: any) => {
     const isDisqualified = ['DISQUALIFIED', 'REJECTED', 'NOT_QUALIFIED'].includes(String(p.technicalStatus || '').toUpperCase());
