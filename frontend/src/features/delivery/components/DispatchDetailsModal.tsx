@@ -61,6 +61,11 @@ import {
   useDeliveryDetail,
   useManualDeliveryStatusUpdate
 } from '../hooks';
+import {
+  validateIndianVehicleNumber,
+  validateDriverPhone,
+  validateEwayBillNumber
+} from '../utils/dispatchValidation';
 import { invalidateDeliveryCache, labelFor } from '../status';
 import type { DeliveryDetailDto } from '../types';
 import { generateTaxInvoicePdf, type TaxInvoiceData, type TaxInvoiceItem } from '../../invoices/lib/invoicePdfGenerator';
@@ -194,6 +199,11 @@ export function DispatchDetailsModal({
       ? String(delivery.metadata.dispatchTimestamp).slice(0, 16)
       : new Date().toISOString().slice(0, 16)
   );
+
+  // Field validation error states
+  const [driverPhoneError, setDriverPhoneError] = useState<string | undefined>();
+  const [vehicleNumberError, setVehicleNumberError] = useState<string | undefined>();
+  const [ewayBillError, setEwayBillError] = useState<string | undefined>();
 
   const [itemsExpanded, setItemsExpanded] = useState(false);
 
@@ -646,6 +656,37 @@ export function DispatchDetailsModal({
     if (!trackingNumber.trim()) {
       toast.error('Please enter a Tracking / AWB / LR number');
       return;
+    }
+
+    // Validate Driver Phone Number (10 numeric digits if entered)
+    const phoneRes = validateDriverPhone(driverPhone);
+    if (!phoneRes.isValid) {
+      setDriverPhoneError(phoneRes.error);
+      toast.error(phoneRes.error);
+      return;
+    } else {
+      setDriverPhoneError(undefined);
+    }
+
+    // Validate Vehicle Registration Number (Indian vehicle format if entered)
+    const vehicleRes = validateIndianVehicleNumber(vehicleNumber);
+    if (!vehicleRes.isValid) {
+      setVehicleNumberError(vehicleRes.error);
+      toast.error(vehicleRes.error);
+      return;
+    } else {
+      setVehicleNumberError(undefined);
+    }
+
+    // Validate E-Way Bill Number (12 numeric digits required if order total >= ₹50,000, or if filled)
+    const isEwayBillReq = orderTotal >= 50000;
+    const ewayRes = validateEwayBillNumber(ewayBillNumber, isEwayBillReq);
+    if (!ewayRes.isValid) {
+      setEwayBillError(ewayRes.error);
+      toast.error(ewayRes.error);
+      return;
+    } else {
+      setEwayBillError(undefined);
     }
 
     await runWithToast(
@@ -1265,42 +1306,80 @@ export function DispatchDetailsModal({
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <Phone className="h-3 w-3 text-slate-400" />
-                      Driver Phone / Contact
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-slate-400" />
+                        Driver Phone / Contact
+                      </span>
+                      <span className="text-[9px] font-medium text-slate-400">10 digits</span>
                     </label>
                     <input
                       type="tel"
                       value={driverPhone}
-                      onChange={e => setDriverPhone(e.target.value)}
-                      placeholder="e.g. +91 98765 43210"
+                      onChange={e => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setDriverPhone(val);
+                        if (driverPhoneError) {
+                          const res = validateDriverPhone(val);
+                          if (res.isValid) setDriverPhoneError(undefined);
+                        }
+                      }}
+                      onBlur={() => {
+                        const res = validateDriverPhone(driverPhone);
+                        setDriverPhoneError(res.error);
+                      }}
+                      placeholder="e.g. 9876543210 (10 digits)"
+                      maxLength={10}
                       disabled={isAlreadyDispatched}
                       className={cn(
-                        "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                        "h-9 w-full rounded-lg border px-3 text-xs font-mono font-semibold outline-none focus:ring-2",
+                        driverPhoneError ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-200 focus:border-[#12335f] focus:ring-[#12335f]/15",
                         isAlreadyDispatched
                           ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
                           : "bg-white text-slate-800"
                       )}
                     />
+                    {driverPhoneError && (
+                      <p className="text-[10px] font-semibold text-red-500 mt-1 flex items-center gap-1">{driverPhoneError}</p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                      Vehicle Registration No.
+                    <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                      <span>Vehicle Registration No.</span>
+                      <span className="text-[9px] font-medium text-slate-400">Indian format</span>
                     </label>
                     <input
                       type="text"
                       value={vehicleNumber}
-                      onChange={e => setVehicleNumber(e.target.value)}
-                      placeholder="e.g. MH 04 AB 1234"
+                      onChange={e => {
+                        const val = e.target.value.toUpperCase();
+                        setVehicleNumber(val);
+                        if (vehicleNumberError) {
+                          const res = validateIndianVehicleNumber(val);
+                          if (res.isValid) setVehicleNumberError(undefined);
+                        }
+                      }}
+                      onBlur={() => {
+                        const res = validateIndianVehicleNumber(vehicleNumber);
+                        if (res.isValid && res.formatted) {
+                          setVehicleNumber(res.formatted);
+                        }
+                        setVehicleNumberError(res.error);
+                      }}
+                      placeholder="e.g. MH 04 AB 1234 or 22 BH 1234 AB"
                       disabled={isAlreadyDispatched}
                       className={cn(
-                        "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                        "h-9 w-full rounded-lg border px-3 text-xs font-mono font-semibold uppercase outline-none focus:ring-2",
+                        vehicleNumberError ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-200 focus:border-[#12335f] focus:ring-[#12335f]/15",
                         isAlreadyDispatched
                           ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
                           : "bg-white text-slate-800"
                       )}
                     />
+                    {vehicleNumberError && (
+                      <p className="text-[10px] font-semibold text-red-500 mt-1 flex items-center gap-1">{vehicleNumberError}</p>
+                    )}
                   </div>
                 </div>
 
@@ -1354,23 +1433,41 @@ export function DispatchDetailsModal({
                 </div>
 
                 <div>
-                  <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500">
-                    E-Way Bill Number (Rule 138)
+                  <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
+                    <span>E-Way Bill Number (Rule 138)</span>
+                    <span className="text-[9px] font-medium text-slate-400">12 digits (numeric)</span>
                   </label>
                   <input
                     type="text"
                     value={ewayBillNumber}
-                    onChange={e => setEwayBillNumber(e.target.value)}
+                    onChange={e => {
+                      const val = e.target.value.replace(/\D/g, '').slice(0, 12);
+                      setEwayBillNumber(val);
+                      if (ewayBillError) {
+                        const isReq = orderTotal >= 50000;
+                        const res = validateEwayBillNumber(val, isReq);
+                        if (res.isValid) setEwayBillError(undefined);
+                      }
+                    }}
+                    onBlur={() => {
+                      const isReq = orderTotal >= 50000;
+                      const res = validateEwayBillNumber(ewayBillNumber, isReq);
+                      setEwayBillError(res.error);
+                    }}
                     placeholder="e.g. 121009876543 (12 digits)"
-                    maxLength={16}
+                    maxLength={12}
                     disabled={isAlreadyDispatched}
                     className={cn(
-                      "h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                      "h-9 w-full rounded-lg border px-3 text-xs font-mono font-semibold outline-none focus:ring-2",
+                      ewayBillError ? "border-red-400 focus:border-red-500 focus:ring-red-500/20" : "border-slate-200 focus:border-[#12335f] focus:ring-[#12335f]/15",
                       isAlreadyDispatched
                         ? "bg-slate-100 text-slate-700 cursor-not-allowed border-slate-300"
                         : "bg-white text-slate-800"
                     )}
                   />
+                  {ewayBillError && (
+                    <p className="text-[10px] font-semibold text-red-500 mt-1 flex items-center gap-1">{ewayBillError}</p>
+                  )}
                 </div>
               </div>
 

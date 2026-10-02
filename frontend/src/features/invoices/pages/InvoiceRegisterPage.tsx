@@ -1860,20 +1860,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                               Payment Release Locked • Invoice Approval Required
                             </p>
                             <p className="text-amber-800 text-[11px] mt-0.5 leading-relaxed">
-                              This tax invoice was submitted by the supplier and requires official buyer approval before disbursements or escrow settlements can be processed. Approve the invoice to unlock payment.
+                              This tax invoice was submitted by the supplier and requires official buyer approval before disbursements or escrow settlements can be processed. Review the invoice and use the Approve Invoice action below.
                             </p>
                           </div>
                         </div>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled={submitting}
-                          onClick={() => handleApproveInvoice(selectedInvoice.id)}
-                          className="shrink-0 h-8 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-2xs gap-1.5 cursor-pointer"
-                        >
-                          {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                          Approve Invoice Now
-                        </Button>
                       </div>
                     )}
 
@@ -2010,22 +2000,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                           if (isBuyer) {
                             if (isSubmitted) {
                               return (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-lg">
-                                    <Lock className="h-3 w-3 text-amber-700" />
-                                    <span>Payment Locked</span>
-                                  </span>
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    disabled={submitting}
-                                    onClick={() => handleApproveInvoice(selectedInvoice.id)}
-                                    className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                                  >
-                                    {submitting ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                                    <span>Approve Invoice</span>
-                                  </Button>
-                                </div>
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 border border-amber-300 px-2 py-0.5 rounded-lg">
+                                  <Lock className="h-3 w-3 text-amber-700" />
+                                  <span>Payment Locked (Pending Approval)</span>
+                                </span>
                               );
                             }
 

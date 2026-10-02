@@ -266,9 +266,31 @@ export function DeliveryDetailPage({ deliveryId, onClose }: DeliveryDetailPagePr
     }
   }, [invoices, taxInvoiceDoc]);
 
+  const isPaidState = useMemo(() => {
+    const primaryInvoice = invoices?.[0];
+    const invStatus = String(primaryInvoice?.invoiceStatus || primaryInvoice?.status || '').toLowerCase();
+    const setStatus = String(delivery?.settlement?.status || '').toLowerCase();
+    const poStatus = String((po as any)?.paymentStatus || (po as any)?.status || '').toLowerCase();
+    const invoiceWithSlip = invoices.some((inv: any) => Boolean(inv?.paymentSlipFile || inv?.paymentSlipFileId));
+    return (
+      invStatus === 'paid' ||
+      setStatus === 'completed' ||
+      setStatus === 'settled' ||
+      setStatus === 'released' ||
+      poStatus === 'paid' ||
+      Boolean(paymentProofDoc) ||
+      Boolean(delivery?.settlement?.transactionReference) ||
+      invoiceWithSlip
+    );
+  }, [invoices, delivery?.settlement, po, paymentProofDoc]);
+
   const handleOpenPaymentProof = useCallback(() => {
+    if (!isPaidState) {
+      notify.info('Payment Not Done Yet: The buyer has not disbursed or uploaded payment for this consignment yet.');
+      return;
+    }
     setIsPaymentProofModalOpen(true);
-  }, []);
+  }, [isPaidState]);
 
   const derivedInitialProof = useMemo(() => {
     if (!delivery) return null;
@@ -1022,6 +1044,7 @@ function DocumentsPanel({
   const isInvApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
   const isInvPaid = rawStatus === 'paid';
   const canApprove = !isAdmin && accessRole === 'buyer';
+  const hasRealPayment = isInvPaid || Boolean(paymentProofDoc) || Boolean(settlement?.transactionReference) || String(settlement?.status || '').toLowerCase() === 'completed' || String(settlement?.status || '').toLowerCase() === 'settled';
 
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-xs sm:p-4">
@@ -1112,30 +1135,47 @@ function DocumentsPanel({
             </div>
           </div>
 
-          {/* Payment Proof Card */}
-          <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 ring-1 ring-sky-200">
-                <CreditCard className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Payment Proof</p>
-                <p className="text-xs font-black text-slate-900 truncate">
-                  {settlement?.transactionReference || (paymentProofDoc ? 'Proof Attached' : 'Bank UTR Proof')}
-                </p>
+          {/* Payment Proof / Payment Pending Card */}
+          {hasRealPayment ? (
+            <div className="flex items-center justify-between rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 transition-colors hover:bg-slate-50">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-50 text-sky-700 ring-1 ring-sky-200">
+                  <CreditCard className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-slate-400">Payment Proof</p>
+                  <p className="text-xs font-black text-slate-900 truncate">
+                    {settlement?.transactionReference || (paymentProofDoc ? 'Proof Attached' : 'Bank UTR Proof')}
+                  </p>
+                </div>
               </div>
+              {onOpenPaymentProof && (
+                <button
+                  type="button"
+                  onClick={onOpenPaymentProof}
+                  className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-50 shadow-2xs cursor-pointer transition-colors"
+                  title="View Payment Proof"
+                >
+                  <Eye className="h-3 w-3" /> View
+                </button>
+              )}
             </div>
-            {onOpenPaymentProof && (
-              <button
-                type="button"
-                onClick={onOpenPaymentProof}
-                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 hover:bg-sky-50 shadow-2xs cursor-pointer transition-colors"
-                title="View Payment Proof"
-              >
-                <Eye className="h-3 w-3" /> View
-              </button>
-            )}
-          </div>
+          ) : (
+            <div className="flex items-center justify-between rounded-xl border border-amber-200/80 bg-amber-50/50 p-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-800 ring-1 ring-amber-300">
+                  <CreditCard className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[9px] font-black uppercase tracking-wider text-amber-800/70">Payment Status</p>
+                  <p className="text-xs font-bold text-amber-950 truncate">Payment Not Done Yet</p>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-amber-100/90 px-2.5 py-1 text-[10px] font-bold text-amber-800 shadow-2xs" title="Buyer has not completed payment yet">
+                <Clock className="h-3 w-3 text-amber-700" /> Pending Payment
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Payment Locked Informative Banner when invoice is pending approval */}

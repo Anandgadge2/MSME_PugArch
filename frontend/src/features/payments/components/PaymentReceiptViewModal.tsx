@@ -535,6 +535,16 @@ export function PaymentReceiptViewModal({
     return buildPaymentTimeline(activePayment, resolvedProof, linkedPo, linkedInvoice);
   }, [activePayment, resolvedProof, linkedPo, linkedInvoice]);
 
+  const hasRealPaymentRecord = useMemo(() => {
+    if (isSettledProp) return true;
+    if (proof || initialProof || resolvedProof) return true;
+    if (!activePayment) return false;
+    const rawStatus = String(activePayment.status || activePayment.paymentStatus || '').toLowerCase();
+    const isPaid = ['success', 'paid', 'escrow_released', 'offline_proof_verified', 'settled', 'verified', 'completed'].includes(rawStatus);
+    const hasProofFile = Boolean(activePayment.metadata?.receiptFileId || activePayment.metadata?.offlineProofId || activePayment.metadata?.transactionReference);
+    return isPaid || hasProofFile;
+  }, [isSettledProp, proof, initialProof, resolvedProof, activePayment]);
+
   const handleCopy = (text: string, type: 'utr' | 'ref') => {
     if (!text) return;
     navigator.clipboard.writeText(text);
@@ -1150,6 +1160,18 @@ export function PaymentReceiptViewModal({
                   No timestamped timeline events recorded for this transaction.
                 </div>
               )}
+            </div>
+          ) : !hasRealPaymentRecord ? (
+            <div className="rounded-2xl border border-amber-200 bg-amber-50/85 p-8 text-center space-y-3.5 my-2 shadow-xs">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-1 ring-amber-300 shadow-2xs">
+                <Clock className="h-6 w-6 text-amber-700" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-base font-black text-amber-950">Payment Not Done Yet</h3>
+                <p className="text-xs font-semibold text-amber-800 max-w-md mx-auto leading-relaxed">
+                  No banking disbursement or payment proof has been uploaded by the buyer for this consignment yet. Once payment is completed by the buyer, official banking settlement receipts and transaction UTR transfer proofs will be generated and displayed here.
+                </p>
+              </div>
             </div>
           ) : (
             /* TAB 1: Receipt & Proof Details */

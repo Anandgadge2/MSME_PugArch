@@ -578,20 +578,10 @@ export function TaxInvoiceRegistryModal({
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs font-semibold text-amber-800 leading-relaxed">
-                        Payment disbursement and settlement release are locked while this invoice is in <strong className="font-black text-amber-950">SUBMITTED</strong> status. Review the items and click <strong className="font-black text-emerald-800">&ldquo;Approve Invoice&rdquo;</strong> to authorize settlement and unlock payment.
+                        Payment disbursement and settlement release are locked while this invoice is in <strong className="font-black text-amber-950">SUBMITTED</strong> status. Review the items and click <strong className="font-black text-emerald-800">&ldquo;Approve Invoice&rdquo;</strong> in the toolbar below to authorize settlement and unlock payment.
                       </p>
                     </div>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    disabled={isApproving}
-                    onClick={handleApproveInvoice}
-                    className="shrink-0 h-9 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-sm gap-1.5 cursor-pointer transition-all self-end sm:self-center"
-                  >
-                    {isApproving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                    <span>Approve Invoice</span>
-                  </Button>
                 </div>
               )}
 
@@ -700,26 +690,13 @@ export function TaxInvoiceRegistryModal({
                   if (isBuyer) {
                     if (isSubmitted) {
                       return (
-                        <div className="inline-flex items-center gap-1.5 flex-wrap">
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled={isApproving}
-                            onClick={handleApproveInvoice}
-                            className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
-                            title="Approve this tax invoice to unlock payment disbursement"
-                          >
-                            {isApproving ? <RefreshCw className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
-                            <span>Approve Invoice</span>
-                          </Button>
-                          <span
-                            className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg"
-                            title="Payment is locked until the tax invoice is approved"
-                          >
-                            <Lock className="h-3 w-3 text-amber-700" />
-                            <span>Payment Locked</span>
-                          </span>
-                        </div>
+                        <span
+                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg"
+                          title="Payment is locked until the tax invoice is approved"
+                        >
+                          <Lock className="h-3 w-3 text-amber-700" />
+                          <span>Payment Locked (Pending Approval)</span>
+                        </span>
                       );
                     }
                     if (isApproved) {

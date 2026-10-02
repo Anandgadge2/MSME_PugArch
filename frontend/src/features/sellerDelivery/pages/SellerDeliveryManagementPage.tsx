@@ -51,6 +51,7 @@ import {
 import type { DeliveryDto } from '../api';
 import { PackedOrderDialog } from '../../delivery/components/PackedOrderDialog';
 import { DispatchDetailsModal } from '../../delivery/components/DispatchDetailsModal';
+import { validateEwayBillNumber } from '../../delivery/utils/dispatchValidation';
 
 const STATUS_TONE: Record<string, string> = {
     CREATED: 'border-amber-200 bg-amber-50 text-amber-800',
@@ -1993,6 +1994,14 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
     };
 
     const handleSave = async () => {
+        const orderValue = Number((delivery as any)?.purchaseOrder?.totalAmount || (delivery as any)?.orderTotal || 0);
+        const isEwayBillReq = orderValue >= 50000;
+        const ewayRes = validateEwayBillNumber(ewayBillNumber, isEwayBillReq);
+        if (!ewayRes.isValid) {
+            toast.error(ewayRes.error || 'Invalid E-Way Bill Number');
+            return;
+        }
+
         await runWithToast(async () => {
             // 1. Update dispatch details (carrier, tracking, eway bill, remarks)
             const updatedTracking = await updateDispatchMut.mutateAsync({
@@ -2377,13 +2386,13 @@ function DispatchDetailsForm({ delivery, onDone }: { delivery: DeliveryDto; onDo
                     </div>
 
                     <div>
-                        <Field label="E-Way Bill Number (Optional)">
+                        <Field label="E-Way Bill Number (Rule 138)">
                             <input
                                 type="text"
                                 value={ewayBillNumber}
-                                onChange={e => setEwayBillNumber(e.target.value)}
+                                onChange={e => setEwayBillNumber(e.target.value.replace(/\D/g, '').slice(0, 12))}
                                 placeholder="e.g. 121009876543 (12 digits)"
-                                maxLength={16}
+                                maxLength={12}
                                 className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50/50 px-3 text-xs font-mono font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/15"
                             />
                         </Field>
