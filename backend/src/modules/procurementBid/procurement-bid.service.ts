@@ -2943,51 +2943,6 @@ export const extendBidSchedule = async (
 
   await procurementAudit(req, 'BID_SCHEDULE_EXTENDED', 'ProcurementBid', bid.id, changeSummary, bid);
 
-  // 1. Gather all seller recipients: participating sellers + all active Sellers & SHGs (public) or invited sellers (limited)
-  const notifiedSellerIds = new Set<number>();
-  const participations = await db.procurementBidParticipation.findMany({
-    where: { bidId: bid.id },
-    select: { sellerId: true }
-  });
-  for (const p of participations) {
-    if (p.sellerId) notifiedSellerIds.add(p.sellerId);
-  }
-
-  const isLimited = (bid as any).visibility === 'LIMITED' || (bid as any).visibility === 'INVITED_SELLERS_ONLY';
-  if (isLimited) {
-    const technicalPacket = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
-    const invitedOrgIds: number[] = (bid as any).invitedSellerOrgIds || technicalPacket.invitedSellerOrgIds || technicalPacket.rules?.invitedSellerOrgIds || [];
-    const invitedUserIds: number[] = (bid as any).invitedUserIds || technicalPacket.invitedUserIds || [];
-    if (invitedOrgIds.length > 0 || invitedUserIds.length > 0) {
-      const invitedUsers = await db.user.findMany({
-        where: {
-          role: { in: ['seller', 'shg'] as any },
-          accountStatus: { not: 'BLOCKED' as any },
-          OR: [
-            ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
-            ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
-          ]
-        },
-        select: { id: true }
-      });
-      for (const u of invitedUsers) {
-        notifiedSellerIds.add(u.id);
-      }
-    }
-  } else {
-    // Public tender corrigendum: Notify all active registered Sellers and SHGs
-    const allActiveSellers = await db.user.findMany({
-      where: {
-        role: { in: ['seller', 'shg'] as any },
-        accountStatus: { not: 'BLOCKED' as any }
-      },
-      select: { id: true }
-    });
-    for (const u of allActiveSellers) {
-      notifiedSellerIds.add(u.id);
-    }
-  }
-
   const corrigendumNumber = updatedTechnicalPacket?.corrigendumCount || 1;
   const tenderRef = bid.bidNumber || bid.requirementNumber || `PRC-${bid.id}`;
   const noticeRef = `JSG-CORR/${new Date().getFullYear()}/${bid.id}/${String(corrigendumNumber).padStart(2, '0')}`;
@@ -2998,69 +2953,7 @@ export const extendBidSchedule = async (
   const redirectPath = `/seller/procurement/events/${bid.id}`;
   const actionUrl = ensurePublicUrl(redirectPath);
 
-  const detailsTable: TableRow[] = [
-    { label: 'Tender / RFQ Reference', value: tenderRef, isCode: true },
-    { label: 'Tender Title', value: bid.title, isHighlight: true },
-    { label: 'Notice Serial', value: `Corrigendum Notice #${corrigendumNumber}`, isHighlight: true },
-    { label: 'Original Submission Deadline', value: originalDeadlineStr },
-    { label: 'Revised Submission Deadline', value: revisedDeadlineStr, color: '#166534', isHighlight: true },
-    ...(newTechDate || bid.technicalOpeningDate ? [{
-      label: 'Technical Bid Opening',
-      value: formatIstDateTime(newTechDate || bid.technicalOpeningDate)
-    }] : []),
-    ...(newFinDate || bid.financialOpeningDate ? [{
-      label: 'Financial Bid Opening',
-      value: formatIstDateTime(newFinDate || bid.financialOpeningDate)
-    }] : []),
-    { label: 'Corrigendum Justification', value: reasonStr },
-    { label: 'Submission Protocol', value: 'Existing Submissions Remain Valid • Revisions Allowed', color: '#1e40af', isHighlight: true },
-    { label: 'Official Portal Gateway', value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>` }
-  ];
-
-  const emailHtml = buildGovernmentGradeEmailHtml({
-    portalName: 'JSG SMILE Procurement Portal',
-    departmentName: 'Government of Odisha • District Administration Jharsuguda',
-    noticeType: 'OFFICIAL CORRIGENDUM • DEADLINE EXTENDED',
-    noticeRef,
-    badgeVariant: 'warning',
-    heading: `Corrigendum #${corrigendumNumber}: Submission Deadline Extended`,
-    summary: `Official Corrigendum Notice for Tender "${bid.title}" (${tenderRef}). The submission closing timeline has been extended to ${revisedDeadlineStr}. All previously submitted commercial & technical quotations remain securely sealed and valid. Participating bidders may review or revise their submissions prior to the revised closing timestamp.`,
-    detailsTable,
-    stepInstructions: {
-      title: 'Action for Participating Bidders',
-      steps: [
-        'If you have already submitted your bid: Your quotation remains securely recorded and sealed. You may review or revise it at any time before the new deadline.',
-        `If you have not yet submitted: Complete your technical and financial submission through the official portal before ${revisedDeadlineStr}.`,
-        'Ensure all required statutory compliance documents and schedule sheets are attached.'
-      ]
-    },
-    actionButton: {
-      label: 'View Tender & Manage Submission →',
-      url: actionUrl
-    },
-    securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules. Official nodal authorities will never ask for your authentication PIN or OTP.'
-  });
-
-  // Dispatch Email & In-App notifications to all identified sellers
-  for (const sellerId of notifiedSellerIds) {
-    try {
-      await notificationService.notifyUser(sellerId, {
-        title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
-        message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}. Reason: ${reasonStr}`,
-        type: 'tender.deadline_extended',
-        priority: 'high',
-        redirectUrl: redirectPath,
-        emailSubject: `[Corrigendum #${corrigendumNumber}] Submission Deadline Extended: ${bid.title} (${tenderRef})`,
-        emailHtml,
-        detailsTable,
-        noticeRef
-      }, ['in_app', 'email']);
-    } catch (err) {
-      logger.warn({ err, sellerId }, 'Failed to send deadline extension notification');
-    }
-  }
-
-  // 2. Real-Time Broadcasts for Instant Seller Auto-Refresh
+  // 1. Instant Real-Time WebSocket Broadcasts to open portal clients (~10ms)
   const corrigendumEvent = {
     type: 'CORRIGENDUM_ISSUED' as const,
     procurementId: bid.id,
@@ -3095,21 +2988,137 @@ export const extendBidSchedule = async (
     };
     broadcastToProcurement(bid.id, updateEvent);
     broadcastToProcurement('all', updateEvent);
-
-    for (const sellerId of notifiedSellerIds) {
-      broadcastToUser(sellerId, {
-        type: 'BID_STATUS_CHANGED',
-        procurementId: bid.id,
-        requirementId: bid.requirementNumber || bid.id,
-        status: 'CORRIGENDUM_ISSUED',
-        title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
-        message: `The submission deadline for "${bid.title}" has been extended to ${revisedDeadlineStr}.`,
-        timestamp: new Date().toISOString()
-      });
-    }
   } catch (bcErr) {
     logger.warn({ bcErr, bidId: bid.id }, 'Failed to broadcast corrigendum event');
   }
+
+  // 2. Asynchronous Background Seller Notifications (Non-blocking: buyer response returns in <200ms)
+  setImmediate(async () => {
+    try {
+      const notifiedSellerIds = new Set<number>();
+      const participations = await db.procurementBidParticipation.findMany({
+        where: { bidId: bid.id },
+        select: { sellerId: true }
+      });
+      for (const p of participations) {
+        if (p.sellerId) notifiedSellerIds.add(p.sellerId);
+      }
+
+      const isLimited = (bid as any).visibility === 'LIMITED' || (bid as any).visibility === 'INVITED_SELLERS_ONLY';
+      if (isLimited) {
+        const technicalPacket = (bid.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+        const invitedOrgIds: number[] = (bid as any).invitedSellerOrgIds || technicalPacket.invitedSellerOrgIds || technicalPacket.rules?.invitedSellerOrgIds || [];
+        const invitedUserIds: number[] = (bid as any).invitedUserIds || technicalPacket.invitedUserIds || [];
+        if (invitedOrgIds.length > 0 || invitedUserIds.length > 0) {
+          const invitedUsers = await db.user.findMany({
+            where: {
+              role: { in: ['seller', 'shg'] as any },
+              accountStatus: { not: 'BLOCKED' as any },
+              OR: [
+                ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+                ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+              ]
+            },
+            select: { id: true }
+          });
+          for (const u of invitedUsers) {
+            notifiedSellerIds.add(u.id);
+          }
+        }
+      } else {
+        const allActiveSellers = await db.user.findMany({
+          where: {
+            role: { in: ['seller', 'shg'] as any },
+            accountStatus: { not: 'BLOCKED' as any }
+          },
+          select: { id: true }
+        });
+        for (const u of allActiveSellers) {
+          notifiedSellerIds.add(u.id);
+        }
+      }
+
+      const detailsTable: TableRow[] = [
+        { label: 'Tender / RFQ Reference', value: tenderRef, isCode: true },
+        { label: 'Tender Title', value: bid.title, isHighlight: true },
+        { label: 'Notice Serial', value: `Corrigendum Notice #${corrigendumNumber}`, isHighlight: true },
+        { label: 'Original Submission Deadline', value: originalDeadlineStr },
+        { label: 'Revised Submission Deadline', value: revisedDeadlineStr, color: '#166534', isHighlight: true },
+        ...(newTechDate || bid.technicalOpeningDate ? [{
+          label: 'Technical Bid Opening',
+          value: formatIstDateTime(newTechDate || bid.technicalOpeningDate)
+        }] : []),
+        ...(newFinDate || bid.financialOpeningDate ? [{
+          label: 'Financial Bid Opening',
+          value: formatIstDateTime(newFinDate || bid.financialOpeningDate)
+        }] : []),
+        { label: 'Corrigendum Justification', value: reasonStr },
+        { label: 'Submission Protocol', value: 'Existing Submissions Remain Valid • Revisions Allowed', color: '#1e40af', isHighlight: true },
+        { label: 'Official Portal Gateway', value: `<a href="${portalUrl}" style="color: #1e40af; text-decoration: underline; font-weight: 700;">${portalUrl}</a>` }
+      ];
+
+      const emailHtml = buildGovernmentGradeEmailHtml({
+        portalName: 'JSG SMILE Procurement Portal',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'OFFICIAL CORRIGENDUM • DEADLINE EXTENDED',
+        noticeRef,
+        badgeVariant: 'warning',
+        heading: `Corrigendum #${corrigendumNumber}: Submission Deadline Extended`,
+        summary: `Official Corrigendum Notice for Tender "${bid.title}" (${tenderRef}). The submission closing timeline has been extended to ${revisedDeadlineStr}. All previously submitted commercial & technical quotations remain securely sealed and valid. Participating bidders may review or revise their submissions prior to the revised closing timestamp.`,
+        detailsTable,
+        stepInstructions: {
+          title: 'Action for Participating Bidders',
+          steps: [
+            'If you have already submitted your bid: Your quotation remains securely recorded and sealed. You may review or revise it at any time before the new deadline.',
+            `If you have not yet submitted: Complete your technical and financial submission through the official portal before ${revisedDeadlineStr}.`,
+            'Ensure all required statutory compliance documents and schedule sheets are attached.'
+          ]
+        },
+        actionButton: {
+          label: 'View Tender & Manage Submission →',
+          url: actionUrl
+        },
+        securityAdvisory: 'Statutory Notice: All procurement submissions on JSG SMILE are encrypted and sealed under Government of Odisha procurement rules. Official nodal authorities will never ask for your authentication PIN or OTP.'
+      });
+
+      const sellerIdList = Array.from(notifiedSellerIds);
+      const batchSize = 5;
+      for (let i = 0; i < sellerIdList.length; i += batchSize) {
+        const batch = sellerIdList.slice(i, i + batchSize);
+        await Promise.allSettled(
+          batch.map(async (sellerId) => {
+            try {
+              await notificationService.notifyUser(sellerId, {
+                title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
+                message: `The submission deadline for "${bid.title}" (${tenderRef}) has been extended from ${originalDeadlineStr} to ${revisedDeadlineStr}. Reason: ${reasonStr}`,
+                type: 'tender.deadline_extended',
+                priority: 'high',
+                redirectUrl: redirectPath,
+                emailSubject: `[Corrigendum #${corrigendumNumber}] Submission Deadline Extended: ${bid.title} (${tenderRef})`,
+                emailHtml,
+                detailsTable,
+                noticeRef
+              }, ['in_app', 'email']);
+
+              broadcastToUser(sellerId, {
+                type: 'BID_STATUS_CHANGED',
+                procurementId: bid.id,
+                requirementId: bid.requirementNumber || bid.id,
+                status: 'CORRIGENDUM_ISSUED',
+                title: `Submission Deadline Extended (Corrigendum #${corrigendumNumber})`,
+                message: `The submission deadline for "${bid.title}" has been extended to ${revisedDeadlineStr}.`,
+                timestamp: new Date().toISOString()
+              });
+            } catch (err) {
+              logger.warn({ err, sellerId }, 'Failed to send deadline extension notification to seller');
+            }
+          })
+        );
+      }
+    } catch (bgErr) {
+      logger.warn({ bgErr, bidId: bid.id }, 'Background seller notification task encountered an error');
+    }
+  });
 
   return updated;
 };
