@@ -690,15 +690,15 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
   };
 };
 
-const loadAwardOrderForSeller = async (actor: AuthenticatedUser, awardId: number) => {
+const loadAwardOrderForSeller = async (actor: AuthenticatedUser, awardId: number, options: { requirePo?: boolean } = {}) => {
   if (actor.role !== 'seller' && actor.role !== 'shg') throw new ApiError(403, 'Seller access required', 'FORBIDDEN_ROLE');
   const sellerIds = await getSellerUserIdsForActor(actor);
   if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
   const award = await db.procurementBidAward.findUnique({ where: { id: awardId }, include: { bid: true, participation: true } });
   if (!award || !sellerIds.includes(award.sellerId)) throw new ApiError(404, 'Award not found', 'AWARD_NOT_FOUND');
   const po = await db.purchaseOrder.findFirst({ where: { sourceType: 'procurement_bid_award', sourceId: award.id }, include: poInclude });
-  if (!po) throw new ApiError(404, 'Purchase order not generated for award yet', 'PO_NOT_FOUND');
-  const delivery = po.deliveryTrackings?.[0] || await deliveryService.ensureDeliveryForPO({ id: actor.id, role: actor.role }, po.id, {});
+  if (!po && options.requirePo) throw new ApiError(404, 'Purchase order not generated for award yet', 'PO_NOT_FOUND');
+  const delivery = po ? (po.deliveryTrackings?.[0] || await deliveryService.ensureDeliveryForPO({ id: actor.id, role: actor.role }, po.id, {})) : null;
   return { award, po, delivery };
 };
 
@@ -821,54 +821,74 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
 };
 
 export const acceptSellerAward = async (req: AuthRequest, awardId: number, body: any = {}) => {
-  const { award, po, delivery } = await loadAwardOrderForSeller(req.user!, awardId);
+  const { award, po, delivery } = await loadAwardOrderForSeller(req.user!, awardId, { requirePo: false });
   if (po?.id) {
     return acceptPO(req, po.id, body);
   }
-  const updatedDelivery = await deliveryService.sellerAccept(actorFromReq(req), delivery.id, {
-    remarks: body.remarks,
-    expectedDelivery: body.expectedDelivery
-  });
+  let updatedDelivery = null;
+  if (delivery?.id) {
+    updatedDelivery = await deliveryService.sellerAccept(actorFromReq(req), delivery.id, {
+      remarks: body.remarks,
+      expectedDelivery: body.expectedDelivery
+    }).catch(() => null);
+  }
   const updatedAward = await db.procurementBidAward.update({
     where: { id: award.id },
     data: { awardStatus: 'ACCEPTED', awardedAt: award.awardedAt || now(), remarks: body.remarks || award.remarks }
   });
-  await updateBidStatus(db, award.bidId, 'IN_PROGRESS', 'SELLER_AWARD_ACCEPTED', req);
+  if (award.participationId) {
+    await db.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: { finalStatus: 'AWARD_ACCEPTED' }
+    }).catch(() => null);
+  }
+  await updateBidStatus(db, award.bidId, 'AWARD_ACCEPTED', 'SELLER_AWARD_ACCEPTED', req);
   await procurementOrderAudit(req, 'SELLER_AWARD_ACCEPTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po?.id });
   
   const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
 
   await notificationService.notifyUser(award.bid.buyerId, {
-    title: 'Purchase Order Accepted',
-    message: `${sellerOrgName} has accepted the purchase order for "${award.bid.title}".`,
-    type: 'purchase_order',
-    redirectUrl: `/buyer/orders?orderId=${po?.id}`
+    title: 'Award Offer Accepted',
+    message: `${sellerOrgName} has accepted the contract award for "${award.bid.title}". You may now issue the Purchase Order.`,
+    type: 'award_accepted',
+    redirectUrl: `/bids/${award.bidId}`
   });
 
   return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
 };
 
 export const rejectSellerAward = async (req: AuthRequest, awardId: number, reason: string) => {
-  const { award, po, delivery } = await loadAwardOrderForSeller(req.user!, awardId);
-  const updatedDelivery = await deliveryService.sellerReject(actorFromReq(req), delivery.id, { reason });
+  const { award, po, delivery } = await loadAwardOrderForSeller(req.user!, awardId, { requirePo: false });
+  let updatedDelivery = null;
+  if (delivery?.id) {
+    updatedDelivery = await deliveryService.sellerReject(actorFromReq(req), delivery.id, { reason }).catch(() => null);
+  }
   const updatedAward = await db.procurementBidAward.update({
     where: { id: award.id },
     data: { awardStatus: 'REJECTED', remarks: reason }
   });
-  await db.purchaseOrder.update({ where: { id: po.id }, data: { status: 'cancelled', poStatus: 'CANCELLED' } });
-  await updateBidStatus(db, award.bidId, 'CANCELLED', 'SELLER_AWARD_REJECTED', req);
-  await procurementOrderAudit(req, 'SELLER_AWARD_REJECTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po.id, reason });
+  if (award.participationId) {
+    await db.procurementBidParticipation.update({
+      where: { id: award.participationId },
+      data: { finalStatus: 'AWARD_DECLINED', rejectionReason: reason }
+    }).catch(() => null);
+  }
+  if (po?.id) {
+    await db.purchaseOrder.update({ where: { id: po.id }, data: { status: 'cancelled', poStatus: 'CANCELLED' } }).catch(() => null);
+  }
+  await updateBidStatus(db, award.bidId, 'UNDER_EVALUATION', 'SELLER_AWARD_REJECTED', req);
+  await procurementOrderAudit(req, 'SELLER_AWARD_REJECTED', 'ProcurementBidAward', award.id, { purchaseOrderId: po?.id, reason });
   
   const sellerOrgName = await resolveSellerOrgName(award.sellerId || req.user?.id);
 
   await notificationService.notifyUser(award.bid.buyerId, {
-    title: 'Purchase Order Rejected',
-    message: `${sellerOrgName} has rejected the purchase order for "${award.bid.title}". Reason: ${reason}`,
-    type: 'purchase_order',
-    redirectUrl: `/buyer/orders?orderId=${po.id}`
+    title: 'Award Offer Declined',
+    message: `${sellerOrgName} has declined the award for "${award.bid.title}". Reason: ${reason}`,
+    type: 'award_declined',
+    redirectUrl: `/bids/${award.bidId}`
   });
 
-  return { award: updatedAward, purchaseOrderId: po.id, delivery: updatedDelivery };
+  return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
 };
 
 export const rejectPO = async (req: AuthRequest, orderId: number, reason: string) => {

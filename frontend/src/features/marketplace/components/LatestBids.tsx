@@ -141,6 +141,42 @@ const getFormattedDescription = (desc?: string | null): string => {
     return parts.join(' | ');
 };
 
+const isRestrictedOpportunity = (raw: any): boolean => {
+    if (!raw) return false;
+    const visibility = String(raw.visibility || '').toUpperCase();
+    if (visibility === 'PRIVATE' || visibility === 'INVITED_SELLERS_ONLY') return true;
+
+    const method = String(
+        raw.procurementMethod || 
+        raw.canonicalMethod || 
+        raw.method || 
+        raw.methodSlug || 
+        raw.bidType || 
+        ''
+    ).toUpperCase();
+    if (method === 'LIMITED_TENDER' || method === 'LIMITED_RFQ' || method.includes('LIMITED_')) return true;
+
+    const rfqType = String(raw.rfqType || raw.payload?.rfqType || '').toUpperCase();
+    if (rfqType === 'LIMITED') return true;
+
+    const payload = raw.payload || raw.technicalPacket || {};
+    const vendorsSelection = String(
+        payload?.vendors?.selection || 
+        payload?.sourcingStrategy || 
+        raw.sourcingStrategy || 
+        raw.vendorsSelection || 
+        ''
+    ).toUpperCase();
+    if (vendorsSelection === 'SELECTED' || vendorsSelection === 'LIMITED' || vendorsSelection === 'INVITED') {
+        return true;
+    }
+
+    const desc = String(raw.description || '');
+    if (/Sourcing Method:\s*Limited/i.test(desc)) return true;
+
+    return false;
+};
+
 function mapTender(t: MarketplaceTender): OpportunityData {
     const status = getProcurementStatus({ status: t.status, dueDate: t.closesAt });
     const days = Math.max(0, Math.ceil((new Date(t.closesAt || '').getTime() - Date.now()) / 86400000));
@@ -405,9 +441,15 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
     };
 
     const activeOpportunities = useMemo(() => {
-        const mappedTenders = tenders.map(mapTender);
-        const mappedBids = bids.map(mapBid);
-        const mappedRequirements = (requirements || []).map((r: any) => {
+        const mappedTenders = (tenders || [])
+            .filter(t => !isRestrictedOpportunity(t))
+            .map(mapTender);
+        const mappedBids = (bids || [])
+            .filter(b => !isRestrictedOpportunity(b))
+            .map(mapBid);
+        const mappedRequirements = (requirements || [])
+            .filter(r => !isRestrictedOpportunity(r))
+            .map((r: any) => {
             const rawDeadline = r.payload?.schedule?.submissionDate || r.payload?.schedule?.submissionDeadline || r.endDate || r.lastDate || r.requiredBy;
             const schedulePub = r.payload?.schedule?.publishDate;
             let rawStartDate = r.approvedAt || r.publishedAt || r.createdAt || r.startDate;
@@ -501,6 +543,7 @@ export function LatestBids({ requirements = [], tenders = [], bids = [], loading
         const uniqueOpportunities: OpportunityData[] = [];
 
         for (const item of combined) {
+            if (item.sourcingMethod?.toLowerCase().includes('limited')) continue;
             const key = `${(item.title || '').trim().toLowerCase()}-${(item.buyerName || '').trim().toLowerCase()}`;
             if (!seen.has(key) && !seen.has(item.displayId)) {
                 seen.add(key);

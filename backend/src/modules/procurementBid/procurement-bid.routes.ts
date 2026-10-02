@@ -1979,19 +1979,19 @@ router.post(['/seller/procurement-bids/:bidId/counter-offer/accept', '/seller/bi
   return apiResponse.success(res, data, 200, 'Price match counter-offer accepted successfully');
 }));
 
-router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/counter-offer/decline', '/seller/bids/:bidId/counter-offer/decline'], authenticate, requireAccountType('seller', 'shg'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.declinePriceMatchCounterOffer(req, req.params.bidId, req.body);
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Price match counter-offer declined');
 }));
 
-router.post(['/seller/procurement-bids/:bidId/accept-award', '/seller/bids/:bidId/accept-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/accept-award', '/seller/bids/:bidId/accept-award'], authenticate, requireAccountType('seller', 'shg'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.acceptAward(req, req.params.bidId);
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Award offer accepted successfully');
 }));
 
-router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bidId/decline-award'], authenticate, requireAccountType('seller'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
+router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bidId/decline-award'], authenticate, requireAccountType('seller', 'shg'), validate({ params: idParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000), awardId: z.union([z.number(), z.string()]).optional() }) }), asyncRoute(async (req, res) => {
   const data = await service.declineAward(req, req.params.bidId, req.body);
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.success(res, data, 200, 'Award offer declined successfully');
@@ -2098,7 +2098,7 @@ router.post(['/seller/awards/:awardId/accept', '/seller/purchase-orders/:id/acce
   return apiResponse.success(res, data, 200, 'Award accepted and delivery opened');
 }));
 
-router.post('/seller/awards/:awardId/reject', authenticate, requireAccountType('seller', 'shg'), requirePermission('purchase_order.approve'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
+router.post(['/seller/awards/:awardId/reject', '/seller/awards/:awardId/decline'], authenticate, requireAccountType('seller', 'shg'), validate({ params: awardIdParamSchema, body: z.object({ reason: z.string().trim().min(5).max(2000) }) }), asyncRoute(async (req, res) => {
   const data = await orderService.rejectSellerAward(req, Number(req.params.awardId), req.body.reason);
   return apiResponse.success(res, data, 200, 'Award rejected');
 }));

@@ -1016,6 +1016,17 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
               return [newNotif, ...prev];
             });
             window.dispatchEvent(new CustomEvent('notifications:updated'));
+            if (
+              newNotif.type === 'bid_awarded' ||
+              newNotif.type === 'award_accepted' ||
+              newNotif.type === 'award_declined' ||
+              newNotif.type === 'purchase_order' ||
+              String(newNotif.title || '').toLowerCase().includes('award') ||
+              String(newNotif.title || '').toLowerCase().includes('purchase order')
+            ) {
+              window.dispatchEvent(new CustomEvent('awards:updated', { detail: newNotif }));
+              window.dispatchEvent(new CustomEvent('orders:updated', { detail: newNotif }));
+            }
             console.log('[SSE] Received new notification:', newNotif);
           } catch (e) {
             console.error('[SSE] Failed to parse notification:', e);

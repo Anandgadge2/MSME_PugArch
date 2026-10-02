@@ -48,6 +48,9 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
     channel.bind('AWARD_RECEIVED', (data: UserRealtimeEvent) => {
       if (!isMounted) return;
       invalidateAll();
+      window.dispatchEvent(new CustomEvent('awards:updated', { detail: data }));
+      window.dispatchEvent(new CustomEvent('notifications:updated'));
+      window.dispatchEvent(new CustomEvent('orders:updated'));
       const amtStr = data.awardedAmount ? ` for ₹${Number(data.awardedAmount).toLocaleString('en-IN')}` : '';
       toast.success('🏆 Contract Award Received!', {
         id: `award-received-${data.auctionId || data.procurementId || 'award'}`,

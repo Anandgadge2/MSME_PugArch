@@ -2073,13 +2073,49 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
       throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     }
 
-    const participants = await db.auctionParticipant.findMany({
+    let participants = await db.auctionParticipant.findMany({
       where: { auctionId: id },
       include: {
         qualificationDocuments: true
       },
       orderBy: [{ currentRank: 'asc' }, { invitedAt: 'asc' }]
     });
+
+    // If no explicit participant records exist but valid bids were placed, derive participants from bids
+    if (participants.length === 0) {
+      const bids = await db.auctionBid.findMany({
+        where: { auctionId: id, isValid: true },
+        orderBy: [{ amount: 'asc' }, { submittedAt: 'asc' }]
+      });
+      if (bids.length > 0) {
+        const vendorBidMap = new Map<string, any>();
+        for (const b of bids) {
+          const key = String(b.sellerOrgId || b.sellerId || 'unknown');
+          if (!vendorBidMap.has(key)) {
+            vendorBidMap.set(key, b);
+          } else {
+            const cur = vendorBidMap.get(key);
+            if (Number(b.amount) < Number(cur.amount)) {
+              vendorBidMap.set(key, b);
+            }
+          }
+        }
+        const distinctBids = Array.from(vendorBidMap.values()).sort((a, b) => Number(a.amount || 0) - Number(b.amount || 0));
+        participants = distinctBids.map((b, idx) => ({
+          id: b.id,
+          auctionId: id,
+          sellerOrgId: b.sellerOrgId || null,
+          sellerUserId: b.sellerId || null,
+          status: 'TECHNICALLY_QUALIFIED',
+          qualificationStatus: 'APPROVED',
+          currentRank: idx + 1,
+          lastBidAmount: b.amount || b.bidAmount,
+          initialQuoteAmount: b.amount || b.bidAmount,
+          initialQuoteTotal: b.amount || b.bidAmount,
+          qualificationDocuments: []
+        }));
+      }
+    }
 
     const orgIds = Array.from(new Set(participants.map((p: any) => p.sellerOrgId).filter(Boolean)));
     const orgs = await db.organization.findMany({

@@ -3154,6 +3154,8 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
           type: 'bid.published',
           redirectUrl: `/buyer/procurement/events/${bid.id}`
         }, ['in_app', 'email']);
+        const tp = (bid.technicalPacket || {}) as any;
+        const vendorsSelection = String(tp.vendors?.selection || tp.vendors?.selectionMode || '').trim();
         void notificationService.notifySellersAndShgsOfProcurement({
           id: bid.id,
           title: bid.title,
@@ -3163,7 +3165,10 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
           buyerOrganizationName: bid.buyerOrganizationName,
           estimatedValue: bid.estimatedValue,
           endDate: bid.endDate,
-          visibility: bid.visibility
+          visibility: bid.visibility,
+          sourcingStrategy: vendorsSelection,
+          category: bid.category,
+          invitedSellerOrgIds: extractInvitedSellerIds(bid.technicalPacket)
         });
       } catch (err) {
         logger.warn({ err }, 'Failed to send publish notification');
@@ -3227,6 +3232,8 @@ export const approveBid = async (req: AuthRequest, bidId: string) => {
           }, ['in_app', 'email']);
         }
       }
+      const tp = (bid.technicalPacket || {}) as any;
+      const vendorsSelection = String(tp.vendors?.selection || tp.vendors?.selectionMode || '').trim();
       void notificationService.notifySellersAndShgsOfProcurement({
         id: bid.id,
         title: bid.title,
@@ -3236,7 +3243,10 @@ export const approveBid = async (req: AuthRequest, bidId: string) => {
         buyerOrganizationName: bid.buyerOrganizationName,
         estimatedValue: bid.estimatedValue,
         endDate: bid.endDate,
-        visibility: bid.visibility
+        visibility: bid.visibility,
+        sourcingStrategy: vendorsSelection,
+        category: bid.category,
+        invitedSellerOrgIds: extractInvitedSellerIds(bid.technicalPacket)
       });
     }
     await notificationService.notifyUser(bid.buyerId, {

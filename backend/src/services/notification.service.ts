@@ -198,7 +198,7 @@ export const notificationService = {
     }
   },
 
-  /** Notify sellers & SHG users about a published public or invited procurement opportunity */
+  /** Notify sellers & SHG users about a published public, invited, or category-matched procurement opportunity */
   async notifySellersAndShgsOfProcurement(procurement: {
     id: number | string;
     title: string;
@@ -210,29 +210,170 @@ export const notificationService = {
     estimatedValue?: number | null;
     endDate?: Date | string | null;
     visibility?: string;
+    sourcingStrategy?: string;
+    category?: string;
+    categoryId?: number;
     invitedSellerOrgIds?: number[];
     invitedUserIds?: number[];
   }) {
     try {
-      const isLimited = procurement.visibility === 'LIMITED' || procurement.visibility === 'INVITED_SELLERS_ONLY';
-      let targetUsers: Array<{ id: number; email?: string | null; role?: string }> = [];
+      const canonicalMethod = String(procurement.canonicalMethod || procurement.procurementType || '').toUpperCase().replace(/[- ]+/g, '_');
+      const sourcingStrategy = String(procurement.sourcingStrategy || '').trim().toUpperCase();
+      const isLimitedMethod = canonicalMethod === 'LIMITED_TENDER' || canonicalMethod.includes('LIMITED');
+      const isSelectedStrategy = ['SELECTED', 'SELECT', 'LIMITED', 'INVITED'].includes(sourcingStrategy);
+      const isPrivateVisibility = procurement.visibility === 'PRIVATE' || procurement.visibility === 'LIMITED' || procurement.visibility === 'INVITED_SELLERS_ONLY';
+      const isInvitedSelectedPool = isLimitedMethod || isSelectedStrategy || isPrivateVisibility;
 
-      if (isLimited) {
-        const invitedOrgIds = procurement.invitedSellerOrgIds || [];
-        const invitedUserIds = procurement.invitedUserIds || [];
-        targetUsers = await db.user.findMany({
-          where: {
-            role: { in: ['seller', 'shg'] as any },
-            accountStatus: { not: 'BLOCKED' as any },
-            OR: [
-              ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
-              ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
-            ]
-          },
-          select: { id: true, email: true, role: true }
-        });
+      let targetUsers: Array<{ id: number; email?: string | null; role?: string }> = [];
+      let isInvitation = false;
+      let isCategoryMatched = false;
+
+      if (isInvitedSelectedPool) {
+        isInvitation = true;
+        let invitedOrgIds = Array.isArray(procurement.invitedSellerOrgIds) ? [...procurement.invitedSellerOrgIds] : [];
+        let invitedUserIds = Array.isArray(procurement.invitedUserIds) ? [...procurement.invitedUserIds] : [];
+
+        // If no invited IDs passed in options, look up relational invitations or technicalPacket from the bid
+        if (!invitedOrgIds.length && !invitedUserIds.length && procurement.id) {
+          const numId = Number(procurement.id);
+          if (Number.isFinite(numId) && numId > 0) {
+            const [relationalInvs, bidRow] = await Promise.all([
+              db.procurementBidInvitation.findMany({
+                where: { bidId: numId },
+                select: { sellerOrgId: true, sellerUserId: true }
+              }).catch(() => []),
+              db.procurementBid.findUnique({
+                where: { id: numId },
+                select: { technicalPacket: true }
+              }).catch(() => null)
+            ]);
+            for (const r of relationalInvs) {
+              if (r.sellerOrgId) invitedOrgIds.push(r.sellerOrgId);
+              if (r.sellerUserId) invitedUserIds.push(r.sellerUserId);
+            }
+
+            if (!invitedOrgIds.length && !invitedUserIds.length && bidRow?.technicalPacket) {
+              const tp: any = bidRow.technicalPacket;
+              const rawList = Array.isArray(tp?.vendors?.invitedSellers)
+                ? tp.vendors.invitedSellers
+                : (Array.isArray(tp?.qualifiedVendors) ? tp.qualifiedVendors : []);
+              for (const entry of rawList) {
+                const rawVal = (entry && typeof entry === 'object')
+                  ? (entry.sellerOrgId ?? entry.supplierId ?? entry.organizationId ?? entry.sellerUserId ?? entry.userId ?? entry.id)
+                  : entry;
+                const n = Number(rawVal);
+                if (Number.isFinite(n) && n > 0) invitedOrgIds.push(n);
+              }
+            }
+          }
+        }
+
+        invitedOrgIds = Array.from(new Set(invitedOrgIds.filter(id => Number.isFinite(id) && id > 0)));
+        invitedUserIds = Array.from(new Set(invitedUserIds.filter(id => Number.isFinite(id) && id > 0)));
+
+        if (invitedOrgIds.length || invitedUserIds.length) {
+          targetUsers = await db.user.findMany({
+            where: {
+              role: { in: ['seller', 'shg'] as any },
+              accountStatus: { not: 'BLOCKED' as any },
+              OR: [
+                ...(invitedOrgIds.length ? [{ organizationId: { in: invitedOrgIds } }] : []),
+                ...(invitedUserIds.length ? [{ id: { in: invitedUserIds } }] : [])
+              ]
+            },
+            select: { id: true, email: true, role: true }
+          });
+        }
+
+        // STRICT RULE: If invited/limited/selected pool, ONLY invited sellers get notified.
+        // If no invited users found, return immediately without notifying anyone else.
+        if (!targetUsers.length) return;
+
+      } else if (sourcingStrategy === 'CATEGORY') {
+        isCategoryMatched = true;
+        const categoryName = (procurement.category || '').trim();
+        const catId = procurement.categoryId;
+
+        let resolvedCategoryIds: number[] = catId ? [catId] : [];
+        if (categoryName) {
+          const matchingCats = await db.category.findMany({
+            where: {
+              OR: [
+                { name: { equals: categoryName, mode: 'insensitive' } },
+                { name: { contains: categoryName, mode: 'insensitive' } },
+                { slug: { equals: categoryName.toLowerCase().replace(/[^a-z0-9]+/g, '-'), mode: 'insensitive' } }
+              ]
+            },
+            select: { id: true }
+          }).catch(() => []);
+          matchingCats.forEach(c => {
+            if (!resolvedCategoryIds.includes(c.id)) resolvedCategoryIds.push(c.id);
+          });
+        }
+
+        const orgConditions: any[] = [];
+        if (resolvedCategoryIds.length) {
+          orgConditions.push(
+            { products: { some: { status: 'ACTIVE', categoryId: { in: resolvedCategoryIds } } } },
+            { services: { some: { status: 'ACTIVE', categoryId: { in: resolvedCategoryIds } } } }
+          );
+        }
+        if (categoryName) {
+          orgConditions.push(
+            { products: { some: { status: 'ACTIVE', category: { name: { contains: categoryName, mode: 'insensitive' } } } } },
+            { services: { some: { status: 'ACTIVE', category: { name: { contains: categoryName, mode: 'insensitive' } } } } }
+          );
+        }
+
+        let matchedOrgIds: number[] = [];
+        if (orgConditions.length) {
+          const matchingOrgs = await db.organization.findMany({
+            where: {
+              verificationStatus: 'VERIFIED',
+              isBlacklisted: false,
+              deletedAt: null,
+              OR: orgConditions
+            },
+            select: { id: true }
+          }).catch(() => []);
+          matchedOrgIds = matchingOrgs.map(o => o.id);
+        }
+
+        const userConditions: any[] = [];
+        if (matchedOrgIds.length) {
+          userConditions.push({ organizationId: { in: matchedOrgIds } });
+        }
+        if (resolvedCategoryIds.length) {
+          userConditions.push(
+            { products: { some: { status: 'ACTIVE', categoryId: { in: resolvedCategoryIds } } } },
+            { services: { some: { status: 'ACTIVE', categoryId: { in: resolvedCategoryIds } } } }
+          );
+        }
+        if (categoryName) {
+          userConditions.push(
+            { products: { some: { status: 'ACTIVE', category: { name: { contains: categoryName, mode: 'insensitive' } } } } },
+            { services: { some: { status: 'ACTIVE', category: { name: { contains: categoryName, mode: 'insensitive' } } } } },
+            { sellerProfile: { productCategories: { has: categoryName } } }
+          );
+        }
+
+        if (userConditions.length) {
+          targetUsers = await db.user.findMany({
+            where: {
+              role: { in: ['seller', 'shg'] as any },
+              accountStatus: { not: 'BLOCKED' as any },
+              OR: userConditions
+            },
+            select: { id: true, email: true, role: true }
+          });
+        }
+
+        // STRICT RULE: If Category sourcing strategy, ONLY strictly matched vendors get notified.
+        if (!targetUsers.length) return;
+
       } else {
-        // Public procurement: Notify all active Sellers and SHGs
+        // Public procurement: Notify all active Sellers and SHGs (only if PUBLIC)
+        if (procurement.visibility === 'PRIVATE') return;
         targetUsers = await db.user.findMany({
           where: {
             role: { in: ['seller', 'shg'] as any },
@@ -249,7 +390,6 @@ export const notificationService = {
       const methodStr = (procurement.canonicalMethod || procurement.procurementType || 'Public Sourcing').replace(/_/g, ' ');
       const orgStr = procurement.buyerOrganizationName || 'Verified Buyer';
 
-      const canonicalMethod = String(procurement.canonicalMethod || procurement.procurementType || '').toUpperCase().replace(/[- ]+/g, '_');
       let targetRedirect = `/bids/${encodeURIComponent(numStr)}`;
       if (canonicalMethod.includes('REVERSE') || canonicalMethod.includes('AUCTION')) {
         targetRedirect = `/seller/procurement/reverse-auction/${encodeURIComponent(procurement.id || numStr)}`;
@@ -265,24 +405,42 @@ export const notificationService = {
         targetRedirect = `/seller/procurement/limited-tender/${encodeURIComponent(numStr)}`;
       }
 
-      const notifyOpts: NotifyOpts = {
-        title: `New Procurement Opportunity: ${titleStr}`,
+      // For invited sellers, notification type MUST contain 'invit' (e.g. 'bid.invitation')
+      // so InviteLoginPopup displays the pending invitation banner popup!
+      const notifyOpts: NotifyOpts = isInvitation ? {
+        title: `Procurement Invitation: ${titleStr}`,
+        message: `Your organization has been invited by ${orgStr} to participate in ${methodStr} (${numStr}).`,
+        type: 'bid.invitation',
+        priority: 'high',
+        redirectUrl: targetRedirect
+      } : {
+        title: isCategoryMatched ? `New Category Opportunity: ${titleStr}` : `New Procurement Opportunity: ${titleStr}`,
         message: `${orgStr} published a new ${methodStr} requirement (${numStr}). Open portal to view details and submit your proposal.`,
         type: 'procurement.opportunity',
         priority: 'high',
         redirectUrl: targetRedirect
       };
 
+      const emailSubject = isInvitation
+        ? `[JsgSmile] Invitation to Bid: ${titleStr} (${numStr})`
+        : (isCategoryMatched
+          ? `[JsgSmile] New Opportunity in your category: ${titleStr} (${numStr})`
+          : `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`);
+
       const emailOpts: EmailOpts = {
-        subject: `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`,
+        subject: emailSubject,
         html: `
           <div style="margin: 0 0 20px; padding: 18px 20px; background: #0c2340; border-radius: 8px; color: #ffffff;">
-            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">NEW ${escapeHtml(methodStr)} OPPORTUNITY</p>
+            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">${isInvitation ? 'INVITATION TO BID' : `NEW ${escapeHtml(methodStr)} OPPORTUNITY`}</p>
             <h2 style="margin: 0; color: #ffffff; font-size: 20px; line-height: 1.3;">${escapeHtml(titleStr)}</h2>
             <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 13px;">Ref No: <strong>${escapeHtml(numStr)}</strong> | Issued by: <strong>${escapeHtml(orgStr)}</strong></p>
           </div>
           <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">
-            A new public procurement opportunity matching registered Seller and SHG business categories has been published on the portal.
+            ${isInvitation
+              ? `Your organization has been formally invited by <strong>${escapeHtml(orgStr)}</strong> to participate in an exclusive / limited procurement opportunity on the portal.`
+              : (isCategoryMatched
+                ? `A new procurement opportunity matching your registered business category (<strong>${escapeHtml(procurement.category || 'Category')}</strong>) has been published on the portal.`
+                : `A new public procurement opportunity matching registered Seller and SHG business categories has been published on the portal.`)}
           </p>
           <table role="presentation" style="width: 100%; margin: 0 0 22px; border-collapse: collapse; font-size: 14px;">
             <tr>
@@ -306,7 +464,7 @@ export const notificationService = {
         }
       };
 
-      // Dispatch in-app and email to all targeted sellers & SHGs
+      // Dispatch in-app and email to strictly targeted sellers & SHGs
       await Promise.allSettled(
         targetUsers.map(user => this.notifyUser(user.id, notifyOpts, ['in_app', 'email']))
       );

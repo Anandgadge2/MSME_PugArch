@@ -1840,6 +1840,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     qualifiedVendorCount: config.qualifiedVendors.length
   });
 
+  const isAuctionLimited = config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.qualifiedVendors?.length);
   void notificationService.notifySellersAndShgsOfProcurement({
     id: auction.id,
     title: auction.title,
@@ -1849,7 +1850,10 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
     buyerOrganizationName: auction.buyerOrganization,
     estimatedValue: auction.estimatedValue,
     endDate: auction.endDateTime,
-    visibility: 'PUBLIC'
+    visibility: isAuctionLimited ? 'INVITED_SELLERS_ONLY' : 'PUBLIC',
+    sourcingStrategy: isAuctionLimited ? 'Selected' : 'Open',
+    category: auction.category || (draftBody.payload as any)?.basics?.category || undefined,
+    invitedSellerOrgIds: Array.isArray(config.qualifiedVendors) ? config.qualifiedVendors.map((v: any) => Number(v.sellerOrgId)).filter((id: number) => Number.isFinite(id) && id > 0) : []
   });
 
   return auction;
@@ -2121,6 +2125,12 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     canonicalMethod
   });
 
+  const vendorsSelection = String(vendors.selection || vendors.selectionMode || '').trim();
+  const rawPacketVendors = (baseData.technicalPacket as any)?.vendors || {};
+  const invitedOrgIds = Array.isArray(rawPacketVendors.invitedSellers)
+    ? rawPacketVendors.invitedSellers.map((s: any) => Number(s?.id || s?.sellerOrgId || s)).filter((n: number) => Number.isFinite(n) && n > 0)
+    : [];
+
   void notificationService.notifySellersAndShgsOfProcurement({
     id: bid.id,
     title: bid.title,
@@ -2130,7 +2140,11 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     buyerOrganizationName: bid.buyerOrganizationName,
     estimatedValue: bid.estimatedValue,
     endDate: bid.endDate,
-    visibility: bid.visibility
+    visibility: bid.visibility,
+    sourcingStrategy: vendorsSelection,
+    category: bid.category,
+    categoryId: requirement.categoryId || undefined,
+    invitedSellerOrgIds: invitedOrgIds
   });
 
   return bid;

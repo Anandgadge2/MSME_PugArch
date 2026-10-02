@@ -435,7 +435,11 @@ const mapLegacyRequirementToPublic = (requirement: any) => {
 };
 
 const getPublicLegacyRequirementWhere = () => ({
-    status: { in: ['APPROVED', 'SOURCING', 'FULFILLED', 'CLOSED', 'EXPIRED'] }
+    status: { in: ['APPROVED', 'SOURCING', 'FULFILLED', 'CLOSED', 'EXPIRED'] },
+    NOT: [
+        { procurementMethod: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
+        { canonicalMethod: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } }
+    ]
 });
 
 const mapProcurementBidToPublic = (bid: any) => {
@@ -545,13 +549,14 @@ const loadLatestProcurementBids = async (take = 6) => {
             where: {
                 approvalStatus: 'APPROVED',
                 status: { in: ['OPEN', 'APPROVED', 'TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'AWARDED'] },
+                visibility: 'PUBLIC',
                 NOT: [
                     { procurementType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
                     { bidType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } }
                 ]
             },
             orderBy: [{ startDate: 'desc' }, { createdAt: 'desc' }],
-            take,
+            take: take * 2,
             select: {
                 id: true,
                 bidNumber: true,
@@ -561,6 +566,10 @@ const loadLatestProcurementBids = async (take = 6) => {
                 buyerType: true,
                 category: true,
                 bidType: true,
+                procurementType: true,
+                canonicalMethod: true,
+                visibility: true,
+                technicalPacket: true,
                 quantity: true,
                 unit: true,
                 estimatedValue: true,
@@ -613,7 +622,23 @@ const loadLatestProcurementBids = async (take = 6) => {
         }).catch(() => [])
     ]);
 
-    const procurementRows = (procurementBids || []).map((bid: any) => ({
+    const filteredProcurementBids = (procurementBids || []).filter((bid: any) => {
+        if (bid.visibility && bid.visibility !== 'PUBLIC') return false;
+        const pType = String(bid.procurementType || '').toUpperCase();
+        const bType = String(bid.bidType || '').toUpperCase();
+        const cMethod = String(bid.canonicalMethod || '').toUpperCase();
+        if (['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(pType)) return false;
+        if (['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(bType)) return false;
+        if (['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(cMethod)) return false;
+        const tp = (bid.technicalPacket || {}) as any;
+        const selection = String(tp.vendors?.selection || tp.vendors?.selectionMode || '').toUpperCase();
+        const rfqType = String(tp.rfqType || tp.vendors?.rfqType || '').toUpperCase();
+        if (rfqType === 'LIMITED') return false;
+        if (['SELECTED', 'SELECT', 'LIMITED', 'INVITED'].includes(selection)) return false;
+        return true;
+    }).slice(0, take);
+
+    const procurementRows = filteredProcurementBids.map((bid: any) => ({
         ...bid,
         sourceModel: 'PROCUREMENT_BID',
         sourceId: bid.id,
@@ -668,7 +693,10 @@ const loadLatestProcurementBids = async (take = 6) => {
 const loadLatestRequirements = async (take = 6) => {
     const [buyerRequirements, legacyRequirements] = await Promise.all([
         db.buyerRequirement?.findMany?.({
-            where: getPublicRequirementWhere(),
+            where: {
+                ...getPublicRequirementWhere(),
+                visibility: 'PUBLIC'
+            },
             orderBy: { createdAt: 'desc' },
             take,
             select: publicRequirementListSelect
@@ -676,7 +704,7 @@ const loadLatestRequirements = async (take = 6) => {
         db.requirement?.findMany?.({
             where: getPublicLegacyRequirementWhere(),
             orderBy: { updatedAt: 'desc' },
-            take,
+            take: take * 4,
             select: publicLegacyRequirementSelect
         }).catch(() => [])
     ]);
@@ -686,10 +714,14 @@ const loadLatestRequirements = async (take = 6) => {
 
     const decoratedLegacy = (legacyRequirements || [])
         .filter((reqItem: any) => {
-            const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
-            const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
-            return !isRestricted && !isLimitedRfq;
+            const method = String(reqItem.canonicalMethod || reqItem.procurementMethod || '').toUpperCase();
+            const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method);
+            const payload = (reqItem.payload && typeof reqItem.payload === 'object') ? (reqItem.payload as any) : {};
+            const isLimitedRfq = method === 'RFQ' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
+            const selection = String(payload.vendors?.selection || payload.vendors?.selectionMode || '').toUpperCase();
+            const isSelectedPool = ['SELECTED', 'SELECT', 'LIMITED', 'INVITED'].includes(selection);
+            const isPrivateVis = reqItem.visibility === 'PRIVATE' || reqItem.visibility === 'LIMITED' || reqItem.visibility === 'INVITED_SELLERS_ONLY';
+            return !isRestricted && !isLimitedRfq && !isSelectedPool && !isPrivateVis;
         })
         .map(mapLegacyRequirementToPublic)
         .filter((l: any) => !buyerTitles.has((l.title || '').trim().toLowerCase()));
@@ -2698,7 +2730,11 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
         const pbWhere: any = {
             approvalStatus: { in: ['APPROVED', 'PENDING'] },
             status: { in: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'] },
-            visibility: 'PUBLIC'
+            visibility: 'PUBLIC',
+            NOT: [
+                { procurementType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
+                { bidType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } }
+            ]
         };
         if (query.q) {
             pbWhere.OR = [
@@ -2753,20 +2789,44 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             ]);
 
             const currentUserId = req.user?.id ? Number(req.user.id) : null;
+            const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
             const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
-                const method = reqItem.canonicalMethod || reqItem.procurementMethod || '';
-                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method.toUpperCase());
-                const isLimitedRfq = method.toUpperCase() === 'RFQ' && reqItem.payload && typeof reqItem.payload === 'object' && (reqItem.payload as any).rfqType === 'LIMITED';
+                const method = String(reqItem.canonicalMethod || reqItem.procurementMethod || '').toUpperCase();
+                const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method);
+                const payload = (reqItem.payload && typeof reqItem.payload === 'object') ? (reqItem.payload as any) : {};
+                const isLimitedRfq = method === 'RFQ' && String(payload.rfqType || '').toUpperCase() === 'LIMITED';
+                const selection = String(payload.vendors?.selection || payload.vendors?.selectionMode || '').toUpperCase();
+                const isSelectedPool = ['SELECTED', 'SELECT', 'LIMITED', 'INVITED'].includes(selection);
+                const isPrivateVis = reqItem.visibility === 'PRIVATE' || reqItem.visibility === 'LIMITED' || reqItem.visibility === 'INVITED_SELLERS_ONLY';
                 
-                if (isRestricted || isLimitedRfq) {
+                if (isRestricted || isLimitedRfq || isSelectedPool || isPrivateVis) {
                     if (!currentUserId) return false;
-                    const invited = Array.isArray((reqItem.payload as any)?.vendors?.invitedSellers) ? (reqItem.payload as any).vendors.invitedSellers : [];
-                    return invited.includes(currentUserId);
+                    const rawInvited = Array.isArray(payload?.vendors?.invitedSellers) ? payload.vendors.invitedSellers : [];
+                    const invitedIds = new Set<number>();
+                    for (const entry of rawInvited) {
+                        const rawVal = (entry && typeof entry === 'object')
+                            ? (entry.sellerOrgId ?? entry.supplierId ?? entry.organizationId ?? entry.sellerUserId ?? entry.userId ?? entry.id)
+                            : entry;
+                        const n = Number(rawVal);
+                        if (Number.isFinite(n) && n > 0) invitedIds.add(n);
+                    }
+                    const isInvited = invitedIds.has(currentUserId) || (currentUserOrgId ? invitedIds.has(currentUserOrgId) : false);
+                    return Boolean(isInvited);
                 }
                 return true;
             });
 
-            const decoratedPb = (procurementBids || []).map(mapProcurementBidToPublic);
+            const filteredPb = (procurementBids || []).filter((bid: any) => {
+                if (bid.visibility !== 'PUBLIC') return false;
+                const tp = (bid.technicalPacket || {}) as any;
+                const selection = String(tp.vendors?.selection || tp.vendors?.selectionMode || '').toUpperCase();
+                const rfqType = String(tp.rfqType || tp.vendors?.rfqType || '').toUpperCase();
+                if (rfqType === 'LIMITED') return false;
+                if (['SELECTED', 'SELECT', 'LIMITED', 'INVITED'].includes(selection)) return false;
+                return true;
+            });
+
+            const decoratedPb = (filteredPb || []).map(mapProcurementBidToPublic);
             const decoratedLegacy = (filteredLegacy || []).map(mapLegacyRequirementToPublic);
             const decoratedBuyer = (buyerRequirements || []).map(decorateRequirement);
 

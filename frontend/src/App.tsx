@@ -8,6 +8,7 @@ import { isShgUser } from './lib/shg';
 import { getCookieValue } from './lib/auth';
 import { resolveLegacyUrl } from './lib/routes';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
+import { useUserRealtime } from './hooks/useUserRealtime';
 
 // Eagerly imported (small, always-needed for initial routes).
 import Login from './views/Login';
@@ -538,6 +539,7 @@ export default function App({
   initialSidebarCollapsed?: boolean;
 }) {
   const { user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut } = useAuth();
+  useUserRealtime(user?.id);
   const network = useNetworkStatus();
   const router = useRouter();
   const pathname = usePathname() || '/';
@@ -1370,6 +1372,11 @@ export default function App({
             {user && (
               <TargetedNoticePopup />
             )}
+          </Suspense>
+        )}
+        {!showDashboardLayout && user && (user.role === 'seller' || user.role === 'shg') && (
+          <Suspense fallback={null}>
+            <SellerAwardPoAlertPopup />
           </Suspense>
         )}
         <SubUserActivationGate />

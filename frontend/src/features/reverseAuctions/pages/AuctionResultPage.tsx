@@ -2,7 +2,18 @@
 
 import { useState, useEffect, useId } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
+
+function formatProcurementMethod(method?: string | null): string {
+  if (!method) return 'Reverse Auction';
+  const clean = String(method).trim().toUpperCase();
+  if (clean === 'REVERSE_AUCTION') return 'Reverse Auction';
+  if (clean === 'BID_WITH_REVERSE_AUCTION') return 'Bid with Reverse Auction';
+  if (clean === 'ENGLISH_REVERSE') return 'English Reverse Auction';
+  if (clean === 'RANK_BASED_REVERSE') return 'Rank-Based Reverse Auction';
+  return clean.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+}
 import {
   AlertTriangle,
   ArrowLeft,
@@ -263,11 +274,21 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
   };
 
   return (
-    <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-      {/* 1. Breadcrumbs & Top Navigation Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 mb-2">
+    <div className="p-3.5 sm:p-5 lg:p-6 max-w-7xl mx-auto space-y-4 sm:space-y-5">
+      {/* 1. Breadcrumb & Action Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white px-4 sm:px-5 py-3 rounded-2xl border border-slate-200 shadow-2xs">
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push(backUrl)}
+            className="h-8 px-2.5 text-xs font-bold text-slate-700 hover:text-slate-950 border-slate-250 hover:bg-slate-50 cursor-pointer"
+            aria-label="Return to reverse auction details page"
+          >
+            <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to Auction
+          </Button>
+
+          <nav aria-label="Breadcrumb" className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-500 ml-1">
             <button
               type="button"
               onClick={() => router.push(rootListingUrl)}
@@ -275,58 +296,28 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
             >
               {rootListingLabel}
             </button>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" aria-hidden="true" />
             <button
               type="button"
               onClick={() => router.push(backUrl)}
-              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline font-mono cursor-pointer"
+              className="hover:text-slate-900 transition-colors focus:outline-none focus:underline font-mono font-bold text-slate-700 cursor-pointer"
             >
               {canonicalCode}
             </button>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-400 shrink-0" aria-hidden="true" />
-            <span className="text-slate-900 font-bold" aria-current="page">Outcomes & Evaluation</span>
-          </nav>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push(backUrl)}
-              className="h-8 px-3 text-xs font-bold text-slate-700 hover:text-slate-950 border-slate-300"
-              aria-label="Return to reverse auction details page"
-            >
-              <ArrowLeft className="mr-1.5 h-3.5 w-3.5" /> Back to Auction Details
-            </Button>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-black tracking-wide uppercase bg-blue-100 text-blue-900 border border-blue-200">
-              {auction?.procurementMethod || 'REVERSE_AUCTION'}
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0" aria-hidden="true" />
+            <span className="text-slate-900 font-extrabold bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-md text-[11px]" aria-current="page">
+              Outcomes & Evaluation
             </span>
-            {purchaseOrder || (['AWARDED', 'COMPLETED'].includes(status) && purchaseOrder) ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700" /> Contract Awarded & PO Issued
-              </span>
-            ) : isAwardAccepted ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-900 border border-indigo-300">
-                <CheckCircle2 className="h-3.5 w-3.5 text-indigo-700" /> Award Accepted — Ready for PO
-              </span>
-            ) : isAwardOffered ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-900 border border-amber-300">
-                <Clock className="h-3.5 w-3.5 text-amber-700" /> Award Offered — Awaiting Supplier
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-300">
-                {status || 'CLOSED'}
-              </span>
-            )}
-          </div>
+          </nav>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-end sm:self-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => query.refetch()}
             disabled={query.isFetching}
-            className="h-9 text-xs font-bold border-slate-300"
+            className="h-8 text-xs font-bold border-slate-250 text-slate-700 hover:bg-slate-50"
             aria-label="Refresh auction outcomes data"
           >
             <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${query.isFetching ? 'animate-spin' : ''}`} />
@@ -335,26 +326,68 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
         </div>
       </div>
 
-      {/* 2. Header Banner with Action Buttons */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-              <Gavel className="h-4 w-4 text-indigo-600" />
-              <span>Official Reverse Auction Outcomes & Evaluation</span>
+      {/* 2. Compact Header Banner */}
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-2xs">
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 sm:gap-4">
+          <div className="space-y-1.5">
+            {/* Formatted Badge Row */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-800 border border-blue-200 shadow-2xs">
+                <Gavel className="h-3 w-3 text-blue-600" aria-hidden="true" />
+                {formatProcurementMethod(auction?.procurementMethod)}
+              </span>
+
+              <span className="font-mono text-[10.5px] font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
+                {canonicalCode}
+              </span>
+
+              {auction?.referenceNo && auction.referenceNo !== canonicalCode && (
+                <Link
+                  href={`/bids/${encodeURIComponent(auction.referenceNo)}`}
+                  className="inline-flex items-center gap-1 text-[10.5px] font-mono font-bold text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md hover:bg-slate-100 hover:text-blue-900 transition"
+                >
+                  <span className="font-sans text-[9px] font-medium text-slate-400">Tender:</span>
+                  {auction.referenceNo}
+                  <ExternalLink className="h-2.5 w-2.5 text-slate-400 ml-0.5" />
+                </Link>
+              )}
+
+              {purchaseOrder || (['AWARDED', 'COMPLETED'].includes(status) && purchaseOrder) ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Contract Awarded & PO Issued
+                </span>
+              ) : isAwardAccepted ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                  <CheckCircle2 className="h-3 w-3 text-indigo-600" /> Award Accepted — Ready for PO
+                </span>
+              ) : isAwardOffered ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                  <Clock className="h-3 w-3 text-amber-600" /> Award Offered — Awaiting Supplier
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10.5px] font-bold bg-slate-100 text-slate-700 border border-slate-200">
+                  {status === 'CLOSED' ? 'Closed' : status === 'LIVE' ? 'Live' : status || 'Closed'}
+                </span>
+              )}
             </div>
-            <h1 className="text-xl sm:text-2xl font-black text-slate-950 mt-1">
+
+            <h1 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight">
               {auction?.title || `Reverse Auction ${canonicalCode}`}
             </h1>
-            <p className="text-xs sm:text-sm font-semibold text-slate-600 mt-1">
-              Auction Code: <span className="font-mono font-bold text-slate-900">{canonicalCode}</span>
-              {displayCategory && <> · Category: <span className="font-bold text-slate-900">{displayCategory}</span></>}
-              {auction?.endTime && <> · Concluded: <span className="font-bold text-slate-900">{formatDateTime(auction.endTime)}</span></>}
+
+            <p className="text-xs font-medium text-slate-500 flex flex-wrap items-center gap-x-2 gap-y-1">
+              {displayCategory && (
+                <span>Category: <strong className="text-slate-700">{displayCategory}</strong></span>
+              )}
+              {displayCategory && auction?.endTime && <span>·</span>}
+              {auction?.endTime && (
+                <span>Concluded: <strong className="text-slate-700">{formatDateTime(auction.endTime)}</strong></span>
+              )}
             </p>
           </div>
 
           <div className="shrink-0 flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200 shadow-2xs">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200 shadow-2xs">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
               <span>Evaluation Concluded</span>
             </span>
@@ -503,76 +536,84 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
       )}
 
       {/* 3. Executive KPI Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4" role="region" aria-label="Auction Key Performance Indicators">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3" role="region" aria-label="Auction Key Performance Indicators">
         {/* L1 Lowest Commercial Offer */}
-        <div className="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50/70 to-white p-4 shadow-sm">
+        <div className="rounded-xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50/50 to-white p-3 sm:p-3.5 space-y-1 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-900 uppercase tracking-wider">Lowest Commercial Offer (L1)</span>
-            <div className="h-8 w-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
-              <Trophy className="h-4 w-4" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-emerald-800 uppercase tracking-wider">
+              Lowest Offer (L1)
+            </span>
+            <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center">
+              <Trophy className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black text-slate-950">
+          <div className="mt-1">
+            <span className="text-base sm:text-lg font-mono font-black text-emerald-950">
               {lowestBidAmount > 0 ? formatCurrency(lowestBidAmount) : '—'}
             </span>
           </div>
-          <p className="text-[11px] font-semibold text-emerald-800 mt-1 flex items-center gap-1">
-            <CheckCircle2 className="h-3 w-3" /> Lowest evaluated downward bid
+          <p className="text-[10px] font-medium text-emerald-700 flex items-center gap-1">
+            <CheckCircle2 className="h-3 w-3" /> Lowest evaluated bid
           </p>
         </div>
 
         {/* Baseline Starting Price */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-3.5 space-y-1 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Starting Baseline Price</span>
-            <div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-              <IndianRupee className="h-4 w-4" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Baseline Starting
+            </span>
+            <div className="h-6 w-6 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center">
+              <IndianRupee className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black text-slate-950">
+          <div className="mt-1">
+            <span className="text-base sm:text-lg font-mono font-black text-slate-900">
               {startPrice > 0 ? formatCurrency(startPrice) : '—'}
             </span>
           </div>
-          <p className="text-[11px] font-semibold text-slate-500 mt-1">
-            Ceiling reference benchmark
+          <p className="text-[10px] font-medium text-slate-500">
+            Ceiling benchmark
           </p>
         </div>
 
         {/* Procurement Savings */}
-        <div className="rounded-xl border border-indigo-200 bg-gradient-to-br from-indigo-50/70 to-white p-4 shadow-sm">
+        <div className="rounded-xl border border-blue-200/80 bg-gradient-to-br from-blue-50/50 to-white p-3 sm:p-3.5 space-y-1 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-indigo-900 uppercase tracking-wider">Procurement Cost Savings</span>
-            <div className="h-8 w-8 rounded-lg bg-indigo-100 text-indigo-700 flex items-center justify-center">
-              <TrendingDown className="h-4 w-4" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-blue-800 uppercase tracking-wider">
+              Cost Savings
+            </span>
+            <div className="h-6 w-6 rounded-md bg-blue-100 text-blue-700 flex items-center justify-center">
+              <TrendingDown className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black text-indigo-950">
+          <div className="mt-1">
+            <span className="text-base sm:text-lg font-mono font-black text-blue-950">
               {savingsAmount > 0 ? formatCurrency(savingsAmount) : '₹0.00'}
             </span>
           </div>
-          <p className="text-[11px] font-semibold text-indigo-800 mt-1">
+          <p className="text-[10px] font-medium text-blue-700">
             {savingsAmount > 0 ? `${savingsPercent}% reduction achieved` : 'No decrement recorded'}
           </p>
         </div>
 
         {/* Active Bidders */}
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-3.5 space-y-1 shadow-2xs">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Qualified Bidders</span>
-            <div className="h-8 w-8 rounded-lg bg-slate-100 text-slate-700 flex items-center justify-center">
-              <Users className="h-4 w-4" />
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+              Qualified Bidders
+            </span>
+            <div className="h-6 w-6 rounded-md bg-slate-100 text-slate-700 flex items-center justify-center">
+              <Users className="h-3.5 w-3.5" />
             </div>
           </div>
-          <div className="mt-2.5">
-            <span className="text-2xl font-black text-slate-950">
+          <div className="mt-1">
+            <span className="text-base sm:text-lg font-black text-slate-900">
               {ranking.length}
             </span>
           </div>
-          <p className="text-[11px] font-semibold text-slate-500 mt-1">
-            Total active suppliers evaluated
+          <p className="text-[10px] font-medium text-slate-500">
+            Active suppliers evaluated
           </p>
         </div>
       </div>
