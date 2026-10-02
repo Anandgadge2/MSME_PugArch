@@ -630,6 +630,11 @@ export const normalizeBid = (raw: any): ProcurementBid => {
       String(raw.description || '').match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i)?.[1],
       'Normal'
     ),
+    myParticipation: raw.myParticipation,
+    hasSubmittedProposal: raw.hasSubmittedProposal !== undefined ? Boolean(raw.hasSubmittedProposal) : undefined,
+    hasParticipated: raw.hasParticipated !== undefined ? Boolean(raw.hasParticipated) : undefined,
+    ownResponse: raw.ownResponse,
+    rawBid: raw,
   };
 };
 

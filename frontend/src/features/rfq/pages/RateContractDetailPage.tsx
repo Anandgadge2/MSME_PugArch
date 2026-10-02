@@ -147,12 +147,13 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   );
 
   // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
+  const hasValidSellerInitial = user?.role === 'seller' ? Boolean(initialData?.myParticipation || initialData?.hasSubmittedProposal) : true;
   const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
     queryKey: ['procurement-bid-rc-detail', requestId, user?.id],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
-    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
-    staleTime: 60_000,
+    initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) && hasValidSellerInitial ? initialData : undefined,
+    staleTime: 10_000,
     retry: 1,
   });
 

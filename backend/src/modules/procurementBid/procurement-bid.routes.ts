@@ -27,7 +27,12 @@ export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
     } else if (bidOrId && typeof bidOrId === 'object') {
       if (bidOrId.id) keysToInvalidate.add(String(bidOrId.id));
       if (bidOrId.bidId) keysToInvalidate.add(String(bidOrId.bidId));
-      if (bidOrId.bidNumber) keysToInvalidate.add(String(bidOrId.bidNumber));
+      if (bidOrId.bidNumber) {
+        keysToInvalidate.add(String(bidOrId.bidNumber));
+        for (const variant of getCanonicalLookupVariants(bidOrId.bidNumber)) {
+          keysToInvalidate.add(variant);
+        }
+      }
       if (bidOrId.sourceId) keysToInvalidate.add(String(bidOrId.sourceId));
       if (bidOrId.purchaseOrder?.bidId) keysToInvalidate.add(String(bidOrId.purchaseOrder.bidId));
       if (bidOrId.award?.bidId) keysToInvalidate.add(String(bidOrId.award.bidId));
@@ -1493,7 +1498,7 @@ const extendScheduleSchema = z.object({
 
 router.post('/buyer/procurement-bids/:bidId/extend-schedule', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), validate({ params: idParamSchema, body: extendScheduleSchema }), asyncRoute(async (req, res) => {
   const bid = await service.extendBidSchedule(req, req.params.bidId, req.body);
-  await invalidateBidCaches(bid.id);
+  await invalidateBidCaches(bid, req.params.bidId);
   return apiResponse.success(res, bid, 200, 'Tender schedule extended and corrigendum issued');
 }));
 

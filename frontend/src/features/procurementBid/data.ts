@@ -94,6 +94,11 @@ export interface ProcurementBid {
   technicalStatus: EvaluationStatus;
   clarificationStatus: ClarificationStatus;
   participated: boolean;
+  myParticipation?: any;
+  hasSubmittedProposal?: boolean;
+  hasParticipated?: boolean;
+  ownResponse?: any;
+  rawBid?: any;
   description: string;
   eligibility: string[];
   requiredDocuments: string[];

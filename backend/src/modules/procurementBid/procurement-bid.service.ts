@@ -1883,6 +1883,9 @@ export const serializeParticipation = (p: any, options: { canSeeFinancial?: bool
     id: p.id,
     bidId: p.bidId,
     sellerId: p.sellerId,
+    sellerUserId: p.sellerId,
+    organizationId: p.seller?.organizationId || p.organizationId || null,
+    sellerOrganizationId: p.seller?.organizationId || p.sellerOrgId || p.organizationId || null,
     seller: p.seller ? {
       id: p.seller.id,
       name: p.seller.name,

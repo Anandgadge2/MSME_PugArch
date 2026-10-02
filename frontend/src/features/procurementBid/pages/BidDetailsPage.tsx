@@ -14,10 +14,12 @@ import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { procurementBidApi } from '../api';
 import { getApi } from '../../shared/apiClient';
 import { Skeleton, ProcurementDetailSkeleton } from '../../../components/ui/skeleton';
+import { useAuth } from '../../../hooks/useAuth';
 
 export default function BidDetailsPage() {
   const pathname = usePathname() || '';
   const searchParams = useSearchParams();
+  const { user } = useAuth();
 
   const pathTokens = pathname.split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -26,7 +28,7 @@ export default function BidDetailsPage() {
   const requestId = searchParams.get('requestId') || searchParams.get('id') || pathnameId;
 
   const { data: bidData, isLoading } = useQuery({
-    queryKey: ['bid-dispatcher-meta', requestId],
+    queryKey: ['bid-dispatcher-meta', requestId, user?.id],
     queryFn: async () => {
       if (!requestId) return null;
 
