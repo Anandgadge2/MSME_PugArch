@@ -10639,6 +10639,7 @@ export function ProcurementDetailUnifiedView(
               effectiveActiveOrder?.invoices || props.rawBid?.invoices || []
             }
             isBuyer={isBuyerSide}
+            isAwardedToSeller={isAwardedToMe}
             isStandby={
               !isBuyerSide &&
               currentUser?.role === "seller" &&
@@ -11407,8 +11408,12 @@ export function ProcurementDetailUnifiedView(
                           </span>
                         )}
                         {activeAward?.remarks && (
-                          <span className="text-[11px] font-medium text-emerald-300/80 bg-black/20 px-1.5 py-0.5 rounded hidden lg:inline">
-                            {activeAward.remarks}
+                          <span
+                            title={`Buyer Remarks: ${activeAward.remarks}`}
+                            className="text-[11px] font-medium text-emerald-200/90 bg-black/35 px-2 py-0.5 rounded border border-emerald-400/20 max-w-[260px] truncate hidden lg:inline-flex items-center gap-1"
+                          >
+                            <span className="text-emerald-400 font-bold">Buyer Note:</span>
+                            <span className="truncate">{activeAward.remarks}</span>
                           </span>
                         )}
                       </div>

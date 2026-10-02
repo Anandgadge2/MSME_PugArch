@@ -45,6 +45,7 @@ export interface ProcurementLifecycleStepperProps {
   activeGrn?: any;
   invoices?: any[];
   isBuyer?: boolean;
+  isAwardedToSeller?: boolean;
   isStandby?: boolean;
   isDeadlinePassed?: boolean;
   isBiddingOpen?: boolean;
@@ -413,6 +414,7 @@ export function ProcurementLifecycleStepper({
   activeGrn,
   invoices,
   isBuyer = true,
+  isAwardedToSeller,
   isStandby = false,
   isDeadlinePassed = false,
   isBiddingOpen,
@@ -619,6 +621,8 @@ export function ProcurementLifecycleStepper({
 
         const isAwardOfferedToSeller =
           !isBuyer &&
+          !isStandby &&
+          (isAwardedToSeller === undefined || isAwardedToSeller === true) &&
           Boolean(activeAward) &&
           ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARDED', 'AWARD_OFFERED', 'PENDING', 'PENDING_ACCEPTANCE', 'ISSUED'].includes(
             String(activeAward?.awardStatus || activeAward?.status || '').toUpperCase()
@@ -628,6 +632,8 @@ export function ProcurementLifecycleStepper({
 
         const isAwardAcceptedBySeller =
           !isBuyer &&
+          !isStandby &&
+          (isAwardedToSeller === undefined || isAwardedToSeller === true) &&
           Boolean(activeAward) &&
           ['ACCEPTED', 'AWARD_ACCEPTED'].includes(
             String(activeAward?.awardStatus || activeAward?.status || '').toUpperCase()
@@ -659,6 +665,16 @@ export function ProcurementLifecycleStepper({
               }
             },
             isPrimary: true
+          };
+        } else if (isStandby) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Reserve Standby'
+          };
+        } else if (!isBuyer && isAwardedToSeller === false) {
+          return {
+            hasAction: false,
+            idleStatusText: 'Under Evaluation'
           };
         } else if (isAwardOfferedToSeller) {
           return {
