@@ -27,6 +27,7 @@ import { reverseAuctionApi } from '../../reverseAuctions/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { isShgUser } from '../../../lib/shg';
 import { cleanCanonicalRefId, formatLocationSummary, formatRefId } from '../../../utils/refIdUtils';
+import { TypeBadge, type OpportunityType } from '../../shared/TypeBadge';
 
 type FilterTab = 'all' | 'tenders' | 'rfqs' | 'rate-contracts' | 'auctions';
 
@@ -34,7 +35,7 @@ interface OpportunityItem {
   id: string;
   refId: string;
   title: string;
-  type: 'Tender' | 'RFQ' | 'Rate Contract' | 'Reverse Auction';
+  type: OpportunityType;
   buyerName: string;
   department?: string;
   location: string;
@@ -96,7 +97,7 @@ export function LiveOpportunityRadar() {
     queryFn: async () => {
       const [bidsRes, auctionsRes] = await Promise.allSettled([
         procurementBidApi.list({ sort: 'latest', pageSize: 20 }),
-        reverseAuctionApi.list({ pageSize: 12 })
+        reverseAuctionApi.list({ pageSize: 50 })
       ]);
 
       const bids = bidsRes.status === 'fulfilled' && bidsRes.value
@@ -133,9 +134,7 @@ export function LiveOpportunityRadar() {
         const isAuction =
           pType === 'REVERSE_AUCTION' ||
           pType === 'AUCTION' ||
-          pType.includes('AUCTION') ||
-          bid.status === 'REVERSE_AUCTION_ACTIVE' ||
-          Boolean(bid.hasActiveReverseAuction) ||
+          bid.type === 'reverse_auction' ||
           rawRefToken.startsWith('RA-');
 
         const isRateContract =
@@ -147,39 +146,76 @@ export function LiveOpportunityRadar() {
             pType === 'RC'
           );
 
-        const isTender =
+        const isRfp =
           !isAuction && !isRateContract && (
+            rawRefToken.startsWith('RFP-') ||
+            pType.includes('RFP') ||
+            pType.includes('PROPOSAL') ||
+            String(bid.methodLabel || bid.title || '').toUpperCase().includes('RFP')
+          );
+
+        const isTender =
+          !isAuction && !isRateContract && !isRfp && (
             rawRefToken.startsWith('TND-') ||
             rawRefToken.startsWith('LTND-') ||
             pType.includes('TENDER') ||
-            pType.includes('OPEN_TENDER')
+            pType.includes('OPEN_TENDER') ||
+            pType.includes('LIMITED')
           );
 
-        const isRfq = !isAuction && !isRateContract && !isTender;
+        const isRfq = !isAuction && !isRateContract && !isRfp && !isTender;
         
-        const type: OpportunityItem['type'] = isAuction 
+        const baseType: OpportunityType = isAuction 
           ? 'Reverse Auction' 
           : isRateContract 
           ? 'Rate Contract' 
+          : isRfp
+          ? 'RFP'
           : isTender 
-          ? 'Tender' 
+          ? (rawRefToken.startsWith('LTND-') || pType.includes('LIMITED') ? 'Limited Tender' : 'Open Tender') 
           : 'RFQ';
+
+        // Match with reverse auctions from API (both active and concluded)
+        const matchingAuction = Array.isArray(data?.auctions) ? data.auctions.find((a: any) => {
+          if (!a) return false;
+          if (bid.id && (String(a.linkedBidId) === String(bid.id) || String(a.linkedRequirementId) === String(bid.requirementId || bid.id))) return true;
+          if (bid.bidNumber && (String(a.referenceNo) === String(bid.bidNumber) || String(a.auctionCode) === String(bid.bidNumber))) return true;
+          if (bid.referenceNumber && (String(a.referenceNo) === String(bid.referenceNumber) || String(a.auctionCode) === String(bid.referenceNumber))) return true;
+          if (rawRefToken && (String(a.referenceNo) === rawRefToken || String(a.auctionCode) === rawRefToken)) return true;
+          return false;
+        }) : null;
+
+        const linkedAuction = bid.linkedAuctionCode || (bid.reverseAuction?.auctionCode) || matchingAuction?.auctionCode || (bid.linkedAuctionId ? `RA-${bid.linkedAuctionId}` : null);
+        const hasLinkedAuction = Boolean(
+          linkedAuction ||
+          matchingAuction ||
+          bid.hasActiveReverseAuction ||
+          bid.allowReverseAuction ||
+          pType === 'BID_WITH_REVERSE_AUCTION' ||
+          pType.includes('AUCTION') ||
+          bid.status === 'REVERSE_AUCTION_ACTIVE'
+        );
+
+        const type: OpportunityType = (hasLinkedAuction && baseType !== 'Reverse Auction')
+          ? `${baseType} + RA`
+          : baseType;
 
         // Canonical ID derivation without double prefixes
         let canonicalRef = cleanCanonicalRefId(bid.bidNumber || bid.referenceNumber || String(bid.id || ''));
         if (!canonicalRef || canonicalRef.toLowerCase().startsWith('bid-') || /^\d+$/.test(canonicalRef)) {
-          const prefix = isRateContract ? 'RC' : isAuction ? 'RA' : isTender ? 'TND' : 'RFQ';
+          const prefix = isRateContract ? 'RC' : isRfp ? 'RFP' : isAuction ? 'RA' : isTender ? 'TND' : 'RFQ';
           canonicalRef = formatRefId(prefix, bid.id || idx, canonicalRef, pType);
         }
 
-        // Multi-stage lineage (e.g. RC-2026-43265 • RA-2026-22846)
-        const linkedAuction = bid.linkedAuctionCode || (bid.reverseAuction?.auctionCode);
-        if (linkedAuction && !canonicalRef.includes(linkedAuction)) {
-          canonicalRef = `${canonicalRef} • ${cleanCanonicalRefId(linkedAuction)}`;
+        // Multi-stage lineage (e.g. RFP-2026-26500 • RA-2026-67333)
+        if (linkedAuction && !canonicalRef.includes(String(linkedAuction))) {
+          canonicalRef = `${canonicalRef} • ${cleanCanonicalRefId(String(linkedAuction))}`;
         }
 
         let actionHref = '';
         let actionLabel = '';
+
+        const isMatchingAuctionLive = matchingAuction && ['LIVE', 'OPEN', 'SCHEDULED'].includes(String(matchingAuction.status || matchingAuction.statusEnum || '').toUpperCase());
 
         if (bid.purchaseOrderId || bid.orderId) {
           actionHref = `${rolePrefix}/orders?orderId=${encodeURIComponent(String(bid.purchaseOrderId || bid.orderId))}`;
@@ -187,13 +223,19 @@ export function LiveOpportunityRadar() {
         } else if (bid.hasSubmitted || bid.myParticipation) {
           actionHref = `${rolePrefix}/bids/submitted?bidId=${encodeURIComponent(String(bid.id))}`;
           actionLabel = 'Review Bid';
+        } else if (hasLinkedAuction && isMatchingAuctionLive) {
+          actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(linkedAuction || matchingAuction.id))}/live`;
+          actionLabel = 'Join Auction';
         } else if (type === 'Reverse Auction') {
           actionHref = `${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(bid.auctionCode || linkedAuction || bid.id))}/live`;
           actionLabel = isExpired ? 'View Results' : 'Join Auction';
-        } else if (type === 'Rate Contract') {
+        } else if (type.includes('Rate Contract')) {
           actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=RATE_CONTRACT`;
           actionLabel = isExpired ? 'View Contract' : 'Quote Rate';
-        } else if (type === 'RFQ') {
+        } else if (type.includes('RFP')) {
+          actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=RFP`;
+          actionLabel = isExpired ? 'View Details' : 'Quote Now';
+        } else if (type.includes('RFQ')) {
           actionHref = `/bids/${encodeURIComponent(cleanCanonicalRefId(canonicalRef))}?type=RFQ`;
           actionLabel = isExpired ? 'View Details' : 'Quote Now';
         } else {
@@ -270,9 +312,12 @@ export function LiveOpportunityRadar() {
             ? existing.refId
             : `${existing.refId} • ${auctionCode}`;
 
+          const baseType = existing.type.replace(/(\s*\+\s*RA)+$/gi, '').trim() || 'Procurement';
+          const compositeType = `${baseType} + RA` as OpportunityType;
+
           list[existingBidIndex] = {
             ...existing,
-            type: 'Reverse Auction',
+            type: compositeType,
             refId: combinedRef,
             title: existing.title.toLowerCase().includes('reverse auction')
               ? existing.title
@@ -326,10 +371,10 @@ export function LiveOpportunityRadar() {
 
   const filtered = useMemo(() => {
     if (activeTab === 'all') return opportunities;
-    if (activeTab === 'tenders') return opportunities.filter(o => o.type === 'Tender');
-    if (activeTab === 'rfqs') return opportunities.filter(o => o.type === 'RFQ');
-    if (activeTab === 'rate-contracts') return opportunities.filter(o => o.type === 'Rate Contract');
-    if (activeTab === 'auctions') return opportunities.filter(o => o.type === 'Reverse Auction');
+    if (activeTab === 'tenders') return opportunities.filter(o => o.type.includes('Tender'));
+    if (activeTab === 'rfqs') return opportunities.filter(o => o.type.startsWith('RFQ') || o.type.startsWith('RFP'));
+    if (activeTab === 'rate-contracts') return opportunities.filter(o => o.type.includes('Rate Contract'));
+    if (activeTab === 'auctions') return opportunities.filter(o => o.type === 'Reverse Auction' || o.type.endsWith('+ RA'));
     return opportunities;
   }, [opportunities, activeTab]);
 
@@ -339,10 +384,10 @@ export function LiveOpportunityRadar() {
 
   const countByTab = useMemo(() => ({
     all: opportunities.length,
-    tenders: opportunities.filter(o => o.type === 'Tender').length,
-    rfqs: opportunities.filter(o => o.type === 'RFQ').length,
-    'rate-contracts': opportunities.filter(o => o.type === 'Rate Contract').length,
-    auctions: opportunities.filter(o => o.type === 'Reverse Auction').length
+    tenders: opportunities.filter(o => o.type.includes('Tender')).length,
+    rfqs: opportunities.filter(o => o.type.startsWith('RFQ') || o.type.startsWith('RFP')).length,
+    'rate-contracts': opportunities.filter(o => o.type.includes('Rate Contract')).length,
+    auctions: opportunities.filter(o => o.type === 'Reverse Auction' || o.type.endsWith('+ RA')).length
   }), [opportunities]);
 
   const rolePrefix = isShg ? '/shg' : '/seller';
@@ -359,7 +404,7 @@ export function LiveOpportunityRadar() {
   const viewAllLabel = activeTab === 'tenders'
     ? 'View All Tenders'
     : activeTab === 'rfqs'
-    ? 'View All RFQs'
+    ? 'View All RFQs & RFPs'
     : activeTab === 'rate-contracts'
     ? 'View Rate Contracts'
     : activeTab === 'auctions'
@@ -414,7 +459,7 @@ export function LiveOpportunityRadar() {
             : tab === 'tenders' 
             ? 'Public Tenders' 
             : tab === 'rfqs' 
-            ? 'Direct RFQs' 
+            ? 'Direct RFQs & RFPs' 
             : tab === 'rate-contracts'
             ? 'Rate Contracts'
             : 'Reverse Auctions';
@@ -482,10 +527,6 @@ export function LiveOpportunityRadar() {
       ) : (
         <div className="p-2 sm:p-3 space-y-2">
           {displayedOpportunities.map((item) => {
-            const isTender = item.type === 'Tender';
-            const isRateContract = item.type === 'Rate Contract';
-            const isRfq = item.type === 'RFQ';
-
             return (
               <div 
                 key={item.id}
@@ -494,17 +535,7 @@ export function LiveOpportunityRadar() {
                 {/* Left Details */}
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className={`text-[8px] font-black uppercase px-1.5 py-0.5 rounded tracking-wider border ${
-                      isTender 
-                        ? 'bg-blue-50 text-blue-700 border-blue-200' 
-                        : isRateContract
-                        ? 'bg-teal-50 text-teal-700 border-teal-200'
-                        : isRfq 
-                        ? 'bg-purple-50 text-purple-700 border-purple-200' 
-                        : 'bg-amber-50 text-amber-700 border-amber-200'
-                    }`}>
-                      {item.type}
-                    </span>
+                    <TypeBadge type={item.type} />
                     <span className="text-[9px] font-bold text-slate-500 font-mono">
                       {item.refId}
                     </span>

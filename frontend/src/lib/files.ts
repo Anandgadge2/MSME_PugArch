@@ -329,7 +329,6 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
   if (previewWindow) {
     try {
       previewWindow.document.title = label;
-      previewWindow.document.body.innerHTML = '<p style="font-family: sans-serif; padding: 24px; color: #334155;">Opening document preview...</p>';
     } catch {
       // Ignore initial DOM access restrictions
     }
@@ -340,11 +339,17 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
       if (!targetUrl) return;
       if (previewWindow && !previewWindow.closed) {
         try {
-          previewWindow.location.href = targetUrl;
+          previewWindow.location.replace(targetUrl);
           try { previewWindow.opener = null; } catch {}
           return;
         } catch {
-          // If direct href assignment fails, fallback below
+          try {
+            previewWindow.location.href = targetUrl;
+            try { previewWindow.opener = null; } catch {}
+            return;
+          } catch {
+            // If direct href assignment fails, fallback below
+          }
         }
       }
       try {

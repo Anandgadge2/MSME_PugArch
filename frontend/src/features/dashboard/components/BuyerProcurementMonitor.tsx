@@ -25,6 +25,7 @@ import { Badge } from '../../../components/ui/card';
 import { api, unwrapApiData } from '../../../lib/api';
 import { useAuth } from '../../../hooks/useAuth';
 import { cleanCanonicalRefId, formatLocationSummary, formatRefId, deriveMethodPrefix } from '../../../utils/refIdUtils';
+import { TypeBadge, type OpportunityType } from '../../shared/TypeBadge';
 
 type FilterTab = 'all' | 'bidding' | 'evaluation' | 'awarded';
 
@@ -32,7 +33,7 @@ interface BuyerProcurementItem {
   id: string;
   bidNumber: string;
   title: string;
-  type: 'RFQ' | 'Open Tender' | 'Limited Tender' | 'Rate Contract' | 'RFP' | 'Reverse Auction' | 'Direct Purchase';
+  type: OpportunityType;
   category: string;
   department?: string;
   location: string;
@@ -247,10 +248,14 @@ export function BuyerProcurementMonitor() {
         stage = 'published';
         stageLabel = participantsCount > 0 ? `${participantsCount} Bids Received` : 'Awaiting Bids';
         actionLabel = participantsCount > 0 ? `Review ${participantsCount} Bids` : 'View Details';
-        actionHref = `/bids/${encodeURIComponent(canonicalBidRef)}?type=${encodeURIComponent(canonicalTypeParam)}`;
       }
 
-      // Hybrid multi-stage linkage (e.g. RC-2026-43265 • RA-2026-22846)
+      // Hybrid multi-stage linkage: always assign composite "+ RA" type when reverse auction stage exists
+      if (isReverseAuctionStage && typeLabel !== 'Reverse Auction' && !typeLabel.endsWith('+ RA')) {
+        typeLabel = `${typeLabel} + RA` as OpportunityType;
+      }
+
+      // Hybrid multi-stage linkage (e.g. RFP-2026-26500 • RA-2026-67333)
       if (isReverseAuctionStage && auctionTargetCode && !displayBidNumber.includes(String(auctionTargetCode))) {
         displayBidNumber = `${displayBidNumber} • ${cleanCanonicalRefId(String(auctionTargetCode))}`;
       }
@@ -450,23 +455,7 @@ export function BuyerProcurementMonitor() {
                 {/* Left: Requisition Details */}
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded border ${
-                      item.type === 'Rate Contract'
-                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                        : item.type === 'Reverse Auction'
-                        ? 'bg-red-50 text-red-700 border-red-200'
-                        : item.type === 'Limited Tender'
-                        ? 'bg-amber-50 text-amber-700 border-amber-200'
-                        : item.type === 'Open Tender'
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : item.type === 'RFP'
-                        ? 'bg-teal-50 text-teal-700 border-teal-200'
-                        : item.type === 'Direct Purchase'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                        : 'bg-indigo-50 text-[#12335f] border-indigo-100'
-                    }`}>
-                      {item.type}
-                    </span>
+                    <TypeBadge type={item.type} />
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide font-mono">
                       {item.bidNumber}
                     </span>

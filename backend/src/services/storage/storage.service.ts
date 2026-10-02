@@ -327,6 +327,34 @@ export const canAccessFileAsset = async (asset: any, user: { id: number; role: s
     }
   }
 
+  // Check if file is linked to any Requirement (SOW, BOQ, line items, requirement documents)
+  const reqWithFile = await prisma.requirement.findFirst({
+    where: {
+      OR: [
+        { payload: { path: ['serviceDetails', 'sowFileAssetId'], equals: asset.id } },
+        { payload: { path: ['sowFileAssetId'], equals: asset.id } },
+        { payload: { path: ['boqFileAssetId'], equals: asset.id } },
+        { payload: { path: ['items'], array_contains: [{ fileAssetId: asset.id }] } },
+        { payload: { path: ['documents'], array_contains: [{ fileAssetId: asset.id }] } }
+      ]
+    },
+    select: { id: true, buyerId: true, organizationId: true, procurementMethod: true }
+  }).catch(() => null);
+
+  if (reqWithFile) {
+    if (user.role === 'admin' || user.role === 'master_admin') return true;
+    if (user.role === 'buyer') {
+      const userOrgId = (user as any).organizationId ? Number((user as any).organizationId) : null;
+      if (reqWithFile.buyerId === user.id) return true;
+      if (userOrgId && reqWithFile.organizationId === userOrgId) return true;
+      return true; // Any authenticated buyer can view procurement requirements
+    }
+    if (user.role === 'seller') {
+      return true; // Any authenticated seller can view procurement SOW, specs, and BOQ documents
+    }
+    return true;
+  }
+
   // Delivery Document check (regardless of entityId or entityType)
   const deliveryDoc = await prisma.deliveryDocument.findFirst({
     where: { fileAssetId: asset.id },

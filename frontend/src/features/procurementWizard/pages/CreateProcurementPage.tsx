@@ -54,6 +54,7 @@ import {
   Clock,
   RefreshCw,
   IndianRupee,
+  Calendar,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -394,6 +395,41 @@ const nextFortnightDateTime = toDateTimeLocal(new Date(Date.now() + 14 * 8640000
 const makeId = () => Math.random().toString(36).substring(2, 9);
 const isReverseAuctionMethod = (method: ProcurementMethodId) => method === 'REVERSE_AUCTION';
 const isRateContractMethod = (method: ProcurementMethodId) => method === 'RATE_CONTRACT';
+
+const calculateDurationBetweenDates = (startDateStr: string, endDateStr: string): string => {
+  if (!startDateStr || !endDateStr) return '';
+  const start = new Date(startDateStr);
+  const end = new Date(endDateStr);
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return '';
+
+  const diffMs = end.getTime() - start.getTime();
+  const diffDays = Math.round(diffMs / 86400000);
+
+  if (diffDays <= 0) return '';
+  if (diffDays < 28) return `${diffDays} Day${diffDays === 1 ? '' : 's'}`;
+
+  let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  const dayDiff = end.getDate() - start.getDate();
+  if (dayDiff >= 20) months += 1;
+  else if (dayDiff < -10 && months > 0) months -= 1;
+
+  if (months >= 12 && months % 12 === 0) {
+    const years = months / 12;
+    return `${years} Year${years === 1 ? '' : 's'} (${months} Months)`;
+  }
+  if (months > 0) {
+    return `${months} Month${months === 1 ? '' : 's'}`;
+  }
+  return `${diffDays} Days`;
+};
+
+const addMonthsToDate = (startDateStr: string, monthsToAdd: number): string => {
+  const base = startDateStr ? new Date(startDateStr) : new Date();
+  if (isNaN(base.getTime())) return '';
+  const target = new Date(base);
+  target.setMonth(target.getMonth() + monthsToAdd);
+  return target.toISOString().split('T')[0];
+};
 const itemTemplateHeaders = [
   'Item Type',
   'Item Name',
@@ -734,15 +770,18 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
   };
 };
 
-const defaultRateContractConfig = (): RateContractConfig => ({
-  rateContractNumber: '',
-  contractTitle: '',
-  contractDescription: '',
-  contractCategory: '',
-  periodStartDate: today,
-  periodEndDate: nextFortnight,
-  rateValidityPeriod: '',
-  supplierSelectionStrategy: 'SINGLE_SUPPLIER',
+const defaultRateContractConfig = (): RateContractConfig => {
+  const rcStart = today;
+  const rcEnd = addMonthsToDate(rcStart, 12);
+  return {
+    rateContractNumber: '',
+    contractTitle: '',
+    contractDescription: '',
+    contractCategory: '',
+    periodStartDate: rcStart,
+    periodEndDate: rcEnd,
+    rateValidityPeriod: '1 Year (12 Months)',
+    supplierSelectionStrategy: 'SINGLE_SUPPLIER',
   selectedSuppliers: [],
   itemRateSchedule: [],
   priceVariationClause: 'FIXED_PRICE',
@@ -764,7 +803,8 @@ const defaultRateContractConfig = (): RateContractConfig => ({
     fileSize: null,
     uploadedAt: null,
   },
-});
+  };
+};
 
 const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
   const isBoq = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
@@ -872,12 +912,28 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
     ? base.selectedSuppliers
     : draft.vendors.invitedSellers.map(supplierId => ({ supplierId }));
 
+  const defaultValidity = base.rateValidityPeriod || (
+    base.periodStartDate && base.periodEndDate
+      ? calculateDurationBetweenDates(base.periodStartDate, base.periodEndDate)
+      : (draft.serviceDetails.duration || '1 Year (12 Months)')
+  );
+  const unifiedPenalty = base.penaltyClause || draft.terms.penaltyClause || draft.serviceDetails.penaltyClause || '';
+
   return {
     ...draft,
     type: 'RATE_CONTRACT',
     basics: {
       ...draft.basics,
       isRepeatedSupply: true,
+    },
+    serviceDetails: {
+      ...draft.serviceDetails,
+      duration: draft.serviceDetails.duration || defaultValidity,
+      penaltyClause: draft.serviceDetails.penaltyClause || unifiedPenalty,
+    },
+    terms: {
+      ...draft.terms,
+      penaltyClause: draft.terms.penaltyClause || unifiedPenalty,
     },
     rateContractConfig: {
       ...base,
@@ -886,8 +942,9 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       contractCategory: base.contractCategory || draft.basics.category,
       selectedSuppliers,
       itemRateSchedule,
+      rateValidityPeriod: defaultValidity,
       deliverySla: base.deliverySla || draft.terms.deliveryTerms,
-      penaltyClause: base.penaltyClause || draft.terms.penaltyClause,
+      penaltyClause: unifiedPenalty,
       securityDepositRequired: false,
       securityDepositAmount: 0,
       approvalWorkflow: base.approvalWorkflow || draft.approval.workflow || 'Finance + Procurement',
@@ -1448,7 +1505,13 @@ export default function CreateProcurementPage() {
             ...(payload.evaluation || {}),
             method: payload.evaluation?.method || payload.evaluationMethod || payload.rules?.evaluationMethod || payload.evaluation?.evaluationMethod || base.evaluation.method
           },
-          approval: { ...base.approval, ...(payload.approval || {}) },
+          approval: {
+            ...base.approval,
+            ...(payload.approval || {}),
+            workflow: (payload.schedule?.packetType === 'Two' || payload.packetType === 'Two')
+              ? 'Two-Stage (Technical + Financial)'
+              : 'Single Stage (Commercial Only)',
+          },
           auctionConfig: {
             ...base.auctionConfig,
             ...(payload.auctionConfig || payload.rules?.auctionConfig || {}),
@@ -1559,7 +1622,9 @@ export default function CreateProcurementPage() {
         severity: 'error',
         stepIdx: 3
       });
-      list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
+      if (!isRateContractMethod(d.type)) {
+        list.push({ label: 'Service Duration is required', ok: d.serviceDetails.duration.trim().length > 0, severity: 'error', stepIdx: 3 });
+      }
       list.push({ label: 'Add at least one service line with quantity > 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else {
       list.push({ label: 'At least one product item is required', ok: d.items.length > 0, severity: 'error', stepIdx: 3 });
@@ -1607,9 +1672,24 @@ export default function CreateProcurementPage() {
       }
     }
 
+    if (isRateContractMethod(d.type)) {
+      list.push({
+        label: 'Rate Contract Validity Period is required',
+        ok: Boolean(d.rateContractConfig.rateValidityPeriod?.trim()),
+        severity: 'error',
+        stepIdx: 5
+      });
+    }
+
     // Step 6 Commercial Terms - Errors
     list.push({ label: 'Payment terms are required', ok: Boolean(d.terms.paymentTerms), severity: 'error', stepIdx: 6 });
     list.push({ label: 'Delivery terms are required', ok: Boolean(d.terms.deliveryTerms), severity: 'error', stepIdx: 6 });
+    list.push({
+      label: 'Penalty clause is required',
+      ok: Boolean((d.terms.penaltyClause || d.rateContractConfig.penaltyClause || d.serviceDetails.penaltyClause || '').trim()),
+      severity: 'error',
+      stepIdx: 6
+    });
 
     // Step 7 Documents - Errors
     list.push({ label: 'At least one required document must be checklist', ok: d.requiredDocs.length > 0, severity: 'error', stepIdx: 7 });
@@ -1686,7 +1766,7 @@ export default function CreateProcurementPage() {
         const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
         if (!hasSowDoc && d.serviceDetails.scopeOfWork.trim().length < 10) return false;
         if (!hasSowDoc && d.serviceDetails.deliverables.trim().length < 3) return false;
-        if (!d.serviceDetails.duration.trim()) return false;
+        if (!isRateContractMethod(d.type) && !d.serviceDetails.duration.trim()) return false;
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) return false;
       }
@@ -1912,7 +1992,7 @@ export default function CreateProcurementPage() {
           toast.error('Service deliverables list is required or upload an SOW document.');
           return false;
         }
-        if (!d.serviceDetails.duration.trim()) {
+        if (!isRateContractMethod(d.type) && !d.serviceDetails.duration.trim()) {
           toast.error('Service duration is required.');
           return false;
         }
@@ -4636,6 +4716,7 @@ function ItemsDetailsForm({
   setSelectedItemForEdit: (item: ItemRow | null) => void;
 }) {
   const whatBuying = draft.basics.whatAreYouBuying;
+  const isRateContract = isRateContractMethod(draft.type);
   const { token } = useAuth();
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const [uploadingFile, setUploadingFile] = useState(false);
@@ -5659,45 +5740,82 @@ function ItemsDetailsForm({
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
-              <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">Master Service Contract Terms & SOW</h4>
+              <h4 className="text-xs font-black text-purple-950 uppercase tracking-wide">
+                {isRateContract ? 'Service Scope of Work (SOW) & SLA Parameters' : 'Master Service Contract Terms & SOW'}
+              </h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
-                Enterprise Sourcing Standard
+                {isRateContract ? 'Rate Contract / Schedule of Rates' : 'Enterprise Sourcing Standard'}
               </span>
             </div>
-            <p className="text-[11px] text-purple-700/90 font-medium">Define overall SLA, deliverables scope, duration, and penalty terms</p>
+            <p className="text-[11px] text-purple-700/90 font-medium">
+              {isRateContract
+                ? 'Define service scope, deliverables, operational SLA response targets, and technical boundaries for call-off releases'
+                : 'Define overall SLA, deliverables scope, duration, and penalty terms'}
+            </p>
           </div>
         </div>
       </div>
 
-      {/* Lump-Sum SOW Pricing & Confidential Budget Banner */}
-      <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 sm:p-3.5 space-y-1.5 shadow-3xs">
-        <div className="flex items-center justify-between gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5">
-            <IndianRupee className="h-4 w-4 text-blue-700 shrink-0" aria-hidden="true" />
-            <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
-              Pricing Model: Lump-Sum Total Contract Value
+      {/* Rate Contract vs Lump-Sum SOW Pricing & Confidential Budget Banner */}
+      {isRateContract ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 sm:p-3.5 space-y-1.5 shadow-3xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <Repeat className="h-4 w-4 text-blue-700 shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
+                Pricing Model: Schedule of Unit Rates (SOR) / Blanket Call-Off
+              </span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
+              Blanket Agreement
             </span>
           </div>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
-            Single Commercial Quote
-          </span>
+          <p className="text-[11px] text-blue-900/90 font-medium">
+            Participating bidders will quote unit rates or line-item fees. Contract validity period and periodic call-off release rules are configured under <strong>Step 6 (Timeline & Rules)</strong>.
+          </p>
+          <div className="pt-1 flex items-center gap-2 flex-wrap text-[10.5px]">
+            <span className="font-bold text-slate-700">Internal Benchmark Ceiling: ₹{Number(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}</span>
+            {!draft.basics.discloseEstimatedCost ? (
+              <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md">
+                ✓ Blind Bidding Active (Budget hidden from bidders for genuine market price discovery)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md">
+                ⚠ Disclosed Budget (Bidders can view internal ceiling)
+              </span>
+            )}
+          </div>
         </div>
-        <p className="text-[11px] text-blue-900/90 font-medium">
-          Participating bidders will quote a single <strong>Lump-Sum Base Fee + GST %</strong> covering the entire Scope of Work (SOW). No milestone or itemized breakdown required.
-        </p>
-        <div className="pt-1 flex items-center gap-2 flex-wrap text-[10.5px]">
-          <span className="font-bold text-slate-700">Internal Benchmark: ₹{Number(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}</span>
-          {!draft.basics.discloseEstimatedCost ? (
-            <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md">
-              ✓ Blind Bidding Active (Budget hidden from bidders for genuine market price discovery)
+      ) : (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/80 p-3 sm:p-3.5 space-y-1.5 shadow-3xs">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <IndianRupee className="h-4 w-4 text-blue-700 shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
+                Pricing Model: Lump-Sum Total Contract Value
+              </span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-900 border border-blue-200">
+              Single Commercial Quote
             </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md">
-              ⚠ Disclosed Budget (Bidders can view internal ceiling)
-            </span>
-          )}
+          </div>
+          <p className="text-[11px] text-blue-900/90 font-medium">
+            Participating bidders will quote a single <strong>Lump-Sum Base Fee + GST %</strong> covering the entire Scope of Work (SOW). No milestone or itemized breakdown required.
+          </p>
+          <div className="pt-1 flex items-center gap-2 flex-wrap text-[10.5px]">
+            <span className="font-bold text-slate-700">Internal Benchmark: ₹{Number(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}</span>
+            {!draft.basics.discloseEstimatedCost ? (
+              <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-md">
+                ✓ Blind Bidding Active (Budget hidden from bidders for genuine market price discovery)
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 font-bold text-amber-800 bg-amber-100/90 px-2 py-0.5 rounded-md">
+                ⚠ Disclosed Budget (Bidders can view internal ceiling)
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* SOW Document Upload Bar (SAP Ariba / GeM fast-track pattern) */}
       <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
@@ -5883,29 +6001,56 @@ function ItemsDetailsForm({
           </div>
         </Field>
 
-        <Field label="Contract Duration" required>
-          <div className="space-y-1.5">
-            <input
-              value={draft.serviceDetails.duration}
-              onChange={e => updateService('duration', e.target.value)}
-              className={inputClass}
-              placeholder="e.g. 1 Year (12 Months), 6 Months"
-            />
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
-              {['6 Months', '1 Year (12 Months)', '2 Years (24 Months)', '3 Years (36 Months)'].map(preset => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => updateService('duration', preset)}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
-                >
-                  {preset}
-                </button>
-              ))}
+        {isRateContract ? (
+          <div className="rounded-xl border border-blue-200/90 bg-blue-50/60 p-3.5 space-y-2 shadow-3xs flex flex-col justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-4 w-4 text-blue-700 shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-blue-950 uppercase tracking-wide">
+                Contract Duration &amp; Validity
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
+                Governed in Step 6
+              </span>
             </div>
+            <p className="text-[11px] text-blue-900/90 font-medium leading-relaxed">
+              Rate contract agreement validity start &amp; expiry dates are configured under <strong>Step 6 (Timeline &amp; Rules)</strong>.
+            </p>
+            {draft.rateContractConfig.rateValidityPeriod ? (
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-blue-950 bg-white/80 border border-blue-200 px-2.5 py-1 rounded-lg">
+                <CheckCircle2 className="h-3.5 w-3.5 text-blue-600 shrink-0" aria-hidden="true" />
+                <span>Synchronized Duration: <strong>{draft.rateContractConfig.rateValidityPeriod}</strong></span>
+              </div>
+            ) : (
+              <p className="text-[10.5px] text-slate-500 font-semibold italic">
+                Will be automatically calculated upon setting agreement dates.
+              </p>
+            )}
           </div>
-        </Field>
+        ) : (
+          <Field label="Contract Duration" required>
+            <div className="space-y-1.5">
+              <input
+                value={draft.serviceDetails.duration}
+                onChange={e => updateService('duration', e.target.value)}
+                className={inputClass}
+                placeholder="e.g. 1 Year (12 Months), 6 Months"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                {['6 Months', '1 Year (12 Months)', '2 Years (24 Months)', '3 Years (36 Months)'].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => updateService('duration', preset)}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Field>
+        )}
 
         <Field label="On-site Manpower / Team Size (Optional)">
           <div className="space-y-1">
@@ -5923,33 +6068,75 @@ function ItemsDetailsForm({
           </div>
         </Field>
 
-        <Field label="Late Delivery / Downtime Penalty Terms">
-          <div className="space-y-1.5">
-            <input
-              value={draft.serviceDetails.penaltyClause}
-              onChange={e => updateService('penaltyClause', e.target.value)}
-              className={inputClass}
-              placeholder="e.g. 0.5% per week of delay up to max 10%"
-            />
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
-              {[
-                '0.5% per week delay (max 10%)',
-                '1% per day SLA downtime penalty',
-                'Standard LD per GCC / PO'
-              ].map(preset => (
-                <button
-                  key={preset}
-                  type="button"
-                  onClick={() => updateService('penaltyClause', preset)}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
-                >
-                  {preset}
-                </button>
-              ))}
+        {isRateContract ? (
+          <div className="rounded-xl border border-purple-200/90 bg-purple-50/60 p-3.5 space-y-2 shadow-3xs flex flex-col justify-between">
+            <div className="flex items-center gap-2">
+              <Scale className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+              <span className="text-xs font-black text-purple-950 uppercase tracking-wide">
+                Liquidated Damages &amp; Penalties
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                Governed in Step 7
+              </span>
             </div>
+            <p className="text-[11px] text-purple-900/90 font-medium leading-relaxed">
+              Standard liquidated damages and SLA penalty terms for periodic release call-off orders are configured under <strong>Step 7 (Commercial Terms)</strong>.
+            </p>
+            {draft.terms.penaltyClause ? (
+              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-purple-950 bg-white/80 border border-purple-200 px-2.5 py-1 rounded-lg">
+                <CheckCircle2 className="h-3.5 w-3.5 text-purple-600 shrink-0" aria-hidden="true" />
+                <span className="truncate max-w-[280px]">Configured: <strong>{draft.terms.penaltyClause}</strong></span>
+              </div>
+            ) : (
+              <p className="text-[10.5px] text-slate-500 font-semibold italic">
+                Centralized penalty clause active.
+              </p>
+            )}
           </div>
-        </Field>
+        ) : (
+          <Field label="Late Delivery / Downtime Penalty Terms">
+            <div className="space-y-1.5">
+              <input
+                value={draft.serviceDetails.penaltyClause}
+                onChange={e => {
+                  const val = e.target.value;
+                  updateService('penaltyClause', val);
+                  updateDraft(c => ({
+                    ...c,
+                    serviceDetails: { ...c.serviceDetails, penaltyClause: val },
+                    terms: { ...c.terms, penaltyClause: c.terms.penaltyClause || val },
+                  }));
+                }}
+                className={inputClass}
+                placeholder="e.g. 0.5% per week of delay up to max 10%"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                {[
+                  '0.5% per week delay (max 10%)',
+                  '1% per day SLA downtime penalty',
+                  'Standard LD per GCC / PO'
+                ].map(preset => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      updateService('penaltyClause', preset);
+                      updateDraft(c => ({
+                        ...c,
+                        serviceDetails: { ...c.serviceDetails, penaltyClause: preset },
+                        terms: { ...c.terms, penaltyClause: c.terms.penaltyClause || preset },
+                      }));
+                    }}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer"
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </Field>
+        )}
       </div>
     </div>
   ) : null;
@@ -6847,7 +7034,50 @@ function ScheduleStepForm({
     }));
   };
   const updateRateContract = <K extends keyof RateContractConfig>(key: K, val: RateContractConfig[K]) => {
-    updateDraft(c => ({ ...c, rateContractConfig: { ...c.rateContractConfig, [key]: val } }));
+    updateDraft(c => {
+      const nextConfig = { ...c.rateContractConfig, [key]: val };
+      let derivedDuration = '';
+
+      if (key === 'periodStartDate' || key === 'periodEndDate') {
+        const start = key === 'periodStartDate' ? String(val) : c.rateContractConfig.periodStartDate;
+        const end = key === 'periodEndDate' ? String(val) : c.rateContractConfig.periodEndDate;
+        derivedDuration = calculateDurationBetweenDates(start, end);
+        if (derivedDuration) {
+          nextConfig.rateValidityPeriod = derivedDuration;
+        }
+      } else if (key === 'rateValidityPeriod') {
+        derivedDuration = String(val || '');
+      }
+
+      return {
+        ...c,
+        rateContractConfig: nextConfig,
+        serviceDetails: {
+          ...c.serviceDetails,
+          duration: derivedDuration || c.serviceDetails.duration || nextConfig.rateValidityPeriod
+        }
+      };
+    });
+  };
+
+  const handleApplyDurationPreset = (months: number) => {
+    const start = draft.rateContractConfig.periodStartDate || today;
+    const end = addMonthsToDate(start, months);
+    const durationStr = calculateDurationBetweenDates(start, end) || `${months} Months`;
+    updateDraft(c => ({
+      ...c,
+      rateContractConfig: {
+        ...c.rateContractConfig,
+        periodStartDate: start,
+        periodEndDate: end,
+        rateValidityPeriod: durationStr,
+      },
+      serviceDetails: {
+        ...c.serviceDetails,
+        duration: durationStr,
+      }
+    }));
+    toast.success(`Applied ${durationStr} validity window.`);
   };
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
@@ -7095,13 +7325,44 @@ function ScheduleStepForm({
                 />
               </div>
               <Field label="Rate Validity Duration" required>
-                <input
-                  value={draft.rateContractConfig.rateValidityPeriod}
-                  onChange={e => updateRateContract('rateValidityPeriod', e.target.value)}
-                  className={inputClass}
-                  placeholder="e.g. Fixed for 1 Year / Full contract period"
-                />
+                <div className="space-y-1">
+                  <div className="relative">
+                    <input
+                      value={draft.rateContractConfig.rateValidityPeriod}
+                      onChange={e => updateRateContract('rateValidityPeriod', e.target.value)}
+                      className={cn(inputClass, "pr-24")}
+                      placeholder="e.g. Fixed for 1 Year / Full contract period"
+                    />
+                    {draft.rateContractConfig.rateValidityPeriod && (
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        ⚡ Synced
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium">Auto-derived from start &amp; expiry dates. Editable if needed.</p>
+                </div>
               </Field>
+
+              {/* Quick Validity Presets */}
+              <div className="sm:col-span-2 lg:col-span-3 -mt-1 pt-1 flex items-center gap-1.5 flex-wrap">
+                <span className="text-[10px] font-bold text-slate-500 mr-0.5">Quick Validity Presets:</span>
+                {[
+                  { label: '+ 6 Months', months: 6 },
+                  { label: '+ 1 Year (12 Mo)', months: 12 },
+                  { label: '+ 2 Years (24 Mo)', months: 24 },
+                  { label: '+ 3 Years (36 Mo)', months: 36 },
+                ].map(p => (
+                  <button
+                    key={p.label}
+                    type="button"
+                    onClick={() => handleApplyDurationPreset(p.months)}
+                    className="text-[10.5px] font-bold px-2.5 py-0.5 rounded-full border border-blue-200 bg-white hover:bg-blue-50 text-blue-900 shadow-3xs transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-blue-500"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
               <Field label="Supplier Selection Strategy" required className="sm:col-span-2 lg:col-span-3">
                 <select
                   value={draft.rateContractConfig.supplierSelectionStrategy}
@@ -8085,9 +8346,33 @@ function CommercialTermsForm({
   updateDraft: (updater: (current: Draft) => Draft) => void;
   showErrors?: boolean;
 }) {
+  const isRateContract = isRateContractMethod(draft.type);
+  const isService = draft.basics.whatAreYouBuying === 'Service' || draft.type === 'RFP';
+  const effectivePenaltyClause = draft.terms.penaltyClause || draft.rateContractConfig.penaltyClause || draft.serviceDetails.penaltyClause || '';
+
   const updateTerms = (key: keyof Draft['terms'], val: any) => {
-    updateDraft(c => ({ ...c, terms: { ...c.terms, [key]: val } }));
+    updateDraft(c => {
+      const updatedTerms = { ...c.terms, [key]: val };
+      if (key === 'penaltyClause') {
+        return {
+          ...c,
+          terms: updatedTerms,
+          rateContractConfig: { ...c.rateContractConfig, penaltyClause: val },
+          serviceDetails: { ...c.serviceDetails, penaltyClause: val }
+        };
+      }
+      return { ...c, terms: updatedTerms };
+    });
   };
+
+  useEffect(() => {
+    if (!draft.terms.penaltyClause && effectivePenaltyClause) {
+      updateDraft(c => ({
+        ...c,
+        terms: { ...c.terms, penaltyClause: effectivePenaltyClause }
+      }));
+    }
+  }, [draft.terms.penaltyClause, effectivePenaltyClause, updateDraft]);
 
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
@@ -8195,22 +8480,62 @@ function CommercialTermsForm({
         {/* Compliance & Penalty Terms card */}
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white flex flex-col justify-between">
           <div className="space-y-4">
-            <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5 mb-2">
-              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">Contract Penalty Clause</h3>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5 mb-2 gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <Scale className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
+                <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                  {isService || isRateContract
+                    ? 'Liquidated Damages (LD) & Performance Penalty Clause'
+                    : 'Contract Penalty Clause'}
+                </h3>
+              </div>
+              {isRateContract && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  Unified Blanket Terms
+                </span>
+              )}
             </div>
 
-          
-
-            <Field label="Late Delivery (LD) Penalty Clause (min 5 char)" required error={fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.')}>
-              <input
-                value={draft.terms.penaltyClause}
-                onChange={e => updateTerms('penaltyClause', e.target.value)}
-                className={controlClass(fieldError(showErrors && !draft.terms.penaltyClause, 'Penalty clause is required.'))}
-                placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
-              />
+            <Field
+              label={
+                isService || isRateContract
+                  ? "Liquidated Damages (LD) / Downtime Penalty Terms (min 5 char)"
+                  : "Late Delivery (LD) Penalty Clause (min 5 char)"
+              }
+              required
+              error={fieldError(showErrors && !effectivePenaltyClause, 'Penalty clause is required.')}
+            >
+              <div className="space-y-1.5">
+                <input
+                  value={effectivePenaltyClause}
+                  onChange={e => updateTerms('penaltyClause', e.target.value)}
+                  className={controlClass(fieldError(showErrors && !effectivePenaltyClause, 'Penalty clause is required.'))}
+                  placeholder="e.g. 0.5% per week of delay up to a maximum of 10%"
+                />
+                <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                  <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                  {[
+                    '0.5% per week delay (max 10%)',
+                    '1% per day SLA downtime penalty',
+                    'Standard LD per GCC / PO',
+                    '0.1% per day of delay up to 10% maximum'
+                  ].map(preset => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => updateTerms('penaltyClause', preset)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200 bg-white hover:bg-purple-50 text-purple-900 transition-colors cursor-pointer focus-visible:ring-2 focus-visible:ring-purple-400"
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </Field>
             <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
-              Specify the standard liquidated damages or penalty clause applicable in case of delays in delivery or completion.
+              {isRateContract
+                ? 'Centralized liquidated damages clause applicable across all staggered release call-off orders and service SLA milestones under this agreement.'
+                : 'Specify the standard liquidated damages or penalty clause applicable in case of delays in delivery or completion.'}
             </p>
           </div>
         </div>
@@ -8447,33 +8772,6 @@ function PreviewPublishForm({
         )}
       </div>
 
-   
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Approval Workflow">
-          <select
-            value={draft.approval.workflow || (draft.schedule.packetType === 'Two' ? 'Two-Stage (Technical + Financial)' : 'Single Stage (Commercial Only)')}
-            onChange={e => {
-              const val = e.target.value;
-              const isTwo = val.includes('Two-Stage');
-              updateDraft(c => ({
-                ...c,
-                approval: { ...c.approval, workflow: val },
-                schedule: { ...c.schedule, packetType: isTwo ? 'Two' : 'Single' }
-              }));
-            }}
-            className={inputClass}
-          >
-            <option value="Single Stage (Commercial Only)">Single Stage (Commercial Only)</option>
-            <option value="Two-Stage (Technical + Financial)">Two-Stage (Technical + Financial)</option>
-          </select>
-          <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            {draft.schedule.packetType === 'Two'
-              ? 'Two-Stage: Technical bids are evaluated and qualified first before unsealing commercial price bids.'
-              : 'Single Stage: Direct commercial evaluation; price bids are unsealed immediately upon deadline closure.'}
-          </p>
-        </Field>
-      </div>
 
       <Field label="Approval notes / Submission Remarks">
         <textarea
@@ -8768,7 +9066,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     contractCategory: draft.rateContractConfig.contractCategory || draft.basics.category,
     deliverySla: draft.rateContractConfig.deliverySla || draft.terms.deliveryTerms || '',
     deliverySlaDays: draft.rateContractConfig.deliverySlaDays ? Number(draft.rateContractConfig.deliverySlaDays) : null,
-    penaltyClause: draft.rateContractConfig.penaltyClause || draft.terms.penaltyClause || '',
+    rateValidityPeriod: draft.rateContractConfig.rateValidityPeriod || draft.serviceDetails.duration || '',
+    penaltyClause: draft.rateContractConfig.penaltyClause || draft.terms.penaltyClause || draft.serviceDetails.penaltyClause || '',
     penaltyRatePerWeek: draft.rateContractConfig.penaltyRatePerWeek != null ? Number(draft.rateContractConfig.penaltyRatePerWeek) : null,
     penaltyGraceDays: draft.rateContractConfig.penaltyGraceDays != null ? Number(draft.rateContractConfig.penaltyGraceDays) : null,
     maxPenaltyCapPercentage: draft.rateContractConfig.maxPenaltyCapPercentage != null ? Number(draft.rateContractConfig.maxPenaltyCapPercentage) : null,
@@ -8855,8 +9154,14 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const isQcbsChosen = chosenEvaluationMethod.toLowerCase().includes('qcbs') || chosenEvaluationMethod.toLowerCase().includes('weighted');
 
+  const autoWorkflow = isTwoPacket ? 'Two-Stage (Technical + Financial)' : 'Single Stage (Commercial Only)';
+
   const payloadJson = {
     ...draft,
+    approval: {
+      ...draft.approval,
+      workflow: autoWorkflow,
+    },
     boqTable: isBoqBased ? draft.boqTable : [],
     boqFileName: isBoqBased ? draft.boqFileName : '',
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
@@ -8921,7 +9226,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     requiredBy: draft.basics.requiredByDate || undefined,
     draftStep,
     workflowStatus: 'DRAFT',
-    approvalStatus: draft.approval?.workflow || 'DRAFT',
+    approvalStatus: autoWorkflow,
     evaluationMethod: chosenEvaluationMethod,
     urgency: draft.basics.priority,
     priority: draft.basics.priority,

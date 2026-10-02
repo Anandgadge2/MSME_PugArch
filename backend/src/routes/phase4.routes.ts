@@ -3170,6 +3170,23 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
     return { id: Number(brandingAsset.ownerId), role: String(brandingAsset.ownerRole || 'seller') };
   }
 
+  // Requirement procurement document check (SOW, BOQ, line items, requirement documents)
+  const reqWithFile = await db.requirement.findFirst({
+    where: {
+      OR: [
+        { payload: { path: ['serviceDetails', 'sowFileAssetId'], equals: fileId } },
+        { payload: { path: ['sowFileAssetId'], equals: fileId } },
+        { payload: { path: ['boqFileAssetId'], equals: fileId } },
+        { payload: { path: ['items'], array_contains: [{ fileAssetId: fileId }] } },
+        { payload: { path: ['documents'], array_contains: [{ fileAssetId: fileId }] } }
+      ]
+    },
+    select: { buyerId: true }
+  }).catch(() => null);
+  if (reqWithFile?.buyerId) {
+    return { id: Number(reqWithFile.buyerId), role: 'buyer' };
+  }
+
   return null;
 };
 
