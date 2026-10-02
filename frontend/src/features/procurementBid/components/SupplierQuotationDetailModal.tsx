@@ -23,6 +23,9 @@ import {
   Loader2,
   Award,
   X,
+  Lock,
+  XCircle,
+  AlertCircle,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { cn } from '../../../lib/utils';
@@ -93,6 +96,21 @@ export function inferDocumentCategory(name: string, fileName?: string): string {
   if (combined.includes('incorporation') || combined.includes('cin')) return 'Company Registration';
   if (combined.includes('deviation')) return 'No-Deviation Cert';
   return 'Statutory Document';
+}
+
+export function isFinancialDocument(doc: { name?: string; fileName?: string; category?: string } | any): boolean {
+  if (!doc) return false;
+  const combined = `${doc.name || ''} ${doc.fileName || ''} ${doc.category || ''}`.toLowerCase();
+  return (
+    doc.category === 'Price Breakup' ||
+    combined.includes('price') ||
+    combined.includes('breakup') ||
+    combined.includes('boq') ||
+    combined.includes('commercial') ||
+    combined.includes('financial') ||
+    combined.includes('rate') ||
+    combined.includes('pricing')
+  );
 }
 
 export function normalizeQuotationDocuments(source: any): NormalizedQuotationDocument[] {
@@ -191,6 +209,7 @@ export function SupplierQuotationDetailView({
   onAcceptAndGeneratePo,
   onDownloadPdf,
   onOpenTechnicalEvaluation,
+  isModal = false,
 }: SupplierQuotationDetailViewProps) {
   const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
@@ -229,16 +248,71 @@ export function SupplierQuotationDetailView({
     '—';
 
   const submittedAt = result.submittedAt || result.details?.submittedAt || result.createdAt;
-  const statusStr = String(result.resultStatus || result.technicalStatus || result.status || 'Under Review');
-  const rank = String(result.finalRank || 'L1');
-  const isAwarded =
+
+  // Technical Evaluation Standing & Disqualification Verification
+  const rawTech = String(
+    result.technicalStatus ||
+    result.rawParticipation?.technicalStatus ||
+    result.details?.technicalStatus ||
+    result.status ||
+    result.resultStatus ||
+    result.qualificationStatus ||
+    ''
+  ).toUpperCase();
+
+  const isTechnicallyDisqualified =
+    rawTech === 'DISQUALIFIED' ||
+    rawTech === 'REJECTED' ||
+    rawTech === 'INELIGIBLE' ||
+    Boolean(result.isDisqualified) ||
+    Boolean(result.rawParticipation?.isDisqualified) ||
+    Boolean(result.details?.isDisqualified) ||
+    result.resultStatus === 'Ineligible' ||
+    result.technicalStatus === 'Disqualified';
+
+  const isTechnicallyQualified =
+    !isTechnicallyDisqualified &&
+    (rawTech === 'QUALIFIED' ||
+      rawTech === 'ACCEPTED' ||
+      rawTech === 'SHORTLISTED' ||
+      result.technicalStatus === 'Qualified');
+
+  const disqualificationReason = (
+    result.disqualificationReason ||
+    result.rejectionReason ||
+    result.scrutinyRemarks ||
+    result.technicalRemarks ||
+    result.remarks ||
+    result.evaluationRemarks ||
+    result.rawParticipation?.disqualificationReason ||
+    result.rawParticipation?.rejectionReason ||
+    result.rawParticipation?.scrutinyRemarks ||
+    result.rawParticipation?.technicalRemarks ||
+    result.rawParticipation?.remarks ||
+    result.rawParticipation?.evaluationRemarks ||
+    result.details?.disqualificationReason ||
+    result.details?.rejectionReason ||
+    result.details?.scrutinyRemarks ||
+    result.details?.technicalRemarks ||
+    result.details?.remarks ||
+    result.details?.evaluationRemarks ||
+    'Bidder disqualified during Stage 1 Technical Scrutiny (non-compliant with tender specifications).'
+  );
+
+  const statusStr = isTechnicallyDisqualified
+    ? 'Disqualified'
+    : String(result.resultStatus || result.technicalStatus || result.status || 'Under Review');
+
+  const rawRank = String(result.finalRank || '').trim();
+  const rank = isTechnicallyDisqualified ? 'NA' : (rawRank && rawRank !== 'NA' ? rawRank : 'L1');
+  const isAwarded = !isTechnicallyDisqualified && (
     result.resultStatus === 'Awarded' ||
     String(result.finalStatus || '').toUpperCase() === 'AWARDED' ||
     String(result.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' ||
     Boolean(bid?.awards?.some((a: any) =>
       Number(a.participationId) === Number(result.participationId || result.id) ||
       (a.sellerId && Number(a.sellerId) === Number(result.sellerId || result.rawParticipation?.sellerId || result.rawParticipation?.sellerUserId))
-    ));
+    )));
 
   // Extract commercial parameters
   const totalEvaluatedPrice = Number(
@@ -612,6 +686,13 @@ export function SupplierQuotationDetailView({
     : uniqueDocs.map(d => ({ label: d.category || d.name, verified: true }));
 
   const handlePreviewDoc = async (doc: any) => {
+    if (isTechnicallyDisqualified && isFinancialDocument(doc)) {
+      toast.error('Financial Document Remains Sealed: Per Two-Packet procurement rules, the financial packet and price breakdown of technically disqualified bidders cannot be opened.', {
+        duration: 5000,
+      });
+      return;
+    }
+
     try {
       setPreviewLoadingId(doc.id);
       if (doc.fileAssetId || doc.fileUrl || doc.url) {
@@ -653,91 +734,144 @@ export function SupplierQuotationDetailView({
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-3 sm:px-6 py-4 space-y-4 pb-28 animate-in fade-in duration-150">
+    <div className={cn(
+      "mx-auto w-full max-w-7xl px-3 sm:px-6 py-4 space-y-4 animate-in fade-in duration-150",
+      isModal ? "pb-6" : "pb-28"
+    )}>
       
-      {/* ── 1. Top Bar: Navigation + Breadcrumb + Primary Actions ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
-        <div className="flex items-center gap-2.5">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={onBack}
-            className="h-8.5 gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
-            <span>Back to Results</span>
-          </Button>
-
-          <nav className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-400">
-            <span className="hover:text-slate-700 cursor-pointer" onClick={onBack}>
-              Procurements
-            </span>
-            <ChevronRight className="h-3 w-3 text-slate-300" />
-            <span className="font-mono text-slate-600">
+      {/* ── 1. Top Bar: Navigation / In-Modal Context + Primary Actions ── */}
+      {isModal ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-slate-200/80">
+          <div className="flex items-center gap-2 text-xs text-slate-600 font-medium min-w-0">
+            <span className="text-slate-400 font-bold uppercase text-[10px]">Tender Reference:</span>
+            <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px] truncate">
               {bidId || bid?.id || 'Bid'}
             </span>
-            <ChevronRight className="h-3 w-3 text-slate-300" />
-            <span className="text-blue-900 font-bold bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md text-[11px]">
-              Supplier Quotation
-            </span>
-          </nav>
-        </div>
+            {bid?.title && (
+              <span className="text-slate-400 hidden md:inline truncate max-w-sm" title={bid.title}>
+                • {bid.title}
+              </span>
+            )}
+          </div>
 
-        {/* Quick Actions */}
-        <div className="flex items-center gap-2">
-          {onOpenTechnicalEvaluation && (
+          <div className="flex items-center gap-2">
+            {onOpenTechnicalEvaluation && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onOpenTechnicalEvaluation(result)}
+                className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
+                <span>Technical Evaluation Record</span>
+              </Button>
+            )}
+
+            {onDownloadPdf && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onDownloadPdf(result)}
+                className="h-8 gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer"
+              >
+                <Download className="h-3.5 w-3.5 text-blue-600" />
+                <span>PDF</span>
+              </Button>
+            )}
+
+            {isAwarded ? (
+              <span className="inline-flex h-8 items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 px-3 text-xs font-black text-emerald-800 uppercase tracking-wide">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-1">
+          <div className="flex items-center gap-2.5">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => onOpenTechnicalEvaluation(result)}
-              className="h-8.5 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
+              onClick={onBack}
+              className="h-8.5 gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
             >
-              <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-              <span>Technical Evaluation Record</span>
+              <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+              <span>Back to Results</span>
             </Button>
-          )}
 
-          {onDownloadPdf && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => onDownloadPdf(result)}
-              className="h-8.5 gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 cursor-pointer"
-            >
-              <Download className="h-3.5 w-3.5 text-blue-600" />
-              <span>PDF</span>
-            </Button>
-          )}
+            <nav className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+              <span className="hover:text-slate-700 cursor-pointer" onClick={onBack}>
+                Procurements
+              </span>
+              <ChevronRight className="h-3 w-3 text-slate-300" />
+              <span className="font-mono text-slate-600">
+                {bidId || bid?.id || 'Bid'}
+              </span>
+              <ChevronRight className="h-3 w-3 text-slate-300" />
+              <span className="text-blue-900 font-bold bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-md text-[11px]">
+                Supplier Quotation
+              </span>
+            </nav>
+          </div>
 
-          {isAwarded ? (
-            <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 px-3.5 text-xs font-black text-emerald-800 uppercase tracking-wide">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
-            </span>
-          ) : null}
+          <div className="flex items-center gap-2">
+            
+
+            
+
+            {isAwarded ? (
+              <span className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-emerald-100 border border-emerald-300 px-3.5 text-xs font-black text-emerald-800 uppercase tracking-wide">
+                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Awarded
+              </span>
+            ) : null}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* ── 2. Executive Hero Banner: Supplier Identity & Commercial Outcome ── */}
       <section className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-5 sm:p-6 shadow-xs">
-        <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500" />
+        <div className={cn(
+          "absolute top-0 left-0 right-0 h-1.5",
+          isTechnicallyDisqualified
+            ? "bg-gradient-to-r from-rose-500 via-rose-600 to-amber-500"
+            : "bg-gradient-to-r from-blue-600 via-indigo-600 to-emerald-500"
+        )} />
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-6 items-start lg:items-center">
           
           {/* Left: Supplier Info & Tender Reference */}
           <div className="space-y-2.5 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Trophy className="h-3 w-3 text-emerald-600" />
-                Rank {rank} • Lowest Evaluated
-              </span>
+              {isTechnicallyDisqualified ? (
+                <>
+                  <span className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-200">
+                    <XCircle className="h-3 w-3 text-rose-600" />
+                    Technically Disqualified • Ineligible
+                  </span>
 
-              <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {statusStr}
-              </span>
+                  <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-rose-100/70 text-rose-800 border border-rose-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                    Stage 1 Failed
+                  </span>
+                </>
+              ) : (
+                <>
+                  {rank && rank !== 'NA' && (
+                    <span className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200">
+                      <Trophy className="h-3 w-3 text-emerald-600" />
+                      Rank {rank} {rank === 'L1' ? '• Lowest Evaluated' : ''}
+                    </span>
+                  )}
+
+                  <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-slate-100 text-slate-700 border border-slate-200">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    {statusStr}
+                  </span>
+                </>
+              )}
 
               <span className="font-mono text-[10px] font-bold px-2 py-1 rounded-md bg-slate-50 text-slate-500 border border-slate-200">
                 QUOTE #{result.id || result.participationId || 'REF'}
@@ -758,58 +892,85 @@ export function SupplierQuotationDetailView({
             {/* Clean Contact Strip */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 font-medium pt-1">
               <span className="inline-flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-slate-400" />
+                <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 Representative: <strong className="text-slate-800">{contactPerson}</strong>
               </span>
 
               {sellerEmail && sellerEmail !== '—' && sellerEmail !== 'Not provided' && (
-                <span className="inline-flex items-center gap-1.5">
-                  <Mail className="h-3.5 w-3.5 text-slate-400" />
+                <span className="inline-flex items-center gap-1.5 break-all">
+                  <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   <a href={`mailto:${sellerEmail}`} className="hover:underline text-slate-700">{sellerEmail}</a>
                 </span>
               )}
 
               {sellerMobile && sellerMobile !== '—' && sellerMobile !== 'Not listed' && (
                 <span className="inline-flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-slate-400" />
+                  <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                   <span className="text-slate-700">{sellerMobile}</span>
                 </span>
               )}
 
               <span className="inline-flex items-center gap-1.5 text-slate-500">
-                <Clock className="h-3.5 w-3.5 text-slate-400" />
+                <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
                 Submitted: <span className="font-semibold text-slate-700">{formatDateTime(submittedAt)}</span>
               </span>
             </div>
           </div>
 
-          {/* Right: Elegant Commercial Summary Box */}
-          <div className="rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-emerald-50/50 to-white px-5 py-4 min-w-[260px] flex flex-col justify-center space-y-2 shadow-2xs">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
-                Total Evaluated Landed Price
-              </span>
-              <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
-                INR (₹)
-              </span>
+          {/* Right: Commercial Summary Box */}
+          {isTechnicallyDisqualified ? (
+            <div className="rounded-2xl border border-rose-200/90 bg-gradient-to-b from-rose-50/70 via-rose-50/40 to-white px-5 py-4 w-full lg:w-auto min-w-[280px] max-w-md flex flex-col justify-center space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-rose-800">
+                  <Lock className="h-3.5 w-3.5 text-rose-600" />
+                  Financial Packet Sealed
+                </span>
+                <span className="text-[9px] font-extrabold bg-rose-100 text-rose-800 px-2 py-0.5 rounded uppercase border border-rose-200">
+                  Stage 2 Sealed
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-rose-700 tracking-tight leading-tight flex items-baseline gap-2">
+                <span>Sealed</span>
+                <span className="text-xs font-bold text-slate-500 font-sans tracking-normal">(Unopened)</span>
+              </div>
+              <div className="text-[11px] font-medium text-slate-600 pt-1.5 border-t border-rose-100 space-y-1.5">
+                <p className="text-slate-700 leading-snug">
+                  <strong className="text-rose-900 font-bold">Packet Unopened:</strong> Financial bid held sealed per Two-Packet evaluation rules (GFR 173).
+                </p>
+                <div className="text-[10.5px] text-slate-700 bg-white/95 rounded-md p-2 border border-rose-150 space-y-0.5">
+                  <span className="text-[9.5px] font-black uppercase tracking-wider text-rose-700 block">Disqualification Reason:</span>
+                  <p className="leading-snug">{disqualificationReason}</p>
+                </div>
+              </div>
             </div>
-            <div className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight leading-tight">
-              {formatCurrency(totalEvaluatedPrice)}
+          ) : (
+            <div className="rounded-2xl border border-emerald-200/90 bg-gradient-to-b from-emerald-50/50 to-white px-5 py-4 w-full lg:w-auto min-w-[260px] flex flex-col justify-center space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800">
+                  Total Evaluated Landed Price
+                </span>
+                <span className="text-[9px] font-extrabold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded">
+                  INR (₹)
+                </span>
+              </div>
+              <div className="text-2xl sm:text-3xl font-black text-emerald-700 tracking-tight leading-tight">
+                {formatCurrency(totalEvaluatedPrice)}
+              </div>
+              <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-1.5 border-t border-emerald-100">
+                <span>Base: <strong className="text-slate-800">{formatCurrency(quotedBaseAmount)}</strong></span>
+                <span>GST {gstPercentage}%: <strong className="text-slate-800">{formatCurrency(taxAmount)}</strong></span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium">
+                F.O.R Destination • All taxes &amp; delivery included
+              </p>
             </div>
-            <div className="flex items-center justify-between text-[11px] font-medium text-slate-600 pt-1.5 border-t border-emerald-100">
-              <span>Base: <strong className="text-slate-800">{formatCurrency(quotedBaseAmount)}</strong></span>
-              <span>GST {gstPercentage}%: <strong className="text-slate-800">{formatCurrency(taxAmount)}</strong></span>
-            </div>
-            <p className="text-[10px] text-slate-400 font-medium">
-              F.O.R Destination • All taxes &amp; delivery included
-            </p>
-          </div>
+          )}
 
         </div>
       </section>
 
       {/* ── 3. Operational Parameter Ribbon (Streamlined, Non-Redundant) ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
           <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
             <Package className="h-3.5 w-3.5 text-blue-600" />
@@ -828,7 +989,7 @@ export function SupplierQuotationDetailView({
             <Truck className="h-3.5 w-3.5 text-amber-600" />
             <span>Delivery SLA</span>
           </div>
-          <p className="text-sm font-black text-slate-900">
+          <p className="text-sm font-black text-slate-900 truncate" title={deliveryTimeline}>
             {deliveryTimeline}
           </p>
           <span className="text-[10.5px] font-medium text-slate-500 block">
@@ -849,27 +1010,59 @@ export function SupplierQuotationDetailView({
           </span>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs flex items-center justify-between gap-2">
+        <div className={cn(
+          "rounded-xl border p-3.5 shadow-2xs flex items-center justify-between gap-2",
+          isTechnicallyDisqualified
+            ? "border-rose-200 bg-rose-50/50"
+            : "border-slate-200 bg-white"
+        )}>
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
-              <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
+              <ShieldCheck className={cn("h-3.5 w-3.5", isTechnicallyDisqualified ? "text-rose-600" : "text-purple-600")} />
               <span>Technical Standing</span>
             </div>
-            <p className="text-sm font-black text-purple-900">
-              Qualified Bidder
-            </p>
-            <span className="text-[10.5px] font-semibold text-emerald-700 block">
-              Stage 1 Scrutiny Passed
-            </span>
+            {isTechnicallyDisqualified ? (
+              <>
+                <p className="text-sm font-black text-rose-900">
+                  Disqualified
+                </p>
+                <span className="text-[10.5px] font-semibold text-rose-700 block truncate" title={disqualificationReason}>
+                  Stage 1 Failed
+                </span>
+              </>
+            ) : isTechnicallyQualified ? (
+              <>
+                <p className="text-sm font-black text-purple-900">
+                  Qualified Bidder
+                </p>
+                <span className="text-[10.5px] font-semibold text-emerald-700 block">
+                  Stage 1 Scrutiny Passed
+                </span>
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-black text-amber-900">
+                  Under Evaluation
+                </p>
+                <span className="text-[10.5px] font-semibold text-amber-700 block">
+                  Stage 1 Scrutiny Pending
+                </span>
+              </>
+            )}
           </div>
           {onOpenTechnicalEvaluation && (
             <button
               type="button"
               onClick={() => onOpenTechnicalEvaluation(result)}
-              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-2xs"
+              className={cn(
+                "inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-bold transition-colors cursor-pointer shrink-0 shadow-2xs",
+                isTechnicallyDisqualified
+                  ? "border-rose-300 bg-rose-100 hover:bg-rose-200 text-rose-900"
+                  : "border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800"
+              )}
               title="Open Technical Evaluation Record"
             >
-              <Eye className="h-3.5 w-3.5 text-purple-600" />
+              <Eye className="h-3.5 w-3.5" />
               <span>Record</span>
             </button>
           )}
@@ -877,7 +1070,7 @@ export function SupplierQuotationDetailView({
       </div>
 
       {/* ── 4. Segmented Tab Navigation ── */}
-      <div className="flex items-center gap-2 border-b border-slate-200 pt-2 pb-1" role="tablist" aria-label="Quotation detail sections">
+      <div className="flex items-center gap-2 border-b border-slate-200 pt-2 pb-1 overflow-x-auto" role="tablist" aria-label="Quotation detail sections">
         <button
           type="button"
           role="tab"
@@ -885,20 +1078,26 @@ export function SupplierQuotationDetailView({
           aria-controls="panel-pricing"
           onClick={() => setActiveTab('pricing')}
           className={cn(
-            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer whitespace-nowrap",
             activeTab === 'pricing'
               ? "bg-[#1B365D] text-white shadow-xs"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
           )}
         >
-          <Package className="h-3.5 w-3.5" />
+          {isTechnicallyDisqualified ? <Lock className="h-3.5 w-3.5 text-rose-300" /> : <Package className="h-3.5 w-3.5" />}
           <span>Items &amp; Financial BOQ</span>
-          <span className={cn(
-            "text-[10px] px-1.5 py-0.2 rounded-md font-extrabold",
-            activeTab === 'pricing' ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
-          )}>
-            {rawLineItems.length}
-          </span>
+          {isTechnicallyDisqualified ? (
+            <span className="text-[10px] px-1.5 py-0.2 rounded-md font-extrabold bg-rose-500/20 text-rose-200 border border-rose-400/30">
+              Sealed
+            </span>
+          ) : (
+            <span className={cn(
+              "text-[10px] px-1.5 py-0.2 rounded-md font-extrabold",
+              activeTab === 'pricing' ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+            )}>
+              {rawLineItems.length}
+            </span>
+          )}
         </button>
 
         <button
@@ -908,7 +1107,7 @@ export function SupplierQuotationDetailView({
           aria-controls="panel-terms"
           onClick={() => setActiveTab('terms')}
           className={cn(
-            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer whitespace-nowrap",
             activeTab === 'terms'
               ? "bg-[#1B365D] text-white shadow-xs"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -925,7 +1124,7 @@ export function SupplierQuotationDetailView({
           aria-controls="panel-compliance"
           onClick={() => setActiveTab('compliance')}
           className={cn(
-            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer",
+            "inline-flex items-center gap-2 px-4 py-2 text-xs font-black rounded-xl transition-all cursor-pointer whitespace-nowrap",
             activeTab === 'compliance'
               ? "bg-[#1B365D] text-white shadow-xs"
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
@@ -947,6 +1146,37 @@ export function SupplierQuotationDetailView({
       {/* TAB 1: Items & Financial BOQ Breakdown */}
       {activeTab === 'pricing' && (
         <section id="panel-pricing" role="tabpanel" className="space-y-4 animate-in fade-in duration-150">
+          
+          {/* Disqualification Two-Packet Advisory Banner */}
+          {isTechnicallyDisqualified && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 sm:p-5 flex items-start gap-3.5 shadow-2xs">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700 shrink-0 border border-rose-200">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div className="space-y-1.5 min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-950">
+                    Financial Packet &amp; Price Schedule Remains Sealed
+                  </h3>
+                  <span className="bg-rose-200 text-rose-900 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-rose-300">
+                    Two-Packet Procurement Rule
+                  </span>
+                </div>
+                <p className="text-xs text-rose-900 leading-relaxed font-medium">
+                  In compliance with standard Public Procurement Guidelines (GFR 2017 Rule 173(xvi)), financial envelopes of bidders who are disqualified in Stage 1 Technical Scrutiny are never unsealed. Commercial rates, unit pricing, and detailed price breakups remain strictly confidential and sealed.
+                </p>
+                <div className="mt-2 rounded-xl bg-white/95 border border-rose-200/90 p-3 text-xs text-slate-800 shadow-2xs">
+                  <span className="font-black text-rose-900 block text-[11px] uppercase tracking-wider mb-1">
+                    Technical Disqualification Reason:
+                  </span>
+                  <p className="text-slate-800 font-semibold leading-relaxed">
+                    {disqualificationReason}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="rounded-2xl border border-slate-200 bg-white shadow-xs overflow-hidden">
             <div className="flex items-center justify-between px-5 py-3 border-b border-slate-150 bg-slate-50/70">
               <div className="flex items-center gap-2">
@@ -956,12 +1186,12 @@ export function SupplierQuotationDetailView({
                 </h2>
               </div>
               <span className="text-xs font-bold text-slate-500">
-                All prices quoted in Indian Rupees (INR ₹)
+                {isTechnicallyDisqualified ? 'Financial Bid Sealed (Unopened)' : 'All prices quoted in Indian Rupees (INR ₹)'}
               </span>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+            <div className="overflow-x-auto w-full">
+              <table className="w-full text-left border-collapse text-xs min-w-[760px]">
                 <thead className="bg-slate-50/90 border-b border-slate-200 text-[10px] font-black uppercase text-slate-500 tracking-wider">
                   <tr>
                     <th className="px-4 py-3 w-12 text-center">#</th>
@@ -1038,7 +1268,13 @@ export function SupplierQuotationDetailView({
                         </td>
 
                         <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-800 text-xs tabular-nums">
-                          {unitPrice ? formatCurrency(unitPrice) : '—'}
+                          {isTechnicallyDisqualified ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
+                              <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                            </span>
+                          ) : (
+                            unitPrice ? formatCurrency(unitPrice) : '—'
+                          )}
                         </td>
 
                         <td className="px-4 py-3.5 text-center">
@@ -1048,20 +1284,48 @@ export function SupplierQuotationDetailView({
                         </td>
 
                         <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/40">
-                          {lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'}
+                          {isTechnicallyDisqualified ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
+                              <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                            </span>
+                          ) : (
+                            lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'
+                          )}
                         </td>
 
                         <td className="px-4 py-3.5 text-center">
-                          <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded text-[10.5px] whitespace-nowrap">
-                            <Check className="h-3 w-3 text-emerald-600 stroke-[2.5]" /> Compliant
-                          </span>
+                          {isTechnicallyDisqualified ? (
+                            <span className="inline-flex items-center gap-1 font-bold text-rose-800 bg-rose-50 border border-rose-200 px-2.5 py-0.5 rounded text-[10.5px] whitespace-nowrap">
+                              <XCircle className="h-3 w-3 text-rose-600 stroke-[2.5]" /> Disqualified
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded text-[10.5px] whitespace-nowrap">
+                              <Check className="h-3 w-3 text-emerald-600 stroke-[2.5]" /> Compliant
+                            </span>
+                          )}
                         </td>
                       </tr>
                     );
                   })}
                 </tbody>
 
-                {totalEvaluatedPrice > 0 && (
+                {isTechnicallyDisqualified ? (
+                  <tfoot className="bg-rose-50/70 border-t border-rose-200 font-bold">
+                    <tr>
+                      <td colSpan={7} className="px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-900 text-right">
+                        Stage 2 Financial Packet Standing:
+                      </td>
+                      <td className="px-4 py-3 text-xs font-black text-rose-700 text-right tabular-nums">
+                        <span className="inline-flex items-center gap-1.5 font-bold">
+                          <Lock className="h-3.5 w-3.5 text-rose-600" /> Sealed (Unopened)
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center text-xs font-black text-rose-800">
+                        Ineligible
+                      </td>
+                    </tr>
+                  </tfoot>
+                ) : totalEvaluatedPrice > 0 ? (
                   <tfoot className="bg-slate-50/90 border-t border-slate-200 font-bold">
                     <tr>
                       <td colSpan={7} className="px-4 py-3 text-xs font-black uppercase tracking-wider text-slate-600 text-right">
@@ -1075,7 +1339,7 @@ export function SupplierQuotationDetailView({
                       </td>
                     </tr>
                   </tfoot>
-                )}
+                ) : null}
               </table>
             </div>
           </div>
@@ -1088,22 +1352,47 @@ export function SupplierQuotationDetailView({
                 Rate Basis: <strong>F.O.R Destination</strong> • Includes Packaging, Forwarding, Freight, Transit Insurance, and GST.
               </p>
             </div>
-            <div className="flex items-center gap-4 text-xs">
-              <div className="text-right">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
-                <strong className="text-slate-800 text-sm font-black">{formatCurrency(quotedBaseAmount)}</strong>
+            {isTechnicallyDisqualified ? (
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div className="text-right">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-slate-500 text-xs">
+                    <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                  </span>
+                </div>
+                <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+                <div className="text-right">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
+                  <span className="inline-flex items-center gap-1 font-bold text-slate-500 text-xs">
+                    <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                  </span>
+                </div>
+                <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+                <div className="text-right">
+                  <span className="text-rose-700 block text-[10px] uppercase font-bold">Total Landed Amount</span>
+                  <span className="inline-flex items-center gap-1 font-black text-rose-700 text-xs sm:text-sm">
+                    <Lock className="h-3.5 w-3.5 text-rose-600" /> Sealed (Packet Unopened)
+                  </span>
+                </div>
               </div>
-              <div className="h-8 w-px bg-slate-200" />
-              <div className="text-right">
-                <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
-                <strong className="text-slate-800 text-sm font-black">{formatCurrency(taxAmount)}</strong>
+            ) : (
+              <div className="flex flex-wrap items-center gap-4 text-xs">
+                <div className="text-right">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
+                  <strong className="text-slate-800 text-sm font-black">{formatCurrency(quotedBaseAmount)}</strong>
+                </div>
+                <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+                <div className="text-right">
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
+                  <strong className="text-slate-800 text-sm font-black">{formatCurrency(taxAmount)}</strong>
+                </div>
+                <div className="h-8 w-px bg-slate-200 hidden sm:block" />
+                <div className="text-right">
+                  <span className="text-emerald-700 block text-[10px] uppercase font-bold">Total Landed Amount</span>
+                  <strong className="text-emerald-700 text-base font-black">{formatCurrency(totalEvaluatedPrice)}</strong>
+                </div>
               </div>
-              <div className="h-8 w-px bg-slate-200" />
-              <div className="text-right">
-                <span className="text-emerald-700 block text-[10px] uppercase font-bold">Total Landed Amount</span>
-                <strong className="text-emerald-700 text-base font-black">{formatCurrency(totalEvaluatedPrice)}</strong>
-              </div>
-            </div>
+            )}
           </div>
         </section>
       )}
@@ -1198,21 +1487,42 @@ export function SupplierQuotationDetailView({
               </span>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-              {statutoryChecklist.map((item, idx) => (
-                <div
-                  key={idx}
-                  className={cn(
-                    "flex items-center gap-2 rounded-xl border p-3 text-xs font-bold transition-colors min-w-0 shadow-2xs",
-                    item.verified
-                      ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
-                      : "border-slate-200 bg-slate-50 text-slate-500"
-                  )}
-                >
-                  <Check className={cn("h-4 w-4 shrink-0", item.verified ? "text-emerald-600 stroke-[3]" : "text-slate-300")} />
-                  <span className="truncate leading-tight text-xs">{item.label}</span>
-                </div>
-              ))}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {statutoryChecklist.map((item, idx) => {
+                const isFinDoc = isFinancialDocument({ name: item.label, category: item.label });
+                const isSealedItem = isTechnicallyDisqualified && isFinDoc;
+
+                if (isSealedItem) {
+                  return (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/70 p-3 text-xs font-bold text-rose-900 shadow-2xs min-w-0"
+                      title="Financial document remains sealed per Two-Packet procurement rules"
+                    >
+                      <Lock className="h-4 w-4 shrink-0 text-rose-600" />
+                      <div className="min-w-0 flex-1">
+                        <span className="truncate leading-tight text-xs block">{item.label}</span>
+                        <span className="text-[9.5px] font-semibold text-rose-700 block">Sealed (Unopened)</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    key={idx}
+                    className={cn(
+                      "flex items-center gap-2 rounded-xl border p-3 text-xs font-bold transition-colors min-w-0 shadow-2xs",
+                      item.verified
+                        ? "border-emerald-200 bg-emerald-50/80 text-emerald-900"
+                        : "border-slate-200 bg-slate-50 text-slate-500"
+                    )}
+                  >
+                    <Check className={cn("h-4 w-4 shrink-0", item.verified ? "text-emerald-600 stroke-[3]" : "text-slate-300")} />
+                    <span className="truncate leading-tight text-xs">{item.label}</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -1232,53 +1542,98 @@ export function SupplierQuotationDetailView({
 
             {uniqueDocs.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
-                {uniqueDocs.map((doc, idx) => (
-                  <div
-                    key={doc.id || idx}
-                    className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col justify-between gap-3 shadow-2xs hover:bg-slate-100/70 transition-colors"
-                  >
-                    <div className="flex items-start gap-3 min-w-0">
-                      <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/80">
-                        <FileText className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <span className="inline-block text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded">
-                          {doc.category}
-                        </span>
-                        <p className="text-xs font-bold text-slate-900 truncate" title={doc.name}>
-                          {doc.name}
-                        </p>
-                        {doc.fileName && doc.fileName !== doc.name && (
-                          <p className="text-[10px] text-slate-400 font-mono truncate" title={doc.fileName}>
-                            {doc.fileName}
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                {uniqueDocs.map((doc, idx) => {
+                  const isFinDoc = isFinancialDocument(doc);
+                  const isSealedDoc = isTechnicallyDisqualified && isFinDoc;
 
-                    <div className="pt-2 border-t border-slate-200/60 flex items-center justify-end">
-                      <button
-                        type="button"
-                        onClick={() => handlePreviewDoc(doc)}
-                        disabled={previewLoadingId === doc.id}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
-                        title="Preview Document"
+                  if (isSealedDoc) {
+                    return (
+                      <div
+                        key={doc.id || idx}
+                        className="rounded-xl border border-rose-200 bg-rose-50/40 p-4 flex flex-col justify-between gap-3 shadow-2xs"
                       >
-                        {previewLoadingId === doc.id ? (
-                          <>
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-700" />
-                            <span>Opening...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Eye className="h-3.5 w-3.5 text-blue-700" />
-                            <span>Preview Document</span>
-                          </>
-                        )}
-                      </button>
+                        <div className="flex items-start gap-3 min-w-0">
+                          <div className="h-9 w-9 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center shrink-0 border border-rose-200">
+                            <Lock className="h-4 w-4" />
+                          </div>
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 px-2 py-0.5 rounded">
+                              <Lock className="h-2.5 w-2.5 text-rose-600" />
+                              Sealed Financial Document
+                            </span>
+                            <p className="text-xs font-bold text-slate-900 truncate" title={doc.name}>
+                              {doc.name}
+                            </p>
+                            <p className="text-[10.5px] text-rose-700 font-medium leading-tight">
+                              Price breakup remains sealed per Two-Packet rules (Disqualified)
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-rose-150 flex items-center justify-between">
+                          <span className="text-[10px] text-slate-400 font-semibold">Packet Unopened</span>
+                          <button
+                            type="button"
+                            disabled
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50/80 px-3 py-1.5 text-xs font-bold text-rose-700 opacity-80 cursor-not-allowed shadow-2xs"
+                            title="Financial documents of technically disqualified bidders remain sealed and cannot be previewed."
+                          >
+                            <Lock className="h-3.5 w-3.5 text-rose-600" />
+                            <span>Sealed (Cannot Open)</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div
+                      key={doc.id || idx}
+                      className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 flex flex-col justify-between gap-3 shadow-2xs hover:bg-slate-100/70 transition-colors"
+                    >
+                      <div className="flex items-start gap-3 min-w-0">
+                        <div className="h-9 w-9 rounded-lg bg-blue-100 text-blue-800 flex items-center justify-center shrink-0 border border-blue-200/80">
+                          <FileText className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0 flex-1 space-y-1">
+                          <span className="inline-block text-[9px] font-black uppercase tracking-wider bg-blue-50 text-blue-700 border border-blue-100 px-2 py-0.5 rounded">
+                            {doc.category}
+                          </span>
+                          <p className="text-xs font-bold text-slate-900 truncate" title={doc.name}>
+                            {doc.name}
+                          </p>
+                          {doc.fileName && doc.fileName !== doc.name && (
+                            <p className="text-[10px] text-slate-400 font-mono truncate" title={doc.fileName}>
+                              {doc.fileName}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200/60 flex items-center justify-end">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewDoc(doc)}
+                          disabled={previewLoadingId === doc.id}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-blue-900 transition-colors shadow-2xs cursor-pointer disabled:opacity-60"
+                          title="Preview Document"
+                        >
+                          {previewLoadingId === doc.id ? (
+                            <>
+                              <Loader2 className="h-3.5 w-3.5 animate-spin text-blue-700" />
+                              <span>Opening...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="h-3.5 w-3.5 text-blue-700" />
+                              <span>Preview Document</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400 font-medium">
@@ -1334,28 +1689,57 @@ export function SupplierQuotationDetailModal({
     result.companyName ||
     'Quoting Supplier';
 
+  const rawTech = String(
+    result.technicalStatus ||
+    result.rawParticipation?.technicalStatus ||
+    result.details?.technicalStatus ||
+    result.status ||
+    result.resultStatus ||
+    result.qualificationStatus ||
+    ''
+  ).toUpperCase();
+
+  const isTechnicallyDisqualified =
+    rawTech === 'DISQUALIFIED' ||
+    rawTech === 'REJECTED' ||
+    rawTech === 'INELIGIBLE' ||
+    Boolean(result.isDisqualified) ||
+    Boolean(result.rawParticipation?.isDisqualified) ||
+    Boolean(result.details?.isDisqualified) ||
+    result.resultStatus === 'Ineligible' ||
+    result.technicalStatus === 'Disqualified';
+
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="supplier-quotation-modal-title"
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-hidden animate-in fade-in duration-200"
+      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-6xl max-h-[92vh] flex flex-col bg-slate-50 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
+        className="relative w-full max-w-5xl my-auto max-h-[92vh] flex flex-col bg-slate-50 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-200 bg-white shadow-2xs shrink-0">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-slate-200 bg-white shadow-2xs shrink-0">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 shrink-0" />
+            <span className={cn(
+              "h-2.5 w-2.5 rounded-full shrink-0",
+              isTechnicallyDisqualified ? "bg-rose-500" : "bg-emerald-500"
+            )} />
             <h2 id="supplier-quotation-modal-title" className="text-sm font-black text-slate-900 tracking-tight truncate">
               Quotation Breakdown • {sellerOrg}
             </h2>
             <span className="hidden sm:inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
               #{result.id || result.participationId || 'REF'}
             </span>
+            {isTechnicallyDisqualified && (
+              <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 shrink-0">
+                <Lock className="h-3 w-3 text-rose-600" />
+                Financial Sealed
+              </span>
+            )}
           </div>
           <button
             type="button"
@@ -1368,7 +1752,7 @@ export function SupplierQuotationDetailModal({
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <SupplierQuotationDetailView
             result={result}
             bid={bid}

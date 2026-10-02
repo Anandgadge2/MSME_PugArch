@@ -554,91 +554,91 @@ export default function BidResultsPage() {
     submitting: false,
   });
 
-  const handleDownloadQuotationPdf = async (result: any) => {
-    if (!result) return;
-    try {
-      const engine = new PdfEngine('p');
-      const quotedAmt = Number(result.quotedAmount || result.totalAmount || result.totalPrice || result.details?.quotedAmount || 0);
-      const gst = Number(result.gstPercentage || result.details?.gstPercentage || 0);
-      const totalAmt = Number(result.totalAmount || result.totalPrice || result.details?.totalAmount || quotedAmt);
-      const qty = result.offeredQuantity || result.details?.offeredQuantity || 1;
+  // const handleDownloadQuotationPdf = async (result: any) => {
+  //   if (!result) return;
+  //   try {
+  //     const engine = new PdfEngine('p');
+  //     const quotedAmt = Number(result.quotedAmount || result.totalAmount || result.totalPrice || result.details?.quotedAmount || 0);
+  //     const gst = Number(result.gstPercentage || result.details?.gstPercentage || 0);
+  //     const totalAmt = Number(result.totalAmount || result.totalPrice || result.details?.totalAmount || quotedAmt);
+  //     const qty = result.offeredQuantity || result.details?.offeredQuantity || 1;
 
-      const sellerLogo = result.sellerLogo || result.details?.logoUrl || result.details?.sellerLogo || undefined;
-      const sellerSignature = result.signatureUrl || result.details?.signatureUrl || undefined;
-      const sellerStamp = result.stampUrl || result.details?.stampUrl || undefined;
-      const sellerOrgName = result.details?.organizationName || result.sellerName || 'N/A';
+  //     const sellerLogo = result.sellerLogo || result.details?.logoUrl || result.details?.sellerLogo || undefined;
+  //     const sellerSignature = result.signatureUrl || result.details?.signatureUrl || undefined;
+  //     const sellerStamp = result.stampUrl || result.details?.stampUrl || undefined;
+  //     const sellerOrgName = result.details?.organizationName || result.sellerName || 'N/A';
 
-      const doc = await engine.generate({
-        documentTitle: 'SUPPLIER QUOTATION RESPONSE',
-        documentNumber: `QUOTE-${result.id || result.participationId || 'REF'}`,
-        dateStr: formatDate(result.submittedAt),
-        status: result.technicalStatus || 'Submitted',
-        issuerName: sellerOrgName,
-        issuerSubtitle: 'Supplier Quotation Submission',
-        issuerLogo: sellerLogo,
-        parties: [
-          {
-            title: 'BUYER ORGANIZATION',
-            name: (bid as any)?.buyerOrganization || (bid as any)?.buyerOrganizationName || bid?.buyer?.name || 'N/A',
-            details: [
-              `Requirement / Bid ID: ${bidId || 'N/A'}`,
-              `Procurement Title: ${bid?.title || 'N/A'}`,
-            ],
-          },
-          {
-            title: 'SUPPLIER / QUOTING ORGANIZATION',
-            name: sellerOrgName,
-            address: result.sellerAddress || result.details?.address || undefined,
-            email: result.sellerEmail && result.sellerEmail !== 'Not provided' ? result.sellerEmail : undefined,
-            phone: result.sellerMobile && result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
-            details: [
-              `Contact Person: ${result.contactPerson || result.details?.contactPerson || 'N/A'}`,
-              `Submitted Date: ${formatDateTime(result.submittedAt)}`,
-            ],
-          },
-        ],
-        infoGrid: {
-          'Make / Brand': result.makeBrand || result.details?.makeBrand || 'N/A',
-          'Model': result.model || result.details?.model || 'N/A',
-          'Delivery Timeline': result.deliveryTimeline || result.details?.deliveryTimeline || 'N/A',
-          'Offered Quantity': String(qty),
-        },
-        tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Rate', 'GST %', 'Total Amount'],
-        tableData: [
-          [
-            '1',
-            result.offeredItem || result.details?.offeredItemDescription || 'Procurement requirement',
-            String(qty),
-            quotedAmt ? moneyPdf(quotedAmt) : 'N/A',
-            gst ? `${gst}%` : '0%',
-            totalAmt ? moneyPdf(totalAmt) : 'N/A',
-          ]
-        ],
-        financials: {
-          subtotal: quotedAmt,
-          totalTax: totalAmt - quotedAmt > 0 ? totalAmt - quotedAmt : undefined,
-          grandTotal: totalAmt,
-        },
-        terms: [
-          result.details?.complianceRemarks ? `Technical Compliance: ${result.details.complianceRemarks}` : '',
-          result.details?.rfqNotes ? `Additional Notes: ${result.details.rfqNotes}` : '',
-        ].filter(Boolean),
-        signatures: {
-          sellerTitle: 'Quoting Supplier Signature & Stamp',
-          sellerName: result.contactPerson || result.sellerName || 'Authorized Signatory',
-          sellerSignatureUrl: sellerSignature,
-          sellerStampUrl: sellerStamp,
-        },
-        footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
-      });
+  //     const doc = await engine.generate({
+  //       documentTitle: 'SUPPLIER QUOTATION RESPONSE',
+  //       documentNumber: `QUOTE-${result.id || result.participationId || 'REF'}`,
+  //       dateStr: formatDate(result.submittedAt),
+  //       status: result.technicalStatus || 'Submitted',
+  //       issuerName: sellerOrgName,
+  //       issuerSubtitle: 'Supplier Quotation Submission',
+  //       issuerLogo: sellerLogo,
+  //       parties: [
+  //         {
+  //           title: 'BUYER ORGANIZATION',
+  //           name: (bid as any)?.buyerOrganization || (bid as any)?.buyerOrganizationName || bid?.buyer?.name || 'N/A',
+  //           details: [
+  //             `Requirement / Bid ID: ${bidId || 'N/A'}`,
+  //             `Procurement Title: ${bid?.title || 'N/A'}`,
+  //           ],
+  //         },
+  //         {
+  //           title: 'SUPPLIER / QUOTING ORGANIZATION',
+  //           name: sellerOrgName,
+  //           address: result.sellerAddress || result.details?.address || undefined,
+  //           email: result.sellerEmail && result.sellerEmail !== 'Not provided' ? result.sellerEmail : undefined,
+  //           phone: result.sellerMobile && result.sellerMobile !== 'Not listed' ? result.sellerMobile : undefined,
+  //           details: [
+  //             `Contact Person: ${result.contactPerson || result.details?.contactPerson || 'N/A'}`,
+  //             `Submitted Date: ${formatDateTime(result.submittedAt)}`,
+  //           ],
+  //         },
+  //       ],
+  //       infoGrid: {
+  //         'Make / Brand': result.makeBrand || result.details?.makeBrand || 'N/A',
+  //         'Model': result.model || result.details?.model || 'N/A',
+  //         'Delivery Timeline': result.deliveryTimeline || result.details?.deliveryTimeline || 'N/A',
+  //         'Offered Quantity': String(qty),
+  //       },
+  //       tableHeaders: ['#', 'Offered Item Description', 'Offered Qty', 'Quoted Rate', 'GST %', 'Total Amount'],
+  //       tableData: [
+  //         [
+  //           '1',
+  //           result.offeredItem || result.details?.offeredItemDescription || 'Procurement requirement',
+  //           String(qty),
+  //           quotedAmt ? moneyPdf(quotedAmt) : 'N/A',
+  //           gst ? `${gst}%` : '0%',
+  //           totalAmt ? moneyPdf(totalAmt) : 'N/A',
+  //         ]
+  //       ],
+  //       financials: {
+  //         subtotal: quotedAmt,
+  //         totalTax: totalAmt - quotedAmt > 0 ? totalAmt - quotedAmt : undefined,
+  //         grandTotal: totalAmt,
+  //       },
+  //       terms: [
+  //         result.details?.complianceRemarks ? `Technical Compliance: ${result.details.complianceRemarks}` : '',
+  //         result.details?.rfqNotes ? `Additional Notes: ${result.details.rfqNotes}` : '',
+  //       ].filter(Boolean),
+  //       signatures: {
+  //         sellerTitle: 'Quoting Supplier Signature & Stamp',
+  //         sellerName: result.contactPerson || result.sellerName || 'Authorized Signatory',
+  //         sellerSignatureUrl: sellerSignature,
+  //         sellerStampUrl: sellerStamp,
+  //       },
+  //       footerNote: 'MSME Enterprise Procurement Portal — Official Quotation Record',
+  //     });
 
-      doc.save(`Quotation_${(result.sellerName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}_${bidId}.pdf`);
-      toast.success('Quotation PDF downloaded successfully!');
-    } catch (err: any) {
-      console.error(err);
-      toast.error('Failed to generate Quotation PDF');
-    }
-  };
+  //     doc.save(`Quotation_${(result.sellerName || 'Supplier').replace(/[^a-zA-Z0-9]/g, '_')}_${bidId}.pdf`);
+  //     toast.success('Quotation PDF downloaded successfully!');
+  //   } catch (err: any) {
+  //     console.error(err);
+  //     toast.error('Failed to generate Quotation PDF');
+  //   }
+  // };
 
   const loadBid = React.useCallback(async (isSilent = false) => {
     let alive = true;
@@ -1221,18 +1221,37 @@ export default function BidResultsPage() {
       width: 'w-32',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
-      cell: (row) => (
-        <span className="font-black text-slate-900 text-xs">
-          {row.totalPrice != null && Number(row.totalPrice) > 0 ? (
-            money(row.totalPrice)
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
-              <Lock className="h-2.5 w-2.5" />
-              Sealed (Stage 2)
+      cell: (row) => {
+        const isDisqualified =
+          row.technicalStatus === 'Disqualified' ||
+          String(row.technicalStatus).toUpperCase() === 'DISQUALIFIED' ||
+          row.resultStatus === 'Ineligible';
+
+        if (isDisqualified) {
+          return (
+            <span
+              className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700"
+              title="Financial packet unopened per Two-Packet evaluation rules (Disqualified in Stage 1 Technical Scrutiny)"
+            >
+              <Lock className="h-2.5 w-2.5 text-rose-600" />
+              Sealed (Disqualified)
             </span>
-          )}
-        </span>
-      )
+          );
+        }
+
+        return (
+          <span className="font-black text-slate-900 text-xs">
+            {row.totalPrice != null && Number(row.totalPrice) > 0 ? (
+              money(row.totalPrice)
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
+                <Lock className="h-2.5 w-2.5" />
+                Sealed (Stage 2)
+              </span>
+            )}
+          </span>
+        );
+      }
     },
     {
       key: 'technicalStatus',
@@ -1300,14 +1319,7 @@ export default function BidResultsPage() {
           >
             <Eye className="h-3.5 w-3.5 text-slate-500" /> Details
           </button>
-          <button
-            onClick={() => handleDownloadQuotationPdf(row)}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-600 transition shadow-2xs cursor-pointer"
-            title="Download Quotation PDF"
-            aria-label={`Download Quotation PDF for ${row.sellerName}`}
-          >
-            <Download className="h-3.5 w-3.5" />
-          </button>
+       
           {(() => {
             const rowPartId = Number(row.participationId || row.id);
             const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
@@ -2647,7 +2659,15 @@ export default function BidResultsPage() {
                         <div className="flex justify-between items-center pt-1 border-t border-slate-200">
                           <span className="text-slate-500 font-bold">Total Quoted:</span>
                           <span className="font-black text-slate-950 text-sm">
-                            {row.totalPrice ? money(row.totalPrice) : 'Pending'}
+                            {row.technicalStatus === 'Disqualified' || String(row.technicalStatus).toUpperCase() === 'DISQUALIFIED' ? (
+                              <span className="inline-flex items-center gap-1 text-xs text-rose-700 font-bold">
+                                <Lock className="h-3 w-3 text-rose-600" /> Sealed (Disqualified)
+                              </span>
+                            ) : row.totalPrice ? (
+                              money(row.totalPrice)
+                            ) : (
+                              'Pending'
+                            )}
                           </span>
                         </div>
                       </div>
@@ -2688,13 +2708,7 @@ export default function BidResultsPage() {
                         >
                           <Eye className="h-3 w-3 text-slate-500" /> Details
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDownloadQuotationPdf(row)}
-                          className="inline-flex h-8 items-center justify-center gap-1 rounded-xl border border-slate-250 bg-white hover:bg-slate-50 text-slate-800 text-[11px] font-bold transition shadow-2xs cursor-pointer"
-                        >
-                          <Download className="h-3 w-3 text-slate-500" /> PDF
-                        </button>
+                      
                         {(() => {
                           const rowPartId = Number(row.participationId || row.id);
                           const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
@@ -3142,7 +3156,6 @@ export default function BidResultsPage() {
           bid={bid}
           bidId={bidId}
           onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
-          onDownloadPdf={(res) => handleDownloadQuotationPdf(res)}
           onOpenTechnicalEvaluation={(res) => {
             setSelectedForTechEval({
               ...(res.rawParticipation || {}),
