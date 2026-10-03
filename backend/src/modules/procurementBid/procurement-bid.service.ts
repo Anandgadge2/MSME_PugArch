@@ -841,6 +841,23 @@ export const resolveAuctionAsBidRecord = async (token: string, client: any = db)
     : (['CLOSED', 'COMPLETED', 'FINALIZED'].includes(auction.status) ? 'L1_GENERATED'
     : (['LIVE', 'ACTIVE'].includes(auction.status) ? 'SELLER_PARTICIPATION' : 'TECHNICAL_EVALUATION_COMPLETED')));
 
+  const auctionPurchaseOrders = await client.purchaseOrder.findMany({
+    where: {
+      OR: [
+        { sourceType: 'auction', sourceId: auction.id },
+        ...(auction.linkedBidId ? [{ bidId: auction.linkedBidId }] : [])
+      ]
+    },
+    include: {
+      invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+      grns: { include: { items: true } },
+      items: true
+    },
+    orderBy: { createdAt: 'desc' }
+  }).catch(() => []);
+
+  const activeAuctionOrder = auctionPurchaseOrders[0] || null;
+
   return {
     id: auction.auctionCode || `RA-${auction.id}`,
     bidNumber: auction.auctionCode || `RA-${auction.id}`,
@@ -943,6 +960,8 @@ export const resolveAuctionAsBidRecord = async (token: string, client: any = db)
       eligibilityCriteria,
       consigneeDetails
     },
+    purchaseOrders: auctionPurchaseOrders,
+    activeOrder: activeAuctionOrder,
     isReverseAuction: true,
     rawAuction: auction
   };

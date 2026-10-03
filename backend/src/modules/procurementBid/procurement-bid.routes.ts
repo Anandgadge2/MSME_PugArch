@@ -304,21 +304,35 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       const sellerIds = (directBid.participations || []).map((p: any) => p.sellerId);
       const sellerRatings = await service.getAverageRatingsForSellers(sellerIds);
       const serialized = service.serializeBid(directBid, { actor: currentActor || undefined, detail: true, includeParticipants, includeFinancial, sellerRatings });
-      if (directBid.awards && directBid.awards.length > 0) {
-        const awardIds = directBid.awards.map((a: any) => a.id);
-        const pos = await (prisma as any).purchaseOrder.findMany({
-          where: {
-            OR: [
-              { sourceType: 'procurement_bid_award', sourceId: { in: awardIds } },
-              { bidId: directBid.id }
-            ]
-          },
-          include: {
-            invoices: { include: { fileAsset: true, paymentSlipFile: true } },
-            grns: { include: { items: true } }
-          },
-          orderBy: { createdAt: 'desc' }
-        });
+      const awardIds = (directBid.awards || []).map((a: any) => a.id);
+      const linkedAuctions = await (prisma as any).auction.findMany({
+        where: {
+          OR: [
+            { linkedBidId: directBid.id },
+            ...(directBid.bidNumber ? [{ referenceNo: directBid.bidNumber }] : [])
+          ]
+        },
+        select: { id: true, auctionCode: true }
+      }).catch(() => []);
+      const linkedAuctionIds = linkedAuctions.map((a: any) => a.id);
+
+      const poOrConditions: any[] = [
+        { bidId: directBid.id },
+        ...(awardIds.length > 0 ? [{ sourceType: 'procurement_bid_award', sourceId: { in: awardIds } }] : []),
+        ...(linkedAuctionIds.length > 0 ? [{ sourceType: 'auction', sourceId: { in: linkedAuctionIds } }] : [])
+      ];
+
+      const pos = await (prisma as any).purchaseOrder.findMany({
+        where: { OR: poOrConditions },
+        include: {
+          invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+          grns: { include: { items: true } },
+          items: true
+        },
+        orderBy: { createdAt: 'desc' }
+      }).catch(() => []);
+
+      if (pos.length > 0) {
         (serialized as any).purchaseOrders = pos;
         (serialized as any).activeOrder = pos[0] || null;
         if (serialized.awards && Array.isArray(serialized.awards)) {

@@ -3754,10 +3754,41 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     assertAuctionManager(req, auction);
 
-    // Determine winner: either specified participant or current rank 1
-    const winner = payload.participantId
+    // Determine winner: either specified participant or fallback to matching seller or current rank 1
+    let winner = payload.participantId
       ? await db.auctionParticipant.findFirst({ where: { id: payload.participantId, auctionId: id } })
-      : await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
+      : null;
+
+    if (!winner && payload.participantId) {
+      // It might be a ProcurementBidParticipation id from a linked bid
+      const bidPart = await db.procurementBidParticipation.findUnique({
+        where: { id: payload.participantId },
+        select: { sellerId: true, seller: { select: { organizationId: true } } }
+      }).catch(() => null);
+
+      if (bidPart) {
+        winner = await db.auctionParticipant.findFirst({
+          where: {
+            auctionId: id,
+            OR: [
+              ...(bidPart.sellerId ? [{ sellerUserId: bidPart.sellerId }] : []),
+              ...(bidPart.seller?.organizationId ? [{ sellerOrgId: bidPart.seller.organizationId }] : [])
+            ]
+          }
+        });
+      }
+    }
+
+    if (!winner) {
+      winner = await db.auctionParticipant.findFirst({ where: { auctionId: id, currentRank: 1 } });
+    }
+
+    if (!winner) {
+      winner = await db.auctionParticipant.findFirst({
+        where: { auctionId: id },
+        orderBy: [{ lastBidAmount: 'asc' }, { id: 'asc' }]
+      });
+    }
 
     if (!winner) {
       throw new ApiError(400, 'No qualifying participant found for this auction', 'NO_WINNER_FOUND');
@@ -3785,9 +3816,13 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     // Check if a Purchase Order already exists for this auction or linked procurement bid
     const bidAwards = auction.linkedBidId ? await db.procurementBidAward.findMany({
       where: { bidId: auction.linkedBidId },
-      select: { id: true }
+      select: { id: true, sellerId: true, seller: { select: { organizationId: true } } }
     }) : [];
     const bidAwardIds = bidAwards.map((a: any) => a.id);
+    const matchingBidAward = bidAwards.find((a: any) =>
+      a.sellerId === sellerUserId ||
+      (winner.sellerOrgId && a.seller?.organizationId === winner.sellerOrgId)
+    );
 
     let po = await db.purchaseOrder.findFirst({
       where: {
@@ -3827,6 +3862,7 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
           sourceId: auction.id,
           metadata: {
             bidId: auction.linkedBidId || null,
+            awardId: matchingBidAward?.id || null,
             auctionId: auction.id,
             auctionCode: auction.auctionCode,
             winningBid: Number(winningAmount),
@@ -3939,6 +3975,21 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       type: 'purchase_order',
       redirectUrl: `/seller/orders?orderId=${po.id}`
     }).catch(() => undefined);
+
+    // Invalidate caches and broadcast lifecycle updates across linked bids and auction
+    try {
+      if (auction.linkedBidId) {
+        invalidateBidCaches(auction.linkedBidId).catch(() => {});
+        broadcastToProcurement(auction.linkedBidId, { type: 'PROCUREMENT_UPDATED', procurementId: auction.linkedBidId, status: 'PO_GENERATED', timestamp: new Date().toISOString() });
+      }
+      if (auction.id) {
+        invalidateBidCaches(auction.id).catch(() => {});
+        broadcastToAuction(auction.id, { type: 'REVERSE_AUCTION_STATUS_CHANGED', auctionId: auction.id, status: 'COMPLETED', timestamp: new Date().toISOString() });
+      }
+      if (auction.auctionCode) {
+        invalidateBidCaches(auction.auctionCode).catch(() => {});
+      }
+    } catch {}
 
     return apiResponse.created(res, {
       success: true,

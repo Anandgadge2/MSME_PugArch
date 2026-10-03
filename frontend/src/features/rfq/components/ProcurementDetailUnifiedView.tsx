@@ -6017,18 +6017,41 @@ export function ProcurementDetailUnifiedView(
     null;
 
   const { data: fetchedOrder } = useQuery({
-    queryKey: ["procurement-active-order", targetId, activeAward?.id],
+    queryKey: ["procurement-active-order", targetId, activeAward?.id, linkedAuction?.id],
     queryFn: async () => {
       try {
         const res: any = await getApi(`/api/orders/procurement?take=20${targetId ? `&bidId=${targetId}` : ""}`);
         const list = Array.isArray(res) ? res : res?.items || res?.data || [];
         return (
-          list.find(
-            (o: any) =>
-              String(o.procurementBidId || o.bidId || o.requirementId) ===
-                String(targetId) ||
-              (activeAward?.id && String(o.awardId || o.sourceId) === String(activeAward.id)),
-          ) || null
+          list.find((o: any) => {
+            const matchesBid =
+              String(o.procurementBidId || o.bidId || o.requirementId) === String(targetId) ||
+              String(o.procurementBidId || o.bidId || o.requirementId) === String(props.id) ||
+              String(o.procurementBidId || o.bidId || o.requirementId) === String(props.displayId) ||
+              (o.metadata?.bidId && String(o.metadata.bidId) === String(targetId));
+
+            const matchesAward =
+              activeAward?.id &&
+              (String(o.awardId || o.sourceId) === String(activeAward.id) ||
+                (o.metadata?.awardId && String(o.metadata.awardId) === String(activeAward.id)));
+
+            const matchesLinkedAuction =
+              linkedAuction &&
+              (String(o.sourceId) === String(linkedAuction.id) ||
+                String(o.auctionId) === String(linkedAuction.id) ||
+                String(o.auctionCode) === String(linkedAuction.auctionCode) ||
+                (o.metadata?.auctionId && String(o.metadata.auctionId) === String(linkedAuction.id)) ||
+                (o.metadata?.auctionCode && String(o.metadata.auctionCode) === String(linkedAuction.auctionCode)) ||
+                (o.notes && String(o.notes).includes(String(linkedAuction.id))));
+
+            const matchesAuctionTarget =
+              o.sourceType === "auction" &&
+              (String(o.sourceId) === String(targetId) ||
+                String(o.sourceId) === String(props.rawBid?.auctionId || props.rawBid?.id) ||
+                (o.metadata?.auctionId && String(o.metadata.auctionId) === String(targetId)));
+
+            return Boolean(matchesBid || matchesAward || matchesLinkedAuction || matchesAuctionTarget);
+          }) || null
         );
       } catch {
         return null;
@@ -6038,7 +6061,7 @@ export function ProcurementDetailUnifiedView(
     staleTime: 4000,
     refetchInterval: (query) => {
       const ord = query.state.data;
-      const st = String(ord?.status || ord?.poStatus || "").toLowerCase();
+      const st = String(ord?.status || ord?.poStatus || ord?.orderStatus || "").toLowerCase();
       if (["closed", "cancelled", "completed", "paid"].includes(st)) return false;
       return 6000;
     },
@@ -6052,7 +6075,11 @@ export function ProcurementDetailUnifiedView(
   }, [fetchedOrder, localCreatedOrder, directActiveOrder, localAcceptedPO]);
 
   const rawOrderStatus = String(
-    effectiveActiveOrder?.status || effectiveActiveOrder?.poStatus || "",
+    effectiveActiveOrder?.status ||
+    effectiveActiveOrder?.poStatus ||
+    effectiveActiveOrder?.orderStatus ||
+    effectiveActiveOrder?.lifecycleStatus ||
+    "",
   ).toLowerCase();
 
   const isPOAccepted = Boolean(
@@ -6528,13 +6555,12 @@ export function ProcurementDetailUnifiedView(
   const handleGeneratePOFromBanner = async (awardId: string) => {
     try {
       setIsIssuingPOFromBanner(true);
-      const isReverseAuction =
+      const isExplicitAuction =
         props.procurementType === "REVERSE_AUCTION" ||
-        String(targetId).toUpperCase().startsWith("RA-") ||
-        Boolean(linkedAuction);
+        String(targetId).toUpperCase().startsWith("RA-");
 
       let created: any = null;
-      if (isReverseAuction) {
+      if (isExplicitAuction) {
         const auctionIdToUse = linkedAuction?.id || targetId;
         const res = await reverseAuctionApi.acceptAndGeneratePo(auctionIdToUse, {
           participantId: activeAward?.participationId ? Number(activeAward.participationId) : undefined,
@@ -6542,8 +6568,22 @@ export function ProcurementDetailUnifiedView(
         });
         created = res?.purchaseOrder || res;
       } else {
-        const res: any = await procurementBidApi.generatePO(targetId, { awardId });
-        created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
+        // Tender / Rate Contract: First attempt direct tender PO generation with awardId
+        try {
+          const res: any = await procurementBidApi.generatePO(targetId, { awardId });
+          created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
+        } catch (tenderErr: any) {
+          // If tender PO creation fails and a linked auction exists, fallback to reverse auction PO generation
+          if (linkedAuction?.id) {
+            const res = await reverseAuctionApi.acceptAndGeneratePo(linkedAuction.id, {
+              participantId: activeAward?.participationId ? Number(activeAward.participationId) : undefined,
+              remarks: "Purchase Order issued from Procurement Highway"
+            });
+            created = res?.purchaseOrder || res;
+          } else {
+            throw tenderErr;
+          }
+        }
       }
 
       toast.success(
@@ -12025,8 +12065,7 @@ export function ProcurementDetailUnifiedView(
 
           {/* Buyer: Purchase Order Issued & Active */}
           {isBuyerSide &&
-            activeAward &&
-            effectiveActiveOrder && (
+            Boolean(effectiveActiveOrder) && (
               <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-2.5">
@@ -12063,10 +12102,12 @@ export function ProcurementDetailUnifiedView(
                           <>
                             Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally accepted by{" "}
                             <strong className="text-slate-900 font-bold">
-                              {activeAward.sellerName ||
-                                activeAward.seller?.name ||
-                                activeAward.awardedSellerName ||
-                                activeAward.sellerOrganization?.name ||
+                              {activeAward?.sellerName ||
+                                activeAward?.seller?.name ||
+                                activeAward?.awardedSellerName ||
+                                activeAward?.sellerOrganization?.name ||
+                                effectiveActiveOrder?.seller?.name ||
+                                effectiveActiveOrder?.seller?.organization?.organizationName ||
                                 "Awarded Supplier"}
                             </strong>{" "}
                             for{" "}
@@ -12084,10 +12125,12 @@ export function ProcurementDetailUnifiedView(
                           <>
                             Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been formally issued to{" "}
                             <strong className="text-slate-900 font-bold">
-                              {activeAward.sellerName ||
-                                activeAward.seller?.name ||
-                                activeAward.awardedSellerName ||
-                                activeAward.sellerOrganization?.name ||
+                              {activeAward?.sellerName ||
+                                activeAward?.seller?.name ||
+                                activeAward?.awardedSellerName ||
+                                activeAward?.sellerOrganization?.name ||
+                                effectiveActiveOrder?.seller?.name ||
+                                effectiveActiveOrder?.seller?.organization?.organizationName ||
                                 "Awarded Supplier"}
                             </strong>{" "}
                             for{" "}

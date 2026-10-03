@@ -11,6 +11,8 @@ import { getProcurementModeSettings } from '../procurementMode/procurement-mode.
 import { logger } from '../../config/logger.js';
 import { getOrGeneratePurchaseOrderPdfBuffer } from '../../services/invoice-pdf.service.js';
 import { formatRefId } from '../../utils/refIdUtils.js';
+import { broadcastToAuction, broadcastToProcurement } from '../../services/websocket.service.js';
+import { invalidateBidCaches } from './procurement-bid.routes.js';
 
 const db = prisma as any;
 
@@ -152,7 +154,7 @@ export const loadProcurementOrder = async (actor: AuthenticatedUser, orderId: nu
 };
 
 export const listProcurementOrders = async (actor: AuthenticatedUser, query: any = {}) => {
-  const where: any = { sourceType: 'procurement_bid_award' };
+  const where: any = { sourceType: { in: ['procurement_bid_award', 'auction'] } };
   if (!isAdmin(actor)) {
     if (actor.role === 'buyer') {
       where.buyerId = Number(actor.id);
@@ -169,13 +171,69 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
   if (query.buyerId) where.buyerId = Number(query.buyerId);
   if (query.sellerId) where.sellerId = Number(query.sellerId);
   if (query.awardId) where.sourceId = Number(query.awardId);
+
+  let bidOrConditions: any[] = [];
   if (query.bidId) {
-    const rawBidVal = Number(query.bidId);
-    if (!isNaN(rawBidVal)) {
-      where.OR = [
-        { bidId: rawBidVal },
-        { sourceId: { in: (await db.procurementBidAward.findMany({ where: { bidId: rawBidVal }, select: { id: true } })).map((a: any) => a.id) } }
-      ];
+    const rawBidStr = String(query.bidId).trim();
+    const rawBidNum = Number(rawBidStr);
+    const validNumericId = (!isNaN(rawBidNum) && rawBidNum > 0 && rawBidNum <= 2147483647) ? rawBidNum : null;
+
+    const [matchingBid, matchingAuction] = await Promise.all([
+      db.procurementBid.findFirst({
+        where: {
+          OR: [
+            { bidNumber: rawBidStr },
+            ...(validNumericId ? [{ id: validNumericId }] : [])
+          ]
+        },
+        select: { id: true, bidNumber: true }
+      }).catch(() => null),
+      db.auction.findFirst({
+        where: {
+          OR: [
+            { auctionCode: rawBidStr },
+            { referenceNo: rawBidStr },
+            ...(validNumericId ? [{ id: validNumericId }] : [])
+          ]
+        },
+        select: { id: true, auctionCode: true, linkedBidId: true }
+      }).catch(() => null)
+    ]);
+
+    const resolvedBidId = matchingBid?.id || matchingAuction?.linkedBidId || validNumericId;
+    const resolvedAuctionId = matchingAuction?.id || validNumericId;
+
+    const awardIds: number[] = resolvedBidId ? (await db.procurementBidAward.findMany({
+      where: { bidId: resolvedBidId },
+      select: { id: true }
+    }).catch(() => [])).map((a: any) => a.id) : [];
+
+    const auctionIds: number[] = resolvedAuctionId ? [resolvedAuctionId] : [];
+    if (resolvedBidId) {
+      const linkedAuctions = await db.auction.findMany({
+        where: {
+          OR: [
+            { linkedBidId: resolvedBidId },
+            ...(matchingBid?.bidNumber ? [{ referenceNo: matchingBid.bidNumber }] : [])
+          ]
+        },
+        select: { id: true }
+      }).catch(() => []);
+      auctionIds.push(...linkedAuctions.map((a: any) => a.id));
+    }
+
+    if (resolvedBidId) {
+      bidOrConditions.push({ bidId: resolvedBidId });
+    }
+    if (awardIds.length > 0) {
+      bidOrConditions.push({ sourceType: 'procurement_bid_award', sourceId: { in: awardIds } });
+    }
+    if (auctionIds.length > 0) {
+      bidOrConditions.push({ sourceType: 'auction', sourceId: { in: auctionIds } });
+    }
+    if (rawBidStr) {
+      bidOrConditions.push({ poNumber: { contains: rawBidStr, mode: 'insensitive' } });
+      bidOrConditions.push({ title: { contains: rawBidStr, mode: 'insensitive' } });
     }
   }
 
@@ -195,14 +253,23 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
     }
   }
 
+  let searchConditions: any[] = [];
   if (query.search) {
     const s = String(query.search).trim();
-    where.OR = [
+    searchConditions = [
       { poNumber: { contains: s, mode: 'insensitive' } },
       { title: { contains: s, mode: 'insensitive' } },
       { buyer: { name: { contains: s, mode: 'insensitive' } } },
       { seller: { name: { contains: s, mode: 'insensitive' } } },
     ];
+  }
+
+  if (bidOrConditions.length > 0 && searchConditions.length > 0) {
+    where.AND = [{ OR: bidOrConditions }, { OR: searchConditions }];
+  } else if (bidOrConditions.length > 0) {
+    where.OR = bidOrConditions;
+  } else if (searchConditions.length > 0) {
+    where.OR = searchConditions;
   }
 
   const orderBy: any = {};
@@ -237,7 +304,7 @@ export const listProcurementOrders = async (actor: AuthenticatedUser, query: any
 
   let metadata: any = undefined;
   if (query.withMetadata === 'true') {
-    const baseWhere: any = { sourceType: 'procurement_bid_award' };
+    const baseWhere: any = { sourceType: { in: ['procurement_bid_award', 'auction'] } };
     if (!isAdmin(actor)) {
       if (actor.role === 'buyer') baseWhere.buyerId = Number(actor.id);
       else if (actor.role === 'seller') baseWhere.sellerId = { in: await getSellerUserIdsForActor(actor) };
@@ -868,6 +935,31 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
       });
     }
 
+    if (po.sourceType === 'auction' && po.sourceId) {
+      await tx.auction.update({
+        where: { id: Number(po.sourceId) },
+        data: {
+          status: 'COMPLETED',
+          statusEnum: 'AWARDED',
+          finalizedAt: new Date()
+        }
+      }).catch(() => null);
+
+      await tx.auctionParticipant.updateMany({
+        where: {
+          auctionId: Number(po.sourceId),
+          OR: [
+            { sellerUserId: po.sellerId },
+            ...(po.seller?.organizationId ? [{ sellerOrgId: po.seller.organizationId }] : [])
+          ]
+        },
+        data: {
+          status: 'ACCEPTED',
+          acceptedAt: now()
+        }
+      }).catch(() => null);
+    }
+
     return { purchaseOrder: updatedPO, delivery: updatedDelivery };
   });
 
@@ -900,6 +992,22 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
     type: 'purchase_order',
     redirectUrl: `/buyer/orders?orderId=${po.id}`
   }).catch(() => undefined);
+
+  try {
+    if (bidId) {
+      invalidateBidCaches(bidId).catch(() => {});
+      broadcastToProcurement(Number(bidId), { type: 'PROCUREMENT_UPDATED', procurementId: Number(bidId), status: 'IN_PROGRESS', timestamp: new Date().toISOString() });
+    }
+    const targetAuctionId = po.sourceType === 'auction' ? po.sourceId : (po.metadata as any)?.auctionId;
+    if (targetAuctionId) {
+      invalidateBidCaches(targetAuctionId).catch(() => {});
+      broadcastToAuction(Number(targetAuctionId), { type: 'REVERSE_AUCTION_STATUS_CHANGED', auctionId: Number(targetAuctionId), status: 'COMPLETED', timestamp: new Date().toISOString() });
+    }
+    const targetAuctionCode = (po.metadata as any)?.auctionCode;
+    if (targetAuctionCode) {
+      invalidateBidCaches(targetAuctionCode).catch(() => {});
+    }
+  } catch {}
 
   return result;
 };
