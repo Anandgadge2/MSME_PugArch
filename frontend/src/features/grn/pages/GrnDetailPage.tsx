@@ -296,13 +296,16 @@ export default function GrnDetailPage({ id }: Props) {
                         onClick={() => {
                             const poId = grn.purchaseOrderId || grn.purchaseOrder?.id;
                             const amt = grn.purchaseOrder?.amount || 0;
-                            const invRoute = user?.role === 'buyer' ? '/buyer/invoices' : '/seller/invoices';
-                            router.push(`${invRoute}?convertPoId=${poId}&amount=${amt}`);
+                            if (user?.role === 'buyer') {
+                                router.push('/buyer/invoices');
+                            } else {
+                                router.push(`/seller/invoices?convertPoId=${poId}&amount=${amt}`);
+                            }
                         }}
                         className="border-slate-300 bg-white text-slate-800 hover:bg-slate-50 hover:text-emerald-800 hover:border-emerald-400 h-9 sm:h-10 text-xs font-bold shadow-2xs gap-1.5 transition-all cursor-pointer"
                     >
                         <Receipt className="h-3.5 w-3.5 text-emerald-600" />
-                        View / Create Invoice
+                        {user?.role === 'buyer' ? 'View Invoices' : 'View / Create Invoice'}
                     </Button>
 
 

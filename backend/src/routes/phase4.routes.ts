@@ -9463,6 +9463,10 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
       throw new ApiError(404, 'Submitted quotation not found', 'QUOTATION_NOT_FOUND');
     }
 
+    if (!isAdmin(req) && quoteResp.sellerUserId !== userId(req)) {
+      throw new ApiError(403, 'You are not the seller of this quotation', 'SELLER_REQUIRED');
+    }
+
     let po = await db.purchaseOrder.findFirst({
       where: {
         sellerId: quoteResp.sellerUserId,

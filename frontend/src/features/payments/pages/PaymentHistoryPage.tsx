@@ -305,6 +305,7 @@ function PaymentRowActionCell({
 }
 
 export default function PaymentHistoryPage({ admin = false }: { admin?: boolean }) {
+  const { user } = useAuth();
   const { hasPermission } = useOrgRole();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
@@ -628,7 +629,7 @@ export default function PaymentHistoryPage({ admin = false }: { admin?: boolean 
         </div>
 
         <div className="flex items-center gap-2">
-          {hasPermission('payment.initiate') && (
+          {user?.role === 'buyer' && hasPermission('payment.initiate') && (
             <Button
               onClick={() => { setSelectedProofPayment(null); setUploadProofModalOpen(true); }}
               className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0b2445] text-white shadow-sm"

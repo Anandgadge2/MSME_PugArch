@@ -196,15 +196,18 @@ function InvoiceRowActionCell({
 
   const state = statusOf(invoice);
   const isSubmitted = state === 'submitted';
-  const isPayable = state === 'approved' || state === 'payment_initiated';
   const hasSlip = Boolean(
     (invoice as any).paymentSlipFileId ||
     (invoice as any).paymentSlipFile ||
     (invoice as any).paymentReference ||
     (invoice as any).offlineProof ||
+    (invoice as any).paymentReceiptFileAssetId ||
     state === 'paid' ||
-    state === 'payment_initiated'
+    state === 'payment_initiated' ||
+    state === 'payment_submitted' ||
+    state === 'payment_under_verification'
   );
+  const isPayable = (state === 'approved' || state === 'payment_initiated') && !hasSlip;
 
   return (
     <div className="relative inline-flex items-center justify-end" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
@@ -782,7 +785,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         setDebouncedSearch(searchParam);
       }
 
-      if (convertPoId && purchaseOrders && purchaseOrders.length > 0) {
+      if ((role === 'seller' || user?.role === 'seller') && convertPoId && purchaseOrders && purchaseOrders.length > 0) {
         const poId = Number(convertPoId);
         setSelectedPurchaseOrderId(poId);
         if (amount) {
@@ -1660,88 +1663,90 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         </>
       )}
 
-      {/* Enterprise Create Invoice Modal */}
-      <CreateInvoiceModal
-        open={createInvoiceModalOpen}
-        onClose={closeCreateInvoiceModal}
-        onSubmit={handleSubmitCreateInvoice}
-        submitting={createInvoiceSubmitting}
-        error={createInvoiceError}
-        sourceType={createInvoiceSourceType}
-        onSourceTypeChange={type => {
-          setCreateInvoiceSourceType(type);
-          if (type === 'po') setSelectedQuotationId(null);
-          else setSelectedPurchaseOrderId(null);
-        }}
-        search={purchaseOrderSearch}
-        onSearchChange={setPurchaseOrderSearch}
-        selectedPurchaseOrderId={selectedPurchaseOrderId}
-        onSelectPurchaseOrder={po => {
-          setSelectedPurchaseOrderId(po.id);
-          // Calculate the true taxable base (excluding GST):
-          let taxableBase = 0;
-          if (po.metadata && typeof po.metadata === 'object') {
-            taxableBase = Number(po.metadata.baseAmount || po.metadata.taxableAmount || po.metadata.taxableBase || 0);
-          }
-          if (!taxableBase && Array.isArray(po.items) && po.items.length > 0) {
-            taxableBase = po.items.reduce((sum: number, it: any) => {
-              const lineTaxable = Number(it.taxableAmount || (it.unitPrice && it.quantity ? Number(it.unitPrice) * Number(it.quantity) : 0));
-              return sum + lineTaxable;
-            }, 0);
-          }
-          if (!taxableBase) {
-            const gross = Number(po.totalValue || po.amount || 0);
-            const gstRate = Number(invoiceGstRate || po.metadata?.gstRate || 18);
-            if (gross > 0) {
-              taxableBase = Number((gross / (1 + gstRate / 100)).toFixed(2));
+      {/* Enterprise Create Invoice Modal: Sellers Only */}
+      {(role === 'seller' || user?.role === 'seller') && (
+        <CreateInvoiceModal
+          open={createInvoiceModalOpen}
+          onClose={closeCreateInvoiceModal}
+          onSubmit={handleSubmitCreateInvoice}
+          submitting={createInvoiceSubmitting}
+          error={createInvoiceError}
+          sourceType={createInvoiceSourceType}
+          onSourceTypeChange={type => {
+            setCreateInvoiceSourceType(type);
+            if (type === 'po') setSelectedQuotationId(null);
+            else setSelectedPurchaseOrderId(null);
+          }}
+          search={purchaseOrderSearch}
+          onSearchChange={setPurchaseOrderSearch}
+          selectedPurchaseOrderId={selectedPurchaseOrderId}
+          onSelectPurchaseOrder={po => {
+            setSelectedPurchaseOrderId(po.id);
+            // Calculate the true taxable base (excluding GST):
+            let taxableBase = 0;
+            if (po.metadata && typeof po.metadata === 'object') {
+              taxableBase = Number(po.metadata.baseAmount || po.metadata.taxableAmount || po.metadata.taxableBase || 0);
             }
-          }
-          if (taxableBase > 0) {
-            setInvoiceAmount(String(taxableBase));
-          } else {
-            const fallbackAmt = Number(po.totalValue || po.amount || 0);
-            if (fallbackAmt > 0) setInvoiceAmount(String(fallbackAmt));
-          }
-          setPurchaseOrderSearch('');
-        }}
-        selectedQuotationId={selectedQuotationId}
-        onSelectQuotation={q => {
-          setSelectedQuotationId(q.id);
-          // Calculate taxable base for quotation:
-          let taxableBase = Number(q.baseAmount || q.taxableAmount || 0);
-          if (!taxableBase) {
-            const offeredRate = Number(q.offeredPrice || q.unitPrice || 0);
-            const qty = Number(q.offeredQuantity || q.quantity || 1);
-            const totalVal = (offeredRate * qty) || Number(q.quotedAmount || 0);
-            if (q.taxAmount || q.gstAmount) {
-              taxableBase = totalVal - Number(q.taxAmount || q.gstAmount);
+            if (!taxableBase && Array.isArray(po.items) && po.items.length > 0) {
+              taxableBase = po.items.reduce((sum: number, it: any) => {
+                const lineTaxable = Number(it.taxableAmount || (it.unitPrice && it.quantity ? Number(it.unitPrice) * Number(it.quantity) : 0));
+                return sum + lineTaxable;
+              }, 0);
+            }
+            if (!taxableBase) {
+              const gross = Number(po.totalValue || po.amount || 0);
+              const gstRate = Number(invoiceGstRate || po.metadata?.gstRate || 18);
+              if (gross > 0) {
+                taxableBase = Number((gross / (1 + gstRate / 100)).toFixed(2));
+              }
+            }
+            if (taxableBase > 0) {
+              setInvoiceAmount(String(taxableBase));
             } else {
-              const rate = Number(q.gstRate || invoiceGstRate || 18);
-              taxableBase = Number((totalVal / (1 + rate / 100)).toFixed(2));
+              const fallbackAmt = Number(po.totalValue || po.amount || 0);
+              if (fallbackAmt > 0) setInvoiceAmount(String(fallbackAmt));
             }
-          }
-          if (taxableBase > 0) setInvoiceAmount(String(taxableBase));
-          setPurchaseOrderSearch('');
-        }}
-        acceptedPurchaseOrders={acceptedPurchaseOrders}
-        filteredPurchaseOrders={filteredPurchaseOrders}
-        purchaseOrdersLoading={purchaseOrdersLoading}
-        selectedPurchaseOrder={selectedPurchaseOrder}
-        submittedQuotations={submittedQuotations}
-        filteredQuotations={filteredQuotations}
-        quotationsLoading={quotationsLoading}
-        selectedQuotation={selectedQuotation}
-        invoiceAmount={invoiceAmount}
-        onInvoiceAmountChange={setInvoiceAmount}
-        invoiceGstRate={invoiceGstRate}
-        onInvoiceGstRateChange={setInvoiceGstRate}
-        invoiceTdsRate={invoiceTdsRate}
-        onInvoiceTdsRateChange={setInvoiceTdsRate}
-        invoiceOtherTax={invoiceOtherTax}
-        onInvoiceOtherTaxChange={setInvoiceOtherTax}
-        invoiceInterstate={invoiceInterstate}
-        onInvoiceInterstateChange={setInvoiceInterstate}
-      />
+            setPurchaseOrderSearch('');
+          }}
+          selectedQuotationId={selectedQuotationId}
+          onSelectQuotation={q => {
+            setSelectedQuotationId(q.id);
+            // Calculate taxable base for quotation:
+            let taxableBase = Number(q.baseAmount || q.taxableAmount || 0);
+            if (!taxableBase) {
+              const offeredRate = Number(q.offeredPrice || q.unitPrice || 0);
+              const qty = Number(q.offeredQuantity || q.quantity || 1);
+              const totalVal = (offeredRate * qty) || Number(q.quotedAmount || 0);
+              if (q.taxAmount || q.gstAmount) {
+                taxableBase = totalVal - Number(q.taxAmount || q.gstAmount);
+              } else {
+                const rate = Number(q.gstRate || invoiceGstRate || 18);
+                taxableBase = Number((totalVal / (1 + rate / 100)).toFixed(2));
+              }
+            }
+            if (taxableBase > 0) setInvoiceAmount(String(taxableBase));
+            setPurchaseOrderSearch('');
+          }}
+          acceptedPurchaseOrders={acceptedPurchaseOrders}
+          filteredPurchaseOrders={filteredPurchaseOrders}
+          purchaseOrdersLoading={purchaseOrdersLoading}
+          selectedPurchaseOrder={selectedPurchaseOrder}
+          submittedQuotations={submittedQuotations}
+          filteredQuotations={filteredQuotations}
+          quotationsLoading={quotationsLoading}
+          selectedQuotation={selectedQuotation}
+          invoiceAmount={invoiceAmount}
+          onInvoiceAmountChange={setInvoiceAmount}
+          invoiceGstRate={invoiceGstRate}
+          onInvoiceGstRateChange={setInvoiceGstRate}
+          invoiceTdsRate={invoiceTdsRate}
+          onInvoiceTdsRateChange={setInvoiceTdsRate}
+          invoiceOtherTax={invoiceOtherTax}
+          onInvoiceOtherTaxChange={setInvoiceOtherTax}
+          invoiceInterstate={invoiceInterstate}
+          onInvoiceInterstateChange={setInvoiceInterstate}
+        />
+      )}
 
       {selectedInvoice && (
         <div id="printable-invoice-overlay" className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md">
@@ -1980,7 +1985,20 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
 
                         {(() => {
                           const invState = statusOf(selectedInvoice);
-                          const isPaid = invState === 'paid';
+                          const hasSlip = Boolean(
+                            (selectedInvoice as any).paymentSlipFileId ||
+                            (selectedInvoice as any).paymentSlipFile ||
+                            (selectedInvoice as any).paymentReference ||
+                            (selectedInvoice as any).offlineProof ||
+                            (selectedInvoice as any).paymentReceiptFileAssetId ||
+                            (detailedInvoice as any)?.paymentSlipFileId ||
+                            (detailedInvoice as any)?.paymentReceiptFileAssetId ||
+                            (detailedInvoice as any)?.offlineProof ||
+                            invState === 'paid' ||
+                            invState === 'payment_submitted' ||
+                            invState === 'payment_under_verification'
+                          );
+                          const isPaid = invState === 'paid' || hasSlip;
                           const isBuyer = role === 'buyer' || user?.role === 'buyer';
                           const isSubmitted = invState === 'submitted';
                           const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
@@ -1993,7 +2011,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                                 className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
                               >
                                 <ShieldCheck className="h-3 w-3" />
-                                <span>View Payment Proof (Paid)</span>
+                                <span>{invState === 'paid' ? 'View Payment Proof (Paid)' : 'View Payment Proof'}</span>
                               </Button>
                             );
                           }

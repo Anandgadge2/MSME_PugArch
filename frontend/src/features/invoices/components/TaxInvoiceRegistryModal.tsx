@@ -473,9 +473,19 @@ export function TaxInvoiceRegistryModal({
   if (!isOpen) return null;
 
   const rawStatus = String(invoice?.invoiceStatus || invoice?.status || '').toLowerCase();
-  const isPaid = rawStatus === 'paid';
-  const isSubmitted = rawStatus === 'submitted' || rawStatus === 'draft';
-  const isApproved = ['approved', 'payment_initiated', 'paid'].includes(rawStatus);
+  const hasSlip = Boolean(
+    (invoice as any)?.paymentSlipFileId ||
+    (invoice as any)?.paymentSlipFile ||
+    (invoice as any)?.paymentReference ||
+    (invoice as any)?.offlineProof ||
+    (invoice as any)?.paymentReceiptFileAssetId ||
+    rawStatus === 'paid' ||
+    rawStatus === 'payment_submitted' ||
+    rawStatus === 'payment_under_verification'
+  );
+  const isPaid = rawStatus === 'paid' || hasSlip;
+  const isSubmitted = (rawStatus === 'submitted' || rawStatus === 'draft') && !hasSlip;
+  const isApproved = (['approved', 'payment_initiated', 'paid', 'payment_submitted', 'payment_under_verification'].includes(rawStatus) || isPaid);
   const isBuyer = user?.role === 'buyer' || user?.role === 'admin';
   const bidId = invoice?.bidId || invoice?.purchaseOrder?.bidId || invoice?.purchaseOrder?.sourceId;
   const poNumber = invoice?.purchaseOrder?.poNumber || invoice?.poNumber;
@@ -704,7 +714,7 @@ export function TaxInvoiceRegistryModal({
                         className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                       >
                         <ShieldCheck className="h-3.5 w-3.5" />
-                        <span>View Payment Proof (Paid)</span>
+                        <span>{rawStatus === 'paid' ? 'View Payment Proof (Paid)' : 'View Payment Proof'}</span>
                       </Button>
                     );
                   }

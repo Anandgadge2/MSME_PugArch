@@ -243,7 +243,9 @@ export const fulfillmentWorkflow = {
 
   async createInvoice(actor: WorkflowActor, input: { purchaseOrderId: number; amount?: number; gstRate?: number; tdsRate?: number; interstate?: boolean; otherTaxRate?: number; items?: Array<Record<string, unknown>> }) {
     const po = await assertPOAccess(actor, input.purchaseOrderId);
-    if (actor.role !== 'admin' && po.sellerId !== actor.id) throw new ApiError(403, 'Seller access required', 'SELLER_REQUIRED');
+    if (actor.role !== 'admin' && (actor.role !== 'seller' || po.sellerId !== actor.id)) {
+      throw new ApiError(403, 'Seller access required to create invoice', 'SELLER_REQUIRED');
+    }
     const gstRate = input.gstRate ?? 18;
     const poGross = Number(po.amount || po.totalValue || 0);
     const metaBase = Number(po.metadata?.baseAmount || po.metadata?.taxableAmount || po.metadata?.quotationPricing?.subtotal || 0);

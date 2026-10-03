@@ -22,6 +22,7 @@ import { Button } from '../../../components/ui/button';
 import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
+import { useAuth } from '../../../hooks/useAuth';
 
 export interface PaymentReceiptUploadModalProps {
   isOpen: boolean;
@@ -64,6 +65,11 @@ export function PaymentReceiptUploadModal({
   payment,
   onSuccess
 }: PaymentReceiptUploadModalProps) {
+  const { user } = useAuth();
+
+  // Strict role enforcement: Sellers can NEVER upload payment proof
+  if (!isOpen || user?.role === 'seller') return null;
+
   const isGlobalSelectorMode = !invoice && !order && !payment;
 
   const [referenceType, setReferenceType] = useState<'PO' | 'INVOICE'>('PO');
@@ -102,11 +108,25 @@ export function PaymentReceiptUploadModal({
       if (!isMounted) return;
       if (ordersRes.status === 'fulfilled') {
         const list = normalizeList<any>(ordersRes.value);
-        setAvailableOrders(list);
+        // Only show orders that have not already completed payment or proof upload
+        const pendingOrders = list.filter((o: any) => {
+          const status = String(o.status || o.poStatus || '').toLowerCase();
+          const hasProof = Boolean(o.paymentSlipFileId || o.paymentSlip || o.offlineProof || o.paymentProof);
+          const isPaidOrSettled = ['paid', 'settled', 'completed', 'cancelled', 'rejected', 'payment_submitted'].includes(status) || String(o.paymentStatus || '').toLowerCase() === 'paid';
+          return !hasProof && !isPaidOrSettled;
+        });
+        setAvailableOrders(pendingOrders);
       }
       if (invoicesRes.status === 'fulfilled') {
         const list = normalizeList<any>(invoicesRes.value);
-        setAvailableInvoices(list);
+        // Only show invoices that are approved and have not already been paid or proof uploaded
+        const pendingInvoices = list.filter((i: any) => {
+          const status = String(i.status || i.invoiceStatus || '').toLowerCase();
+          const hasProof = Boolean(i.paymentSlipFileId || i.paymentSlipFile || i.offlineProof || i.paymentReceiptFileAssetId || i.paymentReference);
+          const isPaidOrClosed = ['paid', 'settled', 'cancelled', 'rejected', 'payment_submitted', 'payment_under_verification'].includes(status);
+          return !hasProof && !isPaidOrClosed;
+        });
+        setAvailableInvoices(pendingInvoices);
       }
       setLoadingEntities(false);
     });

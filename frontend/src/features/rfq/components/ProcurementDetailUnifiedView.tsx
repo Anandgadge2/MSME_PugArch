@@ -6461,11 +6461,19 @@ export function ProcurementDetailUnifiedView(
     const hasPaymentRecorded = Boolean(
       effectiveActiveOrder.paymentSlipFileId ||
       effectiveActiveOrder.paymentSlip ||
+      (effectiveActiveOrder as any).offlineProof ||
       (effectiveActiveOrder as any).paymentProof ||
+      String((effectiveActiveOrder as any).paymentStatus || '').toUpperCase() === 'UNDER_VERIFICATION' ||
+      String((effectiveActiveOrder as any).paymentStatus || '').toUpperCase() === 'PAYMENT_SUBMITTED' ||
+      String((effectiveActiveOrder as any).paymentStatus || '').toUpperCase() === 'PAID' ||
       allOrderInvoices.some((inv: any) =>
         inv.paymentSlipFileId ||
+        inv.paymentSlipFile ||
+        inv.offlineProof ||
+        inv.paymentReceiptFileAssetId ||
         inv.paymentReference ||
         String(inv.status || inv.invoiceStatus || '').toUpperCase() === 'PAYMENT_SUBMITTED' ||
+        String(inv.status || inv.invoiceStatus || '').toUpperCase() === 'PAYMENT_UNDER_VERIFICATION' ||
         String(inv.status || inv.invoiceStatus || '').toUpperCase() === 'PAID'
       )
     );
@@ -11206,9 +11214,9 @@ export function ProcurementDetailUnifiedView(
                 router.push("/grn");
               }
             }}
-            onOpenCreateInvoice={() => setIsCreateInvoiceOpen(true)}
-            onOpenPaymentModal={() => setIsPaymentModalOpen(true)}
-            onOpenSettlementModal={() => setIsConfirmSettlementOpen(true)}
+            onOpenCreateInvoice={!isBuyerSide ? () => setIsCreateInvoiceOpen(true) : undefined}
+            onOpenPaymentModal={isBuyerSide ? () => setIsPaymentModalOpen(true) : undefined}
+            onOpenSettlementModal={!isBuyerSide ? () => setIsConfirmSettlementOpen(true) : undefined}
             onOpenViewPaymentProof={() => setIsViewPaymentProofOpen(true)}
             onNavigateDelivery={async () => {
               if (activeGrn?.id) {
@@ -12963,7 +12971,7 @@ export function ProcurementDetailUnifiedView(
             />
           )}
 
-          {isCreateInvoiceOpen && (
+          {!isBuyerSide && isCreateInvoiceOpen && (
             <CreateInvoiceModal
               open={isCreateInvoiceOpen}
               onClose={() => setIsCreateInvoiceOpen(false)}
@@ -12999,7 +13007,7 @@ export function ProcurementDetailUnifiedView(
             />
           )}
 
-          {isPaymentModalOpen && (
+          {isBuyerSide && isPaymentModalOpen && (
             <RecordOrderPaymentModal
               isOpen={isPaymentModalOpen}
               onClose={() => setIsPaymentModalOpen(false)}
@@ -13012,7 +13020,7 @@ export function ProcurementDetailUnifiedView(
             />
           )}
 
-          {isConfirmSettlementOpen && (
+          {!isBuyerSide && isConfirmSettlementOpen && (
             <ConfirmOrderSettlementModal
               isOpen={isConfirmSettlementOpen}
               onClose={() => setIsConfirmSettlementOpen(false)}

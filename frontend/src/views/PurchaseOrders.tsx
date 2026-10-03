@@ -446,6 +446,43 @@ const OrderActionDropdown = ({
         const anyGrn = hasAnyGrn(order);
         const approvedGrn = hasApprovedGrn(order);
         const isPaid = String(order.status || '').toLowerCase().includes('paid');
+        const activeInvoice = (order as any).invoices?.find(
+          (inv: any) =>
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+            String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+        ) || (order as any).invoices?.[0];
+
+        const hasSlip = Boolean(
+          activeInvoice?.paymentSlipFileId ||
+          activeInvoice?.paymentSlipFile ||
+          (activeInvoice as any)?.offlineProof ||
+          (activeInvoice as any)?.paymentReceiptFileAssetId ||
+          (order as any).paymentSlipFileId ||
+          (order as any).paymentSlip ||
+          (order as any).offlineProof ||
+          (order as any).paymentProof
+        );
+
+        const hasPaymentRecorded = Boolean(
+          isPaid ||
+          hasSlip ||
+          activeInvoice?.paymentReference ||
+          String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
+          String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+          String(order.status || '').toLowerCase() === 'payment_submitted' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'paid' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'under_verification' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'payment_submitted' ||
+          (order as any).payments?.length > 0
+        );
+
+        const isPaymentDone = isPaid || hasPaymentRecorded || hasSlip;
+
+        const isSettled = Boolean(
+          activeInvoice?.settledAt ||
+          String(activeInvoice?.status || '').toLowerCase() === 'paid' ||
+          (isPaid && !hasSlip)
+        );
 
         return (
           <>
@@ -465,7 +502,7 @@ const OrderActionDropdown = ({
             )}
 
             {/* Generate GRN: ONLY visible when no GRN has been created yet */}
-            {!anyGrn && !approvedGrn && !isPaid && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(String(order.status || '').toLowerCase()) && (
+            {!anyGrn && !approvedGrn && !isPaymentDone && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(String(order.status || '').toLowerCase()) && (
               <button
                 type="button"
                 onClick={() => {
@@ -479,34 +516,45 @@ const OrderActionDropdown = ({
               </button>
             )}
 
-            {/* Pay Now / Upload Payment Proof: when GRN approved and not paid */}
-            {approvedGrn && !isPaid && isBuyer && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onRecordPayment?.(order);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
-              >
-                <CreditCard className="h-3.5 w-3.5 text-purple-600" />
-                <span>Pay Now / Upload Payment Proof</span>
-              </button>
-            )}
-
-            {/* View Payment Proof: when paid */}
-            {isPaid && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onViewPaymentSlip?.(order);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-              >
-                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                <span>View Payment Proof (Paid)</span>
-              </button>
+            {/* Buyer Payment Actions: STRICTLY mutually exclusive */}
+            {isBuyer && !isCancelled && (
+              <>
+                {isPaymentDone ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onViewPaymentSlip?.(order);
+                    }}
+                    onMouseEnter={() => {
+                      const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
+                    onFocus={() => {
+                      const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                    title="View uploaded payment proof"
+                  >
+                    <Receipt className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>View Payment Proof</span>
+                  </button>
+                ) : approvedGrn ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onRecordPayment?.(order);
+                    }}
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
+                    title="Pay now online or upload payment proof"
+                  >
+                    <CreditCard className="h-3.5 w-3.5 text-purple-600" />
+                    <span>Pay Now / Upload Payment Proof</span>
+                  </button>
+                ) : null}
+              </>
             )}
           </>
         );
@@ -536,6 +584,7 @@ const OrderActionDropdown = ({
           activeInvoice?.paymentSlipFileId ||
           activeInvoice?.paymentSlipFile ||
           (activeInvoice as any)?.offlineProof ||
+          (activeInvoice as any)?.paymentReceiptFileAssetId ||
           (order as any).paymentSlipFileId ||
           (order as any).paymentSlip ||
           (order as any).offlineProof ||
@@ -544,11 +593,18 @@ const OrderActionDropdown = ({
 
         const hasPaymentRecorded = Boolean(
           isPaid ||
+          hasSlip ||
           activeInvoice?.paymentReference ||
           String(activeInvoice?.status || '').toLowerCase() === 'payment_submitted' ||
           String(activeInvoice?.status || '').toLowerCase().includes('paid') ||
+          String(order.status || '').toLowerCase() === 'payment_submitted' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'paid' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'under_verification' ||
+          String((order as any).paymentStatus || '').toLowerCase() === 'payment_submitted' ||
           (order as any).payments?.length > 0
         );
+
+        const isPaymentDone = isPaid || hasPaymentRecorded || hasSlip;
 
         const isSettled = Boolean(
           activeInvoice?.settledAt ||
@@ -556,10 +612,24 @@ const OrderActionDropdown = ({
           (isPaid && !hasSlip)
         );
 
-        if (isBuyer && !isCancelled) {
+        if (isSeller && !isCancelled) {
           return (
             <>
-              {(hasSlip || hasPaymentRecorded || isPaid) ? (
+              {isPaymentDone && !isSettled && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onConfirmSettlement?.(order);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                  <span>Confirm Settlement</span>
+                </button>
+              )}
+
+              {isPaymentDone && (
                 <button
                   type="button"
                   onClick={() => {
@@ -578,61 +648,6 @@ const OrderActionDropdown = ({
                   title="View uploaded payment proof"
                 >
                   <Receipt className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>View Payment Proof</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onRecordPayment?.(order);
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-                  title="Pay now online or upload payment proof"
-                >
-                  <CreditCard className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Pay / Upload Payment Proof</span>
-                </button>
-              )}
-            </>
-          );
-        }
-
-        if (isSeller && !isCancelled) {
-          return (
-            <>
-              {(hasPaymentRecorded || hasSlip) && !isSettled && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onConfirmSettlement?.(order);
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                  <span>Confirm Settlement</span>
-                </button>
-              )}
-
-              {(hasPaymentRecorded || hasSlip) && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onViewPaymentSlip?.(order);
-                  }}
-                  onMouseEnter={() => {
-                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
-                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
-                  }}
-                  onFocus={() => {
-                    const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
-                    if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
-                  }}
-                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
-                >
-                  <Receipt className="h-3.5 w-3.5 text-indigo-600" />
                   <span>View Payment Proof</span>
                 </button>
               )}
@@ -2948,8 +2963,8 @@ export default function PurchaseOrders() {
                               </Button>
                             )}
 
-                            {/* Payment Actions: ONLY enabled after GRN is approved and order not settled */}
-                            {approvedGrn && !isSettled && (
+                            {/* Payment Actions: ONLY enabled after GRN is approved and NO payment has been submitted yet */}
+                            {approvedGrn && !hasPaymentRecorded && !hasSlip && !isPaid && !isSettled && (
                               <>
                                 <Button
                                   onClick={() => {
@@ -2966,7 +2981,7 @@ export default function PurchaseOrders() {
                             )}
 
                             {/* View Payment Proof: ONLY visible if proof is uploaded or payment recorded */}
-                            {(hasSlip || hasPaymentRecorded) && (
+                            {(hasSlip || hasPaymentRecorded || isPaid) && (
                               <Button
                                 variant="outline"
                                 onClick={() => setViewProofOrder(viewingOrder)}

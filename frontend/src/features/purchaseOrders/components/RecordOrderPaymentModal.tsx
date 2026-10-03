@@ -23,6 +23,7 @@ import { api } from '../../../lib/api';
 import { postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
+import { useAuth } from '../../../hooks/useAuth';
 
 export interface RecordOrderPaymentModalProps {
   isOpen: boolean;
@@ -39,6 +40,7 @@ export function RecordOrderPaymentModal({
   invoiceId: propInvoiceId,
   onSuccess
 }: RecordOrderPaymentModalProps) {
+  const { user } = useAuth();
   const activeInvoice = order?.invoices?.find(
     (inv: any) =>
       String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
@@ -46,7 +48,28 @@ export function RecordOrderPaymentModal({
   ) || order?.invoices?.[0];
 
   const rawInvStatus = String(activeInvoice?.status || activeInvoice?.invoiceStatus || '').toLowerCase();
+  const rawOrderStatus = String(order?.status || order?.poStatus || '').toLowerCase();
   const isInvoicePendingApproval = Boolean(activeInvoice && ['submitted', 'draft', 'created', 'pending'].includes(rawInvStatus));
+
+  const isPaymentAlreadyDone = Boolean(
+    rawOrderStatus.includes('paid') ||
+    rawOrderStatus === 'payment_submitted' ||
+    rawOrderStatus === 'settled' ||
+    rawInvStatus === 'paid' ||
+    rawInvStatus === 'payment_submitted' ||
+    rawInvStatus === 'payment_under_verification' ||
+    String((order as any)?.paymentStatus || '').toLowerCase() === 'paid' ||
+    String((order as any)?.paymentStatus || '').toLowerCase() === 'under_verification' ||
+    String((order as any)?.paymentStatus || '').toLowerCase() === 'payment_submitted' ||
+    (order as any)?.paymentSlipFileId ||
+    (order as any)?.offlineProof ||
+    (order as any)?.paymentProof ||
+    (order as any)?.paymentSlip ||
+    activeInvoice?.paymentSlipFileId ||
+    activeInvoice?.offlineProof ||
+    activeInvoice?.paymentReceiptFileAssetId ||
+    activeInvoice?.paymentReference
+  );
 
   const targetInvoiceId = propInvoiceId || activeInvoice?.id;
   const targetAmount = Number(
@@ -82,7 +105,8 @@ export function RecordOrderPaymentModal({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, submitting, onClose]);
 
-  if (!isOpen || !order) return null;
+  // Strict role enforcement: Only buyers (or admins) can pay / record payment proof
+  if (!isOpen || !order || user?.role === 'seller') return null;
 
   const handleFileUpload = async (selectedFile: File) => {
     if (!selectedFile) return;
@@ -236,7 +260,30 @@ export function RecordOrderPaymentModal({
             </button>
           </div>
 
-          {isInvoicePendingApproval ? (
+          {isPaymentAlreadyDone ? (
+            <div className="mt-5 rounded-2xl border border-emerald-300 bg-emerald-50/90 p-6 text-center space-y-3.5 animate-in fade-in duration-200">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-800 ring-4 ring-emerald-100/60 shadow-xs">
+                <ShieldCheck className="h-6 w-6 text-emerald-700" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-base font-black text-emerald-950">
+                  Payment Already Recorded
+                </h4>
+                <p className="text-xs font-semibold text-emerald-800 max-w-md mx-auto leading-relaxed">
+                  Payment or offline banking settlement proof has already been recorded for Purchase Order <strong className="font-black text-emerald-950">{order.poNumber || `PO-${order.id}`}</strong>. The transaction is currently under audit verification or settled.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  onClick={onClose}
+                  className="h-9 px-4 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider shadow-xs cursor-pointer transition active:scale-95"
+                >
+                  Close
+                </Button>
+              </div>
+            </div>
+          ) : isInvoicePendingApproval ? (
             <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50/90 p-6 text-center space-y-3.5 animate-in fade-in duration-200">
               <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-4 ring-amber-100/60 shadow-xs">
                 <Lock className="h-6 w-6 text-amber-700" />

@@ -25,6 +25,7 @@ import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { formatCurrency } from '../../shared/format';
 import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
+import { useAuth } from '../../../hooks/useAuth';
 
 export interface CreateInvoiceModalProps {
   open: boolean;
@@ -104,6 +105,11 @@ export function CreateInvoiceModal({
   invoiceInterstate,
   onInvoiceInterstateChange,
 }: CreateInvoiceModalProps) {
+  const { user } = useAuth();
+
+  // Strict role enforcement: Buyers can NEVER create tax invoices
+  if (!open || user?.role === 'buyer') return null;
+
   // Live Financial Computations
   const numAmount = useMemo(() => {
     const parsed = parseFloat(invoiceAmount);

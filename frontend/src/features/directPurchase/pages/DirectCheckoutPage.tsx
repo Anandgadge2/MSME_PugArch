@@ -12,14 +12,13 @@ import { useRouter } from 'next/navigation';
 import {
   ArrowLeft,
   Building2,
+  Check,
   CheckCircle2,
   CreditCard,
-  FileText,
+  Download,
   MapPin,
-  MapPinOff,
   PackageCheck,
   ShieldCheck,
-  ShoppingCart,
   Truck,
   UserCheck
 } from 'lucide-react';
@@ -36,25 +35,6 @@ import { EmptyState, LoadingState } from '@/features/shared/FeatureStates';
 import { formatCurrency } from '@/features/shared/format';
 import { api } from '@/lib/api';
 import { cn } from '@/lib/utils';
-import { ComplianceConsentCard, type ComplianceDoc } from '@/components/compliance/ComplianceConsentCard';
-import { OrderPlacementPolicyContent, CancellationRefundPolicyContent } from '@/components/compliance/CompliancePoliciesText';
-
-const complianceDocs: ComplianceDoc[] = [
-  {
-    id: 'procurement',
-    name: 'Order_Placement_Procurement_Policy.pdf',
-    pdfFile: 'Order_Placement_Procurement_Policy.pdf',
-    title: 'Procurement Policy',
-    content: <OrderPlacementPolicyContent />,
-  },
-  {
-    id: 'cancellation',
-    name: 'Order_Cancellation_Refund_Policy.pdf',
-    pdfFile: 'Order_Cancellation_Refund_Policy.pdf',
-    title: 'Cancellation & Refund',
-    content: <CancellationRefundPolicyContent />,
-  },
-];
 
 export default function DirectCheckoutPage() {
   const router = useRouter();
@@ -585,20 +565,100 @@ export default function DirectCheckoutPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-5 space-y-4">
-                <ComplianceConsentCard
-                  docs={complianceDocs}
-                  title="Direct Purchase &amp; Order Cancellation Policies"
-                  subtitle="Statutory compliance agreement governing Purchase Order issuance, T+1 settlement, and cancellation terms."
-                  accepted={termsAccepted}
-                  onAcceptedChange={val => {
-                    setTermsAccepted(val);
-                    if (val) setTermsError(null);
-                  }}
-                  checkboxLabel="I accept the Direct Purchase Terms, Procurement Policy, and Cancellation &amp; Refund Policy"
-                  checkboxDescription="By authorizing this order, you legally confirm administrative sanction, agree to binding purchase order terms, and accept the cancellation and settlement framework of JSG SMILE."
-                  readerHeightClassName="h-[120px] sm:h-[135px]"
-                  showPolicyLibrary
-                />
+                <div
+                  className={cn(
+                    'rounded-xl sm:rounded-2xl border p-3.5 sm:p-4 transition-all duration-150',
+                    termsAccepted
+                      ? 'border-blue-600 bg-blue-50/50 shadow-2xs ring-1 ring-blue-600/20'
+                      : termsError
+                      ? 'border-red-400 bg-red-50/30'
+                      : 'border-slate-200 bg-slate-50/80 hover:border-slate-300'
+                  )}
+                >
+                  <label
+                    htmlFor="direct-purchase-policy-consent"
+                    className="flex items-start gap-2.5 sm:gap-3 cursor-pointer select-none"
+                  >
+                    <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                      <input
+                        type="checkbox"
+                        id="direct-purchase-policy-consent"
+                        checked={termsAccepted}
+                        onChange={(e) => {
+                          setTermsAccepted(e.target.checked);
+                          if (e.target.checked) setTermsError(null);
+                        }}
+                        aria-required="true"
+                        aria-invalid={Boolean(termsError)}
+                        aria-describedby={termsError ? "terms-error-text" : undefined}
+                        className="peer sr-only"
+                      />
+                      <div
+                        className={cn(
+                          'flex h-4.5 w-4.5 items-center justify-center rounded-[4px] border transition-all duration-150',
+                          termsAccepted
+                            ? 'border-blue-600 bg-blue-600 text-white shadow-2xs'
+                            : 'border-slate-300 bg-white hover:border-slate-400 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-600 peer-focus-visible:ring-offset-1'
+                        )}
+                        aria-hidden="true"
+                      >
+                        <Check
+                          className={cn(
+                            'h-3 w-3 stroke-[3] transition-transform duration-150',
+                            termsAccepted ? 'scale-100 opacity-100' : 'scale-0 opacity-0'
+                          )}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex-1 min-w-0 text-xs sm:text-sm text-slate-800 leading-snug">
+                      <span className="font-bold">
+                        I accept the Direct Purchase Terms, Procurement Policy, and agree to the{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const link = document.createElement('a');
+                            link.href = '/docs/Order_Placement_Procurement_Policy.pdf';
+                            link.download = 'Order_Placement_Procurement_Policy.pdf';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                          title="Click to download Order Placement & Procurement Facilitation Policy (PDF)"
+                        >
+                          <span>Order Placement &amp; Procurement Facilitation Policy (T&amp;C)</span>
+                          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                        </button>
+                        {' '}and the{' '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const link = document.createElement('a');
+                            link.href = '/docs/Order_Cancellation_Refund_Policy.pdf';
+                            link.download = 'Order_Cancellation_Refund_Policy.pdf';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                          }}
+                          className="inline-flex items-center gap-1 font-bold text-[#12335f] underline underline-offset-2 decoration-blue-500/60 hover:text-blue-700 hover:decoration-blue-700 cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-blue-500 rounded px-0.5"
+                          title="Click to download Order Cancellation & Refund Policy (PDF)"
+                        >
+                          <span>Cancellation &amp; Refund Policy</span>
+                          <Download className="h-3 w-3 sm:h-3.5 sm:w-3.5 shrink-0 text-[#12335f]" aria-hidden="true" />
+                        </button>
+                        <span className="text-rose-600 ml-0.5" aria-hidden="true">*</span>
+                      </span>
+                      <p className="text-[11px] sm:text-xs text-slate-500 mt-1 leading-relaxed font-normal">
+                        By authorizing this order, you legally confirm administrative sanction, agree to binding purchase order terms, and accept the cancellation and settlement framework of JSG SMILE.
+                      </p>
+                    </div>
+                  </label>
+                </div>
                 {termsError && (
                   <p id="terms-error-text" role="alert" className="text-xs font-bold text-red-600 flex items-center gap-1 mt-1">
                     {termsError}

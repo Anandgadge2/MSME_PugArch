@@ -215,13 +215,13 @@ export function PurchaseOrderReceiptModal({
   const [canvasBg, setCanvasBg] = useState<'light' | 'dark'>('light');
 
   const handleCreateInvoiceAction = () => {
+    if (!isSeller) return;
     if (onCreateInvoice && order) {
       onCreateInvoice(order);
     } else if (order) {
       onClose();
       const amountVal = order.amount || (order as any).totalValue || 0;
-      const targetRoute = isBuyer ? '/buyer/invoices' : '/seller/invoices';
-      router.push(`${targetRoute}?convertPoId=${order.id}&amount=${amountVal}`);
+      router.push(`/seller/invoices?convertPoId=${order.id}&amount=${amountVal}`);
     }
   };
 
@@ -1791,9 +1791,60 @@ export function PurchaseOrderReceiptModal({
             )}
 
             {(() => {
-              const hasGrn = Boolean((order as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'completed'].includes(viewingStatusLower));
-              const isPaid = viewingStatusLower.includes('paid');
+              const activeInvoice = (order as any)?.invoices?.find(
+                (inv: any) =>
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+              ) || (order as any)?.invoices?.[0];
+
+              const hasGrn = Boolean((order as any)?.grns?.length > 0 || ['grn_completed', 'inspection_accepted', 'delivered', 'completed', 'paid'].includes(viewingStatusLower));
+
+              const hasSlip = Boolean(
+                activeInvoice?.paymentSlipFileId ||
+                activeInvoice?.paymentSlipFile ||
+                (activeInvoice as any)?.offlineProof ||
+                (activeInvoice as any)?.paymentReceiptFileAssetId ||
+                (order as any)?.paymentSlipFileId ||
+                (order as any)?.paymentSlip ||
+                (order as any)?.offlineProof ||
+                (order as any)?.paymentProof ||
+                viewingStatusLower.includes('paid') ||
+                viewingStatusLower === 'payment_submitted' ||
+                String((order as any)?.paymentStatus || '').toLowerCase() === 'under_verification' ||
+                String((order as any)?.paymentStatus || '').toLowerCase() === 'payment_submitted' ||
+                String((order as any)?.paymentStatus || '').toLowerCase() === 'paid'
+              );
+
+              const isPaid = viewingStatusLower.includes('paid') || hasSlip;
               const payRoute = isBuyer ? '/buyer/payments' : '/seller/payments';
+
+              if (viewingStatusLower === 'cancelled') return null;
+
+              if (isPaid) {
+                const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
+                return (
+                  <Button
+                    onClick={() => {
+                      if (onViewPaymentSlip) {
+                        onViewPaymentSlip(order);
+                      } else {
+                        onClose();
+                        router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
+                      }
+                    }}
+                    onMouseEnter={() => {
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
+                    onFocus={() => {
+                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
+                    }}
+                    className="h-9 bg-emerald-700 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-800 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-white" /> View Payment Proof {viewingStatusLower.includes('paid') ? '(Paid)' : ''}
+                  </Button>
+                );
+              }
+
               if (hasGrn && !isPaid) {
                 if (!isBuyer) {
                   return (
@@ -1806,8 +1857,12 @@ export function PurchaseOrderReceiptModal({
                 return (
                   <Button
                     onClick={() => {
-                      onClose();
-                      router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
+                      if (onUploadPaymentSlip) {
+                        onUploadPaymentSlip(order);
+                      } else {
+                        onClose();
+                        router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
+                      }
                     }}
                     className="h-9 bg-purple-600 text-xs font-black uppercase tracking-wider text-white hover:bg-purple-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
                   >
@@ -1815,19 +1870,7 @@ export function PurchaseOrderReceiptModal({
                   </Button>
                 );
               }
-              if (isPaid) {
-                return (
-                  <Button
-                    onClick={() => {
-                      onClose();
-                      router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
-                    }}
-                    className="h-9 bg-emerald-700 text-xs font-black uppercase tracking-wider text-white hover:bg-emerald-800 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <ShieldCheck className="mr-1.5 h-3.5 w-3.5 text-white" /> View Payment Proof (Paid)
-                  </Button>
-                );
-              }
+
               return null;
             })()}
 
@@ -1839,57 +1882,6 @@ export function PurchaseOrderReceiptModal({
                 <XCircle className="mr-1.5 h-3.5 w-3.5" /> Cancel PO
               </Button>
             )}
-
-            {(() => {
-              const activeInvoice = (order as any)?.invoices?.find(
-                (inv: any) =>
-                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
-                  String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
-              ) || (order as any)?.invoices?.[0];
-
-              const hasSlip = Boolean(
-                activeInvoice?.paymentSlipFileId ||
-                activeInvoice?.paymentSlipFile ||
-                (activeInvoice as any)?.offlineProof ||
-                (order as any)?.paymentSlipFileId ||
-                (order as any)?.paymentSlip ||
-                (order as any)?.offlineProof ||
-                (order as any)?.paymentProof ||
-                viewingStatusLower.includes('paid')
-              );
-
-              if (hasSlip && onViewPaymentSlip && viewingStatusLower !== 'cancelled') {
-                const proofId = activeInvoice?.paymentSlipFileId || (order as any)?.paymentSlipFileId || (order as any)?.paymentSlipFile;
-                return (
-                  <Button
-                    variant="outline"
-                    onClick={() => onViewPaymentSlip(order)}
-                    onMouseEnter={() => {
-                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
-                    }}
-                    onFocus={() => {
-                      if (proofId) prewarmFileAssetPreview(proofId, 'Payment_Proof');
-                    }}
-                    className="h-9 border-indigo-200 text-xs font-black uppercase tracking-wider text-indigo-700 hover:bg-indigo-50 rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <Receipt className="mr-1.5 h-3.5 w-3.5 text-indigo-600" /> View Payment Proof
-                  </Button>
-                );
-              }
-
-              if (!hasSlip && isBuyer && viewingStatusLower !== 'cancelled' && onUploadPaymentSlip) {
-                return (
-                  <Button
-                    onClick={() => onUploadPaymentSlip(order)}
-                    className="h-9 bg-indigo-600 text-xs font-black uppercase tracking-wider text-white hover:bg-indigo-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <Upload className="mr-1.5 h-3.5 w-3.5" /> Upload Payment Proof
-                  </Button>
-                );
-              }
-
-              return null;
-            })()}
 
             {isBuyer && viewingStatusLower === 'delivered' && onRepeatOrder && (
               <Button
