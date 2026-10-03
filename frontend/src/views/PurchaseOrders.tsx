@@ -58,6 +58,7 @@ import { openFileAsset, prewarmFileAssetPreview } from '../lib/files';
 import { cn } from '../lib/utils';
 import { EmptyState, InlineError, LoadingState } from '../features/shared/FeatureStates';
 import { formatCurrency, formatDate, formatDateTime, formatTime } from '../features/shared/format';
+import { isAdvancePaymentTerms, isDeliveryDeliveredOrApproved } from '../features/shared/procurementLifecycleUtils';
 import { useFeatureQuery, usePagination, useResponsiveViewMode } from '../features/shared/hooks';
 import { KpiCard } from '../features/shared/KpiCard';
 import { Pagination } from '../features/shared/Pagination';
@@ -477,6 +478,14 @@ const OrderActionDropdown = ({
         );
 
         const isPaymentDone = isPaid || hasPaymentRecorded || hasSlip;
+        const isDelivered = isDeliveryDeliveredOrApproved(order);
+
+        const activeInvStatus = String(activeInvoice?.status || activeInvoice?.invoiceStatus || '').toLowerCase();
+        const isInvoiceApproved = Boolean(
+          activeInvoice && ['approved', 'issued', 'verified', 'accepted', 'paid', 'payment_submitted'].includes(activeInvStatus)
+        );
+        const isAdvance = isAdvancePaymentTerms(order) || isAdvancePaymentTerms(activeInvoice);
+        const canPayNow = (isAdvance || approvedGrn) && isInvoiceApproved;
 
         const isSettled = Boolean(
           activeInvoice?.settledAt ||
@@ -501,22 +510,34 @@ const OrderActionDropdown = ({
               </button>
             )}
 
-            {/* Generate GRN: ONLY visible when no GRN has been created yet */}
-            {!anyGrn && !approvedGrn && !isPaymentDone && isBuyer && ['delivered', 'in_fulfillment', 'accepted', 'completed'].includes(String(order.status || '').toLowerCase()) && (
-              <button
-                type="button"
-                onClick={() => {
-                  onClose();
-                  onOpenGrnModal?.(order.id);
-                }}
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left cursor-pointer"
-              >
-                <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
-                <span>Generate GRN (Pay Gate)</span>
-              </button>
+            {/* Generate GRN: ONLY enabled when goods are DELIVERED; disabled otherwise */}
+            {!anyGrn && !approvedGrn && !isPaymentDone && isBuyer && !isCancelled && (
+              isDelivered ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenGrnModal?.(order.id);
+                  }}
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                  <span>Generate GRN (Pay Gate)</span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  disabled
+                  className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-400 bg-slate-50 text-left cursor-not-allowed opacity-60"
+                  title="Generate GRN is disabled until Delivery Status is marked as DELIVERED by the seller"
+                >
+                  <Lock className="h-3.5 w-3.5 text-slate-400" />
+                  <span>Generate GRN (Awaiting Delivery)</span>
+                </button>
+              )
             )}
 
-            {/* Buyer Payment Actions: STRICTLY mutually exclusive */}
+            {/* Buyer Payment Actions: STRICTLY gated by Invoice Approval + (Approved GRN or Advance Payment) */}
             {isBuyer && !isCancelled && (
               <>
                 {isPaymentDone ? (
@@ -540,7 +561,7 @@ const OrderActionDropdown = ({
                     <Receipt className="h-3.5 w-3.5 text-emerald-600" />
                     <span>View Payment Proof</span>
                   </button>
-                ) : approvedGrn ? (
+                ) : canPayNow ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -553,7 +574,29 @@ const OrderActionDropdown = ({
                     <CreditCard className="h-3.5 w-3.5 text-purple-600" />
                     <span>Pay Now / Upload Payment Proof</span>
                   </button>
-                ) : null}
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg text-slate-400 bg-slate-50 text-left cursor-not-allowed opacity-60"
+                    title={
+                      !isInvoiceApproved
+                        ? "Payment is disabled until Tax Invoice is issued and approved."
+                        : !isAdvance && !approvedGrn
+                        ? "Payment is disabled until Goods are Delivered and GRN is Generated."
+                        : "Payment is locked."
+                    }
+                  >
+                    <Lock className="h-3.5 w-3.5 text-slate-400" />
+                    <span>
+                      {!isInvoiceApproved
+                        ? "Pay / Upload Proof (Invoice Pending)"
+                        : !isAdvance && !approvedGrn
+                        ? "Pay / Upload Proof (GRN Required)"
+                        : "Pay / Upload Proof (Locked)"}
+                    </span>
+                  </button>
+                )}
               </>
             )}
           </>
@@ -2918,37 +2961,8 @@ export default function PurchaseOrders() {
                               </Button>
                             )}
 
-                            {/* GRN Required Gate: If goods delivered/in fulfillment but GRN not approved */}
-                            {!approvedGrn && ['delivered', 'in_fulfillment', 'accepted'].includes(viewingStatusLower) && (
-                              hasAnyGrn(viewingOrder) ? (
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    const target = viewingOrder;
-                                    setViewingOrder(null);
-                                    handleViewGrn(target);
-                                  }}
-                                  className="h-9 bg-teal-600 hover:bg-teal-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                                >
-                                  <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN
-                                </Button>
-                              ) : (
-                                <Button
-                                  type="button"
-                                  onClick={() => {
-                                    const poId = viewingOrder.id;
-                                    setViewingOrder(null);
-                                    setGrnModalPoId(poId);
-                                  }}
-                                  className="h-9 bg-amber-600 hover:bg-amber-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                                >
-                                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN First
-                                </Button>
-                              )
-                            )}
-
-                            {/* View GRN (Available when GRN approved) */}
-                            {approvedGrn && (
+                            {/* GRN Section */}
+                            {approvedGrn ? (
                               <Button
                                 type="button"
                                 variant="outline"
@@ -2961,23 +2975,97 @@ export default function PurchaseOrders() {
                               >
                                 <ClipboardCheck className="mr-1.5 h-3.5 w-3.5 text-teal-600" /> View GRN
                               </Button>
+                            ) : hasAnyGrn(viewingOrder) ? (
+                              <Button
+                                type="button"
+                                onClick={() => {
+                                  const target = viewingOrder;
+                                  setViewingOrder(null);
+                                  handleViewGrn(target);
+                                }}
+                                className="h-9 bg-teal-600 hover:bg-teal-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                              >
+                                <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" /> View GRN (Pending Approval)
+                              </Button>
+                            ) : (
+                              /* Generate GRN: enabled ONLY if goods delivered */
+                              isDeliveryDeliveredOrApproved(viewingOrder) ? (
+                                <Button
+                                  type="button"
+                                  onClick={() => {
+                                    const poId = viewingOrder.id;
+                                    setViewingOrder(null);
+                                    setGrnModalPoId(poId);
+                                  }}
+                                  className="h-9 bg-amber-600 hover:bg-amber-700 text-xs font-bold uppercase tracking-wider text-white shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                >
+                                  <AlertTriangle className="mr-1.5 h-3.5 w-3.5" /> Generate GRN
+                                </Button>
+                              ) : (
+                                <Button
+                                  type="button"
+                                  disabled
+                                  className="h-9 bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold uppercase tracking-wider shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-not-allowed opacity-60"
+                                  title="Generate GRN is disabled until Delivery Status is marked as DELIVERED by the seller"
+                                >
+                                  <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Generate GRN (Awaiting Delivery)
+                                </Button>
+                              )
                             )}
 
-                            {/* Payment Actions: ONLY enabled after GRN is approved and NO payment has been submitted yet */}
-                            {approvedGrn && !hasPaymentRecorded && !hasSlip && !isPaid && !isSettled && (
-                              <>
-                                <Button
-                                  onClick={() => {
-                                    const target = viewingOrder;
-                                    setViewingOrder(null);
-                                    setRecordPaymentOrder(target);
-                                  }}
-                                  className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
-                                  title="Pay online or upload payment proof"
-                                >
-                                  <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Payment Proof
-                                </Button>
-                              </>
+                            {/* Payment Actions: STRICTLY gated by Invoice Approval + (Approved GRN or Advance Payment) */}
+                            {!hasPaymentRecorded && !hasSlip && !isPaid && !isSettled && (
+                              (() => {
+                                const modalActiveInv = (viewingOrder as any).invoices?.find(
+                                  (inv: any) =>
+                                    String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
+                                    String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
+                                ) || (viewingOrder as any).invoices?.[0];
+                                const modalInvStatus = String(modalActiveInv?.status || modalActiveInv?.invoiceStatus || '').toLowerCase();
+                                const modalInvApproved = Boolean(
+                                  modalActiveInv && ['approved', 'issued', 'verified', 'accepted', 'paid', 'payment_submitted'].includes(modalInvStatus)
+                                );
+                                const modalAdvance = isAdvancePaymentTerms(viewingOrder) || isAdvancePaymentTerms(modalActiveInv);
+                                const modalCanPay = (modalAdvance || approvedGrn) && modalInvApproved;
+
+                                if (modalCanPay) {
+                                  return (
+                                    <Button
+                                      onClick={() => {
+                                        const target = viewingOrder;
+                                        setViewingOrder(null);
+                                        setRecordPaymentOrder(target);
+                                      }}
+                                      className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer"
+                                      title="Pay online or upload payment proof"
+                                    >
+                                      <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Payment Proof
+                                    </Button>
+                                  );
+                                }
+
+                                return (
+                                  <Button
+                                    disabled
+                                    className="h-9 bg-slate-100 text-slate-400 border border-slate-200 text-xs font-bold uppercase tracking-wider shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-not-allowed opacity-60"
+                                    title={
+                                      !modalInvApproved
+                                        ? "Payment is disabled until Tax Invoice is issued and approved."
+                                        : !modalAdvance && !approvedGrn
+                                        ? "Payment is disabled until Goods are Delivered & GRN is Generated."
+                                        : "Payment is locked."
+                                    }
+                                  >
+                                    <Lock className="mr-1.5 h-3.5 w-3.5 text-slate-400" /> Pay Now (
+                                    {!modalInvApproved
+                                      ? "Invoice Pending"
+                                      : !modalAdvance && !approvedGrn
+                                      ? "GRN Required"
+                                      : "Locked"}
+                                    )
+                                  </Button>
+                                );
+                              })()
                             )}
 
                             {/* View Payment Proof: ONLY visible if proof is uploaded or payment recorded */}
