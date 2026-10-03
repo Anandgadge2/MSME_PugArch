@@ -834,7 +834,33 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                             }
                         ]
                     };
-                    const publicBidStatusesList = ['PENDING_ADMIN_APPROVAL', 'APPROVED', 'OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'IN_PROGRESS', 'DELIVERED', 'GRN_COMPLETED', 'INVOICE_SUBMITTED', 'PAYMENT_COMPLETED', 'COMPLETED', 'EXPIRED'];
+                    const publicBidStatusesList = [
+                        'PENDING_ADMIN_APPROVAL',
+                        'APPROVED',
+                        'OPEN',
+                        'OPEN_FOR_BIDDING',
+                        'PUBLISHED',
+                        'CLOSED',
+                        'EXPIRED',
+                        'UNDER_EVALUATION',
+                        'TECHNICAL_EVALUATION',
+                        'TECHNICAL_EVALUATION_COMPLETED',
+                        'FINANCIAL_EVALUATION',
+                        'L1_GENERATED',
+                        'AWARD_RECOMMENDED',
+                        'AWARD_OFFERED',
+                        'AWARD_ACCEPTED',
+                        'AWARD_DECLINED',
+                        'AWARDED',
+                        'PO_GENERATED',
+                        'IN_PROGRESS',
+                        'DELIVERED',
+                        'GRN_COMPLETED',
+                        'INVOICE_SUBMITTED',
+                        'PAYMENT_COMPLETED',
+                        'COMPLETED',
+                        'NEGOTIATION'
+                    ];
                     const sellerBaseBidWhere: any = {
                         approvalStatus: { in: ['APPROVED', 'PENDING'] },
                         status: { in: publicBidStatusesList as any },

@@ -2744,7 +2744,31 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
 
         const pbWhere: any = {
             approvalStatus: { in: ['APPROVED', 'PENDING'] },
-            status: { in: ['OPEN', 'OPEN_FOR_BIDDING', 'PUBLISHED', 'CLOSED', 'TECHNICAL_EVALUATION', 'FINANCIAL_EVALUATION', 'AWARDED', 'EXPIRED'] },
+            status: { in: [
+                'OPEN',
+                'OPEN_FOR_BIDDING',
+                'PUBLISHED',
+                'CLOSED',
+                'EXPIRED',
+                'UNDER_EVALUATION',
+                'TECHNICAL_EVALUATION',
+                'TECHNICAL_EVALUATION_COMPLETED',
+                'FINANCIAL_EVALUATION',
+                'L1_GENERATED',
+                'AWARD_RECOMMENDED',
+                'AWARD_OFFERED',
+                'AWARD_ACCEPTED',
+                'AWARD_DECLINED',
+                'AWARDED',
+                'PO_GENERATED',
+                'IN_PROGRESS',
+                'DELIVERED',
+                'GRN_COMPLETED',
+                'INVOICE_SUBMITTED',
+                'PAYMENT_COMPLETED',
+                'COMPLETED',
+                'NEGOTIATION'
+            ] },
             visibility: 'PUBLIC',
             NOT: [
                 { procurementType: { in: ['LIMITED_TENDER', 'DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'] } },
