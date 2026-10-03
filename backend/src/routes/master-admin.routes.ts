@@ -3821,7 +3821,7 @@ const slugify = (text: string) =>
 const DEFAULT_TEMPLATE_VARIABLES = [
   'userName', 'userEmail', 'organizationName', 'portalName',
   'companyName', 'actionUrl', 'supportEmail', 'loginUrl',
-  'invoiceNumber', 'orderNumber', 'tenderTitle', 'bidReference',
+  'invoiceNumber', 'orderNumber', 'orderTitle', 'orderDescription', 'tenderTitle', 'bidReference',
   'amount', 'currency', 'dueDate', 'currentDate', 'otp'
 ];
 
@@ -4129,7 +4129,7 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
         noticeRef: '{{orderNumber}}',
         badgeVariant: 'success',
         heading: 'Official Purchase Order Generated',
-        summary: 'Purchase Order {{orderNumber}} has been generated and issued for your awarded tender.',
+        summary: 'Purchase Order {{orderNumber}} has been generated and issued for {{orderDescription}}.',
         detailsTable: [
           { label: 'Purchase Order No.', value: '{{orderNumber}}', isCode: true },
           { label: 'Total PO Value', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' }
@@ -4141,7 +4141,36 @@ const buildDefaultTemplates = (): EmailTemplate[] => {
       }),
       textBody: 'Purchase Order Issued: Purchase Order {{orderNumber}} has been generated. Total Value: {{amount}} {{currency}}.',
       isActive: true,
-      variables: ['orderNumber', 'amount', 'currency', 'actionUrl'],
+      variables: ['orderNumber', 'amount', 'currency', 'actionUrl', 'orderDescription'],
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: 'default_direct_purchase_po_generated',
+      slug: 'direct-purchase-po-generated',
+      name: 'Direct purchase PO generated',
+      subject: 'Purchase Order Generated: {{orderNumber}}',
+      htmlBody: buildGovernmentGradeEmailHtml({
+        portalName: '{{portalName}}',
+        departmentName: 'Government of Odisha • District Administration Jharsuguda',
+        noticeType: 'DIRECT PURCHASE ORDER ISSUED',
+        noticeRef: '{{orderNumber}}',
+        badgeVariant: 'success',
+        heading: 'Official Purchase Order Generated',
+        summary: 'Purchase Order {{orderNumber}} has been generated and issued for your direct purchase order.',
+        detailsTable: [
+          { label: 'Purchase Order No.', value: '{{orderNumber}}', isCode: true },
+          { label: 'Order Title', value: '{{orderTitle}}' },
+          { label: 'Total PO Value', value: '{{amount}} {{currency}}', isHighlight: true, color: '#166534' }
+        ],
+        actionButton: {
+          label: 'View Purchase Order in Portal',
+          url: '{{actionUrl}}'
+        }
+      }),
+      textBody: 'Purchase Order Issued: Purchase Order {{orderNumber}} has been generated for direct purchase. Total Value: {{amount}} {{currency}}.',
+      isActive: true,
+      variables: ['orderNumber', 'orderTitle', 'amount', 'currency', 'actionUrl'],
       createdAt: now,
       updatedAt: now
     },

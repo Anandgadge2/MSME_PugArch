@@ -70,6 +70,7 @@ export const notifyWorkflow = async (
   extra?: {
     emailSubject?: string;
     emailHtml?: string;
+    variables?: Record<string, any>;
   }
 ) => {
   const effectiveUrl = (!redirectUrl || redirectUrl === '/dashboard')
@@ -84,7 +85,8 @@ export const notifyWorkflow = async (
     redirectUrl: effectiveUrl,
     attachments,
     emailSubject: extra?.emailSubject,
-    emailHtml: extra?.emailHtml
+    emailHtml: extra?.emailHtml,
+    variables: extra?.variables
   });
 };
 
@@ -103,6 +105,7 @@ export const notifyWorkflowSoon = (
   extra?: {
     emailSubject?: string;
     emailHtml?: string;
+    variables?: Record<string, any>;
   }
 ) => {
   const effectiveUrl = (!redirectUrl || redirectUrl === '/dashboard')

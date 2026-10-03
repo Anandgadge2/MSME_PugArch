@@ -4155,6 +4155,8 @@ function EntityEditor({
       loginUrl: `${basePortalUrl}/login`,
       invoiceNumber: 'INV-2026-0042',
       orderNumber: 'PO-2026-9812',
+      orderTitle: 'Direct Purchase of Industrial Components',
+      orderDescription: 'your direct purchase order',
       tenderTitle: 'Procurement of High-Grade Steel Cables',
       bidReference: 'JSG-TND/2026/09/88',
       amount: '4,50,000',

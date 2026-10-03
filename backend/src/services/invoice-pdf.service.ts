@@ -1083,6 +1083,25 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
 
+    const isDirectPurchase = po.sourceType === 'direct_purchase' || !po.tenderId;
+    const notificationType = isDirectPurchase ? 'direct_purchase_po_generated' : 'po_generated';
+    const rawAmountNum = Number(po.amount || po.totalValue || 0);
+    const amountStr = rawAmountNum.toLocaleString('en-IN');
+    const orderDesc = isDirectPurchase ? 'your direct purchase order' : 'your awarded tender';
+
+    const commonVars = {
+      orderNumber: poNum,
+      amount: amountStr,
+      currency: po.currency || 'INR',
+      formattedAmount,
+      orderTitle: po.title || 'Purchase Order',
+      buyerName: buyerDisplayName,
+      sellerName: sellerDisplayName,
+      deliveryDate: deliveryDateStr,
+      isDirectPurchase: isDirectPurchase ? 'true' : 'false',
+      orderDescription: orderDesc
+    };
+
     // 1. Notify Seller
     if (po.sellerId) {
       const sellerEmailHtml = `
@@ -1135,12 +1154,16 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
         po.sellerId,
         `New Purchase Order Received: ${poNum}`,
         `A new Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been issued to your organization by ${buyerDisplayName}.${emailNote}`,
-        'po_generated',
+        notificationType,
         `/seller/orders?orderId=${po.id}`,
         pdfAttachment ? [pdfAttachment] : undefined,
         {
           emailSubject: `[PO Received] New Purchase Order #${poNum} from ${buyerDisplayName} - MSME Portal`,
-          emailHtml: sellerEmailHtml
+          emailHtml: sellerEmailHtml,
+          variables: {
+            ...commonVars,
+            actionUrl: `/seller/orders?orderId=${po.id}`
+          }
         }
       );
     }
@@ -1166,11 +1189,11 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Supplier / Vendor</td>
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(sellerDisplayName)}</td>
           </tr>
-          <tr style="background: #f8fafc;">
+          <tr>
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Order Title</td>
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #0f172a;">${escapeHtml(po.title || 'Purchase Order')}</td>
           </tr>
-          <tr>
+          <tr style="background: #f8fafc;">
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #64748b; font-weight: 600;">Total Order Value</td>
             <td style="padding: 10px 14px; border-bottom: 1px solid #e2e8f0; color: #2563eb; font-weight: 700; font-size: 14px;">${escapeHtml(formattedAmount)}</td>
           </tr>
@@ -1197,12 +1220,16 @@ export async function notifyPurchaseOrderCreated(purchaseOrderId: number) {
         po.buyerId,
         `Purchase Order Generated: ${poNum}`,
         `Your Purchase Order ${poNum} (${po.title}) for amount ${formattedAmount} has been generated successfully and issued to ${sellerDisplayName}.${emailNote}`,
-        'po_generated',
+        notificationType,
         `/buyer/orders?orderId=${po.id}`,
         pdfAttachment ? [pdfAttachment] : undefined,
         {
           emailSubject: `[PO Issued] Purchase Order #${poNum} Generated - MSME Portal`,
-          emailHtml: buyerEmailHtml
+          emailHtml: buyerEmailHtml,
+          variables: {
+            ...commonVars,
+            actionUrl: `/buyer/orders?orderId=${po.id}`
+          }
         }
       );
     }

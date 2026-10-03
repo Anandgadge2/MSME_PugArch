@@ -98,9 +98,27 @@ export const compileEmailTemplate = (
   let compiledHtml = htmlBody;
 
   for (const [key, value] of Object.entries(variables)) {
-    const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'g');
-    compiledSubject = compiledSubject.replace(regex, value || '');
-    compiledHtml = compiledHtml.replace(regex, value || '');
+    const regex = new RegExp(`{{\\s*${key}\\s*}}`, 'gi');
+    compiledSubject = compiledSubject.replace(regex, value ?? '');
+    compiledHtml = compiledHtml.replace(regex, value ?? '');
+  }
+
+  // Explicit safety pass for purchase order placeholders
+  if (variables.orderNumber) {
+    compiledSubject = compiledSubject.replace(/{{\s*(?:orderNumber|poNumber)\s*}}/gi, variables.orderNumber);
+    compiledHtml = compiledHtml.replace(/{{\s*(?:orderNumber|poNumber)\s*}}/gi, variables.orderNumber);
+  }
+  if (variables.amount) {
+    compiledSubject = compiledSubject.replace(/{{\s*amount\s*}}/gi, variables.amount);
+    compiledHtml = compiledHtml.replace(/{{\s*amount\s*}}/gi, variables.amount);
+  }
+  if (variables.currency) {
+    compiledSubject = compiledSubject.replace(/{{\s*currency\s*}}/gi, variables.currency);
+    compiledHtml = compiledHtml.replace(/{{\s*currency\s*}}/gi, variables.currency);
+  }
+  if (variables.orderDescription) {
+    compiledSubject = compiledSubject.replace(/{{\s*orderDescription\s*}}/gi, variables.orderDescription);
+    compiledHtml = compiledHtml.replace(/{{\s*orderDescription\s*}}/gi, variables.orderDescription);
   }
 
   return { subject: compiledSubject, html: compiledHtml };

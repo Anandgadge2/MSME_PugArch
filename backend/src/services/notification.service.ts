@@ -568,7 +568,12 @@ export const notificationService = {
             ? await db.globalSetting.findUnique({ where: { key: 'email-templates' } }).catch(() => null)
             : null);
       const templates = Array.isArray(templatesSetting?.value) ? templatesSetting.value : [];
-      const template = templates.find((t: any) => t.slug === templateSlug && t.isActive);
+      let template = templates.find((t: any) => t.slug === templateSlug && t.isActive);
+
+      // Fallback for direct-purchase if specific template not yet customized
+      if (!template && (templateSlug === 'direct-purchase-po-generated' || templateSlug.includes('direct-purchase'))) {
+        template = templates.find((t: any) => t.slug === 'po-generated' && t.isActive);
+      }
 
       let finalSubject = opts.subject;
       let finalHtml = '';
@@ -577,7 +582,7 @@ export const notificationService = {
       const relativeActionUrl = opts.variables?.actionUrl || '';
       const actionUrl = relativeActionUrl ? ensurePublicUrl(relativeActionUrl) : portalUrl;
 
-      const templateVars = {
+      const templateVars: Record<string, string> = {
         userName: user.name || 'User',
         userEmail: user.email,
         portalName,
@@ -589,8 +594,81 @@ export const notificationService = {
         ...opts.variables
       };
 
+      const fullText = `${opts.subject} ${templateVars.title || ''} ${templateVars.message || ''} ${opts.html || ''}`;
+      const isPoNotice =
+        templateSlug.includes('po') ||
+        templateSlug.includes('purchase') ||
+        /purchase\s*order/i.test(fullText) ||
+        /\bPO-[A-Z0-9-]+\b/i.test(fullText);
+
+      if (isPoNotice) {
+        if (!templateVars.orderNumber) {
+          const poMatch = fullText.match(/\b(PO-(?:[A-Z0-9]+-)?\d+)\b/i);
+          if (poMatch) {
+            templateVars.orderNumber = poMatch[1];
+          }
+        }
+
+        const orderIdMatch = actionUrl.match(/orderId=(\d+)/i);
+        if (orderIdMatch && (!templateVars.orderNumber || !templateVars.amount || !templateVars.orderDescription)) {
+          try {
+            const poRecord = await db.purchaseOrder.findUnique({
+              where: { id: Number(orderIdMatch[1]) },
+              select: {
+                id: true,
+                poNumber: true,
+                amount: true,
+                totalValue: true,
+                currency: true,
+                title: true,
+                sourceType: true,
+                tenderId: true
+              }
+            });
+            if (poRecord) {
+              if (!templateVars.orderNumber) templateVars.orderNumber = poRecord.poNumber || `PO-${poRecord.id}`;
+              if (!templateVars.amount) templateVars.amount = Number(poRecord.amount || poRecord.totalValue || 0).toLocaleString('en-IN');
+              if (!templateVars.currency) templateVars.currency = poRecord.currency || 'INR';
+              if (!templateVars.orderTitle) templateVars.orderTitle = poRecord.title || 'Purchase Order';
+              if (poRecord.sourceType === 'direct_purchase' || !poRecord.tenderId) {
+                templateVars.isDirectPurchase = 'true';
+                templateVars.orderDescription = 'your direct purchase order';
+              }
+            }
+          } catch {
+            // non-fatal
+          }
+        }
+
+        const isDirectPurchase =
+          templateVars.isDirectPurchase === 'true' ||
+          templateSlug.includes('direct-purchase') ||
+          (templateVars.orderTitle && /direct\s*purchase/i.test(templateVars.orderTitle)) ||
+          /direct\s*purchase/i.test(fullText);
+
+        if (isDirectPurchase) {
+          templateVars.isDirectPurchase = 'true';
+          if (!templateVars.orderDescription || templateVars.orderDescription === 'your awarded tender') {
+            templateVars.orderDescription = 'your direct purchase order';
+          }
+        } else if (!templateVars.orderDescription) {
+          templateVars.orderDescription = templateVars.tenderTitle ? 'your awarded tender' : 'your order';
+        }
+
+        if (!templateVars.currency) templateVars.currency = 'INR';
+        if (!templateVars.orderNumber) templateVars.orderNumber = 'PO Generated';
+      }
+
       if (template) {
-        const compiled = compileEmailTemplate(template.subject, template.htmlBody, templateVars);
+        let tSubject = template.subject;
+        let tHtml = template.htmlBody;
+
+        if (templateVars.isDirectPurchase === 'true') {
+          tSubject = tSubject.replace(/for your awarded tender/gi, 'for your direct purchase order');
+          tHtml = tHtml.replace(/for your awarded tender/gi, 'for your direct purchase order');
+        }
+
+        const compiled = compileEmailTemplate(tSubject, tHtml, templateVars);
         finalSubject = compiled.subject;
         finalHtml = compiled.html;
       } else {
@@ -667,6 +745,7 @@ export const notificationService = {
     opts: NotifyOpts & {
       emailSubject?: string;
       emailHtml?: string;
+      variables?: Record<string, any>;
       attachments?: Array<{
         filename: string;
         content?: Buffer | string;
@@ -684,7 +763,8 @@ export const notificationService = {
         variables: {
           title: opts.title,
           message: opts.message,
-          actionUrl: opts.redirectUrl || ''
+          actionUrl: opts.redirectUrl || '',
+          ...(opts.variables || {})
         },
         attachments: opts.attachments
       });
