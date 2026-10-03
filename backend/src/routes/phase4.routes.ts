@@ -1264,21 +1264,20 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (items.length === 0) throw new ApiError(400, 'At least one item or service line is required', 'PROCUREMENT_ITEM_REQUIRED');
 
   // Verify that all items have valid names, quantities, and units based on two-tier Category and Pricing Format
-  const rawCat = basics.procurementCategory || basics.categoryType;
-  const rawFormat = basics.pricingFormat || basics.sourcingFormat;
-  const legacyBuying = basics.whatAreYouBuying || 'Product';
+  const rawCat = basics.procurementCategory || basics.categoryType || payload.procurementCategory || payload.categoryType;
+  const rawFormat = basics.pricingFormat || basics.sourcingFormat || payload.pricingFormat;
 
   const categoryType: 'GOODS' | 'SERVICES' | 'WORKS' =
-    rawCat === 'SERVICES' || rawCat === 'Services' || legacyBuying === 'Service' || legacyBuying === 'Services'
+    rawCat === 'SERVICES'
       ? 'SERVICES'
-      : rawCat === 'WORKS' || rawCat === 'Works' || legacyBuying === 'Works'
+      : rawCat === 'WORKS'
       ? 'WORKS'
       : 'GOODS';
 
   const pricingFormat: 'SINGLE_ITEM' | 'BOQ' | 'SOR' =
-    rawFormat === 'SOR' || rawFormat === 'Schedule of Rates' || legacyBuying.includes('SOR') || legacyBuying.includes('Schedule of Rates')
+    rawFormat === 'SOR'
       ? 'SOR'
-      : rawFormat === 'BOQ' || rawFormat === 'Multi-line BOQ' || legacyBuying === 'BOQ' || legacyBuying.includes('BOQ')
+      : rawFormat === 'BOQ'
       ? 'BOQ'
       : 'SINGLE_ITEM';
 
@@ -2042,16 +2041,16 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     category: basics.category || requirement.category?.name || 'General procurement',
     bidType,
     categoryType: (
-      basics.procurementCategory === 'SERVICES' || basics.categoryType === 'SERVICES' || bidType === 'Service' || bidType === 'Services'
+      basics.procurementCategory === 'SERVICES' || basics.categoryType === 'SERVICES' || draftBody.categoryType === 'SERVICES' || draftBody.procurementCategory === 'SERVICES'
         ? 'SERVICES'
-        : basics.procurementCategory === 'WORKS' || basics.categoryType === 'WORKS' || bidType === 'Works'
+        : basics.procurementCategory === 'WORKS' || basics.categoryType === 'WORKS' || draftBody.categoryType === 'WORKS' || draftBody.procurementCategory === 'WORKS'
         ? 'WORKS'
         : 'GOODS'
     ) as any,
     pricingFormat: (
-      basics.pricingFormat === 'SOR' || basics.sourcingFormat === 'SOR' || String(bidType).includes('SOR') || methodSlug === 'rate-contract'
+      basics.pricingFormat === 'SOR' || basics.sourcingFormat === 'SOR' || draftBody.pricingFormat === 'SOR' || methodSlug === 'rate-contract'
         ? 'SOR'
-        : basics.pricingFormat === 'BOQ' || basics.sourcingFormat === 'BOQ' || methodSlug === 'boq-based-bid' || bidType === 'BOQ'
+        : basics.pricingFormat === 'BOQ' || basics.sourcingFormat === 'BOQ' || draftBody.pricingFormat === 'BOQ' || methodSlug === 'boq-based-bid'
         ? 'BOQ'
         : 'SINGLE_ITEM'
     ) as any,
@@ -12963,11 +12962,11 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         })
       : Promise.resolve(null),
     db.bidWizardDraft.findMany({
-      where: { buyerId, draftStatus: 'DRAFT' },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyer: { organizationId: buyerOrgId } }], draftStatus: 'DRAFT' } : { buyerId, draftStatus: 'DRAFT' },
       orderBy: { updatedAt: 'desc' },
     }),
     db.procurementBid.findMany({
-      where: { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyerOrganizationId: buyerOrgId }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         documents: true,
@@ -12975,14 +12974,14 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       },
     }),
     db.procurementRequest.findMany({
-      where: { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyerOrganizationId: buyerOrgId }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         organization: { select: { organizationName: true } }
       }
     }),
     db.directPurchase.findMany({
-      where: { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyerOrganizationId: buyerOrgId }, { requirement: { organizationId: buyerOrgId } }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         requirement: {
@@ -13000,7 +12999,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       },
     }),
     db.requirement.findMany({
-      where: { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { organizationId: buyerOrgId }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         category: { select: { name: true } },
@@ -13775,7 +13774,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Procurement Intent', {
         ...(payload.basics || {}),
         buyerType: payload.buyerType,
-        buyingType: payload.buyingType,
+        procurementCategory: payload.procurementCategory || payload.categoryType || payload.basics?.procurementCategory,
+        pricingFormat: payload.pricingFormat || payload.basics?.pricingFormat,
         recommendedMethod: payload.recommendation?.id,
         recommendationReason: payload.recommendation?.reason,
       }),
@@ -13970,7 +13970,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Procurement Intent', {
         ...(srcPayload.basics || {}),
         buyerType: srcPayload.buyerType,
-        buyingType: srcPayload.buyingType,
+        procurementCategory: srcPayload.procurementCategory || srcPayload.categoryType || srcPayload.basics?.procurementCategory,
+        pricingFormat: srcPayload.pricingFormat || srcPayload.basics?.pricingFormat,
         recommendedMethod: srcPayload.recommendation?.id,
         recommendationReason: srcPayload.recommendation?.reason,
       }),
@@ -14120,7 +14121,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
   const totalResponses = deduplicatedAll.reduce((sum, p) => sum + (Number(p.participantsCount) || 0), 0);
   const kpis = {
     totalProcurements: deduplicatedAll.filter(p => p.statusGroup !== 'draft').length,
-    drafts: 0,
+    drafts: deduplicatedAll.filter(p => p.statusGroup === 'draft').length,
     pendingApproval: deduplicatedAll.filter(p => p.statusGroup === 'pending_approval').length,
     active: deduplicatedAll.filter(p => p.statusGroup === 'active').length,
     completed: deduplicatedAll.filter(p => p.statusGroup === 'completed').length,

@@ -258,7 +258,6 @@ type Draft = {
     title: string;
     procurementCategory: 'GOODS' | 'SERVICES' | 'WORKS';
     pricingFormat: 'SINGLE_ITEM' | 'BOQ' | 'SOR';
-    whatAreYouBuying: string;
     category: string;
     department: string;
     priority: 'Normal' | 'Urgent' | 'Emergency';
@@ -815,7 +814,7 @@ const defaultRateContractConfig = (): RateContractConfig => {
 };
 
 const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
-  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR';
   const source = isBoq
     ? draft.boqTable.map(row => ({
       name: row.description,
@@ -853,7 +852,7 @@ const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
 // Single source of truth for "total procurement quantity" — the value that drives the
 // auto-generated consignee and must be > 0 for the backend submit validator to pass.
 const getTotalProcurementQty = (draft: Draft): number => {
-  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR';
   const rows = isBoq ? draft.boqTable : draft.items;
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 };
@@ -1038,45 +1037,6 @@ export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: Procu
   ]
 };
 
-const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ value: string; label: string }>>> = {
-  RFQ: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
-    { value: 'Service', label: 'Service / Routine Maintenance' }
-  ],
-  RFP: [
-    { value: 'Service', label: 'Service Contract' },
-    { value: 'Product', label: 'Product / Custom Goods' },
-    { value: 'Works', label: 'Works Contract' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
-  ],
-  OPEN_TENDER: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
-    { value: 'Works', label: 'Works Contract' },
-    { value: 'Service', label: 'Service Contract' }
-  ],
-  LIMITED_TENDER: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Service', label: 'Service Contract' },
-    { value: 'Works', label: 'Works Contract' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
-  ],
-  REVERSE_AUCTION: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
-    { value: 'Service', label: 'Service Contract' },
-    { value: 'BOQ', label: 'BOQ Sourced (Multi line)' }
-  ],
-  RATE_CONTRACT: [
-    { value: 'Product', label: 'Product / Goods' },
-    { value: 'Catalogue item', label: 'Catalogue Standard Item' },
-    { value: 'Service', label: 'Service Contract' },
-    { value: 'BOQ', label: 'BOQ Sourced / Schedule of Rates (SOR)' }
-  ]
-};
-
 const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
   let updated = { ...draft, type: method };
   if (isReverseAuctionMethod(method)) {
@@ -1106,21 +1066,12 @@ const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     nextFormat = allowedFormats[0].value;
   }
 
-  const legacyVal = nextFormat === 'BOQ' || nextFormat === 'SOR'
-    ? 'BOQ'
-    : nextCat === 'SERVICES'
-    ? 'Service'
-    : nextCat === 'WORKS'
-    ? 'Works'
-    : 'Product';
-
   updated = {
     ...updated,
     basics: {
       ...updated.basics,
       procurementCategory: nextCat,
-      pricingFormat: nextFormat,
-      whatAreYouBuying: legacyVal
+      pricingFormat: nextFormat
     }
   };
   return updated;
@@ -1159,7 +1110,6 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     title: '',
     procurementCategory: 'GOODS',
     pricingFormat: 'SINGLE_ITEM',
-    whatAreYouBuying: 'Product',
     category: 'Office Supplies & Stationery',
     department: '',
     priority: 'Normal',
@@ -1439,7 +1389,7 @@ export default function CreateProcurementPage() {
     const totals = computeProcurementTotals(importedItems);
     const hasServices = activeCart.items.some(i => Boolean(i.service || i.serviceId));
     const hasProducts = activeCart.items.some(i => !i.service && !i.serviceId);
-    const detectedBuying = (hasServices && !hasProducts) ? 'Service' : 'Product';
+    const detectedCategory: 'GOODS' | 'SERVICES' = (hasServices && !hasProducts) ? 'SERVICES' : 'GOODS';
 
     setDraft(current => {
       const next = {
@@ -1447,8 +1397,9 @@ export default function CreateProcurementPage() {
         type: 'RFQ' as ProcurementMethodId,
         basics: {
           ...current.basics,
-          whatAreYouBuying: detectedBuying,
-          title: current.basics.title || (detectedBuying === 'Service' ? 'Request for Quotation - Services from Cart' : 'Request for Quotation from Cart'),
+          procurementCategory: detectedCategory,
+          pricingFormat: 'SINGLE_ITEM' as const,
+          title: current.basics.title || (detectedCategory === 'SERVICES' ? 'Request for Quotation - Services from Cart' : 'Request for Quotation from Cart'),
           estimatedValue: Math.round(totals.grossValue),
         },
         items: importedItems,
@@ -1573,20 +1524,8 @@ export default function CreateProcurementPage() {
           basics: {
             ...base.basics,
             ...(payload.basics || {}),
-            procurementCategory: payload.basics?.procurementCategory || (
-              payload.basics?.whatAreYouBuying === 'Service' || payload.basics?.whatAreYouBuying === 'Services'
-                ? 'SERVICES'
-                : payload.basics?.whatAreYouBuying === 'Works'
-                ? 'WORKS'
-                : 'GOODS'
-            ),
-            pricingFormat: payload.basics?.pricingFormat || (
-              payload.basics?.whatAreYouBuying === 'BOQ' || payload.basics?.whatAreYouBuying === 'Works'
-                ? 'BOQ'
-                : (payload.type === 'RATE_CONTRACT' || String(payload.basics?.whatAreYouBuying).includes('SOR'))
-                ? 'SOR'
-                : 'SINGLE_ITEM'
-            ),
+            procurementCategory: payload.basics?.procurementCategory || 'GOODS',
+            pricingFormat: payload.basics?.pricingFormat || (payload.type === 'RATE_CONTRACT' ? 'SOR' : 'SINGLE_ITEM'),
             estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
             discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
             deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || resolvedAddress || ''
@@ -1722,11 +1661,11 @@ export default function CreateProcurementPage() {
       });
     }
 
-    const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
-    const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+    const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR';
+    const isServiceContract = d.basics.procurementCategory === 'SERVICES';
 
     if (isBoqSchedule) {
-      list.push({ label: (d.basics.procurementCategory === 'WORKS' || d.basics.whatAreYouBuying === 'Works') ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
+      list.push({ label: d.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
       if (d.boqTable.length > 0) {
         list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 3 });
       }
@@ -1893,8 +1832,8 @@ export default function CreateProcurementPage() {
         const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
         if (!hasSowDoc && sowLen < 10) return false;
       }
-      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
-      const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR';
+      const isServiceContract = d.basics.procurementCategory === 'SERVICES';
       if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
@@ -2104,11 +2043,11 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
-      const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR';
+      const isServiceContract = d.basics.procurementCategory === 'SERVICES';
       if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
-          toast.error((d.basics.procurementCategory === 'WORKS' || d.basics.whatAreYouBuying === 'Works') ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
+          toast.error(d.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
           return false;
         }
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) {
@@ -2823,16 +2762,6 @@ function BasicsStepForm({
     return FORMATS_BY_METHOD[draft.type] || FORMATS_BY_METHOD.RFQ;
   }, [draft.type]);
 
-  const allowedBuyingOptions = useMemo(() => {
-    return BUYING_OPTIONS_BY_METHOD[draft.type] || [
-      { value: 'Product', label: 'Product / Goods' },
-      { value: 'Service', label: 'Service Contract' },
-      { value: 'Works', label: 'Works Contract' },
-      { value: 'BOQ', label: 'BOQ Sourced (Multi line)' },
-      { value: 'Catalogue item', label: 'Catalogue Standard Item' }
-    ];
-  }, [draft.type]);
-
   useEffect(() => {
     const isCatAllowed = allowedCategories.some(c => c.value === draft.basics.procurementCategory);
     const isFormatAllowed = allowedFormats.some(f => f.value === draft.basics.pricingFormat);
@@ -2840,21 +2769,13 @@ function BasicsStepForm({
     if (!isCatAllowed || !isFormatAllowed) {
       const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
       const nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
-      const legacyVal = nextFormat === 'BOQ' || nextFormat === 'SOR'
-        ? 'BOQ'
-        : nextCat === 'SERVICES'
-        ? 'Service'
-        : nextCat === 'WORKS'
-        ? 'Works'
-        : 'Product';
 
       updateDraft(c => ({
         ...c,
         basics: {
           ...c.basics,
           procurementCategory: nextCat,
-          pricingFormat: nextFormat,
-          whatAreYouBuying: legacyVal
+          pricingFormat: nextFormat
         }
       }));
     }
@@ -3173,21 +3094,11 @@ function BasicsStepForm({
             value={draft.basics.procurementCategory || 'GOODS'}
             onChange={e => {
               const val = e.target.value as ProcurementCategoryValue;
-              const format = draft.basics.pricingFormat || 'SINGLE_ITEM';
-              const legacyVal = format === 'BOQ' || format === 'SOR'
-                ? 'BOQ'
-                : val === 'SERVICES'
-                ? 'Service'
-                : val === 'WORKS'
-                ? 'Works'
-                : 'Product';
-
               updateDraft(c => ({
                 ...c,
                 basics: {
                   ...c.basics,
-                  procurementCategory: val,
-                  whatAreYouBuying: legacyVal
+                  procurementCategory: val
                 }
               }));
             }}
@@ -3211,22 +3122,13 @@ function BasicsStepForm({
             value={draft.basics.pricingFormat || 'SINGLE_ITEM'}
             onChange={e => {
               const val = e.target.value as ProcurementPricingFormatValue;
-              const cat = draft.basics.procurementCategory || 'GOODS';
               const isBoqType = val === 'BOQ' || val === 'SOR';
-              const legacyVal = isBoqType
-                ? 'BOQ'
-                : cat === 'SERVICES'
-                ? 'Service'
-                : cat === 'WORKS'
-                ? 'Works'
-                : 'Product';
 
               updateDraft(c => ({
                 ...c,
                 basics: {
                   ...c.basics,
-                  pricingFormat: val,
-                  whatAreYouBuying: legacyVal
+                  pricingFormat: val
                 },
                 boqTable: isBoqType && c.boqTable.length === 0
                   ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
@@ -5294,7 +5196,12 @@ function ItemsDetailsForm({
   selectedItemForEdit: ItemRow | null;
   setSelectedItemForEdit: (item: ItemRow | null) => void;
 }) {
-  const whatBuying = draft.basics.whatAreYouBuying;
+  const category = draft.basics.procurementCategory || 'GOODS';
+  const pricingFormat = draft.basics.pricingFormat || 'SINGLE_ITEM';
+  const isService = category === 'SERVICES' || draft.type === 'RFP';
+  const isWorks = category === 'WORKS';
+  const isGoods = category === 'GOODS';
+  const isBoqOrSor = pricingFormat === 'BOQ' || pricingFormat === 'SOR';
   const isRateContract = isRateContractMethod(draft.type);
   const { token } = useAuth();
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
@@ -5712,7 +5619,7 @@ function ItemsDetailsForm({
         items: nextItems,
       };
     });
-    toast.success(`Imported ${itemsToImport.length} ${whatBuying === 'Service' ? 'service' : 'product'} item${itemsToImport.length === 1 ? '' : 's'} from Cart`);
+    toast.success(`Imported ${itemsToImport.length} ${isService ? 'service' : 'product'} item${itemsToImport.length === 1 ? '' : 's'} from Cart`);
   };
 
   const handleImportCartItems = () => {
@@ -5723,12 +5630,12 @@ function ItemsDetailsForm({
     }
 
     const cartItems = rawCartItems.filter(item => {
-      const isService = Boolean(item.serviceId || item.service || (item as any).itemType === 'Service');
-      return whatBuying === 'Service' ? isService : !isService;
+      const itemIsService = Boolean(item.serviceId || item.service || (item as any).itemType === 'Service');
+      return isService ? itemIsService : !itemIsService;
     });
 
     if (cartItems.length === 0) {
-      if (whatBuying === 'Service') {
+      if (isService) {
         toast.error('No service items found in active cart. Please add services from the marketplace.');
       } else {
         toast.error('No product items found in active cart. Please add products from the marketplace.');
@@ -5778,10 +5685,10 @@ function ItemsDetailsForm({
   };
 
   useEffect(() => {
-    if (whatBuying === 'Service' && !draft.serviceDetails.serviceTitle?.trim() && draft.basics.title?.trim()) {
+    if (isService && !draft.serviceDetails.serviceTitle?.trim() && draft.basics.title?.trim()) {
       updateService('serviceTitle', draft.basics.title.trim());
     }
-  }, [whatBuying, draft.basics.title, draft.serviceDetails.serviceTitle]);
+  }, [isService, draft.basics.title, draft.serviceDetails.serviceTitle]);
 
   const [uploadingSow, setUploadingSow] = useState(false);
 
@@ -6058,7 +5965,7 @@ function ItemsDetailsForm({
   };
 
   const procurementItemColumns: ColumnDef<any>[] = useMemo(() => {
-    const isServiceMode = whatBuying === 'Service';
+    const isServiceMode = isService;
 
     const baseColumns: ColumnDef<any>[] = [
       {
@@ -6329,10 +6236,10 @@ function ItemsDetailsForm({
     );
 
     return baseColumns;
-  }, [whatBuying, handleDuplicateItem, handleRemoveItem]);
+  }, [isService, handleDuplicateItem, handleRemoveItem]);
 
-  // 1. BOQ Table Mode (for BOQ Sourced or Works Contracts)
-  if (whatBuying === 'BOQ' || whatBuying === 'Works') {
+  // 1. BOQ Table Mode (for BOQ Sourced, SOR, or Works Contracts)
+  if (isBoqOrSor || isWorks) {
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
         {/* Scope of Work (SOW) Dossier Section for RFP, Works, or BOQ */}
@@ -6428,10 +6335,10 @@ function ItemsDetailsForm({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
-              {whatBuying === 'Works' ? 'Works Schedule / Bill of Quantities (BOQ)' : 'Structured Bill of Quantities (BOQ)'}
+              {isWorks ? 'Works Schedule / Bill of Quantities (BOQ)' : 'Structured Bill of Quantities (BOQ)'}
             </h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-              {whatBuying === 'Works' ? 'Itemized schedule of construction, fabrication, or execution trades' : 'Invite quotes using an itemized spreadsheet schedule'}
+              {isWorks ? 'Itemized schedule of construction, fabrication, or execution trades' : 'Invite quotes using an itemized spreadsheet schedule'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
@@ -6580,7 +6487,7 @@ function ItemsDetailsForm({
   // Service Details Panel (when Service is selected)
   const hasSowDoc = Boolean(draft.serviceDetails.sowFileAssetId || draft.serviceDetails.sowFileName);
 
-  const serviceDetailsPanel = (whatBuying === 'Service' || draft.type === 'RFP') ? (
+  const serviceDetailsPanel = isService ? (
     <div className="space-y-4 rounded-2xl p-3.5 sm:p-5 border border-slate-200/90 bg-gradient-to-br from-slate-50/80 via-white to-slate-50/40 w-full min-w-0 max-w-full shadow-3xs">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-3 gap-2">
         <div className="flex items-center gap-2.5">
@@ -7018,7 +6925,7 @@ function ItemsDetailsForm({
           </div>
         </div>
 
-        {(whatBuying === 'Service' || draft.type === 'RFP') && draft.items.length === 0 && (
+        {isService && draft.items.length === 0 && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50/90 border border-slate-200 rounded-xl text-xs text-slate-900 animate-fadeIn">
             <div className="space-y-0.5">
               <span className="font-extrabold uppercase text-[#0b2447] tracking-wide block">
@@ -7075,7 +6982,7 @@ function ItemsDetailsForm({
           </div>
         )}
 
-        {/* Action Toolbar: Strictly gated by whatAreYouBuying */}
+        {/* Action Toolbar: Strictly gated by Procurement Category */}
         {(() => {
           const serviceCartCount = (activeCart?.items || []).filter(i => Boolean(i.service || i.serviceId || (i as any).itemType === 'Service')).length;
           const productCartCount = (activeCart?.items || []).filter(i => !i.service && !i.serviceId && (i as any).itemType !== 'Service').length;
@@ -7083,7 +6990,7 @@ function ItemsDetailsForm({
           return (
             <div className="flex items-center justify-between gap-2 overflow-x-auto no-scrollbar py-0.5 flex-nowrap">
               <div className="flex items-center gap-2 shrink-0 flex-nowrap">
-                {whatBuying !== 'Service' && (
+                {!isService && (
                   <Button
                     type="button"
                     size="sm"
@@ -7094,7 +7001,7 @@ function ItemsDetailsForm({
                   </Button>
                 )}
 
-                {whatBuying === 'Service' && (
+                {isService && (
                   <Button
                     type="button"
                     size="sm"
@@ -7107,7 +7014,7 @@ function ItemsDetailsForm({
               </div>
 
               <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-nowrap">
-                {whatBuying !== 'Service' ? (
+                {!isService ? (
                   <>
                     <Button
                       type="button"
@@ -7180,7 +7087,7 @@ function ItemsDetailsForm({
 
       {/* Helpful Hint Cards - Contextually Gated */}
       <div className="grid gap-3 sm:grid-cols-3">
-        {whatBuying === 'Service' ? (
+        {isService ? (
           isRateContract ? (
             <>
               <div className="rounded-xl border border-slate-200 bg-white p-3 text-xs font-semibold text-slate-800 flex items-start gap-2.5 shadow-3xs">
@@ -7236,12 +7143,12 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth={whatBuying === 'Service' ? 'min-w-[1100px]' : 'min-w-[1240px]'}
+        minWidth={isService ? 'min-w-[1100px]' : 'min-w-[1240px]'}
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
-        emptyTitle={whatBuying === 'Service' ? "No service contract lines added yet" : "No product items added yet"}
+        emptyTitle={isService ? "No service contract lines added yet" : "No product items added yet"}
         emptyDescription={
-          whatBuying === 'Service'
+          isService
             ? (isRateContract
                 ? "Click 'Add SOR Service Line' or use the 1-click Initialize button above to configure your Schedule of Rates baseline."
                 : "Click 'Add Service Line' or use the 1-click Initialize button above to configure your lump-sum contract item.")
@@ -7250,7 +7157,7 @@ function ItemsDetailsForm({
         footer={
           <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
             <div className="flex items-center gap-2 shrink-0 flex-nowrap">
-              {whatBuying !== 'Service' && (
+              {!isService && (
                 <Button
                   type="button"
                   size="sm"
@@ -7260,7 +7167,7 @@ function ItemsDetailsForm({
                   <Plus className="h-3.5 w-3.5 mr-1" aria-hidden="true" /> Add Product Line
                 </Button>
               )}
-              {whatBuying === 'Service' && (
+              {isService && (
                 <Button
                   type="button"
                   size="sm"
@@ -7272,7 +7179,7 @@ function ItemsDetailsForm({
               )}
             </div>
             <span className="text-[11px] font-semibold text-slate-500 shrink-0 whitespace-nowrap">
-              {draft.items.length} {whatBuying === 'Service' ? (isRateContract ? 'SOR line' : 'service line') : 'line item'}{draft.items.length === 1 ? '' : 's'} scheduled
+              {draft.items.length} {isService ? (isRateContract ? 'SOR line' : 'service line') : 'line item'}{draft.items.length === 1 ? '' : 's'} scheduled
             </span>
           </div>
         }
@@ -7298,7 +7205,7 @@ function ItemsDetailsForm({
 
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {whatBuying === 'Service' ? 'Base Service Fee' : 'Base Value (Excl. GST)'}
+                  {isService ? 'Base Service Fee' : 'Base Value (Excl. GST)'}
                 </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-800">
@@ -7324,7 +7231,7 @@ function ItemsDetailsForm({
 
               <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">
-                  {whatBuying === 'Service' ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)'}
+                  {isService ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)'}
                 </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-base font-black text-[#0b2447]">
@@ -7344,7 +7251,7 @@ function ItemsDetailsForm({
                   <div className="flex items-center gap-2 text-slate-800 font-semibold">
                     <Info className="h-4 w-4 text-[#0b2447] shrink-0" />
                     <span>
-                      {whatBuying === 'Service' ? (
+                      {isService ? (
                         <>
                           <strong>Price Discovery / Bidding Mode:</strong> Estimated service fee is ₹0 (Undisclosed). Qualified bidders will quote their commercial fee during bidding.
                         </>
@@ -7374,7 +7281,7 @@ function ItemsDetailsForm({
                   <div className="flex items-center gap-2 text-amber-900 font-semibold">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
                     <span>
-                      {whatBuying === 'Service' ? (
+                      {isService ? (
                         <>
                           Tender initial budget is <strong>₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</strong>, but Service Schedule total (incl. GST) is <strong>₹{Math.round(totals.grossValue).toLocaleString('en-IN')}</strong>.
                         </>
@@ -7393,11 +7300,11 @@ function ItemsDetailsForm({
                         ...c,
                         basics: { ...c.basics, estimatedValue: Math.round(totals.grossValue) }
                       }));
-                      toast.success(whatBuying === 'Service' ? 'Tender estimated budget synced with Service Schedule Total!' : 'Tender estimated budget synced with Schedule Total!');
+                      toast.success(isService ? 'Tender estimated budget synced with Service Schedule Total!' : 'Tender estimated budget synced with Schedule Total!');
                     }}
                     className="h-7.5 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap shadow-3xs"
                   >
-                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> {whatBuying === 'Service' ? 'Sync Tender Budget with Service Schedule' : 'Sync Tender Budget with BOQ'}
+                    <RefreshCw className="h-3.5 w-3.5 mr-1" /> {isService ? 'Sync Tender Budget with Service Schedule' : 'Sync Tender Budget with BOQ'}
                   </Button>
                 </div>
               ) : (
@@ -7405,7 +7312,7 @@ function ItemsDetailsForm({
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                     <span>
-                      {whatBuying === 'Service'
+                      {isService
                         ? 'Service schedule total is fully aligned with your tender budget ceiling.'
                         : 'Tender estimated budget is fully synchronized with schedule line items (Base + GST).'}
                     </span>
@@ -9385,7 +9292,7 @@ function CommercialTermsForm({
   showErrors?: boolean;
 }) {
   const isRateContract = isRateContractMethod(draft.type);
-  const isService = draft.basics.procurementCategory === 'SERVICES' || draft.basics.whatAreYouBuying === 'Service' || draft.type === 'RFP';
+  const isService = draft.basics.procurementCategory === 'SERVICES' || draft.type === 'RFP';
   const effectivePenaltyClause = draft.terms.penaltyClause || draft.rateContractConfig.penaltyClause || draft.serviceDetails.penaltyClause || '';
 
   const updateTerms = (key: keyof Draft['terms'], val: any) => {
@@ -9839,7 +9746,7 @@ function PreviewPublishForm({
         priority={draft.basics.priority}
         requiredBy={draft.basics.requiredByDate}
         location={draft.basics.deliveryLocation}
-        itemsCount={(draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works' || draft.basics.procurementCategory === 'WORKS') ? draft.boqTable.length : draft.items.length}
+        itemsCount={(draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.procurementCategory === 'WORKS') ? draft.boqTable.length : draft.items.length}
         suppliersCount={draft.vendors.invitedSellers.length}
         docsCount={draft.requiredDocs.length}
       />
@@ -10046,7 +9953,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const estimatedValue = draft.basics.estimatedValue || 0;
 
   // Handle BOQ item list vs Standard item list
-  const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works' || draft.basics.procurementCategory === 'WORKS';
+  const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.procurementCategory === 'WORKS';
   const mappedItems = isBoqBased
     ? draft.boqTable.map(item => ({
         itemName: item.description,
@@ -10158,7 +10065,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     description: (draft.type === 'RFP' && (draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName))
       ? (draft.serviceDetails.scopeOfWork || `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}`)
       : `Sourcing Method: ${draft.type}\nValue: INR ${estimatedValue.toLocaleString('en-IN')}\nUrgency: ${draft.basics.priority}`,
-    whatAreYouBuying: draft.basics.whatAreYouBuying,
+    procurementCategory: draft.basics.procurementCategory,
+    pricingFormat: draft.basics.pricingFormat,
     estimatedValue,
     discloseEstimatedCost: Boolean(draft.basics.discloseEstimatedCost),
     deliveryLocation,
@@ -10273,7 +10181,6 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   // Run suggestion engine to capture recommendation result
   const recommendation = suggestProcurementMethod({
     estimatedValue: draft.basics.estimatedValue,
-    whatAreYouBuying: draft.basics.whatAreYouBuying,
     procurementCategory: draft.basics.procurementCategory,
     pricingFormat: draft.basics.pricingFormat,
     isCatalogueAvailable: draft.basics.isCatalogueAvailable,
@@ -10325,7 +10232,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.procurementCategory === 'SERVICES' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
+    serviceDetails: draft.basics.procurementCategory === 'SERVICES' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),
@@ -10345,7 +10252,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     rfqType: draft.rfqType,
     items: isBoqBased ? mappedItems : draft.items,
     fullProcurementMethod: draft.type,
-    buyingType: draft.basics.whatAreYouBuying,
+    categoryType: draft.basics.procurementCategory,
+    procurementCategory: draft.basics.procurementCategory,
+    pricingFormat: draft.basics.pricingFormat,
     recommendation,
     consigneeDetails,
     documents: mappedDocuments,
@@ -10376,6 +10285,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     methodSlug: draft.type,
     procurementMethod: dbMethod,
     canonicalMethod: draft.type,
+    categoryType: draft.basics.procurementCategory,
+    procurementCategory: draft.basics.procurementCategory,
+    pricingFormat: draft.basics.pricingFormat,
     sealedSubmission: draft.sealedSubmissionFlag,
     title,
     description: basics.description,

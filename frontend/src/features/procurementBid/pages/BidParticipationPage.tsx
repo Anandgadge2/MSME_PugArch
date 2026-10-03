@@ -215,7 +215,7 @@ const asTenderItems = (bid?: ProcurementBid | null): TenderBoqItem[] => {
 
 const isServiceBid = (bid?: ProcurementBid | null) => {
   const tp = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
-  const buyType = String((bid as any)?.categoryType || bid?.bidType || tp?.basics?.procurementCategory || tp?.basics?.whatAreYouBuying || tp?.basics?.bidType || '').toUpperCase();
+  const buyType = String((bid as any)?.categoryType || bid?.bidType || tp?.basics?.procurementCategory || tp?.basics?.bidType || '').toUpperCase();
   return buyType.includes('SERVICE') || Boolean(tp?.serviceDetails?.scopeOfWork || tp?.serviceDetails?.sowFileName);
 };
 

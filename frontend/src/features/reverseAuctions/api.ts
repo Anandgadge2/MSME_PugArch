@@ -86,7 +86,9 @@ export type ReverseAuction = {
     currency?: string | null;
     requiredBy?: string | null;
     // Procurement Intent
-    whatAreYouBuying?: string | null;
+    categoryType?: string | null;
+    procurementCategory?: string | null;
+    pricingFormat?: string | null;
     category?: string | null;
     urgencyPriority?: string | null;
     deliveryLocation?: string | null;

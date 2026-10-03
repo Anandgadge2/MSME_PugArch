@@ -135,7 +135,6 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
 
 export interface SuggestionCriteria {
   estimatedValue: number;
-  whatAreYouBuying?: 'GOODS' | 'SERVICES' | 'WORKS' | 'BOQ' | 'CATALOG_ITEM' | string;
   procurementCategory?: 'GOODS' | 'SERVICES' | 'WORKS' | string;
   pricingFormat?: 'SINGLE_ITEM' | 'BOQ' | 'SOR' | string;
   isCatalogueAvailable: boolean;
@@ -161,9 +160,8 @@ export interface RecommendationResult {
 export const suggestProcurementMethod = (criteria: SuggestionCriteria): RecommendationResult => {
   const {
     estimatedValue,
-    whatAreYouBuying,
-    procurementCategory,
-    pricingFormat,
+    procurementCategory = 'GOODS',
+    pricingFormat = 'SINGLE_ITEM',
     isCatalogueAvailable,
     isOnlyOneVendor,
     isReverseAuctionNeeded,
@@ -174,13 +172,12 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     isRepeatedSupply = false,
     marketResearchOnly = false
   } = criteria;
-  const rawCat = procurementCategory || whatAreYouBuying;
-  const requirementType = String(rawCat || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  const formatType = String(pricingFormat || '').trim().toUpperCase();
+  const categoryType = String(procurementCategory).trim().toUpperCase();
+  const formatType = String(pricingFormat).trim().toUpperCase();
   const priority = String(urgency || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  const isBoq = formatType === 'BOQ' || requirementType === 'BOQ';
+  const isBoq = formatType === 'BOQ';
   const isSor = formatType === 'SOR';
-  const isServiceOrWorks = ['SERVICES', 'SERVICE', 'SERVICE_CONTRACT', 'WORKS', 'WORK', 'WORKS_CONTRACT'].includes(requirementType);
+  const isServiceOrWorks = categoryType === 'SERVICES' || categoryType === 'WORKS';
 
   const result: RecommendationResult = {
     id: 'RFQ',

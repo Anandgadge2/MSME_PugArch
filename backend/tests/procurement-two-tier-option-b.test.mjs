@@ -55,3 +55,18 @@ test('4. Frontend CreateProcurementPage.tsx provides context-aware template gene
   assert.ok(code.includes('procurement_services_template'), 'Must generate Services SOW template');
   assert.ok(code.includes('procurement_goods_template'), 'Must generate Goods item template');
 });
+
+test('5. Zero legacy category code: whatAreYouBuying and BUYING_OPTIONS_BY_METHOD are completely purged', () => {
+  const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
+  const wizardCode = fs.readFileSync(wizardPath, 'utf8');
+  assert.ok(!wizardCode.includes('whatAreYouBuying'), 'CreateProcurementPage must not contain whatAreYouBuying');
+  assert.ok(!wizardCode.includes('BUYING_OPTIONS_BY_METHOD'), 'CreateProcurementPage must not contain BUYING_OPTIONS_BY_METHOD');
+
+  const phase4Path = path.join(BACKEND_DIR, 'src', 'routes', 'phase4.routes.ts');
+  const phase4Code = fs.readFileSync(phase4Path, 'utf8');
+  assert.ok(!phase4Code.includes('whatAreYouBuying'), 'phase4.routes.ts must not contain whatAreYouBuying');
+
+  const bidRoutesPath = path.join(BACKEND_DIR, 'src', 'modules', 'procurementBid', 'procurement-bid.routes.ts');
+  const bidRoutesCode = fs.readFileSync(bidRoutesPath, 'utf8');
+  assert.ok(!bidRoutesCode.includes('whatAreYouBuying'), 'procurement-bid.routes.ts must not contain whatAreYouBuying');
+});

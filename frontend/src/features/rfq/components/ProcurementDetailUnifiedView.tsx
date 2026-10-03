@@ -7932,13 +7932,22 @@ export function ProcurementDetailUnifiedView(
   const buyingType =
     firstPresent(
       props.buyingType,
+      payload.procurementCategory,
+      payload.categoryType,
+      basics.procurementCategory,
+      basics.categoryType,
       payload.buyingType,
-      basics.whatAreYouBuying,
       basics.buyingType,
       payload.bidType,
-    ) || "Product";
+    ) || "GOODS";
 
   const isBoqProcurement =
+    String(payload.pricingFormat || basics.pricingFormat || "")
+      .trim()
+      .toUpperCase() === "BOQ" ||
+    String(payload.pricingFormat || basics.pricingFormat || "")
+      .trim()
+      .toUpperCase() === "SOR" ||
     String(buyingType || "")
       .trim()
       .toUpperCase() === "BOQ";

@@ -69,6 +69,8 @@ export interface ProcurementBid {
   buyerType: BuyerType;
   departmentName: string;
   bidType: BidType;
+  categoryType?: 'GOODS' | 'SERVICES' | 'WORKS';
+  pricingFormat?: 'SINGLE_ITEM' | 'BOQ' | 'SOR';
   procurementType?: string;
   category: string;
   location: string;

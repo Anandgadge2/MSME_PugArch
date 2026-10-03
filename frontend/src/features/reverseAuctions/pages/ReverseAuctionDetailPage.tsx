@@ -586,7 +586,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const resolvedCategory =
     (rawCategoryCandidate && !['general sourcing', 'general procurement'].includes(rawCategoryCandidate.trim().toLowerCase()))
       ? rawCategoryCandidate.trim()
-      : (reqData.whatAreYouBuying || '');
+      : (reqData.categoryType || (linkedBidData as any)?.categoryType || '');
 
   const resolvedApprovalAuthority =
     reqData.approvalAuthority ||
@@ -996,13 +996,13 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
 
   const effectiveProcurementLabel = parentTypeLabel ? `${parentTypeLabel} (e-RA)` : 'Reverse Auction';
 
+  const rawCat = String(reqData.categoryType || reqData.procurementCategory || (linkedBidData as any)?.categoryType || (linkedBidData.technicalPacket as any)?.basics?.procurementCategory || '').toUpperCase();
   const resolvedBuyingType =
-    reqData.whatAreYouBuying ||
-    reqData.buyingType ||
-    linkedBidData.whatAreYouBuying ||
-    linkedBidData.buyingType ||
-    (linkedBidData.category && !String(linkedBidData.category).toUpperCase().includes('TENDER') && !String(linkedBidData.category).toUpperCase().includes('AUCTION') ? linkedBidData.category : undefined) ||
-    'Goods / Products';
+    rawCat === 'SERVICES'
+      ? 'Services'
+      : rawCat === 'WORKS'
+      ? 'Works Contract'
+      : 'Goods';
 
   if (auction.isLoading) {
     return <ProcurementDetailSkeleton />;

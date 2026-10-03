@@ -89,6 +89,8 @@ interface DisplayDraft {
   specifications: string;
   specificationDocumentName: string;
   isLocal: boolean;
+  categoryType?: string;
+  pricingFormat?: string;
   /** True once the draft was submitted/published — kept in the list as history. */
   isPublished?: boolean;
   raw: any;
@@ -1581,11 +1583,11 @@ function DraftDetailView({
       category={categoryName}
       procurementMethod={procurementLabel}
       buyingType={
-        basics.procurementCategory === 'SERVICES'
-          ? 'Services & Maintenance'
-          : basics.procurementCategory === 'WORKS'
-          ? 'Works & Construction'
-          : basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'
+        (d.categoryType || basics.procurementCategory) === 'SERVICES'
+          ? 'Services'
+          : (d.categoryType || basics.procurementCategory) === 'WORKS'
+          ? 'Works Contract'
+          : 'Goods'
       }
       deliveryLocation={d.deliveryLocation || basics.deliveryLocation || ''}
       paymentTerms={terms.paymentTerms || 'Standard Draft Payment Terms'}
