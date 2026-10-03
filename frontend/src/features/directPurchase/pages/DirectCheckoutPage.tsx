@@ -776,7 +776,18 @@ export default function DirectCheckoutPage() {
                   />
                   <span className="text-[11px] font-medium leading-snug">
                     I confirm administrative sanction and agree to the{' '}
-                    <span className="font-bold underline text-slate-900">Direct Purchase &amp; Statutory Cancellation Terms</span>.
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        const el = document.getElementById('direct-purchase-terms-section');
+                        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                      className="font-bold underline text-slate-900 hover:text-[#12335f] cursor-pointer"
+                    >
+                      Direct Purchase &amp; Statutory Cancellation Terms
+                    </button>
                     <span className="text-red-500 font-bold ml-1">*</span>
                   </span>
                 </label>
