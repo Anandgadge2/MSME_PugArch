@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import {
   X,
   Maximize2,
@@ -51,6 +51,7 @@ export function TaxInvoiceRegistryModal({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [copyType, setCopyType] = useState('Original Copy');
   const [downloadDropdownOpen, setDownloadDropdownOpen] = useState(false);
+  const downloadMenuRef = useRef<HTMLDivElement>(null);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isApproving, setIsApproving] = useState(false);
   const [isBrandingModalOpen, setIsBrandingModalOpen] = useState(false);
@@ -248,17 +249,34 @@ export function TaxInvoiceRegistryModal({
     }
   }, [invoice?.deliveryId, invoice?.grnId, invoice?.purchaseOrderId, invoice?.purchaseOrder]);
 
-  // Handle ESC key to close
+  // Close download dropdown on outside click
+  useEffect(() => {
+    if (!downloadDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (downloadMenuRef.current && !downloadMenuRef.current.contains(e.target as Node)) {
+        setDownloadDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [downloadDropdownOpen]);
+
+  // Handle ESC key to close dropdown first, then modal
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        if (downloadDropdownOpen) {
+          e.stopPropagation();
+          setDownloadDropdownOpen(false);
+        } else {
+          onClose();
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, downloadDropdownOpen]);
 
   // Construct structured invoice data for TaxInvoiceCard and PDF generator
   const invoiceData: TaxInvoiceData = useMemo(() => {
@@ -464,7 +482,7 @@ export function TaxInvoiceRegistryModal({
 
   return (
     <div
-      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 backdrop-blur-md p-2 sm:p-4 overflow-y-auto animate-in fade-in duration-200"
+      className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
       aria-label="Tax Invoice Registry"
@@ -479,52 +497,55 @@ export function TaxInvoiceRegistryModal({
           "relative flex flex-col bg-white shadow-2xl transition-all duration-300 overflow-hidden",
           isFullscreen
             ? "fixed inset-0 z-[121] h-screen w-screen max-w-none max-h-none rounded-none p-4 sm:p-6"
-            : "w-full max-w-5xl max-h-[92vh] rounded-3xl border border-slate-200 p-5 sm:p-6 my-auto"
+            : "w-full max-w-5xl h-full max-h-[92vh] rounded-3xl border border-slate-200/90 p-4 sm:p-6 my-auto"
         )}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 pb-3 mb-3 shrink-0">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 pb-3.5 mb-3 shrink-0">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
-              TAX INVOICE REGISTRY
-            </p>
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-xl font-black text-slate-950 tracking-tight">
+            <div className="flex items-center gap-2">
+              <span className="h-2 w-2 rounded-full bg-[#12335f] animate-pulse" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#12335f]">
+                TAX INVOICE REGISTRY
+              </p>
+            </div>
+            <div className="flex items-center gap-2.5 mt-0.5 flex-wrap">
+              <h2 className="text-xl sm:text-2xl font-black text-slate-950 tracking-tight font-mono">
                 {invoice?.invoiceNumber || (invoiceId ? `INV-${invoiceId}` : 'Tax Invoice')}
               </h2>
               {loading && (
-                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-500 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-bold text-slate-600 bg-slate-100 border border-slate-200 px-2.5 py-0.5 rounded-full">
                   <RefreshCw className="h-3 w-3 animate-spin text-[#12335f]" />
                   Syncing ledger...
                 </span>
               )}
               {isApproved && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
                   <CheckCircle2 className="h-3 w-3 text-emerald-600" />
                   {isPaid ? 'PAID & SETTLED' : 'APPROVED'}
                 </span>
               )}
               {isSubmitted && (
-                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2.5 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200/90 px-2.5 py-0.5 rounded-full shadow-2xs">
                   <Clock className="h-3 w-3 text-amber-600" />
                   SUBMITTED (PENDING APPROVAL)
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
               Created on {invoice?.createdAt ? formatDate(invoice.createdAt) : formatDate(new Date())}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={handleRefreshInvoice}
               disabled={isRefreshing || loading}
               title="Refresh invoice details"
               aria-label="Refresh invoice details"
-              className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer"
+              className="rounded-full border border-slate-200/80 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
             >
               <RefreshCw className={cn("h-4 w-4", (isRefreshing || loading) && "animate-spin text-[#12335f]")} />
             </button>
@@ -533,7 +554,7 @@ export function TaxInvoiceRegistryModal({
               onClick={() => setIsFullscreen(prev => !prev)}
               title={isFullscreen ? "Restore window size" : "Full screen view"}
               aria-label={isFullscreen ? "Restore window size" : "Full screen view"}
-              className="rounded-full border border-slate-200 p-2 text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+              className="rounded-full border border-slate-200/80 p-2 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
             >
               {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
             </button>
@@ -542,7 +563,7 @@ export function TaxInvoiceRegistryModal({
               onClick={onClose}
               title="Close invoice view"
               aria-label="Close invoice view"
-              className="rounded-full border border-slate-200 p-2 text-slate-500 hover:bg-slate-100 transition cursor-pointer"
+              className="rounded-full border border-slate-200/80 p-2 text-slate-500 hover:bg-rose-50 hover:text-rose-600 hover:border-rose-200 transition cursor-pointer shadow-2xs hover:scale-105 active:scale-95"
             >
               <X className="h-4 w-4" />
             </button>
@@ -550,7 +571,7 @@ export function TaxInvoiceRegistryModal({
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto pr-1 space-y-4">
+        <div className="flex-1 overflow-y-auto px-1 sm:px-2 py-1 space-y-4">
           {loading && !invoice ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-3">
               <RefreshCw className="h-8 w-8 animate-spin text-[#12335f]" />
@@ -561,11 +582,11 @@ export function TaxInvoiceRegistryModal({
               {/* Payment Locked Alert Banner for Buyer */}
               {isSubmitted && isBuyer && (
                 <div
-                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-amber-300 bg-amber-50/95 p-3.5 sm:p-4 text-amber-900 shadow-xs"
+                  className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50/90 via-amber-50/60 to-amber-50/90 p-3.5 sm:p-4 text-amber-900 shadow-xs"
                   role="alert"
                 >
                   <div className="flex items-start gap-3 min-w-0">
-                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-1 ring-amber-300">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-100 text-amber-700 ring-4 ring-amber-50/80">
                       <Lock className="h-5 w-5" />
                     </div>
                     <div className="min-w-0">
@@ -573,11 +594,11 @@ export function TaxInvoiceRegistryModal({
                         <h4 className="text-xs sm:text-sm font-black text-amber-950 uppercase tracking-tight">
                           Payment Locked &bull; Invoice Pending Buyer Approval
                         </h4>
-                        <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">
+                        <span className="rounded-full bg-amber-200/90 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-900">
                           Action Required
                         </span>
                       </div>
-                      <p className="mt-0.5 text-xs font-semibold text-amber-800 leading-relaxed">
+                      <p className="mt-1 text-xs font-medium text-amber-900/90 leading-relaxed">
                         Payment disbursement and settlement release are locked while this invoice is in <strong className="font-black text-amber-950">SUBMITTED</strong> status. Review the items and click <strong className="font-black text-emerald-800">&ldquo;Approve Invoice&rdquo;</strong> in the toolbar below to authorize settlement and unlock payment.
                       </p>
                     </div>
@@ -599,7 +620,7 @@ export function TaxInvoiceRegistryModal({
               )}
 
               {/* Connected Lifecycle Bar */}
-              <div className="flex flex-wrap items-center gap-1.5 p-2 bg-gradient-to-r from-slate-100 via-indigo-50/50 to-slate-100 rounded-2xl border border-slate-200/90">
+              <div className="flex flex-wrap items-center gap-2 p-2.5 bg-gradient-to-r from-slate-50 via-slate-100/60 to-slate-50 rounded-2xl border border-slate-200/80">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 px-2 py-0.5">
                   CONNECTED LIFECYCLE:
                 </span>
@@ -612,9 +633,9 @@ export function TaxInvoiceRegistryModal({
                     onClick={() => {
                       router.push(`/bids/${bidId}`);
                     }}
-                    className="h-7 border-slate-250 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                    className="h-8 border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                   >
-                    <FileText className="h-3 w-3 text-slate-500" />
+                    <FileText className="h-3.5 w-3.5 text-slate-500" />
                     <span>View Quotation</span>
                   </Button>
                 )}
@@ -630,9 +651,9 @@ export function TaxInvoiceRegistryModal({
                       const rolePath = user?.role === 'buyer' ? '/buyer/orders' : '/seller/orders';
                       router.push(`${rolePath}?orderId=${encodeURIComponent(orderTarget)}`);
                     }}
-                    className="h-7 border-indigo-200 bg-white hover:bg-indigo-50 text-indigo-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                    className="h-8 border-indigo-200 hover:border-indigo-300 bg-white hover:bg-indigo-50 text-indigo-700 text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                   >
-                    <FileText className="h-3 w-3 text-indigo-600" />
+                    <FileText className="h-3.5 w-3.5 text-indigo-600" />
                     <span>View PO</span>
                   </Button>
                 )}
@@ -646,9 +667,9 @@ export function TaxInvoiceRegistryModal({
                     onClick={() => {
                       router.push(`/delivery/${connectedDeliveryId}`);
                     }}
-                    className="h-7 border-blue-200 bg-white hover:bg-blue-50 text-blue-700 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                    className="h-8 border-blue-200 hover:border-blue-300 bg-white hover:bg-blue-50 text-blue-700 text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                   >
-                    <Truck className="h-3 w-3 text-blue-600" />
+                    <Truck className="h-3.5 w-3.5 text-blue-600" />
                     <span>View Delivery</span>
                   </Button>
                 )}
@@ -662,9 +683,9 @@ export function TaxInvoiceRegistryModal({
                     onClick={() => {
                       router.push(`/grn/${connectedGrnId}`);
                     }}
-                    className="h-7 border-emerald-200 bg-white hover:bg-emerald-50 text-emerald-800 text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                    className="h-8 border-emerald-200 hover:border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                   >
-                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                     <span>View GRN</span>
                   </Button>
                 )}
@@ -680,9 +701,9 @@ export function TaxInvoiceRegistryModal({
                         onClick={() => {
                           router.push(`${payPath}?search=${searchParam}`);
                         }}
-                        className="h-7 bg-emerald-700 hover:bg-emerald-800 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                        className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                       >
-                        <ShieldCheck className="h-3 w-3" />
+                        <ShieldCheck className="h-3.5 w-3.5" />
                         <span>View Payment Proof (Paid)</span>
                       </Button>
                     );
@@ -691,10 +712,10 @@ export function TaxInvoiceRegistryModal({
                     if (isSubmitted) {
                       return (
                         <span
-                          className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg"
+                          className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-100/90 border border-amber-300/80 px-2.5 py-1 rounded-xl"
                           title="Payment is locked until the tax invoice is approved"
                         >
-                          <Lock className="h-3 w-3 text-amber-700" />
+                          <Lock className="h-3.5 w-3.5 text-amber-700" />
                           <span>Payment Locked (Pending Approval)</span>
                         </span>
                       );
@@ -710,8 +731,8 @@ export function TaxInvoiceRegistryModal({
 
                       return (
                         <div className="inline-flex items-center gap-1.5 flex-wrap">
-                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                          <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                             <span>Approved</span>
                           </span>
                           {canDisbursePayment ? (
@@ -721,17 +742,17 @@ export function TaxInvoiceRegistryModal({
                               onClick={() => {
                                 router.push(`${payPath}?search=${searchParam}`);
                               }}
-                              className="h-7 bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold shadow-2xs gap-1 cursor-pointer"
+                              className="h-8 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold shadow-2xs gap-1.5 rounded-xl px-2.5 cursor-pointer transition"
                             >
-                              <CreditCard className="h-3 w-3" />
+                              <CreditCard className="h-3.5 w-3.5" />
                               <span>Pay Now / Upload Payment Proof</span>
                             </Button>
                           ) : (
                             <span
-                              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-500 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-lg cursor-not-allowed"
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-xl cursor-not-allowed"
                               title={paymentGateReason}
                             >
-                              <Lock className="h-3 w-3 text-slate-400" />
+                              <Lock className="h-3.5 w-3.5 text-slate-400" />
                               <span>Payment Locked (Awaiting Delivery)</span>
                             </span>
                           )}
@@ -741,15 +762,15 @@ export function TaxInvoiceRegistryModal({
                   }
                   if (isSubmitted) {
                     return (
-                      <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
-                        <Clock className="h-3 w-3 text-amber-600" />
+                      <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                        <Clock className="h-3.5 w-3.5 text-amber-600" />
                         <span>Awaiting Buyer Approval</span>
                       </span>
                     );
                   }
                   return (
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
-                      <Clock className="h-3 w-3 text-amber-600" />
+                    <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                      <Clock className="h-3.5 w-3.5 text-amber-600" />
                       <span>Payment Pending from Buyer</span>
                     </span>
                   );
@@ -757,39 +778,43 @@ export function TaxInvoiceRegistryModal({
               </div>
 
               {/* Toolbar: Copy Type, Stamp & Signature, Download PDF */}
-              <div className="flex items-center justify-between gap-2.5 bg-slate-50 border border-slate-200 p-2.5 sm:p-3 rounded-2xl flex-nowrap overflow-x-auto scrollbar-none">
+              <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50/95 border border-slate-200/90 p-2.5 sm:p-3 rounded-2xl relative z-30 shadow-2xs">
                 {/* Left: Copy Type Dropdown */}
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2.5 shrink-0">
                   <label htmlFor="modal-copy-type-select" className="text-xs font-black text-slate-700 uppercase tracking-wider whitespace-nowrap">
                     COPY TYPE:
                   </label>
-                  <select
-                    id="modal-copy-type-select"
-                    value={copyType}
-                    onChange={(e) => setCopyType(e.target.value)}
-                    className="h-9 px-2.5 sm:px-3 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-[#12335f] focus:outline-none min-w-[170px] max-w-[220px] cursor-pointer"
-                  >
-                    <option value="Original Copy">Original Copy (Buyer)</option>
-                    <option value="Duplicate Copy">Duplicate Copy (Transporter)</option>
-                    <option value="Triplicate Copy">Triplicate Copy (Supplier)</option>
-                    <option value="Quadruplicate Copy">Quadruplicate Copy (Extra)</option>
-                  </select>
+                  <div className="relative">
+                    <select
+                      id="modal-copy-type-select"
+                      value={copyType}
+                      onChange={(e) => setCopyType(e.target.value)}
+                      className="h-9 pl-3 pr-8 rounded-xl border border-slate-300 bg-white text-xs font-bold text-slate-800 shadow-xs focus:ring-2 focus:ring-[#12335f] focus:outline-none min-w-[190px] cursor-pointer appearance-none"
+                    >
+                      <option value="Original Copy">Original Copy (Buyer)</option>
+                      <option value="Duplicate Copy">Duplicate Copy (Transporter)</option>
+                      <option value="Triplicate Copy">Triplicate Copy (Supplier)</option>
+                      <option value="Quadruplicate Copy">Quadruplicate Copy (Extra)</option>
+                    </select>
+                    <ChevronDown className="h-3.5 w-3.5 text-slate-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  </div>
                 </div>
 
                 {/* Right: Actions */}
-                <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
+                <div className="flex items-center gap-2 flex-wrap shrink-0 ml-auto">
                   {isBuyer && isSubmitted && (
                     <Button
                       type="button"
                       disabled={isApproving}
                       onClick={handleApproveInvoice}
-                      className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                      className="h-9 px-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer transition active:scale-[0.98]"
                       title="Approve this tax invoice"
                     >
                       {isApproving ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
                       <span>Approve Invoice</span>
                     </Button>
                   )}
+
                   {/* Stamp & Signature Button */}
                   <Button
                     type="button"
@@ -797,70 +822,91 @@ export function TaxInvoiceRegistryModal({
                     onClick={handleOpenBranding}
                     aria-label="Manage official seal, logo and signature"
                     title="Manage official seal, logo and signature"
-                    className="h-9 px-3 rounded-xl border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                    className="h-9 px-3.5 rounded-xl border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100/80 text-indigo-800 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer transition active:scale-[0.98]"
                   >
                     <Stamp className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
-                    <span className="hidden sm:inline">STAMP & SIGNATURE</span>
-                    <span className="sm:hidden">STAMP</span>
+                    <span className="hidden sm:inline">Stamp &amp; Signature</span>
+                    <span className="sm:hidden">Stamp</span>
                   </Button>
 
                   {/* Download PDF Button with Split Dropdown */}
-                  <div className="relative inline-flex rounded-xl shadow-xs shrink-0">
+                  <div ref={downloadMenuRef} className="relative inline-flex rounded-xl shadow-xs shrink-0">
                     <Button
                       type="button"
                       disabled={isDownloadingPdf}
                       onClick={() => void handleDownloadPdf()}
-                      className="h-9 rounded-l-xl rounded-r-none bg-[#12335f] hover:bg-slate-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 px-3 whitespace-nowrap cursor-pointer"
+                      className="h-9 rounded-l-xl rounded-r-none bg-[#12335f] hover:bg-[#0c2444] text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 px-3.5 whitespace-nowrap cursor-pointer transition"
                     >
                       {isDownloadingPdf ? (
                         <RefreshCw className="h-3.5 w-3.5 animate-spin" />
                       ) : (
                         <Download className="h-3.5 w-3.5" />
                       )}
-                      DOWNLOAD PDF ({copyType.replace(' Copy', '').toUpperCase()})
+                      <span>Download PDF ({copyType.replace(' Copy', '').toUpperCase()})</span>
                     </Button>
                     <Button
                       type="button"
                       onClick={() => setDownloadDropdownOpen(prev => !prev)}
-                      className="h-9 rounded-r-xl rounded-l-none bg-[#0e2a4f] hover:bg-slate-900 text-white px-2 border-l border-slate-700 cursor-pointer"
+                      className="h-9 rounded-r-xl rounded-l-none bg-[#0e2a4f] hover:bg-[#07192f] text-white px-2.5 border-l border-slate-700/60 cursor-pointer transition"
                       title="Download other copies"
+                      aria-label="Download other invoice copies"
+                      aria-haspopup="true"
+                      aria-expanded={downloadDropdownOpen}
                     >
-                      <ChevronDown className="h-3.5 w-3.5" />
+                      <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", downloadDropdownOpen && "rotate-180")} />
                     </Button>
 
                     {downloadDropdownOpen && (
-                      <div className="absolute right-0 top-10 z-50 w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in-50">
-                        <p className="px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 mb-1">
-                          Download Invoice Copies
-                        </p>
+                      <div
+                        role="menu"
+                        className="absolute right-0 top-full mt-1.5 z-[70] w-64 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-2 duration-150"
+                      >
+                        <div className="px-3 py-1.5 border-b border-slate-100 mb-1 flex items-center justify-between">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Download Invoice Copies
+                          </p>
+                          <span className="text-[9px] font-bold text-slate-400">PDF</span>
+                        </div>
                         {[
-                          { id: 'Original Copy', label: 'Original Copy (Buyer)' },
-                          { id: 'Duplicate Copy', label: 'Duplicate Copy (Transporter)' },
-                          { id: 'Triplicate Copy', label: 'Triplicate Copy (Supplier)' },
-                          { id: 'Quadruplicate Copy', label: 'Quadruplicate Copy (Extra)' }
-                        ].map(c => (
-                          <button
-                            key={c.id}
-                            type="button"
-                            onClick={() => {
-                              setCopyType(c.id);
-                              setDownloadDropdownOpen(false);
-                              void handleDownloadPdf(c.id);
-                            }}
-                            className="w-full text-left px-2.5 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-950 rounded-lg flex items-center justify-between cursor-pointer"
-                          >
-                            <span>{c.label}</span>
-                            <Download className="h-3 w-3 text-slate-400" />
-                          </button>
-                        ))}
+                          { id: 'Original Copy', label: 'Original Copy', sublabel: 'For Buyer / Recipient' },
+                          { id: 'Duplicate Copy', label: 'Duplicate Copy', sublabel: 'For Transporter' },
+                          { id: 'Triplicate Copy', label: 'Triplicate Copy', sublabel: 'For Supplier / Internal' },
+                          { id: 'Quadruplicate Copy', label: 'Quadruplicate Copy', sublabel: 'Extra Record Copy' }
+                        ].map(c => {
+                          const isSelected = copyType === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              type="button"
+                              role="menuitem"
+                              onClick={() => {
+                                setCopyType(c.id);
+                                setDownloadDropdownOpen(false);
+                                void handleDownloadPdf(c.id);
+                              }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 text-xs rounded-xl flex items-center justify-between cursor-pointer transition",
+                                isSelected
+                                  ? "bg-[#12335f]/5 text-[#12335f] font-black"
+                                  : "text-slate-700 font-semibold hover:bg-slate-100 hover:text-slate-900"
+                              )}
+                            >
+                              <div>
+                                <p className="text-xs font-bold leading-tight">{c.label}</p>
+                                <p className="text-[10px] text-slate-400 font-normal leading-tight">{c.sublabel}</p>
+                              </div>
+                              <Download className={cn("h-3.5 w-3.5 shrink-0 ml-2", isSelected ? "text-[#12335f]" : "text-slate-400")} />
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Tax Invoice Document View */}
-              <div className="overflow-x-auto py-2">
+              {/* Tax Invoice Document View with Canvas/Desk Presentation */}
+              <div className="bg-slate-100/90 rounded-2xl p-3 sm:p-6 md:p-8 border border-slate-200/80 flex justify-center shadow-inner overflow-x-auto">
                 <TaxInvoiceCard
                   copyType={copyType}
                   invoiceNumber={invoiceData.invoiceNumber}

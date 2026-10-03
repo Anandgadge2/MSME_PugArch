@@ -104,7 +104,7 @@ export function TaxInvoiceCard({
   };
 
   return (
-    <div className="w-full max-w-4xl mx-auto bg-white border-2 border-slate-900 shadow-xl text-slate-950 font-sans text-xs selection:bg-slate-200">
+    <div className="w-full max-w-4xl min-w-[620px] md:min-w-[700px] mx-auto bg-white border-2 border-slate-900 shadow-2xl rounded-sm text-slate-950 font-sans text-xs selection:bg-slate-200">
       {/* 1. TOP HEADER BOX: Seller details (left) & Logo + CIN (right) */}
       <div className="grid grid-cols-1 md:grid-cols-2 p-4 border-b-2 border-slate-900 gap-4 items-start">
         {/* Left: Seller Information */}
@@ -119,11 +119,19 @@ export function TaxInvoiceCard({
           )}
           {seller.gstin && (
             <p className="text-xs font-bold text-slate-900">
-              GST NO: <span className="font-mono">{seller.gstin}</span>
+              GST NO: <span className="font-mono font-semibold">{seller.gstin}</span>
             </p>
           )}
-          {seller.phone && <p className="text-xs font-semibold text-slate-800">{seller.phone}</p>}
-          {seller.email && <p className="text-xs font-semibold text-slate-800">{seller.email}</p>}
+          {seller.phone && !seller.address?.includes(seller.phone) && (
+            <p className="text-xs font-semibold text-slate-800">
+              <span className="font-bold">Contact:</span> {seller.phone}
+            </p>
+          )}
+          {seller.email && (
+            <p className="text-xs font-semibold text-slate-800">
+              <span className="font-bold">Email:</span> {seller.email}
+            </p>
+          )}
         </div>
 
         {/* Right: Company Logo & CIN */}
