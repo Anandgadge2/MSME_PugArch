@@ -1666,7 +1666,18 @@ export default function CreateProcurementPage() {
     }
     const hasReverseAuction = isReverseAuctionMethod(d.type) || Boolean(d.basics.isReverseAuctionNeeded);
     if (hasReverseAuction) {
+      const isStandaloneRA = isReverseAuctionMethod(d.type);
+      const isStartingBidValid = isStandaloneRA
+        ? (d.auctionConfig.startingBidPrice > 0 || (d.auctionConfig.startingBidPrice === -1 && d.basics.estimatedValue > 0))
+        : (d.auctionConfig.startingBidPrice > 0 || d.auctionConfig.startingBidPrice === -1);
+      list.push({
+        label: 'Reverse auction starting opening price must be set (> 0)',
+        ok: isStartingBidValid,
+        severity: 'error',
+        stepIdx: 8
+      });
       list.push({ label: 'Reverse auction minimum bid decrement must be greater than 0', ok: d.auctionConfig.minimumBidDecrement > 0, severity: 'error', stepIdx: 8 });
+      list.push({ label: 'Reverse auction duration must be greater than 0 minutes', ok: (d.auctionConfig.durationMinutes || 0) > 0, severity: 'error', stepIdx: 8 });
       if (d.auctionConfig.reservePrice !== null && d.auctionConfig.startingBidPrice > 0) {
         list.push({ label: 'Reserve price cannot exceed starting price', ok: d.auctionConfig.reservePrice <= d.auctionConfig.startingBidPrice, severity: 'error', stepIdx: 8 });
       }
@@ -1801,6 +1812,7 @@ export default function CreateProcurementPage() {
         if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
         if (auction.startingBidPrice !== -1 && auction.startingBidPrice <= 0) return false;
+        if (auction.startingBidPrice === -1 && d.basics.estimatedValue <= 0) return false;
         if (auction.startingBidPrice !== -1 && auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) return false;
         if (auction.minimumBidDecrement <= 0) return false;
         if (auction.autoExtensionEnabled && (
@@ -2095,6 +2107,10 @@ export default function CreateProcurementPage() {
           toast.error('Starting bid price must be greater than 0.');
           return false;
         }
+        if (auction.startingBidPrice === -1 && d.basics.estimatedValue <= 0) {
+          toast.error('Estimated budget must be greater than 0 when using dynamic L1 starting price.');
+          return false;
+        }
         if (auction.startingBidPrice !== -1 && auction.reservePrice !== null && auction.reservePrice > auction.startingBidPrice) {
           toast.error('Reserve price cannot exceed starting bid price.');
           return false;
@@ -2240,7 +2256,34 @@ export default function CreateProcurementPage() {
       router.push(`/buyer/my-procurements`);
     } catch (err: any) {
       console.error('[SubmitProcurement] Submission failed:', err);
-      toast.error('Submission failed: ' + (err.message || 'Unknown error'), { duration: 8000 });
+      const rawMsg = String(err?.message || 'Unknown error');
+      const lower = rawMsg.toLowerCase();
+
+      // Intelligent Error Recovery & Focus Trapping
+      if (lower.includes('auction') || lower.includes('startingbidprice') || lower.includes('starting bid') || lower.includes('decrement') || lower.includes('reserve price') || lower.includes('reserveprice') || lower.includes('duration')) {
+        const evalStepIdx = ALL_STEPS.indexOf('evaluation');
+        if (evalStepIdx !== -1) {
+          changeActiveStep(evalStepIdx);
+          setTriedNext(true);
+          setTimeout(() => {
+            if (lower.includes('starting') || lower.includes('ceiling') || lower.includes('price')) {
+              const el = document.getElementById('auction-starting-bid-price') || document.getElementById('auction-starting-price-mode');
+              el?.focus();
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (lower.includes('decrement')) {
+              const el = document.getElementById('auction-min-bid-decrement');
+              el?.focus();
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } else if (lower.includes('reserve')) {
+              const el = document.getElementById('auction-reserve-price');
+              el?.focus();
+              el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }, 350);
+        }
+      }
+
+      toast.error('Submission failed: ' + rawMsg, { duration: 8000 });
     } finally {
       setSubmittingDraft(false);
     }
@@ -9397,7 +9440,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     department: draft.auctionConfig.department || draft.internal.department || draft.basics.department,
     purchaseOrganization: draft.auctionConfig.purchaseOrganization || draft.auctionConfig.buyerOrganization || draft.internal.orgName,
     estimatedValue,
-    startingBidPrice: draft.auctionConfig.startingBidPrice === -1 ? 0 : Number(draft.auctionConfig.startingBidPrice || estimatedValue || 0),
+    auctionDurationMinutes: Number(draft.auctionConfig.durationMinutes || 60),
+    startingBidPrice: draft.auctionConfig.startingBidPrice === -1
+      ? Number(estimatedValue > 0 ? estimatedValue : 1)
+      : Number(draft.auctionConfig.startingBidPrice || estimatedValue || 1),
+    reservePrice: (draft.auctionConfig.reservePrice && Number(draft.auctionConfig.reservePrice) > 0)
+      ? Number(draft.auctionConfig.reservePrice)
+      : null,
     minimumBidDecrement: Number(draft.auctionConfig.minimumBidDecrement || Math.max(100, Math.round(estimatedValue * 0.01)) || 1000),
     termsDocumentName: cleanDocName(draft.auctionConfig.termsDocumentName, ''),
     termsDocumentFileId: draft.auctionConfig.termsDocumentFileId || null,
@@ -9470,6 +9519,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const rules = {
     startPrice: auctionConfigPayload?.startingBidPrice ?? draft.basics.estimatedValue ?? 0,
     minimumDecrement: auctionConfigPayload?.minimumBidDecrement ?? 0,
+    reservePrice: auctionConfigPayload?.reservePrice ?? null,
     auctionConfig: auctionConfigPayload,
     evaluationMethod: chosenEvaluationMethod,
     allowReverseAuction: hasReverseAuction,

@@ -1389,10 +1389,10 @@ const auctionConfigSchema = z.object({
   auctionMode: z.enum(['ONLINE']),
   auctionStartDateTime: safeCoercedDate,
   auctionEndDateTime: safeCoercedDate,
-  auctionDurationMinutes: z.coerce.number().int().positive(),
-  startingBidPrice: z.coerce.number().positive(),
-  reservePrice: z.coerce.number().positive().optional().nullable(),
-  minimumBidDecrement: z.coerce.number().positive(),
+  auctionDurationMinutes: z.coerce.number().int().positive({ message: 'Reverse auction duration must be greater than 0 minutes' }),
+  startingBidPrice: z.coerce.number().positive({ message: 'Reverse auction starting bid price must be greater than 0' }),
+  reservePrice: z.preprocess(val => (val === 0 || val === '0' || val === '' ? null : val), z.coerce.number().positive({ message: 'Reserve price must be greater than 0' }).optional().nullable()),
+  minimumBidDecrement: z.coerce.number().positive({ message: 'Reverse auction minimum bid decrement must be greater than 0' }),
   autoExtensionEnabled: z.coerce.boolean(),
   extensionTriggerMinutes: z.coerce.number().int().positive().optional().nullable(),
   extensionDurationMinutes: z.coerce.number().int().positive().optional().nullable(),
@@ -1421,6 +1421,7 @@ const normalizeAuctionConfigForDraft = (draft: any) => {
   const payload = draft.payload || {};
   const rules = payload.rules || {};
   const raw = payload.auctionConfig || rules.auctionConfig || {};
+  const estVal = Number(payload.basics?.estimatedValue || payload.estimatedValue || draft.estimatedValue || 0);
   return {
     auctionTitle: raw.auctionTitle || payload.basics?.title || draft.title,
     auctionDescription: raw.auctionDescription || draft.description || payload.basics?.description,
@@ -1435,10 +1436,26 @@ const normalizeAuctionConfigForDraft = (draft: any) => {
     auctionMode: raw.auctionMode || 'ONLINE',
     auctionStartDateTime: raw.auctionStartDateTime || raw.startDateTime || raw.startAt || rules.auctionStartDateTime,
     auctionEndDateTime: raw.auctionEndDateTime || raw.endDateTime || raw.endAt || rules.auctionEndDateTime,
-    auctionDurationMinutes: raw.auctionDurationMinutes || raw.durationMinutes,
-    startingBidPrice: raw.startingBidPrice || raw.startingPrice || rules.startPrice,
-    reservePrice: raw.reservePrice || rules.reservePrice || null,
-    minimumBidDecrement: raw.minimumBidDecrement || raw.minDecrementAmount || rules.minimumDecrement,
+    auctionDurationMinutes: Number(raw.auctionDurationMinutes || raw.durationMinutes || 60),
+    startingBidPrice: (() => {
+      const explicit = raw.startingBidPrice ?? raw.startingPrice ?? rules.startPrice;
+      if (explicit !== undefined && explicit !== null && Number(explicit) > 0) {
+        return Number(explicit);
+      }
+      if (estVal > 0) return estVal;
+      return Number(explicit || 0);
+    })(),
+    reservePrice: (raw.reservePrice && Number(raw.reservePrice) > 0)
+      ? Number(raw.reservePrice)
+      : ((rules.reservePrice && Number(rules.reservePrice) > 0) ? Number(rules.reservePrice) : null),
+    minimumBidDecrement: (() => {
+      const explicit = raw.minimumBidDecrement ?? raw.minDecrementAmount ?? rules.minimumDecrement;
+      if (explicit !== undefined && explicit !== null && Number(explicit) > 0) {
+        return Number(explicit);
+      }
+      if (estVal > 0) return Math.max(100, Math.round(estVal * 0.01));
+      return 1000;
+    })(),
     autoExtensionEnabled: Boolean(raw.autoExtensionEnabled ?? rules.autoExtensionEnabled ?? false),
     extensionTriggerMinutes: raw.extensionTriggerMinutes ?? raw.autoExtensionWindowMinutes ?? null,
     extensionDurationMinutes: raw.extensionDurationMinutes ?? raw.autoExtensionByMinutes ?? null,
@@ -1474,7 +1491,11 @@ const normalizeAuctionConfigForDraft = (draft: any) => {
 const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, methodSlug: string, vendorSelection?: string) => {
   const parsed = auctionConfigSchema.safeParse(configInput);
   if (!parsed.success) {
-    throw new ApiError(400, parsed.error.issues[0]?.message || 'Reverse auction configuration is invalid', 'PROCUREMENT_AUCTION_CONFIG_INVALID');
+    const firstIssue = parsed.error.issues[0];
+    const fieldPath = firstIssue?.path ? firstIssue.path.filter((p: any) => typeof p === 'string' || typeof p === 'number').join('.') : '';
+    const fieldMsg = firstIssue?.message || 'Reverse auction configuration is invalid';
+    const errorMsg = fieldPath ? `${fieldPath}: ${fieldMsg}` : fieldMsg;
+    throw new ApiError(400, errorMsg, 'PROCUREMENT_AUCTION_CONFIG_INVALID');
   }
   const config = parsed.data;
   if (methodSlug === 'reverse-auction' && config.procurementMethod !== 'REVERSE_AUCTION') {
