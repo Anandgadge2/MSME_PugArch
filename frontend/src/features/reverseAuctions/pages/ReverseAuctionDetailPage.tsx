@@ -247,7 +247,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       invalidate();
     },
     onError: (err: any) => {
-      toast.error(`Transition failed: ${err.message}`);
+      const msg = err?.response?.data?.message || err?.message || 'Transition failed';
+      toast.error(msg, { duration: 6000 });
     },
   });
 

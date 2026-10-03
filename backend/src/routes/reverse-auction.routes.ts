@@ -1967,15 +1967,41 @@ router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update'
 // Before an auction can go LIVE, enough sellers must have cleared the pre-bid
 // qualification stage — otherwise the auction opens with no eligible bidders.
 const assertEnoughQualifiedBidders = async (auction: any) => {
+  const isPublic = await isAuctionPublic(auction);
   const qualified = await db.auctionParticipant.count({
     where: {
       auctionId: auction.id,
-      status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+      status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED', 'ONLINE'] }
     }
   });
-  const minimum = Math.max(1, Number(auction.minimumQualifiedBidders) || 1);
+  const minimum = Math.max(isPublic ? 2 : 1, Number(auction.minimumQualifiedBidders) || 2);
   if (qualified < minimum) {
-    throw new ApiError(400, `At least ${minimum} technically qualified bidder(s) are required before the auction can go live (currently ${qualified}).`, 'AUCTION_INSUFFICIENT_QUALIFIED');
+    throw new ApiError(422, `At least ${minimum} qualified bidder(s) are required before the auction can go live (currently ${qualified}).`, 'AUCTION_INSUFFICIENT_QUALIFIED');
+  }
+};
+
+/**
+ * Ensures Limited Reverse Auctions have enough invited/confirmed suppliers before scheduling.
+ * Open auctions are exempt because participants register publicly.
+ */
+const assertEnoughScheduledParticipants = async (auction: any) => {
+  const isPublic = await isAuctionPublic(auction);
+  if (isPublic) return; // Public/Open auction requires no invited suppliers upfront
+
+  const invitedCount = await db.auctionParticipant.count({
+    where: {
+      auctionId: auction.id,
+      status: { in: ['INVITED', 'ACCEPTED', 'CONFIRMED', 'TECHNICALLY_QUALIFIED'] },
+    },
+  });
+
+  const minimum = Math.max(2, Number(auction.minimumQualifiedBidders) || 2);
+  if (invitedCount < minimum) {
+    throw new ApiError(
+      422,
+      `Limited reverse auction requires at least ${minimum} invited supplier(s) before scheduling (currently ${invitedCount}).`,
+      'AUCTION_INSUFFICIENT_PARTICIPANTS'
+    );
   }
 };
 
@@ -2042,7 +2068,7 @@ const transition = (target: string, enumStatus: string, extra?: (req: AuthReques
     }
   };
 
-router.post('/reverse-auctions/:id/schedule', requirePermission('reverse_auction.publish', orgScope), transition('SCHEDULED', 'SCHEDULED'));
+router.post('/reverse-auctions/:id/schedule', requirePermission('reverse_auction.publish', orgScope), transition('SCHEDULED', 'SCHEDULED', undefined, assertEnoughScheduledParticipants));
 router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', (req, auction) => {
   const now = new Date();
   let endTime = auction?.endTime;
