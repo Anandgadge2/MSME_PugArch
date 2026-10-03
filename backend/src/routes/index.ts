@@ -37,6 +37,7 @@ import transaction2faRoutes from '../modules/auth/transaction-2fa.routes.js';
 import consentRoutes from './consent.routes.js';
 import appealRoutes from './appeal.routes.js';
 import noticeCircularRoutes from './notice-circular.routes.js';
+import procurementSubmissionRoutes from './procurement-submission.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -149,6 +150,7 @@ router.use('/', rbacRoutes);
 router.use('/', navigationRoutes);
 router.use('/consent', consentRoutes);
 router.use('/', noticeCircularRoutes);
+router.use('/', procurementSubmissionRoutes);
 
   return router;
 };
