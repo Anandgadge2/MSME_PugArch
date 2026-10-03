@@ -201,7 +201,7 @@ const isParticipatedOpportunity = (item: SellerOpportunity) => {
   const elig = String(item.eligibility || '').toLowerCase();
   const stat = String(item.status || '').toLowerCase();
   const action = String(item.actionLabel || '').toLowerCase();
-  return (
+  if (
     elig.includes('participated') ||
     stat.includes('submitted') ||
     stat.includes('participated') ||
@@ -209,7 +209,45 @@ const isParticipatedOpportunity = (item: SellerOpportunity) => {
     action.includes('view response') ||
     action.includes('view quotation') ||
     action.includes('view quote')
-  );
+  ) {
+    return true;
+  }
+
+  // Check localStorage for submitted quotation
+  if (typeof window !== 'undefined') {
+    try {
+      const candidates = new Set<string>();
+      if (item.sourceRef) {
+        candidates.add(String(item.sourceRef).trim().toUpperCase());
+      }
+      if (item.id) {
+        const rawId = String(item.id).trim();
+        candidates.add(rawId.toUpperCase());
+        candidates.add(rawId.replace(/^(bid|req|qr)-/i, '').toUpperCase());
+      }
+      if (item.title) {
+        candidates.add(String(item.title).trim().toUpperCase());
+      }
+      if (item.href) {
+        item.href.split(/[\/?&=]+/).filter(Boolean).forEach(part => candidates.add(part.trim().toUpperCase()));
+      }
+      if (item.detailsHref) {
+        item.detailsHref.split(/[\/?&=]+/).filter(Boolean).forEach(part => candidates.add(part.trim().toUpperCase()));
+      }
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('rfq_submitted_')) {
+          const subKey = k.replace(/^rfq_submitted_(\d+_)?/, '').trim().toUpperCase();
+          if (subKey && candidates.has(subKey)) {
+            return true;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  return false;
 };
 
 /**
@@ -661,14 +699,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
           const isMergedParticipated =
             isParticipatedOpportunity(existing) ||
+            isParticipatedOpportunity(opportunity) ||
             (parentOpp ? isParticipatedOpportunity(parentOpp) : false) ||
             existing.eligibility === 'Already participated' ||
-            parentOpp?.eligibility === 'Already participated';
+            opportunity.eligibility === 'Already participated' ||
+            parentOpp?.eligibility === 'Already participated' ||
+            existing.actionLabel === 'Track Status' ||
+            opportunity.actionLabel === 'Track Status';
 
-          let bestEligibility = isMergedParticipated ? 'Already participated' : (parentOpp?.eligibility || existing.eligibility || 'Check documents');
-          let bestActionLabel = isMergedParticipated ? 'Track Status' : (parentOpp?.actionLabel || existing.actionLabel);
-          let bestHref = (isMergedParticipated && isParticipatedOpportunity(existing)) ? existing.href : (parentOpp?.href || existing.href);
-          let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref;
+          let bestEligibility = isMergedParticipated ? 'Already participated' : (parentOpp?.eligibility || existing.eligibility || opportunity.eligibility || 'Check documents');
+          let bestActionLabel = isMergedParticipated ? 'Track Status' : (parentOpp?.actionLabel || existing.actionLabel || opportunity.actionLabel);
+          let bestHref = (isMergedParticipated && isParticipatedOpportunity(opportunity))
+            ? opportunity.href
+            : ((isMergedParticipated && isParticipatedOpportunity(existing)) ? existing.href : (parentOpp?.href || existing.href || opportunity.href));
+          let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref || opportunity.detailsHref;
 
           if (auctionOpp) {
             const auctionStatusUpper = String(auctionOpp.status).toUpperCase();
@@ -735,6 +779,79 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       setLoading(false);
     };
 
+    // Collect local submission records from localStorage
+    const localSubmittedKeys = new Set<string>();
+    if (typeof window !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('rfq_submitted_')) {
+            const rawSub = localStorage.getItem(key);
+            if (rawSub) {
+              const subObj = JSON.parse(rawSub);
+              if (subObj?.status === 'SUBMITTED' || subObj?.submissionStatus === 'SUBMITTED') {
+                const subKey = key.replace(/^rfq_submitted_(\d+_)?/, '').trim().toUpperCase();
+                if (subKey) localSubmittedKeys.add(subKey);
+              }
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const currentUserId = Number(user?.id || 0);
+    const pSellerSubmissions = (currentUserId > 0 && user?.role === 'seller')
+      ? Promise.all([
+          procurementBidApi.getSellerBids().catch(() => []),
+          procurementBidApi.getSellerMarketplaceResponses().catch(() => [])
+        ]).then(([sellerBids, sellerResponses]) => {
+          const keys = new Set<string>(localSubmittedKeys);
+          (Array.isArray(sellerBids) ? sellerBids : []).forEach((item: any) => {
+            const bid = item.bid || item;
+            if (bid?.id) keys.add(String(bid.id).toUpperCase());
+            if (bid?.bidNumber) keys.add(String(bid.bidNumber).toUpperCase());
+            if (item?.bidId) keys.add(String(item.bidId).toUpperCase());
+            if (bid?.title) keys.add(String(bid.title).trim().toUpperCase());
+          });
+          (Array.isArray(sellerResponses) ? sellerResponses : []).forEach((resp: any) => {
+            const req = resp.requirement || resp.buyerRequirement || resp;
+            if (req?.id) keys.add(String(req.id).toUpperCase());
+            if (req?.requirementNumber) keys.add(String(req.requirementNumber).toUpperCase());
+            if (req?.referenceNumber) keys.add(String(req.referenceNumber).toUpperCase());
+            if (resp?.requirementId) keys.add(String(resp.requirementId).toUpperCase());
+            if (resp?.buyerRequirementId) keys.add(String(resp.buyerRequirementId).toUpperCase());
+            if (req?.title) keys.add(String(req.title).trim().toUpperCase());
+          });
+          return keys;
+        }).catch(() => localSubmittedKeys)
+      : Promise.resolve(localSubmittedKeys);
+
+    pSellerSubmissions.then(submittedKeys => {
+      if (!alive || submittedKeys.size === 0) return;
+      setItems(prev => prev.map(item => {
+        const oppKeys = [
+          item.id,
+          item.sourceRef,
+          item.title,
+          item.href,
+          item.detailsHref,
+          ...(item.id.startsWith('bid-') ? [item.id.replace('bid-', '')] : []),
+          ...(item.id.startsWith('req-') ? [item.id.replace('req-', '')] : []),
+          ...(item.id.startsWith('qr-') ? [item.id.replace('qr-', '')] : []),
+        ].map(k => String(k || '').toUpperCase());
+
+        const isMatch = oppKeys.some(k => submittedKeys.has(k) || Array.from(submittedKeys).some(sk => sk && sk.length > 3 && k.includes(sk)));
+        if (isMatch) {
+          return {
+            ...item,
+            eligibility: 'Already participated',
+            actionLabel: 'Track Status'
+          };
+        }
+        return item;
+      }));
+    });
+
     // Trigger parallel fetches and stream results as each completes
     const p1 = procurementBidApi.list({ pageSize: 50 }).then(res => {
       if (!alive) return;
@@ -787,13 +904,23 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           return (userId > 0 && sId === userId) || (userOrgId > 0 && oId === userOrgId);
         };
 
+        const canonicalBidId = bid.bidNumber || bid.referenceNumber || bid.id;
+        const isLocallySubmitted = [
+          String(canonicalBidId).toUpperCase(),
+          String(bid.id).toUpperCase(),
+          String(bid.bidNumber || '').toUpperCase(),
+          String(bid.title || '').trim().toUpperCase()
+        ].some(k => k && localSubmittedKeys.has(k));
+
         const myParticipation = bid.myParticipation || (Array.isArray(bid.participations)
           ? bid.participations.find((p: any) => matchesUserOrOrg(p))
           : null);
         const isBidParticipated = Boolean(
           bid.participated ||
           bid.hasParticipated ||
+          bid.hasSubmittedProposal ||
           myParticipation ||
+          isLocallySubmitted ||
           (Array.isArray(bid.participations) && bid.participations.some((p: any) => matchesUserOrOrg(p)))
         );
         const myTechStatus = String(myParticipation?.technicalStatus || '').toUpperCase();
@@ -809,7 +936,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? 'Already participated'
           : 'Check documents';
 
-        const canonicalBidId = bid.bidNumber || bid.referenceNumber || bid.id;
         let actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
         let href = `/bids/${canonicalBidId}/participate`;
         let detailsHref = `/bids/${canonicalBidId}`;
@@ -871,7 +997,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           actionLabel,
           href,
           detailsHref,
-          sourceRef: bid.id || `BID-${bid.sourceId || ''}`,
+          sourceRef: bid.bidNumber || bid.referenceNumber || bid.id || `BID-${bid.sourceId || ''}`,
           publishedAt: bid.publishedAt || bid.approvedAt || bid.createdAt || bid.rawStartDate || bid.startDate,
           createdAt: bid.createdAt,
           quantity: bid.quantity,
@@ -998,11 +1124,21 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const isReqDisqualified = reqTechStatus === 'DISQUALIFIED' || reqFinalStatus === 'DISQUALIFIED' || reqFinalStatus === 'REJECTED';
         const isReqNotSelected = reqFinalStatus === 'NOT_SELECTED';
 
+        const isReqLocallySubmitted = [
+          String(canonicalReqId).toUpperCase(),
+          String(req.id).toUpperCase(),
+          String(req.referenceNumber || '').toUpperCase(),
+          String(req.bidNumber || '').toUpperCase(),
+          String(req.requirementNumber || '').toUpperCase(),
+          String(req.title || '').trim().toUpperCase()
+        ].some(k => k && localSubmittedKeys.has(k));
+
         const isReqParticipated = Boolean(
           req.hasParticipated ||
           req.participated ||
           myReqParticipation ||
           myReqResponse ||
+          isReqLocallySubmitted ||
           (Array.isArray(req.participations) && req.participations.some((p: any) => matchesUserOrOrg(p))) ||
           (Array.isArray(req.responses) && req.responses.some((r: any) => matchesUserOrOrg(r)))
         );
@@ -1107,11 +1243,18 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const myQrResponse = qr.ownResponse || (Array.isArray(qr.responses)
           ? qr.responses.find((r: any) => matchesUserOrOrg(r))
           : null);
+        const isQrLocallySubmitted = [
+          String(qr.id).toUpperCase(),
+          String(qr.quoteNumber || '').toUpperCase(),
+          String(qr.title || '').trim().toUpperCase()
+        ].some(k => k && localSubmittedKeys.has(k));
+
         const isQrParticipated = Boolean(
           qr.hasParticipated ||
           qr.participated ||
           myQrParticipation ||
           myQrResponse ||
+          isQrLocallySubmitted ||
           (Array.isArray(qr.participations) && qr.participations.some((p: any) => matchesUserOrOrg(p))) ||
           (Array.isArray(qr.responses) && qr.responses.some((r: any) => matchesUserOrOrg(r)))
         );

@@ -333,6 +333,10 @@ const computeRequirementState = (requirement: any) => {
 const decorateRequirement = (requirement: any) => {
     if (!requirement) return requirement;
     const state = computeRequirementState(requirement);
+    const userResp = Array.isArray(requirement.responses) && requirement.responses.length > 0 ? requirement.responses[0] : null;
+    const userPart = Array.isArray(requirement.participations) && requirement.participations.length > 0 ? requirement.participations[0] : null;
+    const hasParticipated = Boolean(userResp || userPart || requirement.hasParticipated || requirement.participated || requirement.myParticipation || requirement.ownResponse);
+
     return {
         ...requirement,
         buyerId: requirement.buyerId || requirement.createdById,
@@ -342,7 +346,11 @@ const decorateRequirement = (requirement: any) => {
         computedStatus: state.code,
         statusLabel: state.label,
         daysRemaining: state.daysRemaining,
-        timeRemaining: state.timeRemaining
+        timeRemaining: state.timeRemaining,
+        hasParticipated,
+        participated: hasParticipated,
+        myParticipation: userPart || requirement.myParticipation,
+        ownResponse: userResp || requirement.ownResponse
     };
 };
 
@@ -475,6 +483,9 @@ const mapProcurementBidToPublic = (bid: any) => {
     const cleanState = formatState(bid.state || org.state || 'Odisha');
     const cleanLocation = [cleanDistrict, cleanState].filter(Boolean).join(', ') || 'Jharsuguda, Odisha';
 
+    const userParticipation = Array.isArray(bid.participations) && bid.participations.length > 0 ? bid.participations[0] : null;
+    const hasParticipated = Boolean(userParticipation || bid.hasParticipated || bid.participated);
+
     return decorateRequirement({
         id: bid.id,
         buyerId: bid.buyerId,
@@ -510,7 +521,11 @@ const mapProcurementBidToPublic = (bid: any) => {
         requirementNumber: bid.bidNumber,
         procurementMethod: bid.procurementType,
         canonicalMethod: bid.canonicalMethod || bid.procurementType,
-        technicalPacket: bid.technicalPacket
+        technicalPacket: bid.technicalPacket,
+        participations: bid.participations || [],
+        myParticipation: userParticipation || bid.myParticipation,
+        hasParticipated,
+        participated: hasParticipated
     });
 };
 
@@ -2777,19 +2792,53 @@ router.get('/marketplace/requirements', optionalAuthenticate, shortCache(30), as
             buyerOrderBy = [{ lastDate: 'asc' }];
         }
 
+        const currentUserId = req.user?.id ? Number(req.user.id) : null;
+        const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
+        const hasUser = Boolean(currentUserId);
+
         const cacheKey = `cache:marketplace:requirements:${req.user?.id || 'anon'}:${JSON.stringify(req.query)}`;
         const cachedResult = await getOrSetCache(cacheKey, async () => {
             const [buyerRequirements, buyerTotal, legacyRequirements, legacyTotal, procurementBids, pbTotal] = await Promise.all([
-                db.buyerRequirement.findMany({ where, orderBy: buyerOrderBy, take: pageSize * page, select: publicRequirementListSelect }).catch(() => []),
+                db.buyerRequirement.findMany({
+                    where,
+                    orderBy: buyerOrderBy,
+                    take: pageSize * page,
+                    select: {
+                        ...publicRequirementListSelect,
+                        responses: (hasUser && currentUserId) ? {
+                            where: {
+                                OR: [
+                                    { sellerUserId: currentUserId },
+                                    ...(currentUserOrgId ? [{ sellerOrganizationId: currentUserOrgId }] : [])
+                                ]
+                            },
+                            select: { id: true, status: true, sellerUserId: true, sellerOrganizationId: true }
+                        } : false
+                    }
+                }).catch(() => []),
                 db.buyerRequirement.count({ where }).catch(() => 0),
                 db.requirement.findMany({ where: legacyWhere, orderBy: [{ requiredBy: 'asc' }, { updatedAt: 'desc' }], take: pageSize * page, select: publicLegacyRequirementSelect }).catch(() => []),
                 db.requirement.count({ where: legacyWhere }).catch(() => 0),
-                db.procurementBid.findMany({ where: pbWhere, include: { buyerOrganization: true }, orderBy: [{ endDate: 'asc' }, { createdAt: 'desc' }], take: pageSize * page }).catch(() => []),
+                db.procurementBid.findMany({
+                    where: pbWhere,
+                    include: {
+                        buyerOrganization: true,
+                        participations: (hasUser && currentUserId) ? {
+                            where: {
+                                isWithdrawn: false,
+                                OR: [
+                                    { sellerId: currentUserId },
+                                    ...(currentUserOrgId ? [{ seller: { organizationId: currentUserOrgId } }] : [])
+                                ]
+                            },
+                            select: { id: true, sellerId: true, submissionStatus: true, seller: { select: { id: true, organizationId: true } } }
+                        } : false
+                    },
+                    orderBy: [{ endDate: 'asc' }, { createdAt: 'desc' }],
+                    take: pageSize * page
+                }).catch(() => []),
                 db.procurementBid.count({ where: pbWhere }).catch(() => 0)
             ]);
-
-            const currentUserId = req.user?.id ? Number(req.user.id) : null;
-            const currentUserOrgId = req.user?.organizationId ? Number(req.user.organizationId) : null;
             const filteredLegacy = (legacyRequirements || []).filter((reqItem: any) => {
                 const method = String(reqItem.canonicalMethod || reqItem.procurementMethod || '').toUpperCase();
                 const isRestricted = ['DIRECT_PURCHASE', 'CATALOG_PURCHASE', 'REPEAT_ORDER', 'LIMITED_TENDER', 'SINGLE_SOURCE', 'EMERGENCY_PURCHASE'].includes(method);
