@@ -60,7 +60,7 @@ import {
   Repeat,
   RefreshCw,
 } from "lucide-react";
-import { IssueCallOffModal } from "../../rateContract/components/IssueCallOffModal";
+import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
@@ -72,21 +72,11 @@ import {
   prewarmFileAssetPreview,
   type DocumentPreview,
 } from "../../../lib/files";
-import { TechnicalEvaluationModal } from "./TechnicalEvaluationModal";
 import { DocumentPreviewModal } from "../../../components/DocumentPreviewModal";
 import { FocusTrap } from "../../../components/ui/FocusTrap";
 import { ProcurementLifecycleStepper } from "./ProcurementLifecycleStepper";
 import { deriveProcurementPrimaryAction } from "./procurementActionEngine";
-import { PurchaseOrderReceiptModal } from "../../purchaseOrders/components/PurchaseOrderReceiptModal";
-import { TaxInvoiceRegistryModal } from "../../invoices/components/TaxInvoiceRegistryModal";
-import { PackedOrderDialog } from "../../delivery/components/PackedOrderDialog";
-import { DispatchDetailsModal } from "../../delivery/components/DispatchDetailsModal";
-import { GrnCreateModal } from "../../grn/components/GrnCreateModal";
 import { useGrnEligibility } from "../../grn/hooks";
-import { CreateInvoiceModal } from "../../invoices/components/CreateInvoiceModal";
-import { RecordOrderPaymentModal } from "../../purchaseOrders/components/RecordOrderPaymentModal";
-import { ConfirmOrderSettlementModal } from "../../purchaseOrders/components/ConfirmOrderSettlementModal";
-import { PaymentReceiptViewModal } from "../../payments/components/PaymentReceiptViewModal";
 import { useDeliveryByPO } from "../../delivery/hooks";
 import { ensureDeliveryForPurchaseOrder } from "../../delivery/api";
 import { postApi } from "../../shared/apiClient";
@@ -96,13 +86,77 @@ import { getApi } from "../../shared/apiClient";
 import { procurementBidApi } from "../../procurementBid/api";
 import { KpiCard } from "../../shared/KpiCard";
 import ClarificationPanel from "./ClarificationPanel";
-import StartReverseAuctionModal, {
-  SubmittedVendorItem,
-} from "../../reverseAuctions/components/StartReverseAuctionModal";
-import { ExtendScheduleModal } from "./ExtendScheduleModal";
+import type { SubmittedVendorItem } from "../../reverseAuctions/components/StartReverseAuctionModal";
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
+
+const ModalLoadingFallback = () => (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs"
+    role="status"
+    aria-live="polite"
+    aria-label="Loading dialog"
+  >
+    <div className="flex flex-col items-center gap-3 p-6 bg-white rounded-2xl shadow-2xl border border-slate-100">
+      <Loader2 className="h-8 w-8 animate-spin text-blue-600" aria-hidden="true" />
+      <span className="text-xs font-semibold text-slate-600">Loading component...</span>
+    </div>
+  </div>
+);
+
+const IssueCallOffModal = dynamic(
+  () => import("../../rateContract/components/IssueCallOffModal").then((m) => m.IssueCallOffModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const TechnicalEvaluationModal = dynamic(
+  () => import("./TechnicalEvaluationModal").then((m) => m.TechnicalEvaluationModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const PurchaseOrderReceiptModal = dynamic(
+  () => import("../../purchaseOrders/components/PurchaseOrderReceiptModal").then((m) => m.PurchaseOrderReceiptModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const TaxInvoiceRegistryModal = dynamic(
+  () => import("../../invoices/components/TaxInvoiceRegistryModal").then((m) => m.TaxInvoiceRegistryModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const PackedOrderDialog = dynamic(
+  () => import("../../delivery/components/PackedOrderDialog").then((m) => m.PackedOrderDialog),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const DispatchDetailsModal = dynamic(
+  () => import("../../delivery/components/DispatchDetailsModal").then((m) => m.DispatchDetailsModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const GrnCreateModal = dynamic(
+  () => import("../../grn/components/GrnCreateModal").then((m) => m.GrnCreateModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const CreateInvoiceModal = dynamic(
+  () => import("../../invoices/components/CreateInvoiceModal").then((m) => m.CreateInvoiceModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const RecordOrderPaymentModal = dynamic(
+  () => import("../../purchaseOrders/components/RecordOrderPaymentModal").then((m) => m.RecordOrderPaymentModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const ConfirmOrderSettlementModal = dynamic(
+  () => import("../../purchaseOrders/components/ConfirmOrderSettlementModal").then((m) => m.ConfirmOrderSettlementModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const PaymentReceiptViewModal = dynamic(
+  () => import("../../payments/components/PaymentReceiptViewModal").then((m) => m.PaymentReceiptViewModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const StartReverseAuctionModal = dynamic(
+  () => import("../../reverseAuctions/components/StartReverseAuctionModal"),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const ExtendScheduleModal = dynamic(
+  () => import("./ExtendScheduleModal").then((m) => m.ExtendScheduleModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
 import { useProcurementRealtime } from "../hooks/useProcurementRealtime";
 import { useUserRealtime } from "../../../hooks/useUserRealtime";
 import {
