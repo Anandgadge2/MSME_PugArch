@@ -1,117 +1,25 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState, useMemo } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
-import { formatRefId } from '../../../utils/refIdUtils';
-import {
-  Download,
-  Calendar,
-  MapPin,
-  Building2,
-  Check,
-  Loader2,
-  Eye,
-  FileText,
-  ShieldCheck,
-  ArrowRight,
-  ArrowLeft,
-  Layers,
-  ClipboardList,
-  IndianRupee,
-  Info,
-  Package,
-  ClipboardCheck,
-  Clock,
-  CheckCircle,
-  Users,
-  Tag,
-  CheckCircle2,
-  ShieldAlert,
-  FileCheck,
-  Truck,
-  Phone,
-  Mail,
-  FileSpreadsheet,
-  Lock,
-  Scale,
-  FileBox,
-  ChevronDown,
-  ChevronUp,
-  Shield,
-  ExternalLink,
-  AlertCircle,
-  RotateCcw,
-  Star,
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
-import { cn } from '../../../lib/utils';
-import { useQuery } from '@tanstack/react-query';
-import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { fetchRateContractDetail } from '../../rateContract/api';
-import { openFileAsset } from '../../../lib/files';
-import { PdfEngine } from '../../../lib/pdfEngine';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
+import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 
-/* ─── Helper Utilities ─────────────────────────────────── */
-
-function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
-  if (!dateVal) return null;
-  try {
-    let s = typeof dateVal === 'string' ? dateVal.trim() : dateVal;
-    if (typeof s === 'string') {
-      s = s.replace(/\s*IST\b/i, '').replace(/\bSept\b/i, 'Sep');
-    }
-    const d = new Date(s);
-    if (isNaN(d.getTime())) return String(dateVal);
-    const day = String(d.getDate()).padStart(2, '0');
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const month = months[d.getMonth()];
-    const year = d.getFullYear();
-    if (!includeTime) return `${day} ${month} ${year}`;
-    const hoursNum = d.getHours();
-    const minutes = String(d.getMinutes()).padStart(2, '0');
-    const ampm = hoursNum >= 12 ? 'PM' : 'AM';
-    let h12 = hoursNum % 12;
-    if (h12 === 0) h12 = 12;
-    const hoursFormatted = String(h12).padStart(2, '0');
-    return `${day} ${month} ${year}, ${hoursFormatted}:${minutes} ${ampm}`;
-  } catch {
-    return String(dateVal);
-  }
-}
-
-function hasValue(val: unknown): boolean {
-  if (val === null || val === undefined || val === '') return false;
-  if (typeof val === 'string' && val.trim() === '') return false;
-  if (typeof val === 'boolean') return true;
-  if (Array.isArray(val)) return val.length > 0;
-  if (typeof val === 'object') return Object.keys(val as object).length > 0;
-  return true;
-}
-
-function formatDisplayValue(val: unknown): string {
-  if (val === null || val === undefined || val === '') return '';
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No';
-  if (Array.isArray(val)) return val.map(v => formatDisplayValue(v)).join(', ');
-  if (typeof val === 'object') return Object.entries(val as object).map(([k, v]) => `${k}: ${formatDisplayValue(v)}`).join(' | ');
-  const str = String(val);
-  return str.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-}
-
-/* ─── Main Page ─────────────────────────────────────────── */
-
-export default function RateContractDetailPage({ initialData }: { initialData?: any } = {}) {
+function RateContractDetailContent({ initialData }: { initialData?: any }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
-  const [expandedDocs, setExpandedDocs] = useState(false);
+  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const pathTokens = (pathname || '').split('/').filter(Boolean);
@@ -146,9 +54,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     )
   );
 
-  // Fetch ProcurementBid / Rate Contract data via the unified detail endpoint
   const hasValidSellerInitial = user?.role === 'seller' ? Boolean(initialData?.myParticipation || initialData?.hasSubmittedProposal) : true;
-  const { data: bidData, isLoading: bidLoading, error: bidError } = useQuery({
+  const { data: bidData, isLoading: bidLoading, error: bidError, refetch: refetchBid } = useQuery({
     queryKey: ['procurement-bid-rc-detail', requestId, user?.id],
     queryFn: () => procurementBidApi.detail(requestId),
     enabled: !!requestId,
@@ -157,13 +64,11 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     retry: 1,
   });
 
-  // Fetch BuyerRequirement data when navigated via requirementId
-  const { data: reqData, isLoading: reqLoading, error: reqError } = useQuery({
+  const { data: reqData, isLoading: reqLoading, error: reqError, refetch: refetchReq } = useQuery({
     queryKey: ['marketplace-requirement-rc-detail', requirementId, user?.id],
     queryFn: async () => {
       const data = await getApi<any>(`/api/marketplace/requirements/${requirementId}`);
-      const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
-      return unwrapped;
+      return data?.requirement || data?.data?.requirement || data?.data || data;
     },
     enabled: !!requirementId,
     initialData: isMatchingInitial && (initialData?.title || initialData?.requirement) ? initialData : undefined,
@@ -171,21 +76,8 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
     retry: 1,
   });
 
-  const bidSourceId = bidData?.sourceId || null;
-  const { data: bidReqData } = useQuery({
-    queryKey: ['marketplace-requirement-rc-ownresponse', bidSourceId, user?.id],
-    queryFn: async () => {
-      const data = await getApi<any>(`/api/marketplace/requirements/${bidSourceId}`);
-      const unwrapped = data?.requirement || data?.data?.requirement || data?.data || data;
-      return unwrapped;
-    },
-    enabled: !!requestId && !!bidSourceId && user?.role === 'seller',
-    staleTime: 60_000,
-  });
-
-  // Fetch Contract table data when navigated via contract id (e.g. from /seller/opportunities or /procurement/rate-contracts)
   const contractId = !isNaN(Number(rawIdParam)) ? Number(rawIdParam) : (rawIdParam.startsWith('rc-') ? Number(rawIdParam.replace('rc-', '')) : null);
-  const { data: contractData, isLoading: contractLoading, error: contractError } = useQuery({
+  const { data: contractData, isLoading: contractLoading, error: contractError, refetch: refetchContract } = useQuery({
     queryKey: ['rate-contract-detail', contractId, user?.id],
     queryFn: () => fetchRateContractDetail(contractId!),
     enabled: !!contractId,
@@ -200,749 +92,77 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
   );
   const isQueryInProgress = bidLoading || reqLoading || contractLoading;
   const hasData = Boolean(bidData || reqData || contractData || hasValidInitialData);
-  const isLoading = !hasData && isQueryInProgress;
-  const error = !hasData && !isQueryInProgress && (bidError || reqError || contractError) ? (bidError || reqError || contractError) : null;
 
-  const reqObj = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
-
-  const ownParticipation: any = user?.role === 'seller'
-    ? (() => {
-        const candidate = bidData?.myParticipation;
-        if (candidate) {
-          const pUserId = candidate.sellerId || candidate.sellerUserId || candidate.seller?.id || candidate.sellerUser?.id;
-          const pOrgId = candidate.organizationId || candidate.sellerOrganizationId || candidate.seller?.organizationId || candidate.seller?.organization?.id;
-          const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
-          const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
-          if (matchUser || matchOrg) return candidate;
-        }
-        return (Array.isArray(bidData?.participations) ? bidData.participations : []).find((p: any) => {
-          const pUserId = p.sellerId || p.sellerUserId || p.seller?.id || p.sellerUser?.id;
-          const pOrgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
-          const matchUser = Boolean(user?.id && pUserId && Number(pUserId) === Number(user.id));
-          const matchOrg = Boolean(user?.organizationId && pOrgId && Number(pOrgId) === Number(user.organizationId));
-          return matchUser || matchOrg;
-        }) || null;
-      })()
-    : null;
-
-  const rawReqOwnResp = reqData?.ownResponse || bidReqData?.ownResponse;
-  const verifiedRawReqOwnResp = React.useMemo(() => {
-    if (!rawReqOwnResp || user?.role !== 'seller') return null;
-    const sId = rawReqOwnResp.sellerId || rawReqOwnResp.sellerUserId || rawReqOwnResp.userId || rawReqOwnResp.seller?.id;
-    const sOrg = rawReqOwnResp.organizationId || rawReqOwnResp.sellerOrganizationId || rawReqOwnResp.seller?.organizationId;
-    const matchUser = Boolean(user?.id && sId && String(sId) === String(user.id));
-    const matchOrg = Boolean(user?.organizationId && sOrg && String(sOrg) === String(user.organizationId));
-    return (matchUser || matchOrg) ? rawReqOwnResp : null;
-  }, [rawReqOwnResp, user]);
-
-  const ownResponse = (ownParticipation ? {
-    ...ownParticipation,
-    status: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
-    submissionStatus: ownParticipation.submissionStatus || ownParticipation.status || 'DRAFT',
-    createdAt: ownParticipation.createdAt,
-    updatedAt: ownParticipation.updatedAt || ownParticipation.createdAt,
-    submittedAt: ownParticipation.submittedAt || null,
-    offeredPrice: ownParticipation.offeredPrice || ownParticipation.quotedAmount || ownParticipation.totalAmount || ownParticipation.responseData?.offeredPrice,
-    offeredQuantity: ownParticipation.offeredQuantity || ownParticipation.responseData?.offeredQuantity,
-    deliveryTimeline: ownParticipation.deliveryTimeline || ownParticipation.responseData?.deliveryTimeline,
-    terms: ownParticipation.terms || ownParticipation.responseData?.terms,
-    message: ownParticipation.message || ownParticipation.responseData?.message,
-    responseData: ownParticipation.responseData,
-  } : null) || verifiedRawReqOwnResp;
-
-  // ── Normalize rcData from either contractData, reqData, or verified bidData ──
-  const bid: any = bidData;   // Runtime has more fields than the TS type; cast for extraction
-  const isBidActualRc = Boolean(
-    bid && (
-      String(bid.bidType || '').toUpperCase().includes('RATE_CONTRACT') ||
-      String(bid.procurementType || '').toUpperCase().includes('RATE_CONTRACT') ||
-      String(bid.bidNumber || '').toUpperCase().startsWith('RC-') ||
-      String(bid.title || '').toUpperCase().includes('RATE CONTRACT') ||
-      bid.technicalPacket?.rateContractConfig ||
-      bid.technicalPacket?.rateContract
-    )
-  );
-
-  const cMeta: any = contractData?.metadata || {};
-  const contractAsRcData = contractData ? {
-    id: contractData.id,
-    subject: cMeta.contractTitle || contractData.title || 'Rate Contract Opportunity',
-    title: cMeta.contractTitle || contractData.title,
-    contractNumber: contractData.contractNumber || cMeta.requirementNumber || `RC-${contractData.id}`,
-    buyer: {
-      name: (contractData as any).buyerOrganization?.organizationName || (contractData as any).buyer?.name || cMeta.buyerOrganizationName || 'Verified Buyer',
-      email: (contractData as any).buyerEmail || (contractData as any).buyer?.email || null,
-      mobile: (contractData as any).buyerMobile || (contractData as any).buyer?.mobile || null,
-      buyerProfile: (contractData as any).buyerOrganization || (contractData as any).buyer?.buyerProfile,
-    },
-    estimatedValue: contractData.value || cMeta.estimatedValue,
-    deadlineDate: contractData.endDate || cMeta.periodEndDate,
-    createdAt: contractData.startDate || contractData.createdAt || cMeta.periodStartDate,
-    status: contractData.status || cMeta.activeState || 'ACTIVE',
-    items: (cMeta.itemRateSchedule || []).map((it: any) => ({
-      itemName: it.itemName,
-      name: it.itemName,
-      quantity: it.estimatedAnnualQuantity,
-      unit: it.unitOfMeasure,
-      specification: it.specification || '',
-      baseRate: it.baseRate,
-      discount: it.discount,
-      gst: it.gst
-    })),
-    location: (cMeta.deliveryLocation && !cMeta.deliveryLocation.toLowerCase().includes('sla') ? cMeta.deliveryLocation : null) || [cMeta.district, cMeta.state].filter(Boolean).join(', ') || 'Location as agreed in call-off orders',
-    requirementNumber: contractData.contractNumber || cMeta.requirementNumber,
-    paymentTerms: cMeta.paymentTerms || '—',
-    deliveryTerms: cMeta.deliverySla || '—',
-    payload: {
-      basics: {
-        title: cMeta.contractTitle || contractData.title,
-        category: cMeta.contractCategory,
-        estimatedValue: contractData.value,
-      },
-      rateContractConfig: cMeta,
-      rateContract: cMeta,
-      schedule: {
-        publishDate: contractData.startDate || cMeta.periodStartDate,
-        submissionDeadline: contractData.endDate || cMeta.periodEndDate,
-      },
-      terms: {
-        deliveryTerms: cMeta.deliverySla,
-        paymentTerms: cMeta.paymentTerms,
-        penaltyClause: cMeta.penaltyClause,
-        rateValidityPeriod: cMeta.rateValidityPeriod,
-      },
-      items: (cMeta.itemRateSchedule || []).map((it: any) => ({
-        itemName: it.itemName,
-        quantity: it.estimatedAnnualQuantity,
-        unit: it.unitOfMeasure,
-        specification: it.specification,
-        baseRate: it.baseRate,
-      })),
-      vendors: {
-        invitedSellers: cMeta.selectedSuppliers || []
-      }
-    },
-    description: cMeta.contractDescription || contractData.title,
-    documents: cMeta.contractDocument ? [{ fileName: cMeta.contractDocument.fileName }] : [],
-    procurementMethod: 'RATE_CONTRACT',
-    categoryName: cMeta.contractCategory || 'Facility Management & Canteen Services',
-    quantity: (cMeta.itemRateSchedule || []).reduce((sum: number, it: any) => sum + (Number(it.estimatedAnnualQuantity) || 0), 0) || undefined,
-    unit: cMeta.itemRateSchedule?.[0]?.unitOfMeasure || 'Units',
-    buyerOrganization: (contractData as any).buyerOrganization || { organizationName: cMeta.buyerOrganizationName || 'Verified Buyer' },
-    allowReverseAuction: false,
-  } : null;
-
-  const preferReq = Boolean((explicitReqId || (!bid && !contractData)) && reqObj && (reqObj.title || reqObj.id));
-
-  const rcData: any = preferReq ? {
-    id: reqObj.id,
-    subject: reqObj.title || reqObj.description || bid?.title,
-    buyer: {
-      name: reqObj.buyerOrganization?.organizationName || reqObj.buyer?.name || reqObj.buyerEmail || bid?.buyer?.name || null,
-      email: reqObj.buyerEmail || reqObj.buyer?.email || null,
-      mobile: reqObj.buyerMobile || reqObj.buyer?.mobile || null,
-      buyerProfile: reqObj.buyerOrganization || reqObj.buyer?.buyerProfile,
-    },
-    estimatedValue: reqObj.estimatedValue || reqObj.budgetMax || reqObj.budgetMin || bid?.estimatedValue,
-    deadlineDate: reqObj.lastDate || bid?.endDate,
-    createdAt: reqObj.createdAt,
-    updatedAt: reqObj.updatedAt,
-    status: reqObj.status || bid?.status,
-    items: reqObj.items || reqObj.payload?.items || bid?.items,
-    location: reqObj.location || (reqObj.buyerOrganization
-      ? [reqObj.buyerOrganization.address || reqObj.buyerOrganization.organizationName, reqObj.buyerOrganization.city, reqObj.buyerOrganization.district, reqObj.buyerOrganization.state].filter(Boolean).join(', ')
-      : bid?.deliveryLocation),
-    requirementNumber: reqObj.requirementNumber || bid?.bidNumber,
-    paymentTerms: reqObj.paymentTerms || reqObj.payload?.paymentTerms || reqObj.payload?.terms?.paymentTerms || bid?.technicalPacket?.terms?.paymentTerms,
-    deliveryTerms: reqObj.deliveryTerms || reqObj.payload?.deliveryTerms || reqObj.payload?.terms?.deliveryTerms || bid?.technicalPacket?.terms?.deliveryTerms,
-    payload: reqObj.payload || bid?.technicalPacket,
-    description: reqObj.description || bid?.description,
-    documents: reqObj.documents || bid?.documents,
-    procurementMethod: 'RATE_CONTRACT',
-    categoryName: reqObj.category?.name || reqObj.category || bid?.category,
-    quantity: reqObj.quantity || bid?.quantity,
-    unit: reqObj.unit || bid?.unit,
-    buyerOrganization: reqObj.buyerOrganization || bid?.buyerOrganization,
-  } : contractAsRcData ? contractAsRcData : isBidActualRc && bid ? {
-    id: bid.id || bid.sourceId,
-    subject: bid.title,
-    buyer: bid.buyer || { name: bid.buyerName },
-    estimatedValue: bid.estimatedValue,
-    deadlineDate: bid.endDate,
-    createdAt: bid.startDate || bid.createdAt,
-    status: bid.status,
-    location: bid.deliveryLocation,
-    requirementNumber: bid.bidNumber || bid.referenceNumber || bid.id,
-    paymentTerms: bid.technicalPacket?.terms?.paymentTerms || bid.technicalPacket?.rateContractConfig?.paymentTerms || '',
-    deliveryTerms: bid.technicalPacket?.terms?.deliveryTerms || bid.technicalPacket?.rateContractConfig?.deliverySla || '',
-    payload: bid.technicalPacket,          // ← backend now returns full technicalPacket
-    description: bid.description,
-    documents: bid.documents?.length ? bid.documents : (bid.bidDocuments || []),
-    items: bid.items || bid.technicalPacket?.items || [],
-    procurementMethod: 'RATE_CONTRACT',
-    categoryName: bid.category,
-    quantity: bid.quantity,
-    unit: bid.unit,
-    buyerOrganization: bid.buyerOrganization || { organizationName: bid.buyerOrganizationName },
-    visibility: bid.visibility,
-    allowReverseAuction: false,
-    evaluationMethod: [
-      bid.technicalPacket?.evaluation?.method,
-      bid.technicalPacket?.evaluation?.evaluationMethod,
-      bid.technicalPacket?.evaluationMethod,
-      bid.technicalPacket?.rules?.evaluationMethod,
-      bid.evaluationMethod,
-    ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) || bid.evaluationMethod,
-    // Preserve top-level date fields
-    startDate: bid.startDate,
-    endDate: bid.endDate,
-    technicalOpeningDate: bid.technicalOpeningDate,
-    financialOpeningDate: bid.financialOpeningDate,
-  } : reqObj && (reqObj.title || reqObj.id) ? {
-    id: reqObj.id,
-    subject: reqObj.title || reqObj.description,
-    buyer: {
-      name: reqObj.buyerOrganization?.organizationName || reqObj.buyer?.name || reqObj.buyerEmail || null,
-      email: reqObj.buyerEmail || reqObj.buyer?.email || null,
-      mobile: reqObj.buyerMobile || reqObj.buyer?.mobile || null,
-      buyerProfile: reqObj.buyerOrganization || reqObj.buyer?.buyerProfile,
-    },
-    estimatedValue: reqObj.estimatedValue || reqObj.budgetMax || reqObj.budgetMin,
-    deadlineDate: reqObj.lastDate,
-    createdAt: reqObj.createdAt,
-    updatedAt: reqObj.updatedAt,
-    status: reqObj.status,
-    items: reqObj.items,
-    location: reqObj.location || (reqObj.buyerOrganization
-      ? [reqObj.buyerOrganization.address || reqObj.buyerOrganization.organizationName, reqObj.buyerOrganization.city, reqObj.buyerOrganization.district, reqObj.buyerOrganization.state].filter(Boolean).join(', ')
-      : null),
-    requirementNumber: reqObj.requirementNumber,
-    paymentTerms: reqObj.paymentTerms || reqObj.payload?.paymentTerms || reqObj.payload?.terms?.paymentTerms,
-    deliveryTerms: reqObj.deliveryTerms || reqObj.payload?.deliveryTerms || reqObj.payload?.terms?.deliveryTerms,
-    payload: reqObj.payload,
-    description: reqObj.description,
-    documents: reqObj.documents,
-    procurementMethod: 'RATE_CONTRACT',
-    categoryName: reqObj.category?.name || reqObj.category,
-    quantity: reqObj.quantity,
-    unit: reqObj.unit,
-    buyerOrganization: reqObj.buyerOrganization,
-  } : null;
-
-  const isClosedStatus = ['AWARDED', 'CLOSED', 'CANCELLED', 'COMPLETED', 'EXPIRED'].includes(String(rcData?.status || '').toUpperCase());
-  const isDeadlinePassedStatus = !!rcData?.deadlineDate && new Date(rcData.deadlineDate).getTime() < Date.now();
-  const isProcurementEnded = isClosedStatus || isDeadlinePassedStatus;
-  const isRateQuotationSubmitted = Boolean(
-    ownResponse &&
-    String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase() === 'SUBMITTED'
-  );
-
-  if (isLoading) {
+  if (!hasData && isQueryInProgress) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Rate Contract" />;
   }
 
-
-  if (error || !rcData) {
+  if (!hasData && !isQueryInProgress) {
+    const errorMsg = (bidError as Error)?.message || (reqError as Error)?.message || (contractError as Error)?.message || 'The requested Rate Contract record could not be loaded.';
     return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 text-center px-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 text-amber-600 border border-amber-200">
+      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
           <ShieldAlert className="h-8 w-8" />
         </div>
-        <h2 className="text-xl font-black text-slate-900">Rate Contract Not Found</h2>
-        <p className="text-sm font-medium text-slate-500 max-w-md">
-          The requested Rate Contract opportunity could not be loaded or is no longer available.
-        </p>
-        <Button onClick={() => router.back()} variant="outline" className="mt-2 rounded-xl">
-          <ArrowLeft className="h-4 w-4 mr-2" /> Go Back
+        <h1 className="text-xl font-black text-slate-950">Rate Contract unavailable</h1>
+        <p className="max-w-md text-sm font-semibold leading-relaxed text-slate-500">{errorMsg}</p>
+        <Button type="button" variant="outline" onClick={() => router.back()} className="mt-1">
+          <ArrowLeft className="h-4 w-4" /> Go Back
         </Button>
       </div>
     );
   }
 
-  /* ── Payload Extraction (full wizard draft shape from enriched technicalPacket) ── */
-  const payload = rcData.payload || {};
-  const basics = payload.basics || {};
-  const internal = payload.internal || {};
-  const schedule = payload.schedule || {};
-  const terms = payload.terms || {};
-  const vendors = payload.vendors || {};
-  const evaluation = payload.evaluation || {};
-  const serviceDetails = payload.serviceDetails || {};
-  const consigneeDetails = Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [];
-  const rateContractConfig = payload.rateContractConfig || payload.rateContract || {};
-
-  /* ── Core Display Fields ── */
-  const subject = 
-    rcData.title ||
-    rcData.subject ||
-    rcData.contractTitle ||
-    rcData.itemName ||
-    rcData.name ||
-    rateContractConfig.contractTitle ||
-    rateContractConfig.title ||
-    basics.title ||
-    basics.contractTitle ||
-    basics.procurementTitle ||
-    (Array.isArray(rcData.items) && (rcData.items[0]?.itemName || rcData.items[0]?.name)) ||
-    (Array.isArray(payload.items) && (payload.items[0]?.itemName || payload.items[0]?.name)) ||
-    'Rate Contract Opportunity';
-  const contractNumber = formatRefId('RC', rcData.id, rcData.requirementNumber || (rcData as any).contractNumber || rateContractConfig.rateContractNumber, 'RATE_CONTRACT');
-
-  /* ── Buyer Info ── */
-  const orgName = rcData.buyerOrganization?.organizationName
-    || rcData.buyer?.buyerProfile?.organizationName
-    || internal.orgName
-    || rcData.buyerOrganizationName
-    || (rcData.buyer?.name && rcData.buyer.name !== rcData.buyer?.buyerProfile?.representativeName ? rcData.buyer.name : null)
-    || null;
-  const contactName = rcData.buyer?.buyerProfile?.representativeName
-    || rcData.buyerProfile?.representativeName
-    || rcData.buyer?.buyerProfile?.contactPerson
-    || (rcData.buyer?.name && rcData.buyer.name !== orgName && rcData.buyer.name !== 'Buyer' ? rcData.buyer.name : null)
-    || rcData.contactPerson
-    || internal.contactPerson
-    || rcData.buyerOrganization?.contactPerson
-    || null;
-  const buyerEmail = rcData.buyerEmail
-    || rcData.buyer?.buyerProfile?.email
-    || rcData.buyerProfile?.email
-    || rcData.buyer?.email
-    || internal.email
-    || null;
-  const buyerMobile = rcData.buyerMobile
-    || rcData.buyer?.buyerProfile?.phone
-    || rcData.buyer?.buyerProfile?.mobile
-    || rcData.buyerProfile?.mobile
-    || rcData.buyer?.mobile
-    || internal.mobile
-    || null;
-  const buyerAddress = rcData.buyerAddress
-    || rcData.buyer?.buyerProfile?.registeredAddress
-    || rcData.buyer?.buyerProfile?.address
-    || rcData.buyerProfile?.registeredAddress
-    || rcData.buyerOrganization?.registeredAddress
-    || null;
-  const locationText = rcData.location
-    || rateContractConfig.deliverySla
-    || basics.deliveryLocation
-    || internal.deliveryAddress
-    || (consigneeDetails[0]?.address ? [consigneeDetails[0].name, consigneeDetails[0].address].filter(Boolean).join(': ') : null)
-    || null;
-
-  /* ── Rate Contract Specific Fields ── */
-  const rateValidityPeriod = rateContractConfig.rateValidityPeriod || terms.rateValidityPeriod || null;
-  const priceVariationClause = rateContractConfig.priceVariationClause || null;
-  const callOffOrderAllowed = rateContractConfig.callOffOrderAllowed;
-  const minimumOrderQty = rateContractConfig.minimumOrderQuantity || 0;
-  const maxOrderQty = rateContractConfig.maximumOrderQuantityPerCallOff || 0;
-  const deliverySla = rateContractConfig.deliverySla || terms.deliveryTerms || rcData.deliveryTerms || null;
-  const deliverySlaDays = (rateContractConfig.deliverySlaDays != null && rateContractConfig.deliverySlaDays !== '')
-    ? Number(rateContractConfig.deliverySlaDays)
-    : null;
-  const penaltyClause = rateContractConfig.penaltyClause || terms.penaltyClause || null;
-  const penaltyRatePerWeek = (rateContractConfig.penaltyRatePerWeek != null && rateContractConfig.penaltyRatePerWeek !== '')
-    ? Number(rateContractConfig.penaltyRatePerWeek)
-    : null;
-  const penaltyGraceDays = (rateContractConfig.penaltyGraceDays != null && rateContractConfig.penaltyGraceDays !== '')
-    ? Number(rateContractConfig.penaltyGraceDays)
-    : null;
-  const maxPenaltyCapPercentage = (rateContractConfig.maxPenaltyCapPercentage != null && rateContractConfig.maxPenaltyCapPercentage !== '')
-    ? Number(rateContractConfig.maxPenaltyCapPercentage)
-    : null;
-
-  payload.rateContractConfig = {
-    ...rateContractConfig,
-    callOffOrderAllowed,
-    minimumOrderQuantity: minimumOrderQty,
-    maximumOrderQuantityPerCallOff: maxOrderQty,
-    deliverySla,
-    deliverySlaDays,
-    penaltyClause,
-    penaltyRatePerWeek,
-    penaltyGraceDays,
-    maxPenaltyCapPercentage,
-  };
-
-  const supplierStrategy = rateContractConfig.supplierSelectionStrategy
-    ? formatDisplayValue(rateContractConfig.supplierSelectionStrategy)
-    : null;
-
-  /* ── Contract Period ── */
-  const periodStart = rateContractConfig.periodStartDate || rcData.startDate || null;
-  const periodEnd = rateContractConfig.periodEndDate || rcData.endDate || rcData.deadlineDate || null;
-
-  /* ── Payment / Financial ── */
-  const paymentTermsText = rcData.paymentTerms || terms.paymentTerms || rateContractConfig.paymentTerms || null;
-  const securityDepositRequired = rateContractConfig.securityDepositRequired;
-  const securityDepositAmount = rateContractConfig.securityDepositAmount;
-
-  /* ── Description / Scope ── */
-  const displayScope = rcData.description || basics.description || rateContractConfig.contractDescription || null;
-
-  /* ── Uploaded Procurement Documents (from backend contractDocs) ── */
-  const uploadedDocuments: Array<{
-    id: string | number;
-    fileName: string;
-    documentType: string;
-    fileAssetId: number | null;
-    fileUrl: string | null;
-  }> = [];
-
-  // From rcData.documents (the contractDocs array from backend)
-  const rawDocs = Array.isArray(rcData.documents) && rcData.documents.length > 0
-    ? rcData.documents
-    : Array.isArray(payload.documents) && payload.documents.length > 0
-      ? payload.documents
-      : [];
-
-  for (const d of rawDocs) {
-    if (!d) continue;
-    const fname = d.fileName || d.originalName || d.name || null;
-    const furl = d.fileUrl || d.url || (d.fileAssetId ? `/api/files/${d.fileAssetId}/view` : null);
-    if (d.fileAssetId || (furl && furl !== '/api/files/null/view')) {
-      uploadedDocuments.push({
-        id: d.id || d.fileAssetId || uploadedDocuments.length,
-        fileName: fname || 'Rate Contract Document',
-        documentType: d.documentType || d.type || 'DOCUMENT',
-        fileAssetId: d.fileAssetId ? Number(d.fileAssetId) : null,
-        fileUrl: furl,
-      });
-    }
-  }
-
-  // Also check rateContractConfig.contractDocument
-  const contractDoc = rateContractConfig.contractDocument;
-  if (contractDoc && contractDoc.fileAssetId) {
-    const alreadyAdded = uploadedDocuments.some(d => d.fileAssetId === Number(contractDoc.fileAssetId));
-    if (!alreadyAdded) {
-      uploadedDocuments.push({
-        id: contractDoc.fileAssetId,
-        fileName: contractDoc.fileName || 'Rate Contract Document',
-        documentType: 'RATE_CONTRACT_DOCUMENT',
-        fileAssetId: Number(contractDoc.fileAssetId),
-        fileUrl: `/api/files/${contractDoc.fileAssetId}/view`,
-      });
-    }
-  }
-
-  /* ── Required Seller Documents (checklist, not uploaded files) ── */
-  const reqDocsList: Array<{ name: string; instructions?: string; fileType?: string; maxSize?: string; required: boolean }> = [];
-  const rawReqDocs = payload.requiredDocs || payload.requiredDocuments || payload.documentsRequired || payload.rules?.requiredDocuments || [];
-  for (const d of (Array.isArray(rawReqDocs) ? rawReqDocs : [rawReqDocs])) {
-    if (!d) continue;
-    if (typeof d === 'string') {
-      reqDocsList.push({ name: d, required: true });
-    } else if (d && typeof d === 'object') {
-      const name = d.name || d.documentName || d.fileName || d.title || d.label || '';
-      if (name) reqDocsList.push({ ...d, name, required: d.required !== false });
-    }
-  }
-
-  const defaultRcReqDocs = [
-    { name: 'GST Certificate', instructions: 'Upload verified GST registration document.', fileType: 'PDF', maxSize: '5', required: true },
-    { name: 'PAN Card', instructions: 'Upload official PAN card.', fileType: 'PDF', maxSize: '2', required: true },
-    { name: 'Bank Details', instructions: 'Cancelled cheque or passbook.', fileType: 'PDF', maxSize: '2', required: true },
-    { name: 'Technical Compliance Sheet', instructions: 'Compliance report against specified standards.', fileType: 'PDF, DOCX', maxSize: '10', required: true },
-    { name: 'Detailed Price Breakup', instructions: 'Itemized cost schedule.', fileType: 'PDF, XLSX', maxSize: '5', required: true },
-  ];
-
-  /* ── Exhaustive Item Extraction ── */
-  const extractItems = () => {
-    const p = rcData?.payload || reqObj?.payload || {};
-    const rateContractConfig = p.rateContractConfig || p.rateContract || {};
-
-    // Priority order of item source candidates - itemRateSchedule is first for Rate Contracts
-    const candidates = [
-      rateContractConfig.itemRateSchedule,
-      rcData?.items,
-      reqObj?.items,
-      (bidData as any)?.items,
-      p.items,
-      p.boq,
-      p.itemsList,
-      p.basics?.items,
-      p.wizardData?.items,
-    ];
-
-    for (const cand of candidates) {
-      if (Array.isArray(cand) && cand.length > 0) {
-        return cand.map((item: any, i: number) => {
-          const specs = (item.specifications && typeof item.specifications === 'object')
-            ? item.specifications
-            : {};
-
-          const qty = Number(item.estimatedAnnualQuantity || item.quantity || item.qty || 1);
-          const baseRate = item.baseRate !== undefined && item.baseRate !== null ? Number(item.baseRate) : (item.estimatedUnitPrice || item.unitPrice || item.price || null);
-          const gst = item.gst !== undefined && item.gst !== null ? Number(item.gst) : (item.taxRate || item.gstPercent || specs.gstPercent || specs.gst || null);
-          const discount = item.discount !== undefined && item.discount !== null ? Number(item.discount) : 0;
-          
-          const discountedRate = baseRate !== null ? baseRate * (1 - discount / 100) : null;
-          const netUnitPrice = discountedRate !== null ? (gst !== null ? discountedRate * (1 + gst / 100) : discountedRate) : null;
-          const totalAmount = item.totalAmount || item.totalPrice
-            || (netUnitPrice !== null ? qty * netUnitPrice : (baseRate !== null ? qty * baseRate : null));
-
-          return {
-            id: item.id || i + 1,
-            itemName: item.itemName || item.name || item.title || item.productName || subject,
-            description: item.specification || item.description || item.itemDescription || (typeof item.specifications === 'string' ? item.specifications : null) || null,
-            quantity: qty,
-            unitOfMeasure: item.uom || item.unitOfMeasure || item.unit || 'Nos',
-            baseRate,
-            gst,
-            discount,
-            netUnitPrice,
-            estimatedUnitPrice: baseRate,
-            totalAmount,
-            slabPricingEnabled: Boolean(item.slabPricingEnabled || (Array.isArray(item.slabPricing) && item.slabPricing.length > 0)),
-            slabPricing: Array.isArray(item.slabPricing) ? item.slabPricing : [],
-            brand: item.brand || item.makeBrand || item.brandName || specs.brand || specs.brandName || null,
-            make: item.make || item.makeBrand || specs.make || specs.makeBrand || null,
-            model: item.model || specs.model || null,
-            alternateBrandAllowed: item.alternateBrandAllowed ?? specs.alternateBrandAllowed ?? null,
-            hsn: item.hsn || item.hsnCode || item.hsn_sac_code || specs.hsn || specs.hsnCode || null,
-            sac: item.sac || item.sacCode || specs.sac || specs.sacCode || null,
-            technicalSpecification: item.technicalSpecification || item.specification || item.technicalSpecs || null,
-            fileUrl: item.fileUrl || item.attachmentUrl || null,
-            fileName: item.fileName || item.originalName || (item.fileUrl ? item.fileUrl.split('/').pop() : null) || null,
-            fileAssetId: item.fileAssetId ? Number(item.fileAssetId) : null,
-            deliverySchedule: item.deliverySchedule || item.deliveryPeriod || item.deliveryRequirement || null,
-            warranty: item.warranty || item.warrantyRequirement || null,
-          };
-        });
-      }
-    }
-
-    // Fallback: construct a single item from requirement-level data
-    if (hasValue(subject)) {
-      return [{
-        id: 1,
-        itemName: subject,
-        description: displayScope || null,
-        quantity: Number(rcData?.quantity || 1),
-        unitOfMeasure: rcData?.unit || 'Nos',
-        estimatedUnitPrice: rcData?.estimatedValue || null,
-        totalAmount: rcData?.estimatedValue || null,
-        brand: null,
-        make: null,
-        model: null,
-        alternateBrandAllowed: null,
-        hsn: null,
-        sac: null,
-        gst: null,
-        technicalSpecification: null,
-        fileUrl: null,
-        fileName: null,
-        fileAssetId: null,
-        deliverySchedule: null,
-        warranty: null,
-      }];
-    }
-    return [];
-  };
-
-  const itemsList = extractItems();
-
-  const authenticPublishDate = (() => {
-    const tCreated = rcData.createdAt;
-    const rawPub = schedule.publishDate;
-    if (rawPub && tCreated) {
-      const pubMs = new Date(rawPub).getTime();
-      const crMs = new Date(tCreated).getTime();
-      if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
-        return rawPub;
-      }
-    }
-    return rcData.approvedAt || rcData.publishedAt || tCreated || rawPub || rcData.startDate;
-  })();
-
-  /* ── Timeline Events (all available dates) ── */
-  const allTimelineEvents = [
-    { label: 'PUBLISHING DATE', value: formatDateString(authenticPublishDate) },
-    { label: 'BID SUBMISSION START', value: formatDateString(schedule.submissionStartDate || rcData.startDate) },
-    { label: 'CLARIFICATION START', value: formatDateString(schedule.clarificationAllowed ? (schedule.submissionStartDate || rcData.startDate || authenticPublishDate) : null) },
-    { label: 'CLARIFICATION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true) },
-    { label: 'BID SUBMISSION END', value: formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true), red: true },
-    { label: 'TECHNICAL OPENING', value: formatDateString(schedule.technicalOpeningDate || rcData.technicalOpeningDate) },
-    { label: 'FINANCIAL OPENING', value: formatDateString(schedule.financialOpeningDate || rcData.financialOpeningDate) },
-    { label: 'CONTRACT START DATE', value: formatDateString(periodStart) },
-    { label: 'CONTRACT END DATE', value: formatDateString(periodEnd) },
-  ].filter(e => e.value !== null);
-
-  /* ── Contract Stepper ── */
-  const publishedDate = formatDateString(authenticPublishDate) || '—';
-  const closesAt = formatDateString(schedule.submissionDate || rcData.deadlineDate || rcData.endDate, true) || '—';
-
-  const timelineSteps = [
-    { label: 'Rate Contract Published', date: publishedDate, active: true },
-    { label: 'Clarification Window', date: `Up to ${closesAt}`, active: false },
-    { label: 'Rate Quote Submission', date: `Up to ${closesAt}`, active: false },
-    { label: 'Evaluation & Empanelment', date: 'Pending', active: false },
-    { label: 'Contract Awarded', date: 'Pending', active: false },
-  ];
-
-  /* ── Action Handlers ── */
-
-  const handleSubmitQuotation = () => {
-    if (!user) {
-      toast.error('Please login to participate and submit your rate contract quotation.');
-      router.push(`/login?redirect=${encodeURIComponent(pathname + (requestId ? `?requestId=${requestId}` : (requirementId ? `?requirementId=${requirementId}` : '')))}`);
-      return;
-    }
-    const targetId = rcData.id || requirementId || requestId;
-    router.push(`/bids/${targetId}/participate`);
-  };
-
-  const handleViewDoc = (doc: typeof uploadedDocuments[0]) => {
-    if (doc.fileAssetId || doc.fileUrl) {
-      openFileAsset(
-        { id: doc.fileAssetId, fileAssetId: doc.fileAssetId, url: doc.fileUrl, originalName: doc.fileName },
-        doc.fileName
-      ).catch(() => {
-        if (doc.fileUrl) window.open(doc.fileUrl, '_blank', 'noopener,noreferrer');
-        else toast.error('Unable to open document.');
-      });
-    } else {
-      toast.error('Document URL not available.');
-    }
-  };
-
-  const handleDownloadDoc = (doc: typeof uploadedDocuments[0]) => {
-    const url = doc.fileAssetId
-      ? `/api/files/${doc.fileAssetId}/download`
-      : doc.fileUrl;
-    if (!url) { toast.error('Download URL not available.'); return; }
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = doc.fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  /* ── Consignee derived helpers ── */
-  const primaryConsignee = consigneeDetails[0] || null;
-  const consigneeName = primaryConsignee?.name || contactName || null;
-  const consigneeAddress = primaryConsignee?.address || primaryConsignee?.location || locationText || null;
-  const totalConsigneeQty = consigneeDetails.reduce((s: number, c: any) => s + Number(c.quantity || 0), 0)
-    || Number(rcData.quantity || 0) || null;
-
-  /* ─────────────────────────────── RENDER (UNIFIED REFERENCE UI) ─────────────────────────────── */
+  const rcData: any = contractData || bidData || reqData || initialData || {};
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
   const statusUpper = String(rcData.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
+  const handleSubmitQuotation = () => {
+    if (!user) {
+      toast.error('Please login to submit a rate quotation.');
+      router.push(`/login?redirect=${encodeURIComponent(pathname || '')}`);
+      return;
+    }
+    const resolvedId = rcData.id || requestId || requirementId;
+    router.push(`/seller/opportunities/rate-contracts/${resolvedId}/submit-quote`);
+  };
+
+  const viewProps = adaptProcurementUnifiedProps(rcData, reqObj, {
+    user,
+    router,
+    requestId: activeRcId,
+    procurementType: 'RATE_CONTRACT',
+    procurementLabel: 'Rate Contract',
+    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : 'Rate Contract Opportunities',
+    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities/rate-contracts',
+    onRefresh: async () => {
+      await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);
+    },
+    onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation,
+    extraProps: {
+      contractId: contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined)),
+      contractNumber: contractData?.contractNumber || (rcData as any)?.contractNumber || null,
+      rateContractConfig: rcData?.rateContractConfig || rcData?.payload?.rateContractConfig,
+      terms: rcData?.terms || rcData?.payload?.terms,
+      contractDocument: rcData?.contractDocument,
+      utilization: contractData?.utilization || rcData?.utilization || null,
+    },
+  });
+
   return (
     <>
-      <ProcurementDetailUnifiedView
-        procurementType="RATE_CONTRACT"
-        procurementLabel="Rate Contract"
-        id={rcData.id || requirementId || requestId || 'RC'}
-        displayId={contractNumber || String(rcData.id)}
-        rawBid={rcData || bid}
-        awards={(rcData as any).awards || bid?.awards || []}
-        purchaseOrders={contractData?.purchaseOrders || (rcData as any).purchaseOrders || bid?.purchaseOrders || []}
-        activeOrder={(rcData as any).activeOrder || bid?.activeOrder || null}
-        lifecycleStage={rcData.lifecycleStage || bid?.lifecycleStage}
-        subject={subject}
-        status={rcData.status || 'OPEN'}
-        buyerName={contactName}
-        contactPerson={contactName}
-        orgName={orgName}
-        buyerEmail={buyerEmail}
-        buyerMobile={buyerMobile}
-        buyerAddress={buyerAddress}
-        buyer={{
-          name: contactName,
-          email: buyerEmail,
-          mobile: buyerMobile,
-          buyerProfile: {
-            ...(rcData.buyerOrganization || {}),
-            ...(rcData.buyer?.buyerProfile || {}),
-            ...(rcData.buyerProfile || {}),
-            organizationName: orgName,
-            representativeName: contactName,
-            contactPerson: contactName,
-            email: buyerEmail,
-            mobile: buyerMobile,
-            phone: buyerMobile,
-            registeredAddress: buyerAddress || rcData.buyerOrganization?.registeredAddress,
-            address: buyerAddress || rcData.buyerOrganization?.registeredAddress,
-            department: rcData.buyer?.buyerProfile?.department || rcData.buyerProfile?.department || rcData.departmentName,
-          }
-        }}
-        estimatedValue={rcData.estimatedValue}
-        discloseEstimatedCost={Boolean(rcData.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? payload.basics?.discloseEstimatedCost ?? false)}
-        deadlineDate={schedule.submissionClosingDate || schedule.submissionDeadline || schedule.submissionDate || schedule.bidClosingDate || rcData.deadlineDate || periodEnd}
-        createdAt={periodStart || rcData.createdAt}
-        publishedDate={periodStart || rcData.createdAt || rcData.publishedAt}
-        submissionStartDate={schedule.submissionStartDate || rcData.startDate}
-        closingDate={schedule.submissionClosingDate || schedule.submissionDeadline || schedule.submissionDate || schedule.bidClosingDate || rcData.deadlineDate || periodEnd}
-        clarificationDate={schedule.clarificationEndDate || schedule.clarificationDeadline || schedule.submissionDate || rcData.deadlineDate || rcData.endDate || periodEnd}
-        technicalDate={schedule.technicalOpeningDate || schedule.technicalEvaluationDate}
-        financialDate={schedule.financialOpeningDate || schedule.financialEvaluationDate || schedule.finalEvaluationDate}
-        packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}
-        category={rcData.categoryName}
-        procurementMethod="Rate Contract"
-        buyingType={basics.buyingType || 'Product'}
-        deliveryLocation={locationText}
-        paymentTerms={rcData.paymentTerms}
-        deliveryTerms={rcData.deliveryTerms || deliverySla}
-        description={rcData.description}
-        payload={payload}
-        approvalAuthority={bid?.approvalAuthority || payload.internal?.approvalAuthority || (rcData as any).approvalAuthority}
-        justification={bid?.justification || payload.internal?.justification || (rcData as any).justification || rcData.description}
-        internalDetails={bid?.internalDetails || payload.internal}
-        documents={uploadedDocuments.map((d, index) => ({
-          id: d.fileAssetId ? String(d.fileAssetId) : `rc-doc-${index}`,
-          name: d.fileName,
-          meta: d.documentType,
-          fileAssetId: d.fileAssetId || undefined,
-          url: d.fileUrl || undefined,
-          required: true,
-        }))}
-        requiredDocuments={reqDocsList.length ? reqDocsList : defaultRcReqDocs}
-        items={itemsList}
-        evaluationMethod={
-          [
-            payload.evaluation?.method,
-            payload.evaluation?.evaluationMethod,
-            payload.evaluationMethod,
-            payload.rules?.evaluationMethod,
-            reqObj?.payload?.evaluation?.method,
-            rcData.evaluationMethod,
-          ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
-          rcData.evaluationMethod ||
-          'Rate Contract L1'
-        }
-        participations={bid?.participations || []}
-        participantsCount={bid?.participations?.length || 0}
-        isSubmitDisabled={isProcurementEnded}
-        hasSubmittedProposal={isRateQuotationSubmitted}
-        ownParticipation={ownParticipation}
-        ownResponse={ownResponse}
-        backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rate-contracts"}
-        backRouteLabel={isBuyerOrAdmin ? "My Procurements" : "Rate Contract Opportunities"}
-        submitButtonLabel={isBuyerOrAdmin ? 'View Evaluation & Results' : (isRateQuotationSubmitted ? 'Rate Quotation Submitted' : (isProcurementEnded ? undefined : 'Submit Rate Quote'))}
-        onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : (isProcurementEnded ? undefined : handleSubmitQuotation)}
-        onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
-        cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Rate Contract' : 'Cancel Rate Contract'}
-        clarificationKind={requirementId || bidData?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'quote-request'}
-        clarificationEntityId={rcData?.id || requirementId || bidData?.sourceId || requestId}
-        contractId={contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined))}
-        contractNumber={contractData?.contractNumber || (rcData as any)?.contractNumber || null}
-        rateContractConfig={payload.rateContractConfig || rateContractConfig}
-        terms={terms}
-        contractDocument={contractDoc}
-        utilization={contractData?.utilization || rcData?.utilization || null}
-      />
+      <ProcurementDetailUnifiedView {...viewProps} />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: contractData?.id || bidData?.id || reqData?.id || (typeof rcData?.id === 'number' ? rcData.id : (!isNaN(Number(rcData?.id)) ? Number(rcData.id) : 0)) || contractNumber || String(rcData?.id || activeRcId),
-            type: contractData ? 'rate_contract' : (bidData?.sourceModel === 'REQUIREMENT' || reqData ? 'requirement' : (bidData ? 'bid_tender' : 'rate_contract')),
-            title: subject,
-            referenceNumber: contractNumber || String(rcData?.id || activeRcId),
+            id: contractData?.id || bidData?.id || reqData?.id || String(rcData?.id || activeRcId),
+            type: contractData ? 'rate_contract' : (bidData?.sourceModel === 'REQUIREMENT' || reqData ? 'requirement' : 'bid_tender'),
+            title: viewProps.subject,
+            referenceNumber: viewProps.displayId || String(rcData?.id || activeRcId),
             typeLabel: 'Rate Contract',
             status: statusUpper,
           }}
@@ -954,5 +174,13 @@ export default function RateContractDetailPage({ initialData }: { initialData?: 
         />
       )}
     </>
+  );
+}
+
+export default function RateContractDetailPage({ initialData }: { initialData?: any } = {}) {
+  return (
+    <Suspense fallback={<ProcurementDetailSkeleton procurementTypeLabel="Rate Contract" />}>
+      <RateContractDetailContent initialData={initialData} />
+    </Suspense>
   );
 }

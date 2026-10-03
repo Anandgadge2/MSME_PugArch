@@ -1,1452 +1,230 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
-import {
-  Download, Calendar, MapPin, Building2, ChevronRight, Loader2,
-  Eye, FileText, ShieldCheck, ArrowRight, Paperclip, ClipboardList,
-  IndianRupee, AlertTriangle, Info, Package, Clock, CheckCircle,
-  Phone, Mail, UserCheck, Tag, Truck, BarChart3, ClipboardCheck, Send, Users, X,
-  ChevronDown, CheckCircle2, ShieldAlert, Layers, Lock, Share2, Sparkles, ArrowLeft,
-  Check, FileSpreadsheet, Scale, AlertCircle, HelpCircle
-} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { Button } from '../../../components/ui/button';
-import { cn } from '../../../lib/utils';
-import { useQuery } from '@tanstack/react-query';
-import { PdfEngine, moneyPdf } from '../../../lib/pdfEngine';
-import ClarificationPanel from '../components/ClarificationPanel';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { sanitizeUom, sanitizeHsn } from '../utils/quoteItemParser';
+import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { useProcurementRealtime } from '../hooks/useProcurementRealtime';
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   UTILITY HELPERS
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-const fmt = (val?: number | string | null): string => {
-  if (val === null || val === undefined || val === '') return '—';
-  const n = Number(val);
-  if (isNaN(n) || n === 0) return '—';
-  return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
-};
-
-const fmtDate = (d?: string | Date | null, includeTime?: boolean): string => {
-  if (!d) return '—';
-  try {
-    let s = typeof d === 'string' ? d.trim() : d;
-    if (typeof s === 'string') {
-      s = s.replace(/\bSept\b/i, 'Sep');
-    }
-    const dt = new Date(s);
-    if (isNaN(dt.getTime())) return String(d);
-    const day = dt.getDate().toString().padStart(2, '0');
-    const mo = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][dt.getMonth()];
-    const yr = dt.getFullYear();
-    const isDateOnlyStr = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
-    const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
-    const isMidnightLocal = dt.getHours() === 0 && dt.getMinutes() === 0 && dt.getSeconds() === 0;
-    const isMidnight = isMidnightUtc || isMidnightLocal;
-    if (isDateOnlyStr || (isMidnight && !includeTime)) {
-      return `${day} ${mo} ${yr}`;
-    }
-    const shouldIncludeTime = includeTime !== undefined ? includeTime : (!isDateOnlyStr && !isMidnight);
-    if (!shouldIncludeTime) return `${day} ${mo} ${yr}`;
-    let hours = dt.getHours();
-    const mm = dt.getMinutes().toString().padStart(2, '0');
-    const ampm = hours >= 12 ? 'PM' : 'AM';
-    let h12 = hours % 12;
-    if (h12 === 0) h12 = 12;
-    const hh = h12.toString().padStart(2, '0');
-    return `${day} ${mo} ${yr}, ${hh}:${mm} ${ampm}`;
-  } catch { return String(d); }
-};
-
-const calcTimeLeft = (d?: string | Date | null) => {
-  if (!d) return { label: '—', isPassed: false };
-  let dt = new Date(d);
-  if (isNaN(dt.getTime())) return { label: '—', isPassed: false };
-  const isDateOnlyStr = typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d.trim());
-  const isMidnightUtc = dt.getUTCHours() === 0 && dt.getUTCMinutes() === 0 && dt.getUTCSeconds() === 0;
-  if (isDateOnlyStr || isMidnightUtc) {
-    dt = new Date(dt.getTime());
-    dt.setHours(23, 59, 59, 999);
-  }
-  const ms = dt.getTime() - Date.now();
-  if (ms <= 0) return { label: 'Deadline Passed', isPassed: true };
-  const days = Math.floor(ms / 86_400_000);
-  const hrs  = Math.floor((ms % 86_400_000) / 3_600_000);
-  const mins = Math.floor((ms % 3_600_000)  / 60_000);
-  if (days > 0)  return { label: `${days}d ${hrs}h remaining`,      isPassed: false };
-  if (hrs > 0)   return { label: `${hrs}h ${mins}m remaining`,      isPassed: false };
-  return            { label: `${mins} minutes remaining`,            isPassed: false };
-};
-
-const stripAutoDesc = (desc?: string): string => {
-  if (!desc) return '';
-  let text = String(desc).replace(/\r/g, '');
-  text = text.replace(/Sourcing Method:\s*[^|\n]*/gi, '');
-  text = text.replace(/RFP\s?Value:\s*[^|\n]*/gi, '');
-  text = text.replace(/Estimated\s?Value:\s*[^|\n]*/gi, '');
-  text = text.replace(/Value:\s*[^|\n]*/gi, '');
-  text = text.replace(/Urgency:\s*[^|\n]*/gi, '');
-  text = text.replace(/Priority:\s*[^|\n]*/gi, '');
-  return text.trim();
-};
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   ENTERPRISE UI PRIMITIVES
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/** Enterprise Key-Value Row */
-const KV = ({
-  label, value, accent = false, mono = false, icon: Icon
-}: {
-  label: string; value?: string | null; accent?: boolean; mono?: boolean; icon?: any;
-}) => {
-  if (!value || value === '—') return null;
-  return (
-    <div className="flex items-center justify-between py-2.5 px-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/60 transition-colors rounded-lg">
-      <span className="flex items-center gap-2 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-        {Icon && <Icon className="h-3.5 w-3.5 text-slate-400 shrink-0" />}
-        {label}
-      </span>
-      <span className={cn(
-        'text-xs font-extrabold text-right leading-relaxed',
-        accent ? 'text-blue-700' : 'text-slate-900',
-        mono && 'font-mono text-[11px] bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200',
-      )}>
-        {value}
-      </span>
-    </div>
-  );
-};
-
-/** Enterprise Card Container */
-const Card = ({
-  icon: Icon, title, badge, iconBg = 'bg-blue-50', iconColor = 'text-blue-600', children, className, id
-}: {
-  icon: any; title: string; badge?: React.ReactNode;
-  iconBg?: string; iconColor?: string; children: React.ReactNode; className?: string; id?: string;
-}) => (
-  <div id={id} className={cn('rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-md transition-shadow duration-200 overflow-hidden', className)}>
-    <div className="flex items-center justify-between gap-2.5 sm:gap-3 px-5 py-4 border-b border-slate-100 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/40">
-      <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
-        <span className={cn('flex h-8 w-8 items-center justify-center rounded-xl shadow-xs border border-blue-100/50', iconBg, iconColor)}>
-          <Icon className="h-4 w-4" />
-        </span>
-        <h3 className="text-xs font-black text-slate-900 tracking-wider uppercase">{title}</h3>
-      </div>
-      {badge}
-    </div>
-    <div className="p-5">{children}</div>
-  </div>
-);
-
-/** Enterprise Stat Tile for Top Overview Strip */
-const StatTile = ({
-  icon: Icon, label, value, valueClass, subtext
-}: {
-  icon: any; label: string; value: string; valueClass?: string; subtext?: string;
-}) => (
-  <div className="flex items-center gap-2.5 sm:gap-3.5 px-5 py-4 min-w-[170px] flex-1 border-r border-slate-100 last:border-0">
-    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-600">
-      <Icon className="h-4.5 w-4.5" />
-    </div>
-    <div className="min-w-0">
-      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 truncate">{label}</p>
-      <p className={cn('text-sm font-black leading-snug truncate mt-0.5', valueClass ?? 'text-slate-900')}>
-        {value}
-      </p>
-      {subtext && <p className="text-[10px] font-semibold text-slate-400 truncate">{subtext}</p>}
-    </div>
-  </div>
-);
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   MAIN PAGE COMPONENT
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-export default function RfqDetailPage({ initialData }: { initialData?: any } = {}) {
+function RfqDetailContent({ initialData }: { initialData?: any }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const pathname = usePathname() || '';
+  const pathname = usePathname();
   const { user } = useAuth();
-
-  const [isDescExpanded, setIsDescExpanded] = useState(false);
-  const [expandedAccordion, setExpandedAccordion] = useState<string | null>('commercial');
+  const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || searchParams?.get('rfqId') || '';
   const rawIdParam = searchParams?.get('id') || '';
 
-  const pathTokens = pathname.split('/').filter(Boolean);
+  const pathTokens = (pathname || '').split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
-  const pathnameId = (rawPathId && !['bids', 'tenders', 'details', 'rfq'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
-
-  const activeId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
+  const pathnameId = (rawPathId && !['rfq', 'rfqs', 'bids', 'opportunities', 'details'].includes(rawPathId.toLowerCase())) ? rawPathId : '';
 
   let requirementId = explicitReqId;
   let requestId = explicitRequestId;
 
-  if (explicitReqId) {
-    requirementId = explicitReqId;
-    // Do NOT set requestId to explicitReqId - Requirement IDs and ProcurementBid IDs are separate tables
-  } else if (explicitRequestId) {
-    requestId = explicitRequestId;
-  } else if (rawIdParam) {
-    if (String(rawIdParam).toUpperCase().startsWith('REQ-')) {
-      requirementId = rawIdParam;
+  if (!requirementId && !requestId && (rawIdParam || pathnameId)) {
+    const candidate = rawIdParam || pathnameId;
+    if (candidate.toLowerCase().startsWith('req-')) {
+      requirementId = candidate.replace(/^req-/i, '');
     } else {
-      requestId = rawIdParam;
-      if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
-        requirementId = rawIdParam;
-      }
-    }
-  } else if (pathnameId) {
-    if (String(pathnameId).toUpperCase().startsWith('REQ-')) {
-      requirementId = pathnameId;
-    } else {
-      requestId = pathnameId;
-      if (pathname.includes('/buyer') || pathname.includes('/requirement')) {
-        requirementId = pathnameId;
-      }
-    }
-  } else if (initialData) {
-    if ((initialData.sourceModel === 'REQUIREMENT' && !initialData.bidNumber) || (!initialData.bidNumber && initialData.requirementId)) {
-      requirementId = String(initialData.requirementId || initialData.id || '');
-    } else {
-      requestId = String(initialData.bidNumber || initialData.id || '');
+      requestId = candidate;
     }
   }
 
+  const activeRfqId = explicitReqId || explicitRequestId || rawIdParam || pathnameId;
   const isMatchingInitial = Boolean(
-    initialData && (
-      !activeId ||
-      String(initialData.id).toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.bidNumber || '').toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.displayId || '').toLowerCase() === String(activeId).toLowerCase() ||
-      String(initialData.sourceId || '').toLowerCase() === String(activeId).toLowerCase()
+    initialData && activeRfqId && (
+      String(initialData.id).toLowerCase() === String(activeRfqId).toLowerCase() ||
+      String(initialData.requirementNumber || '').toLowerCase() === String(activeRfqId).toLowerCase() ||
+      String(initialData.bidNumber || '').toLowerCase() === String(activeRfqId).toLowerCase() ||
+      String(initialData.displayId || '').toLowerCase() === String(activeRfqId).toLowerCase()
     )
   );
 
-  /* ── Queries ── */
-  const { data: bidData, isLoading: bidLoading } = useQuery({
+  const { data: bidData, isLoading: bidLoading, refetch: refetchBid } = useQuery({
     queryKey: ['rfq-detail-bid', requestId, user?.id],
-    queryFn:  () => procurementBidApi.detail(requestId),
-    enabled:  Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
+    queryFn: () => procurementBidApi.detail(requestId),
+    enabled: Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
     initialData: Boolean(requestId) && isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
   });
 
-  const { data: reqData, isLoading: reqLoading } = useQuery({
-    queryKey: ['rfq-detail-req', requirementId, user?.id],
-    queryFn:  async () => getApi<any>(`/api/marketplace/requirements/${requirementId}`),
-    enabled:  Boolean(requirementId),
-    initialData: Boolean(requirementId) && isMatchingInitial && (initialData?.sourceModel === 'REQUIREMENT' || initialData?.requirementNumber?.startsWith('REQ-')) ? (initialData.requirement || initialData) : undefined,
+  const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || (!requestId?.startsWith('BID-') ? requestId : '');
+
+  const { data: reqData, isLoading: reqLoading, refetch: refetchReq } = useQuery({
+    queryKey: ['rfq-detail-req', targetReqId, user?.id],
+    queryFn: async () => getApi<any>(`/api/marketplace/requirements/${targetReqId}`),
+    enabled: Boolean(targetReqId),
+    initialData: Boolean(targetReqId) && isMatchingInitial && (initialData?.sourceModel === 'REQUIREMENT' || initialData?.requirementNumber?.startsWith('REQ-')) ? (initialData.requirement || initialData) : undefined,
     staleTime: 60_000,
   });
 
-  const [selectedBuyerResponse, setSelectedBuyerResponse] = useState<any>(null);
-  const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const effectiveTargetId = String(bidData?.id || reqData?.id || reqData?.requirement?.id || requestId || targetReqId);
 
-  const bidPacket: any = (bidData as any)?.technicalPacket && typeof (bidData as any).technicalPacket === 'object'
-    ? (bidData as any).technicalPacket
-    : {};
-  const activeBidId = (bidData as any)?.id || (initialData as any)?.id;
-  const linkedRequirementId = bidPacket.sourceRequirementId || bidPacket.requirementId || bidPacket.linkedRequirementId || (bidData as any)?.sourceId;
-  const targetReqId = requirementId || (reqData as any)?.requirement?.id || activeBidId || requestId || linkedRequirementId;
-
-  const { data: ownResponseQueryData } = useQuery({
-    queryKey: ['rfq-own-response', targetReqId, requestId, user?.id],
-    queryFn:  async () => {
-      try { return await getApi<any>(`/api/marketplace/requirements/${targetReqId}`); }
-      catch { return null; }
-    },
-    enabled:   (!!targetReqId || !!requestId) && user?.role === 'seller',
-    staleTime: 60_000,
-  });
-
-  const rawBid: any = bidData || (initialData?.bidNumber || initialData?.sourceModel === 'BID' ? initialData : null);
-  const reqObj: any = (reqData as any)?.requirement ?? reqData;
-
-  const rawBidMatches = Boolean(rawBid && (!activeId || String(rawBid.id) === String(activeId) || String(rawBid.bidNumber || '').toLowerCase() === String(activeId).toLowerCase()));
-  const reqObjMatches = Boolean(reqObj && (!activeId || String(reqObj.id) === String(activeId) || String(reqObj.requirementNumber || '').toLowerCase() === String(activeId).toLowerCase()));
-  const preferReq = Boolean(explicitReqId ? reqObjMatches : (!rawBidMatches && reqObjMatches));
-
-  const ownParticipation: any = user?.role === 'seller'
-    ? (() => {
-        const participations = [
-          ...(rawBid?.myParticipation ? [rawBid.myParticipation] : []),
-          ...(Array.isArray(rawBid?.participations) ? rawBid.participations : []),
-          ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
-          ...(Array.isArray(rawBid?.quoteResponses) ? rawBid.quoteResponses : []),
-        ];
-        return participations.find((p: any) => {
-          const sId = p.sellerId || p.seller?.id || p.sellerUserId;
-          const sOrg = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
-          return (
-            Boolean(user?.id && sId && String(sId) === String(user.id)) ||
-            Boolean(user?.organizationId && sOrg && String(sOrg) === String(user.organizationId))
-          );
-        }) || null;
-      })()
-    : null;
-
-  const localSubmittedResponse = React.useMemo(() => {
-    if (typeof window === 'undefined' || !user || user.role !== 'seller' || !user.id) return null;
-    const keys = [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber].filter(Boolean);
-    for (const k of keys) {
-      try {
-        const item = localStorage.getItem(`rfq_submitted_${user.id}_${k}`);
-        if (item) {
-          const parsed = JSON.parse(item);
-          if (parsed && parsed.status && String(parsed.status).toUpperCase() !== 'DRAFT') {
-            if (!parsed.userId || String(parsed.userId) === String(user.id)) {
-              return parsed;
-            }
-          }
-        }
-      } catch {
-        // ignore
-      }
-    }
-    return null;
-  }, [targetReqId, requirementId, requestId, (rawBid as any)?.id, (rawBid as any)?.bidNumber, user]);
-
-  const rawOwnResp = React.useMemo(() => {
-    const candidate = (reqData as any)?.ownResponse ?? (ownResponseQueryData as any)?.ownResponse;
-    if (!candidate) return null;
-    // Guard against cross-contamination: verify candidate belongs to this procurement
-    const currentBidId = rawBid?.id || activeBidId;
-    const currentReqId = reqObj?.id || requirementId;
-    if (candidate.bidId && currentBidId && Number(candidate.bidId) !== Number(currentBidId)) {
-      return null;
-    }
-    if (candidate.requirementId && currentReqId && Number(candidate.requirementId) !== Number(currentReqId)) {
-      if (!candidate.bidId || !currentBidId || Number(candidate.bidId) !== Number(currentBidId)) {
-        return null;
-      }
-    }
-    if (user?.role === 'seller') {
-      const candidateUserId = candidate.sellerUserId || candidate.sellerId || candidate.userId || candidate.seller?.id || candidate.user?.id;
-      const candidateOrgId = candidate.sellerOrganizationId || candidate.organizationId || candidate.seller?.organizationId || candidate.sellerOrgId;
-      const matchUser = Boolean(user?.id && candidateUserId && String(candidateUserId) === String(user.id));
-      const matchOrg = Boolean(user?.organizationId && candidateOrgId && String(candidateOrgId) === String(user.organizationId));
-      if (!matchUser && !matchOrg) {
-        return null;
-      }
-    }
-    return candidate;
-  }, [reqData, ownResponseQueryData, rawBid?.id, activeBidId, reqObj?.id, requirementId, user]);
-
-  const ownResponse =
-    (ownParticipation ? {
-      ...ownParticipation,
-      id: ownParticipation.id,
-      status: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
-      submissionStatus: ownParticipation.submissionStatus ?? ownParticipation.status ?? 'DRAFT',
-      createdAt: ownParticipation.createdAt,
-      submittedAt: ownParticipation.submittedAt ?? null,
-      offeredPrice: ownParticipation.offeredPrice ?? ownParticipation.quotedAmount ?? ownParticipation.totalAmount,
-      offeredQuantity: ownParticipation.offeredQuantity,
-      deliveryTimeline: ownParticipation.deliveryTimeline,
-      message: ownParticipation.message ?? ownParticipation.coverNote,
-      terms: ownParticipation.terms,
-      responseData: ownParticipation.responseData,
-    } : null) ??
-    rawOwnResp ??
-    localSubmittedResponse;
-
-
-  const hasValidInitialData = Boolean(
-    initialData &&
-    typeof initialData === 'object' &&
-    (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title)
-  );
-  const isQueryInProgress = (Boolean(requestId) && bidLoading) || (Boolean(requirementId) && reqLoading);
-  const hasData = Boolean(bidData || reqData || (hasValidInitialData && (rawBid || reqObj)));
-  const isLoading = (!hasData && isQueryInProgress) || (!rawBid && !reqObj && isQueryInProgress);
-
-  /* ── Buyer Seller Responses Query ── */
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
-  const effectiveTargetId = String(
-    preferReq
-      ? (targetReqId || explicitReqId || requirementId || (rawBid as any)?.bidNumber || requestId || '')
-      : (requestId || (rawBid as any)?.bidNumber || targetReqId || explicitReqId || requirementId || (rawBid as any)?.id || '')
-  );
-
-  // Hybrid Real-Time Synchronization for Quotations & Responses
-  useProcurementRealtime(effectiveTargetId);
-
-  const { data: buyerResponsesData } = useQuery({
-    queryKey: ['rfq-buyer-responses-v2', effectiveTargetId, targetReqId, (rawBid as any)?.id],
+  const { data: buyerResponses = [], refetch: refetchResponses } = useQuery({
+    queryKey: ['rfq-buyer-responses-v2', effectiveTargetId, targetReqId, (bidData as any)?.id],
     queryFn: async () => {
       if (!effectiveTargetId) return [];
-
-      const extractArray = (res: any): any[] => {
-        if (!res) return [];
-        if (Array.isArray(res)) return res;
-        if (Array.isArray(res.responses)) return res.responses;
-        if (Array.isArray(res.participants)) return res.participants;
-        if (Array.isArray(res.participations)) return res.participations;
-        if (Array.isArray(res.results)) return res.results;
-        if (Array.isArray(res.items)) return res.items;
-        if (res.data) return extractArray(res.data);
+      try {
+        const res = await getApi<any>(`/api/phase4/requirements/${effectiveTargetId}/responses`);
+        return Array.isArray(res) ? res : res?.data || res?.responses || [];
+      } catch {
         return [];
-      };
-
-      const primaryToken = (rawBid as any)?.bidNumber || effectiveTargetId;
-
-      try {
-        const res = await getApi<any>(`/api/buyer/procurement-bids/${encodeURIComponent(primaryToken)}/participants`, true);
-        const items = extractArray(res);
-        if (items.length > 0) return items;
-      } catch {}
-
-      try {
-        const res = await getApi<any>(`/api/buyer/requirements/${encodeURIComponent(primaryToken)}/responses?pageSize=50`, true);
-        const items = extractArray(res);
-        if (items.length > 0) return items;
-      } catch {}
-
-      return [];
+      }
     },
-    enabled: Boolean(isBuyerOrAdmin && effectiveTargetId && effectiveTargetId !== 'RFQ'),
-    staleTime: 2_000,
-    refetchInterval: 3_000,
-    refetchOnWindowFocus: true,
+    enabled: Boolean(effectiveTargetId) && (user?.role === 'buyer' || user?.role === 'admin'),
+    staleTime: 15_000,
   });
 
-  const sellerResponses = React.useMemo(() => {
-    // Sealed Bidding Strict Confidentiality: Sellers must strictly NEVER see other sellers' quotations
-    if (user?.role === 'seller') {
-      return ownParticipation ? [ownParticipation] : [];
-    }
-
-    const rawList = [
-      ...(Array.isArray(buyerResponsesData) ? buyerResponsesData : []),
-      ...(Array.isArray(reqData?.responses) ? reqData.responses : []),
-      ...(Array.isArray(rawBid?.participations) ? rawBid.participations : []),
-      ...(Array.isArray(rawBid?.quoteResponses) ? rawBid.quoteResponses : []),
-      ...(Array.isArray(rawBid?.results) ? rawBid.results : []),
-    ];
-
-    const vendorMap = new Map<string, any>();
-    const list: any[] = [];
-
-    const getVendorKeys = (item: any) => {
-      const sId = item.sellerUserId || item.sellerId || item.seller?.id || item.sellerUser?.id;
-      const sOrg = item.sellerOrganizationId || item.sellerOrgId || item.seller?.organizationId || item.sellerUser?.organizationId || item.seller?.organization?.id;
-      const sOrgName = (
-        item.sellerOrgName ||
-        item.sellerOrganization?.organizationName ||
-        item.seller?.organization?.organizationName ||
-        item.seller?.sellerProfile?.organizationName ||
-        item.sellerProfile?.organizationName ||
-        item.companyName ||
-        item.sellerName ||
-        ''
-      ).trim().toLowerCase();
-
-      const keys: string[] = [];
-      if (sOrg && String(sOrg) !== '0' && String(sOrg) !== 'undefined') keys.push(`org-${sOrg}`);
-      if (sId && String(sId) !== '0' && String(sId) !== 'undefined') keys.push(`user-${sId}`);
-      if (sOrgName && !sOrgName.startsWith('supplier #') && !sOrgName.startsWith('verified supplier') && !sOrgName.startsWith('seller partner')) {
-        keys.push(`name-${sOrgName}`);
-      }
-      return { sId, sOrg, sOrgName, keys };
-    };
-
-    for (const r of rawList) {
-      if (!r) continue;
-      const statusStr = String(r.status || r.submissionStatus || '').toUpperCase();
-      if (statusStr === 'DRAFT') continue;
-
-      const { sId, sOrg, sOrgName, keys } = getVendorKeys(r);
-
-      // Check if this vendor has already been seen under any canonical key
-      let existing = keys.map(k => vendorMap.get(k)).find(Boolean);
-
-      const respData = typeof r.responseData === 'string'
-        ? (() => { try { return JSON.parse(r.responseData); } catch { return {}; } })()
-        : (r.responseData || {});
-      const offeredPrice = r.offeredPrice ?? r.quotedAmount ?? r.totalAmount ?? respData.offeredPrice ?? respData.quotedAmount ?? respData.totalAmount;
-      const sellerName = r.sellerUser?.name || r.seller?.name || r.sellerName || r.contactPerson || 'Seller Partner';
-      const sellerOrgName = r.sellerOrgName
-        || r.sellerOrganization?.organizationName
-        || r.seller?.organization?.organizationName
-        || r.seller?.sellerProfile?.organizationName
-        || r.sellerProfile?.organizationName
-        || r.seller?.organizationName
-        || r.companyName
-        || r.sellerName
-        || r.sellerUser?.name
-        || r.seller?.name
-        || (sId ? `Supplier #${sId}` : 'Verified Supplier');
-
-      const rawTechStatus = String(r.technicalStatus || respData.technicalStatus || '').toUpperCase();
-      const isTechEvaluated = rawTechStatus === 'QUALIFIED' || rawTechStatus === 'DISQUALIFIED' || rawTechStatus === 'NOT_QUALIFIED';
-      const normalizedTechStatus = rawTechStatus === 'QUALIFIED'
-        ? 'QUALIFIED'
-        : (rawTechStatus === 'DISQUALIFIED' || rawTechStatus === 'NOT_QUALIFIED' || statusStr === 'REJECTED' ? 'DISQUALIFIED' : 'PENDING');
-
-      const itemOfferedQty = Number(r.offeredQuantity ?? respData.offeredQuantity ?? 0);
-      const itemTimeline = r.deliveryTimeline || respData.deliveryTimeline;
-      const itemDocs = Array.isArray(r.documents) ? r.documents : (Array.isArray(respData.documents) ? respData.documents : []);
-      const itemLines = Array.isArray(r.lineItems) ? r.lineItems : (Array.isArray(respData.lineItems) ? respData.lineItems : (Array.isArray(respData.lineQuotes) ? respData.lineQuotes : []));
-
-      if (existing) {
-        // Merge records for the single authentic vendor entity
-        // 1. Technical Evaluation Priority: If this record has evaluation decisions, apply them
-        if (isTechEvaluated && existing.technicalStatus === 'PENDING') {
-          existing.technicalStatus = normalizedTechStatus;
-          existing.technicalRemarks = r.technicalRemarks || r.rejectionReason || respData.technicalRemarks || existing.technicalRemarks;
-          existing.score = r.score ?? respData.score ?? existing.score;
-          existing.isDisqualified = normalizedTechStatus === 'DISQUALIFIED' || Boolean(r.isDisqualified) || existing.isDisqualified;
-        }
-
-        // 2. Quotation details: preserve authentic offered quantity, timeline, line items, documents
-        if (!existing.offeredQuantity && itemOfferedQty > 0) {
-          existing.offeredQuantity = itemOfferedQty;
-        }
-        if ((!existing.deliveryTimeline || existing.deliveryTimeline === 'Standard') && itemTimeline && itemTimeline !== 'Standard') {
-          existing.deliveryTimeline = itemTimeline;
-        }
-        if ((!existing.offeredPrice || existing.offeredPrice === 0) && offeredPrice != null && Number(offeredPrice) > 0) {
-          existing.offeredPrice = Number(offeredPrice);
-          existing.quotedAmount = Number(offeredPrice);
-          existing.totalAmount = Number(offeredPrice);
-        }
-        if ((!existing.lineItems || existing.lineItems.length === 0) && itemLines.length > 0) {
-          existing.lineItems = itemLines;
-        }
-        if ((!existing.documents || existing.documents.length === 0) && itemDocs.length > 0) {
-          existing.documents = itemDocs;
-        }
-        if (r.id && !existing.participationId && String(r.participationNumber || '').startsWith('PRT-')) {
-          existing.participationId = r.id;
-          existing.id = r.id;
-        }
-        if (r.message || r.coverNote || respData.message) {
-          existing.message = existing.message || r.message || r.coverNote || respData.message;
-        }
-
-        // Register any new keys pointing to this merged vendor
-        for (const k of keys) {
-          vendorMap.set(k, existing);
-        }
-      } else {
-        const newRecord: any = {
-          id: r.id || (keys[0] ? `v-${keys[0]}` : `item-${list.length}`),
-          participationId: r.participationNumber ? r.id : undefined,
-          quoteResponseId: !r.participationNumber ? r.id : undefined,
-          sellerId: sId,
-          sellerUserId: sId,
-          sellerOrganizationId: sOrg,
-          sellerName,
-          sellerOrgName,
-          companyName: sellerOrgName,
-          sellerOrganization: r.sellerOrganization || { organizationName: sellerOrgName },
-          sellerUser: r.sellerUser || r.seller || { name: sellerName },
-          seller: r.seller || { name: sellerName, organization: { organizationName: sellerOrgName } },
-          sellerEmail: r.sellerUser?.email || r.seller?.email || r.sellerEmail,
-          sellerPhone: r.sellerUser?.mobile || r.seller?.mobile || r.sellerPhone,
-          status: statusStr || 'SUBMITTED',
-          submissionStatus: statusStr || 'SUBMITTED',
-          offeredPrice: offeredPrice != null ? Number(offeredPrice) : null,
-          quotedAmount: offeredPrice != null ? Number(offeredPrice) : null,
-          totalAmount: offeredPrice != null ? Number(offeredPrice) : null,
-          offeredQuantity: itemOfferedQty > 0 ? itemOfferedQty : undefined,
-          deliveryTimeline: (itemTimeline && itemTimeline !== 'Standard') ? itemTimeline : undefined,
-          message: r.message || r.coverNote || respData.message || respData.coverNote,
-          terms: r.terms || respData.terms,
-          attachmentUrl: r.attachmentUrl || respData.attachmentUrl,
-          documents: itemDocs,
-          lineItems: itemLines,
-          submittedAt: r.submittedAt || r.createdAt || r.updatedAt,
-          responseData: respData,
-          technicalStatus: normalizedTechStatus,
-          technicalRemarks: r.technicalRemarks || r.rejectionReason || respData.technicalRemarks || '',
-          score: r.score ?? respData.score ?? null,
-          isDisqualified: normalizedTechStatus === 'DISQUALIFIED' || Boolean(r.isDisqualified),
-        };
-
-        list.push(newRecord);
-        if (keys.length > 0) {
-          for (const k of keys) {
-            vendorMap.set(k, newRecord);
-          }
-        } else {
-          vendorMap.set(`id-${newRecord.id}`, newRecord);
-        }
-      }
-    }
-
-    return list;
-  }, [buyerResponsesData, reqData?.responses, rawBid?.participations, rawBid?.quoteResponses, rawBid?.results]);
-
-  /* ══════════════════════════════════════════════════════════════════════════
-     DATA RESOLUTION  — pull buyer-submitted fields in priority order
-     ══════════════════════════════════════════════════════════════════════════ */
-  const ref        = preferReq 
-    ? (reqObj?.requirementNumber || requirementId || requestId || rawBid?.bidNumber || rawBid?.id || '—')
-    : (requestId || rawBid?.bidNumber || rawBid?.id || requirementId || reqObj?.requirementNumber || '—');
-
-  const rawTitleCandidates = preferReq ? [
-    reqObj?.title,
-    reqObj?.subject,
-    reqObj?.name,
-    reqObj?.payload?.basics?.title,
-    reqObj?.payload?.basics?.contractTitle,
-    rawBid?.title,
-    rawBid?.subject,
-    rawBid?.itemName,
-    rawBid?.name,
-    rawBid?.technicalPacket?.basics?.title,
-    rawBid?.technicalPacket?.basics?.contractTitle,
-    (Array.isArray(reqObj?.items) && reqObj.items[0]?.itemName) || null,
-    (Array.isArray(rawBid?.items) && rawBid.items[0]?.itemName) || null,
-  ] : [
-    rawBid?.title,
-    rawBid?.subject,
-    rawBid?.itemName,
-    rawBid?.name,
-    reqObj?.title,
-    reqObj?.subject,
-    reqObj?.name,
-    rawBid?.technicalPacket?.basics?.title,
-    reqObj?.payload?.basics?.title,
-    rawBid?.technicalPacket?.basics?.contractTitle,
-    reqObj?.payload?.basics?.contractTitle,
-    (Array.isArray(rawBid?.items) && rawBid.items[0]?.itemName) || null,
-    (Array.isArray(reqObj?.items) && reqObj.items[0]?.itemName) || null,
-  ];
-
-  const validTitle = rawTitleCandidates.find(t => {
-    if (!t) return false;
-    const s = String(t).trim().toLowerCase();
-    return !(
-      s === 'procurement bid' ||
-      s.startsWith('procurement bid #') ||
-      s.startsWith('procurement #') ||
-      s === 'untitled procurement bid' ||
-      s === 'procurement requirement' ||
-      s.includes('no description') ||
-      s.includes('no scope') ||
-      s === 'n/a' ||
-      s === '—'
-    );
-  });
-  const title      = validTitle ? String(validTitle).trim() : (ref !== '—' ? `Procurement #${ref}` : 'Procurement Opportunity');
-  const desc       = stripAutoDesc(preferReq ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description) : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description));
-  const rawDescForUrgency = String(preferReq
-    ? (reqObj?.description || reqObj?.payload?.basics?.description || rawBid?.description || rawBid?.technicalPacket?.basics?.description || '')
-    : (rawBid?.description || rawBid?.technicalPacket?.basics?.description || reqObj?.description || reqObj?.payload?.basics?.description || '')
-  );
-  const descUrgencyMatch = rawDescForUrgency.match(/(?:urgency|priority):\s*([A-Za-z0-9_-]+)/i);
-
-  const resolvedUrgency = preferReq
-    ? (reqObj?.urgency || reqObj?.priority || reqObj?.payload?.urgency || reqObj?.payload?.priority || reqObj?.payload?.basics?.priority || reqObj?.payload?.basics?.urgency || rawBid?.urgency || rawBid?.priority || rawBid?.technicalPacket?.urgency || rawBid?.technicalPacket?.priority || rawBid?.technicalPacket?.basics?.priority || rawBid?.technicalPacket?.basics?.urgency || (descUrgencyMatch ? descUrgencyMatch[1].trim() : undefined))
-    : (rawBid?.urgency || rawBid?.priority || rawBid?.technicalPacket?.urgency || rawBid?.technicalPacket?.priority || rawBid?.technicalPacket?.basics?.priority || rawBid?.technicalPacket?.basics?.urgency || reqObj?.urgency || reqObj?.priority || reqObj?.payload?.urgency || reqObj?.payload?.priority || reqObj?.payload?.basics?.priority || reqObj?.payload?.basics?.urgency || (descUrgencyMatch ? descUrgencyMatch[1].trim() : undefined));
-  const strategy   = preferReq ? (reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || '') : (rawBid?.technicalPacket?.recommendation?.reason || rawBid?.technicalPacket?.basics?.justification || reqObj?.payload?.recommendation?.reason || reqObj?.payload?.basics?.justification || '');
-  const category   = preferReq ? (reqObj?.category?.name || reqObj?.category || rawBid?.category || rawBid?.technicalPacket?.basics?.category || '—') : (rawBid?.category || reqObj?.category?.name || reqObj?.category || rawBid?.technicalPacket?.basics?.category || '—');
-  const rawDescUpper = String(rawBid?.description || reqObj?.description || reqObj?.payload?.basics?.description || '').toUpperCase();
-  const explicitMethod = preferReq
-    ? (reqObj?.procurementMethod || reqObj?.type || rawBid?.procurementMethod || rawBid?.procurementType || rawBid?.bidType)
-    : (rawBid?.procurementMethod || rawBid?.procurementType || rawBid?.bidType || reqObj?.procurementMethod || reqObj?.type);
-  const method = explicitMethod || (rawDescUpper.includes('SOURCING METHOD: RFQ') ? 'RFQ' : (rawBid?.technicalPacket?.basics?.buyingType || 'RFQ'));
-
-  const methodUpper = String(method || '').toUpperCase();
-  const reqTypeUpper = String(reqObj?.procurementMethod || reqObj?.type || reqObj?.payload?.basics?.procurementMethod || rawBid?.procurementType || rawBid?.bidType || '').toUpperCase();
-
-  const isRfqExplicit =
-    methodUpper.includes('RFQ') ||
-    methodUpper.includes('QUOTATION') ||
-    reqTypeUpper.includes('RFQ') ||
-    reqTypeUpper.includes('QUOTATION') ||
-    rawDescUpper.includes('SOURCING METHOD: RFQ') ||
-    rawDescUpper.includes('METHOD: RFQ') ||
-    String(ref).toUpperCase().startsWith('RFQ-');
-
-  const isLimited = !isRfqExplicit && (methodUpper.includes('LIMITED') || reqTypeUpper.includes('LIMITED'));
-  const isRateContract = !isRfqExplicit && !isLimited && (methodUpper.includes('RATE_CONTRACT') || methodUpper === 'RATE CONTRACT' || reqTypeUpper.includes('RATE_CONTRACT') || reqTypeUpper === 'RATE CONTRACT' || methodUpper.startsWith('RC-') || reqTypeUpper.startsWith('RC-'));
-  const isRfp = !isRfqExplicit && !isRateContract && !isLimited && (methodUpper.includes('RFP') || methodUpper.includes('REQUEST FOR PROPOSAL') || reqTypeUpper.includes('RFP') || reqTypeUpper.includes('REQUEST FOR PROPOSAL'));
-  const isOpenTender = !isRfqExplicit && !isLimited && !isRateContract && !isRfp && (
-    methodUpper.includes('TENDER') ||
-    methodUpper.includes('OPEN') ||
-    reqTypeUpper.includes('TENDER') ||
-    reqTypeUpper.includes('OPEN')
-  );
-
-  const derivedProcurementType = isLimited ? 'LIMITED_TENDER'
-    : isOpenTender ? 'OPEN_TENDER'
-    : isRateContract ? 'RATE_CONTRACT'
-    : isRfp ? 'RFP'
-    : 'RFQ';
-
-  const derivedProcurementLabel = derivedProcurementType === 'LIMITED_TENDER' ? 'Limited Tender'
-    : derivedProcurementType === 'OPEN_TENDER' ? 'Open Tender'
-    : derivedProcurementType === 'RATE_CONTRACT' ? 'Rate Contract'
-    : derivedProcurementType === 'RFP' ? 'Request for Proposal'
-    : 'Request for Quotation';
-
-  const derivedBackRouteLabel = derivedProcurementType === 'LIMITED_TENDER' ? 'Limited Tender Opportunities'
-    : derivedProcurementType === 'OPEN_TENDER' ? 'Open Tender Opportunities'
-    : derivedProcurementType === 'RATE_CONTRACT' ? 'Rate Contract Opportunities'
-    : derivedProcurementType === 'RFP' ? 'RFP Opportunities'
-    : 'RFQ Opportunities';
-  const buyType    = preferReq ? (reqObj?.payload?.basics?.bidType || rawBid?.technicalPacket?.basics?.bidType || 'Product') : (rawBid?.technicalPacket?.basics?.bidType || rawBid?.technicalPacket?.basics?.whatAreYouBuying || reqObj?.payload?.basics?.bidType || 'Product');
-  const value      = preferReq ? (reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.estimatedValue || rawBid?.technicalPacket?.basics?.estimatedValue) : (rawBid?.estimatedValue || reqObj?.estimatedValue || reqObj?.budgetMax || rawBid?.technicalPacket?.basics?.estimatedValue);
-  const deadline   = preferReq
-    ? (reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || reqObj?.lastDate || rawBid?.rawEndDate || rawBid?.endDate || reqObj?.requiredBy)
-    : (rawBid?.rawEndDate || rawBid?.technicalPacket?.schedule?.submissionDate || rawBid?.technicalPacket?.schedule?.submissionDeadline || reqObj?.payload?.schedule?.submissionDate || reqObj?.payload?.schedule?.submissionDeadline || rawBid?.endDate || reqObj?.lastDate || reqObj?.requiredBy);
-  const resolvePublishedCandidate = (...candidates: any[]) => {
-    const valid = candidates.filter(Boolean);
-    const withTime = valid.find(c => {
-      if (typeof c === 'string') return c.includes('T') && !c.includes('T00:00:00');
-      if (c instanceof Date) return c.getHours() !== 0 || c.getMinutes() !== 0;
-      return false;
-    });
-    return withTime || valid[0];
-  };
-  const createdCandidate = reqObj?.createdAt || rawBid?.createdAt || null;
-  const approvedCandidate = reqObj?.approvedAt || rawBid?.approvedAt || rawBid?.publishedAt || null;
-  const formPublishCandidate = preferReq
-    ? (reqObj?.payload?.schedule?.publishDate || rawBid?.technicalPacket?.schedule?.publishDate)
-    : (rawBid?.technicalPacket?.schedule?.publishDate || reqObj?.payload?.schedule?.publishDate);
-
-  const published = (() => {
-    if (approvedCandidate) return approvedCandidate;
-    const tCreated = createdCandidate ? new Date(createdCandidate).getTime() : NaN;
-    if (formPublishCandidate && Number.isFinite(tCreated)) {
-      const tPub = new Date(formPublishCandidate).getTime();
-      if (Number.isFinite(tPub) && tPub > tCreated + 60000 && tPub > Date.now()) {
-        return formPublishCandidate;
-      }
-    }
-    return createdCandidate || formPublishCandidate || rawBid?.startDate || null;
-  })();
-  const explicitSubmissionStartDate = preferReq
-    ? (reqObj?.submissionStartDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || reqObj?.payload?.tender?.bidStartDate || rawBid?.submissionStartDate || rawBid?.technicalPacket?.schedule?.submissionStartDate)
-    : (rawBid?.submissionStartDate || rawBid?.technicalPacket?.schedule?.submissionStartDate || rawBid?.startDate || reqObj?.submissionStartDate || reqObj?.payload?.schedule?.submissionStartDate || reqObj?.payload?.schedule?.startDate || reqObj?.payload?.tender?.bidStartDate);
-  const submissionStartDate = explicitSubmissionStartDate || published;
-  const location   = preferReq ? (reqObj?.location || reqObj?.deliveryLocation || rawBid?.deliveryLocation || '—') : (rawBid?.deliveryLocation || reqObj?.location || rawBid?.technicalPacket?.basics?.deliveryLocation || '—');
-  const buyerOrg   = preferReq ? (reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || reqObj?.buyerName || rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || '—') : (rawBid?.buyerOrganizationName || rawBid?.buyerOrganization?.organizationName || rawBid?.buyer?.buyerProfile?.organizationName || rawBid?.buyer?.name || reqObj?.buyerOrganization?.organizationName || reqObj?.organization?.organizationName || '—');
-  const buyerType  = preferReq ? (reqObj?.buyerType || reqObj?.buyerOrganization?.type || rawBid?.buyerType || 'Private Buyer') : (rawBid?.buyerType || rawBid?.technicalPacket?.basics?.buyerType || 'Private Buyer');
-  const contact    = preferReq ? (reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.buyerProfile?.representativeName || reqObj?.contactPerson || reqObj?.buyerPersonName || reqObj?.buyer?.name || reqObj?.buyerUser?.name || rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.buyerName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.technicalPacket?.buyerContact?.contactPerson || '—') : (rawBid?.buyer?.buyerProfile?.representativeName || rawBid?.buyerProfile?.representativeName || rawBid?.buyerPersonName || rawBid?.buyerName || rawBid?.technicalPacket?.internal?.contactPerson || rawBid?.technicalPacket?.buyerContact?.contactPerson || rawBid?.contactPerson || rawBid?.buyer?.name || reqObj?.buyer?.buyerProfile?.representativeName || reqObj?.contactPerson || rawBid?.buyer?.name || '—');
-  const email      = preferReq ? (reqObj?.buyerEmail || reqObj?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || reqObj?.buyer?.email || reqObj?.createdBy?.email || rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || rawBid?.buyer?.email || '') : (rawBid?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || reqObj?.buyerProfile?.email || rawBid?.buyer?.email || rawBid?.technicalPacket?.internal?.email || rawBid?.technicalPacket?.buyerContact?.email || reqObj?.buyerEmail || rawBid?.buyer?.buyerProfile?.email || reqObj?.createdBy?.email || '');
-  const mobile     = preferReq ? (reqObj?.buyerMobile || reqObj?.buyer?.buyerProfile?.phone || reqObj?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || reqObj?.buyer?.mobile || reqObj?.createdBy?.mobile || rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || rawBid?.buyer?.mobile || '') : (rawBid?.buyerMobile || rawBid?.buyer?.buyerProfile?.phone || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.buyerProfile?.mobile || rawBid?.buyer?.mobile || rawBid?.technicalPacket?.internal?.mobile || rawBid?.technicalPacket?.buyerContact?.mobile || reqObj?.buyerMobile || rawBid?.buyer?.buyerProfile?.mobile || reqObj?.createdBy?.mobile || '');
-  const buyerAddress = preferReq ? (reqObj?.buyerAddress || reqObj?.buyer?.buyerProfile?.registeredAddress || reqObj?.buyer?.buyerProfile?.address || reqObj?.buyerProfile?.registeredAddress || reqObj?.buyerOrganization?.registeredAddress || rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '') : (rawBid?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || rawBid?.buyerProfile?.registeredAddress || rawBid?.buyerOrganization?.registeredAddress || reqObj?.buyerAddress || rawBid?.buyer?.buyerProfile?.registeredAddress || rawBid?.buyer?.buyerProfile?.address || '');
-  const payTerms   = preferReq ? (reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || rawBid?.technicalPacket?.terms?.paymentTerms || '100% after delivery and acceptance') : (rawBid?.technicalPacket?.terms?.paymentTerms || reqObj?.paymentTerms || reqObj?.payload?.terms?.paymentTerms || '100% after delivery and acceptance');
-  const delTerms   = preferReq ? (reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || rawBid?.technicalPacket?.terms?.deliveryTerms || 'Door delivery to site') : (rawBid?.technicalPacket?.terms?.deliveryTerms || reqObj?.deliveryTerms || reqObj?.payload?.terms?.deliveryTerms || 'Door delivery to site');
-  const warranty   = preferReq ? (reqObj?.payload?.terms?.warrantyTerms || rawBid?.technicalPacket?.terms?.warrantyTerms || '12 Months') : (rawBid?.technicalPacket?.terms?.warrantyTerms || reqObj?.payload?.terms?.warrantyTerms || '12 Months');
-  const evalCandidates = [
-    reqObj?.payload?.evaluation?.method,
-    reqObj?.payload?.evaluation?.evaluationMethod,
-    reqObj?.payload?.evaluationMethod,
-    reqObj?.payload?.rules?.evaluationMethod,
-    reqObj?.payload?.tender?.evaluationMethod,
-    reqObj?.payload?.wizardData?.evaluation?.method,
-    reqObj?.evaluationMethod,
-    rawBid?.technicalPacket?.evaluation?.method,
-    rawBid?.technicalPacket?.evaluation?.evaluationMethod,
-    rawBid?.technicalPacket?.evaluationMethod,
-    rawBid?.technicalPacket?.rules?.evaluationMethod,
-    rawBid?.technicalPacket?.tender?.evaluationMethod,
-    rawBid?.technicalPacket?.wizardData?.evaluation?.method,
-    rawBid?.payload?.evaluation?.method,
-    rawBid?.payload?.evaluationMethod,
-    rawBid?.evaluationMethod,
-  ];
-  const specificEvalMethod = evalCandidates.find(
-    c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())
-  );
-  const evalMethod = specificEvalMethod || evalCandidates.find(
-    c => typeof c === 'string' && c.trim().length > 0 && c.trim() !== 'null' && c.trim() !== 'undefined'
-  ) || 'L1 Basis';
-  const clarDeadline = deadline;
-  const techOpen   = preferReq
-    ? (reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate || rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate)
-    : (rawBid?.technicalOpeningDate || rawBid?.technicalPacket?.schedule?.technicalOpeningDate || reqObj?.technicalOpeningDate || reqObj?.payload?.schedule?.technicalOpeningDate || reqObj?.payload?.tender?.technicalEvaluationDate || reqObj?.payload?.technicalOpeningDate);
-  const finOpen    = preferReq
-    ? (reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate || reqObj?.payload?.tender?.financialEvaluationDate || reqObj?.payload?.schedule?.finalEvaluationDate || reqObj?.payload?.financialOpeningDate || rawBid?.financialOpeningDate || rawBid?.technicalPacket?.schedule?.financialOpeningDate)
-    : (rawBid?.financialOpeningDate || rawBid?.technicalPacket?.schedule?.financialOpeningDate || reqObj?.financialOpeningDate || reqObj?.payload?.schedule?.financialOpeningDate || reqObj?.payload?.tender?.financialEvaluationDate || reqObj?.payload?.schedule?.finalEvaluationDate || reqObj?.payload?.financialOpeningDate);
-  const packetType = preferReq
-    ? (reqObj?.packetType || reqObj?.payload?.schedule?.packetType || reqObj?.payload?.rules?.packetType || reqObj?.payload?.packetType || (finOpen ? 'Two Packet' : rawBid?.packetType) || 'Single Packet')
-    : (rawBid?.packetType || rawBid?.technicalPacket?.schedule?.packetType || rawBid?.technicalPacket?.rules?.packetType || reqObj?.payload?.schedule?.packetType || (finOpen ? 'Two Packet' : 'Single Packet'));
-  const bidValDate = preferReq ? (reqObj?.payload?.schedule?.bidValidityDate) : (rawBid?.technicalPacket?.schedule?.bidValidityDate || reqObj?.payload?.schedule?.bidValidityDate);
-  const reqByDate  = preferReq ? (reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate || rawBid?.technicalPacket?.basics?.requiredByDate) : (rawBid?.technicalPacket?.basics?.requiredByDate || reqObj?.requiredBy || reqObj?.payload?.basics?.requiredByDate);
-  const status     = preferReq ? (reqObj?.status || rawBid?.status || 'OPEN') : (rawBid?.status || reqObj?.status || 'OPEN');
-
-  const projectDuration = preferReq
-    ? (reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || '—')
-    : (rawBid?.technicalPacket?.basics?.projectDuration || rawBid?.technicalPacket?.terms?.contractPeriod || reqObj?.payload?.basics?.projectDuration || reqObj?.payload?.terms?.contractPeriod || '—');
-  const department = preferReq
-    ? (reqObj?.buyerOrganization?.department || reqObj?.payload?.internal?.department || rawBid?.technicalPacket?.internal?.department || rawBid?.buyer?.buyerProfile?.departmentName || rawBid?.buyer?.buyerProfile?.department || '—')
-    : (rawBid?.technicalPacket?.internal?.department || rawBid?.buyer?.buyerProfile?.departmentName || rawBid?.buyer?.buyerProfile?.department || reqObj?.buyerOrganization?.department || reqObj?.payload?.internal?.department || '—');
-
-  /* ── Derived flags ── */
-  let deadlineDt = deadline ? new Date(deadline) : null;
-  if (deadlineDt && !isNaN(deadlineDt.getTime()) && deadlineDt.getUTCHours() === 0 && deadlineDt.getUTCMinutes() === 0 && deadlineDt.getUTCSeconds() === 0) {
-    deadlineDt = new Date(deadlineDt.getTime());
-    deadlineDt.setHours(23, 59, 59, 999);
-  }
-  const isClosed   = ['AWARDED', 'CLOSED', 'CANCELLED'].includes(String(status).toUpperCase());
-  const isPassed   = !!deadlineDt && deadlineDt.getTime() < Date.now();
-  const isOwnSubmitted = Boolean(
-    (ownResponse && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownResponse.status || ownResponse.submissionStatus || '').toUpperCase())) ||
-    (ownParticipation && ['SUBMITTED', 'UNDER_REVIEW', 'SHORTLISTED', 'ACCEPTED', 'QUALIFIED'].includes(String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase()))
-  );
-  const submitted  = isBuyerOrAdmin ? Boolean(rawBid?.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted;
-  const statusUpper = String(status || 'OPEN').toUpperCase();
-  const isBidAwarded = ['AWARDED', 'PO_GENERATED', 'COMPLETED'].includes(statusUpper) ||
-    (rawBid?.awards && Array.isArray(rawBid.awards) && rawBid.awards.length > 0);
-
-  const isCurrentSellerAwarded = Boolean(
-    (rawBid?.awards && Array.isArray(rawBid.awards) && rawBid.awards.some((a: any) => {
-      const matchesSeller = (user?.id && Number(a.sellerId) === Number(user.id)) ||
-        (user?.organizationId && Number(a.seller?.organizationId) === Number(user.organizationId));
-      const isApproved = ['ADMIN_APPROVED', 'ACCEPTED'].includes(String(a.awardStatus || '').toUpperCase()) || !!a.awardedAt;
-      return matchesSeller && isApproved;
-    })) ||
-    (Array.isArray(ownParticipation?.awards) && ownParticipation.awards.some((a: any) => {
-      const isApproved = ['ADMIN_APPROVED', 'ACCEPTED'].includes(String(a?.awardStatus || '').toUpperCase()) || !!a?.awardedAt;
-      return isApproved;
-    })) ||
-    ['AWARDED', 'AWARD_ACCEPTED', 'ORDERED'].includes(String(ownParticipation?.finalStatus || '').toUpperCase())
-  );
-  const isAwarded  = isBuyerOrAdmin ? isBidAwarded : isCurrentSellerAwarded;
-  const canCancel  = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
-
-  /* ── Line Items ── */
-  const reqItemCandidates: any[][] = [
-    Array.isArray(reqObj?.items) ? reqObj.items : null,
-    Array.isArray(reqObj?.payload?.items) ? reqObj.payload.items : null,
-    Array.isArray(reqObj?.payload?.lineItems) ? reqObj.payload.lineItems : null,
-    Array.isArray(reqObj?.payload?.wizardData?.items) ? reqObj.payload.wizardData.items : null,
-    Array.isArray(reqObj?.payload?.basics?.items) ? reqObj.payload.basics.items : null,
-    Array.isArray(reqObj?.payload?.boqTable) ? reqObj.payload.boqTable : null,
-    Array.isArray(reqObj?.payload?.wizardData?.boqTable) ? reqObj.payload.wizardData.boqTable : null,
-    Array.isArray(reqObj?.payload?.boq) ? reqObj.payload.boq : null,
-    Array.isArray(reqObj?.boqTable) ? reqObj.boqTable : null,
-  ].filter((c): c is any[] => Array.isArray(c) && c.length > 0);
-
-  const bidItemCandidates: any[][] = [
-    Array.isArray(rawBid?.items) ? rawBid.items : null,
-    Array.isArray(rawBid?.technicalPacket?.items) ? rawBid.technicalPacket.items : null,
-    Array.isArray(rawBid?.technicalPacket?.lineItems) ? rawBid.technicalPacket.lineItems : null,
-    Array.isArray(rawBid?.technicalPacket?.wizardData?.items) ? rawBid.technicalPacket.wizardData.items : null,
-    Array.isArray(rawBid?.technicalPacket?.boqTable) ? rawBid.technicalPacket.boqTable : null,
-    Array.isArray(rawBid?.technicalPacket?.boq) ? rawBid.technicalPacket.boq : null,
-    Array.isArray(rawBid?.technicalPacket?.wizardData?.boqTable) ? rawBid.technicalPacket.wizardData.boqTable : null,
-    Array.isArray(rawBid?.boqTable) ? rawBid.boqTable : null,
-  ].filter((c): c is any[] => Array.isArray(c) && c.length > 0);
-
-  let rawItems: any[] = [];
-  if (preferReq) {
-    if (reqItemCandidates.length > 0) {
-      rawItems = reqItemCandidates[0];
-    } else if (bidItemCandidates.length > 0) {
-      rawItems = bidItemCandidates[0];
-    }
-  } else {
-    if (bidItemCandidates.length > 0) {
-      rawItems = bidItemCandidates[0];
-    } else if (reqItemCandidates.length > 0) {
-      rawItems = reqItemCandidates[0];
-    }
-  }
-
-  /* helper: collect unique spec-files from an item raw object */
-  const collectItemFiles = (it: any): { name: string; fileName: string; fid?: number; fileAssetId?: number; id?: number; url?: string; fileUrl?: string }[] => {
-    const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
-    const seenIds = new Set<string>();
-    const seenUrls = new Set<string>();
-    const seenNames = new Set<string>();
-    const result: { name: string; fileName: string; fid?: number; fileAssetId?: number; id?: number; url?: string; fileUrl?: string }[] = [];
-
-    const push = (name?: string, fid?: any, url?: string) => {
-      const fileAssetId = fid ? Number(fid) : undefined;
-      const cleanUrl = url ? String(url).split('?')[0].trim().toLowerCase() : '';
-      let extractedId = fileAssetId ? String(fileAssetId) : undefined;
-      if (!extractedId && cleanUrl) {
-        const match = cleanUrl.match(/\/files\/(\d+)/i);
-        if (match) extractedId = match[1];
-      }
-
-      const fName = name && name !== 'Specification File' && name !== 'Procurement Document'
-        ? String(name).trim()
-        : (cleanUrl ? cleanUrl.split('/').pop()?.split('?')[0] : undefined) || (extractedId ? `File #${extractedId}` : undefined);
-      if (!fName && !extractedId && !cleanUrl) return;
-
-      const lowerName = String(fName || '').toLowerCase().trim();
-      const isGeneric = !lowerName || lowerName === 'document' || lowerName === 'attachment' || lowerName === 'specification file' || lowerName === 'procurement document';
-
-      if (extractedId && seenIds.has(extractedId)) return;
-      if (cleanUrl && seenUrls.has(cleanUrl)) return;
-      if (!isGeneric && lowerName && seenNames.has(lowerName)) return;
-
-      if (extractedId) seenIds.add(extractedId);
-      if (cleanUrl) seenUrls.add(cleanUrl);
-      if (!isGeneric && lowerName) seenNames.add(lowerName);
-
-      const finalUrl = url || (extractedId ? `/api/files/${extractedId}/view` : undefined);
-      const finalName = fName || (extractedId ? `File #${extractedId}` : 'Document');
-      const numId = extractedId ? Number(extractedId) : fileAssetId;
-
-      result.push({
-        name: finalName,
-        fileName: finalName,
-        fid: numId,
-        fileAssetId: numId,
-        id: numId,
-        url: finalUrl,
-        fileUrl: finalUrl,
-      });
-    };
-
-    push(it.fileName || it.originalName || it.specificationFileName || it.attachmentName, it.fileAssetId, it.fileUrl || it.attachmentUrl);
-    push(it.technicalDocumentName || it.specFileName, it.technicalFileAssetId, it.technicalDocumentUrl || it.specFileUrl);
-    push(sp.fileName || sp.originalName || sp.specificationFileName || sp.name, sp.fileAssetId || sp.id, sp.fileUrl || sp.url || sp.attachmentUrl);
-
-    const arrays: any[] = [
-      ...(Array.isArray(it.attachments)             ? it.attachments             : []),
-      ...(Array.isArray(it.files)                   ? it.files                   : []),
-      ...(Array.isArray(it.documents)               ? it.documents               : []),
-      ...(Array.isArray(sp.attachments)             ? sp.attachments             : []),
-      ...(Array.isArray(sp.files)                   ? sp.files                   : []),
-      ...(Array.isArray(sp.documents)               ? sp.documents               : []),
-      ...(Array.isArray(sp.uploadedSpecificationFiles) ? sp.uploadedSpecificationFiles : []),
-    ];
-    for (const f of arrays) {
-      if (!f) continue;
-      if (typeof f === 'string') { push(f.split('/').pop(), undefined, f); }
-      else { push(f.fileName || f.name || f.originalName || f.documentName || f.specificationFileName, f.fileAssetId || f.fid || f.id, f.fileUrl || f.url || f.attachmentUrl); }
-    }
-
-    return result;
-  };
-
-  const items = rawItems.map((it: any, idx: number) => {
-    const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
-    const collectedFiles = collectItemFiles(it);
-    const estRate = it.estimatedUnitPrice !== undefined && it.estimatedUnitPrice !== null
-      ? Number(it.estimatedUnitPrice)
-      : (it.unitPrice !== undefined && it.unitPrice !== null
-          ? Number(it.unitPrice)
-          : (sp.estimatedUnitPrice !== undefined && sp.estimatedUnitPrice !== null
-              ? Number(sp.estimatedUnitPrice)
-              : (sp.unitPrice !== undefined && sp.unitPrice !== null ? Number(sp.unitPrice) : undefined)));
-
-    const brandPref = it.brand_preference || it.brandPreference || it.brand || it.brandName || sp.brand_preference || sp.brandPreference || sp.brand || '';
-    const brandFlex = it.brand_flexible || it.brandFlexible || sp.brand_flexible || sp.brandFlexible || 'Yes';
-    const rawHsn = it.hsn_sac_code || it.hsn || it.hsnSacCode || sp.hsn_sac_code || sp.hsn || sp.hsnCode || '';
-    const hsn = sanitizeHsn(rawHsn);
-    const itemType = it.itemType || sp.itemType || 'Product';
-    const cleanUom = sanitizeUom(it.unitOfMeasure || it.unit || sp.unit || 'Nos');
-
-    return {
-      ...it,
-      id: String(it.id ?? idx + 1),
-      itemType,
-      type: itemType,
-      name: it.itemName || it.name || it.title || sp.itemName || `Item #${idx + 1}`,
-      itemName: it.itemName || it.name || it.title || sp.itemName || `Item #${idx + 1}`,
-      desc: it.description || sp.description || it.specification || '',
-      description: it.description || sp.description || it.specification || '',
-      specification: it.specification || it.description || sp.description || sp.specification || '',
-      qty: Number(it.quantity || sp.quantity || 1),
-      quantity: Number(it.quantity || sp.quantity || 1),
-      unit: cleanUom,
-      unitOfMeasure: cleanUom,
-      price: estRate,
-      estimatedUnitPrice: estRate,
-      unitPrice: estRate,
-      hsn_sac_code: hsn,
-      hsn,
-      brand: brandPref,
-      brandPreference: brandPref,
-      brand_preference: brandPref,
-      brandPolicy: brandFlex,
-      brandFlexible: brandFlex,
-      brand_flexible: brandFlex,
-      gst: it.gstPercent ?? it.gst ?? sp.gstPercent ?? 18,
-      specifications: {
-        ...sp,
-        itemType,
-        hsn_sac_code: hsn,
-        brand_preference: brandPref,
-        brand_flexible: brandFlex,
-        estimatedUnitPrice: estRate,
-      },
-      itemFiles: collectedFiles,
-      attachments: collectedFiles.length ? collectedFiles : ((Array.isArray(it.attachments) && it.attachments.length) ? it.attachments : (sp.attachments || [])),
-    };
-  });
-  if (!items.length) {
-    items.push({
-      id: 'item-1', name: title, desc: desc || 'Primary procurement item',
-      qty: Number(rawBid?.quantity || reqObj?.quantity || 1),
-      unit: sanitizeUom(rawBid?.unit || reqObj?.unit || 'Nos'),
-      unitOfMeasure: sanitizeUom(rawBid?.unit || reqObj?.unit || 'Nos'),
-      price: value ? Number(value) : undefined,
-      gst: 18, brand: '', itemFiles: [],
-    });
-  }
-
-  /* ── Documents ── */
-  const reqDocs = [
-    ...(Array.isArray(reqObj?.documents) ? reqObj.documents : []),
-    ...(Array.isArray(reqObj?.payload?.documents) ? reqObj.payload.documents : []),
-    ...(Array.isArray(reqObj?.payload?.requiredDocs) ? reqObj.payload.requiredDocs : []),
-  ];
-  const bidDocs = [
-    ...(Array.isArray(rawBid?.documents) ? rawBid.documents : []),
-    ...(Array.isArray(rawBid?.technicalPacket?.documents) ? rawBid.technicalPacket.documents : []),
-    ...(Array.isArray(rawBid?.requiredDocuments)
-      ? rawBid.requiredDocuments.map((n: any) => typeof n === 'string' ? { fileName: n, documentType: 'REQUIRED' } : n)
-      : []),
-  ];
-  const rawDocs: any[] = preferReq
-    ? (reqDocs.length ? reqDocs : bidDocs)
-    : (bidDocs.length ? bidDocs : reqDocs);
-  const docs: any[] = [];
-  const seenDocs = new Set<string>();
-  for (const d of rawDocs) {
-    if (!d) continue;
-    const nm  = d.fileName || d.name || d.originalName || 'Document';
-    const key = nm.toLowerCase().trim();
-    if (seenDocs.has(key)) continue;
-    seenDocs.add(key);
-    const fid = d.fileAssetId ? Number(d.fileAssetId) : (typeof d.id === 'number' ? d.id : null);
-    docs.push({ id: fid ?? `d${docs.length}`, name: nm, type: d.documentType || 'Document', fid, url: d.fileUrl || d.url, required: Boolean(d.required || d.documentType === 'REQUIRED') });
-  }
-
-  /* ── Handlers ── */
-  const handleDownloadPdf = async () => {
-    if (isDownloadingPdf) return;
-    setIsDownloadingPdf(true);
-    const toastId = toast.loading('Preparing RFQ specification document...');
-    try {
-      const buyerGstin = preferReq
-        ? (reqObj?.buyerOrganization?.gstin || reqObj?.organization?.gstin || reqObj?.buyerProfile?.gstin || rawBid?.buyerOrganization?.gstin || rawBid?.buyer?.organization?.gstin || reqObj?.buyer?.buyerProfile?.gstin)
-        : (rawBid?.buyerOrganization?.gstin || rawBid?.buyer?.organization?.gstin || rawBid?.buyerProfile?.gstin || reqObj?.buyerOrganization?.gstin || reqObj?.organization?.gstin || rawBid?.buyer?.buyerProfile?.gstin);
-
-      const buyerPan = preferReq
-        ? (reqObj?.buyerOrganization?.pan || reqObj?.organization?.pan || reqObj?.buyerProfile?.pan || rawBid?.buyerOrganization?.pan || rawBid?.buyer?.organization?.pan)
-        : (rawBid?.buyerOrganization?.pan || rawBid?.buyer?.organization?.pan || reqObj?.buyerOrganization?.pan);
-
-      const hasReverseAuction = Boolean(
-        rawBid?.allowReverseAuction ||
-        rawBid?.technicalPacket?.allowReverseAuction ||
-        reqObj?.allowReverseAuction ||
-        reqObj?.payload?.allowReverseAuction ||
-        reqObj?.payload?.basics?.isReverseAuctionNeeded ||
-        rawBid?.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
-        rawBid?.procurementType === 'REVERSE_AUCTION' ||
-        rawBid?.status === 'REVERSE_AUCTION_ACTIVE' ||
-        rawBid?.lifecycleStage === 'REVERSE_AUCTION_ACTIVE' ||
-        rawDescUpper.includes('REVERSE AUCTION')
-      );
-      const isTwoPacket = packetType === 'Two Packet' || !!techOpen || rawDescUpper.includes('TWO-STAGE');
-      const sourcingLabel = hasReverseAuction
-        ? isTwoPacket
-          ? 'Two-Stage Tender with Reverse Auction'
-          : 'Single-Packet Tender with Reverse Auction'
-        : isTwoPacket
-          ? 'Two-Packet Procurement'
-          : derivedProcurementLabel;
-
-      const discloseEstimatedCost = Boolean(
-        rawBid?.discloseEstimatedCost ??
-        reqObj?.discloseEstimatedCost ??
-        reqObj?.payload?.discloseEstimatedCost ??
-        reqObj?.payload?.basics?.discloseEstimatedCost ??
-        rawBid?.technicalPacket?.discloseEstimatedCost ??
-        rawBid?.technicalPacket?.basics?.discloseEstimatedCost ??
-        false
-      );
-      const shouldShowEstimatedCost = Boolean(isBuyerOrAdmin || discloseEstimatedCost || isAwarded);
-
-      const humanPayTerms = (() => {
-        const p = String(payTerms || '').trim();
-        const pUpper = p.toUpperCase();
-        if (!p || p === '—' || p === 'N/A') return 'Payment on Consignment Delivery & Acceptance';
-        if (pUpper.includes('ON_DELIVERY') || pUpper.includes('DELIVERY')) return 'Payment on Consignment Delivery & GRN Acceptance';
-        if (pUpper.includes('ADVANCE')) return '100% Advance Payment';
-        if (pUpper.includes('NET_30') || pUpper.includes('NET 30')) return '30 Days Net from GRN Approval';
-        return p;
-      })();
-
-      const humanDelTerms = (() => {
-        const d = String(delTerms || '').trim();
-        const dUpper = d.toUpperCase();
-        if (!d || d === '—' || d === 'N/A') return 'Door delivery to site / consignee destination';
-        if (dUpper.includes('DOOR_DELIVERY') || dUpper.includes('DOOR DELIVERY')) return 'Door delivery to site / consignee destination';
-        return d;
-      })();
-
-      const humanEvalMethod = (() => {
-        const e = String(evalMethod || '').trim();
-        const eUpper = e.toUpperCase();
-        if (eUpper.includes('REVERSE AUCTION')) return 'Reverse Auction Final Bid Rank (L1)';
-        if (eUpper.includes('L1')) return 'L1 Total Value (Lowest Responsive Bidder)';
-        return 'L1 Total Value (Lowest Responsive Bidder)';
-      })();
-
-      const tableHeaders = ['#', 'Item & Technical Specifications', 'Qty', 'Unit', 'Est. Price', 'GST'];
-      const tableData = items.map((it, i) => {
-        const descLines: string[] = [it.name];
-        if (it.brand) {
-          descLines.push(`Brand: ${it.brand} (${it.brandPolicy === 'Yes' || it.brandPolicy === 'Flexible' ? 'Equivalent OK' : 'Strict'})`);
-        }
-        if (it.hsn) {
-          descLines.push(`HSN/SAC: ${it.hsn}`);
-        }
-        if (it.desc && it.desc !== it.name && !it.desc.startsWith('Item #')) {
-          descLines.push(`Scope: ${it.desc.slice(0, 100)}`);
-        }
-        return [
-          String(i + 1),
-          descLines.join('\n'),
-          String(it.qty),
-          it.unit,
-          shouldShowEstimatedCost
-            ? (it.price ? moneyPdf(it.price) : 'N/A')
-            : 'Confidential (Competitive Sourcing)',
-          `${it.gst}%`,
-        ];
-      });
-
-      const termsList = [
-        `Payment Terms: ${humanPayTerms}`,
-        `Delivery Terms: ${humanDelTerms}`,
-        `Evaluation Criteria: ${humanEvalMethod}`,
-        `Warranty: ${warranty && warranty !== '—' ? warranty : '12 Months standard OEM warranty'}`,
-        `Consignee Destination: ${location && location !== '—' && location !== 'N/A' ? location : (buyerAddress || 'Site Delivery as per Purchase Order')}`,
-      ];
-
-      const notesList: string[] = [];
-      if (hasReverseAuction) {
-        notesList.push('SOURCING WORKFLOW: Two-Stage Tender with Dynamic Reverse Auction.');
-        notesList.push('Stage 1 (Technical & Baseline Qualification): Bidders submit technical specification compliance and initial baseline commercial quotes. Only approved vendors advance to Stage 2.');
-        notesList.push('Stage 2 (Live Reverse Auction): Technically qualified bidders participate in dynamic downward decrement bidding.');
-      }
-      notesList.push(`BID SUBMISSION CUTOFF: ${fmtDate(deadline, true) || 'Refer to portal live timer'} (Strict automated closing).`);
-      if (techOpen) {
-        notesList.push(`TECHNICAL PACKET OPENING: ${fmtDate(techOpen, true)}`);
-      }
-      if (bidValDate) {
-        notesList.push(`BID VALIDITY: ${fmtDate(bidValDate)}`);
-      }
-
-      const engine = new PdfEngine();
-      const doc = await engine.generate({
-        documentTitle: `${derivedProcurementLabel.toUpperCase()} SPECIFICATION NOTICE`,
-        documentNumber: ref,
-        dateStr: fmtDate(published),
-        status,
-        issuerName: buyerOrg !== '—' ? buyerOrg : 'Enterprise Procuring Entity',
-        issuerSubtitle: `${sourcingLabel} Notice`,
-        parties: [
-          {
-            title: 'PROCURING ENTITY (BUYER)',
-            name: buyerOrg !== '—' ? buyerOrg : 'Enterprise Procuring Entity',
-            address: buyerAddress || (location !== '—' ? location : undefined),
-            email: email || undefined,
-            phone: mobile || undefined,
-            gstin: buyerGstin || undefined,
-            pan: buyerPan || undefined,
-            details: [
-              `Contact Officer: ${contact && contact !== '—' ? contact : 'Procurement Officer'}`,
-              `Department: ${department && department !== '—' ? department : 'Procurement & Commercial Division'}`,
-              `Category: ${category && category !== '—' ? category : 'General'}`,
-            ],
-          },
-          {
-            title: 'TENDER SPECIFICATION & ELIGIBILITY',
-            name: title || 'Procurement Notice',
-            details: [
-              `Procurement Ref: ${ref}`,
-              `Sourcing Method: ${sourcingLabel}`,
-              `Category: ${category && category !== '—' ? category : 'General Equipment'}`,
-              `Submission Cutoff: ${fmtDate(deadline, true) || 'Refer to portal schedule'}`,
-              `Bidding Currency: INR (Indian Rupee)`,
-              `Eligible Bidders: Verified & Registered MSME Suppliers`,
-            ],
-          },
-        ],
-        infoGrid: {
-          'Sourcing Method': sourcingLabel,
-          'Delivery SLA': humanDelTerms,
-          'Payment Terms': humanPayTerms,
-          'Evaluation Criteria': humanEvalMethod,
-        },
-        tableHeaders,
-        tableData,
-        financials: shouldShowEstimatedCost && value ? { grandTotal: Number(value || 0) } : undefined,
-        terms: termsList,
-        notes: notesList,
-        signatoryMode: 'single',
-        singleSignatoryTitle: buyerOrg !== '—' ? buyerOrg : 'Procuring Entity',
-        singleSignatoryName: contact && contact !== '—' ? `${contact} (Authorized Procurement Officer)` : 'Authorized Sourcing Authority',
-        footerNote: 'JSGSMILE Enterprise Procurement Portal',
-      });
-      doc.save(`${ref.replace(/[^a-zA-Z0-9-]/g, '_')}-RFQ.pdf`);
-      toast.success('Procurement document downloaded successfully.', { id: toastId });
-    } catch (err) {
-      console.error('Failed to generate PDF:', err);
-      toast.error('Failed to generate PDF document.', { id: toastId });
-    } finally {
-      setIsDownloadingPdf(false);
-    }
-  };
-
-  const handleSubmitQuotation = () => {
-    if (!user) {
-      router.push(`/login?redirect=${encodeURIComponent(pathname + (requestId ? `?requestId=${requestId}` : `?requirementId=${requirementId}`))}`);
-      return;
-    }
-    const id = requestId || rawBid?.bidNumber || requirementId || reqObj?.id || linkedRequirementId || rawBid?.id;
-    if (!id) { toast.error('Procurement ID not found'); return; }
-    router.push(`/bids/${encodeURIComponent(String(id))}/participate`);
-  };
+  const isCurrentSellerAwarded = Boolean((bidData as any)?.isAwarded || (reqData as any)?.isAwarded);
 
   const { data: invoiceStatusData, isLoading: invoiceStatusLoading } = useQuery({
-    queryKey: ['rfq-invoice-status', requestId, user?.id],
+    queryKey: ['rfq-invoice-status', requestId || effectiveTargetId, user?.id],
     queryFn: async () => {
-      if (!requestId) return { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
+      const idToQuery = requestId || effectiveTargetId;
+      if (!idToQuery) return { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
       try {
-        const res = await getApi<any>(`/api/seller/procurement-bids/${requestId}/invoice`);
+        const res = await getApi<any>(`/api/seller/procurement-bids/${idToQuery}/invoice`);
         return res?.data || res || { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
-      } catch (err) {
+      } catch {
         return { exists: false, canConvertToInvoice: false, isAwarded: false, hasAcceptedPO: false };
       }
     },
-    enabled: !!requestId && user?.role === 'seller' && isCurrentSellerAwarded,
+    enabled: Boolean(requestId || effectiveTargetId) && user?.role === 'seller' && isCurrentSellerAwarded,
     staleTime: 0,
   });
 
-  const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
+  useProcurementRealtime(effectiveTargetId);
+
+  const isQueryInProgress = bidLoading || reqLoading;
+  const rawBid: any = bidData || (reqData as any)?.requirement || (reqData as any)?.data || reqData || initialData || {};
+  const reqObj: any = (reqData as any)?.requirement || reqData || {};
+
+  if (!bidData && !reqData && !initialData && isQueryInProgress) {
+    return <ProcurementDetailSkeleton procurementTypeLabel="Request for Quotation" />;
+  }
+
+  if (!bidData && !reqData && !initialData && !isQueryInProgress) {
+    return (
+      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <h1 className="text-xl font-black text-slate-950">Procurement Requirement Not Found</h1>
+        <p className="max-w-md text-sm font-semibold leading-relaxed text-slate-500">
+          The requested RFQ opportunity could not be loaded or may no longer be available.
+        </p>
+        <Button onClick={() => router.push(user?.role === 'buyer' ? '/buyer/my-procurements' : '/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
+          {user?.role === 'buyer' ? 'Return to Procurements' : 'Return to Opportunities'}
+        </Button>
+      </div>
+    );
+  }
+
+  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const statusUpper = String(rawBid.status || reqObj.status || 'OPEN').toUpperCase();
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleConvertToInvoice = async () => {
-    if (!requestId) return;
+    const idToUse = requestId || effectiveTargetId;
+    if (!idToUse) return;
     setIsConvertingInvoice(true);
     try {
-      const result = await postApi<any>(`/api/seller/procurement-bids/${requestId}/convert-to-invoice`, {});
+      const result = await postApi<any>(`/api/seller/procurement-bids/${idToUse}/convert-to-invoice`, {});
       toast.success('Invoice generated successfully!');
-      
       const createdInvoiceId = result?.id || result?.data?.id;
-      
       if (createdInvoiceId) {
         router.push(`/seller/invoices/${createdInvoiceId}`);
       } else {
         router.push('/seller/invoices');
       }
     } catch (err: any) {
-      console.error('[Convert Invoice Error]', err);
       toast.error(err?.message || 'Failed to convert to invoice.');
     } finally {
       setIsConvertingInvoice(false);
     }
   };
 
-  /* ── Status Badge Styling Helper ── */
-  const getStatusBadgeStyle = (st: string) => {
-    const s = String(st || '').toUpperCase();
-    if (['OPEN', 'PUBLISHED', 'ACTIVE'].includes(s)) {
-      return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', dot: 'bg-emerald-500 animate-pulse' };
+  const handleSubmitQuotation = () => {
+    if (!user) {
+      toast.error('Please login to submit a quotation.');
+      router.push(`/login?redirect=${encodeURIComponent(pathname || '')}`);
+      return;
     }
-    if (['AWARDED', 'CLOSED'].includes(s)) {
-      return { bg: 'bg-blue-50 text-blue-700 border-blue-200', dot: 'bg-blue-500' };
-    }
-    if (['CANCELLED', 'UNDER_EVALUATION', 'TECHNICAL_EVALUATION'].includes(s)) {
-      return { bg: 'bg-amber-50 text-amber-700 border-amber-200', dot: 'bg-amber-500' };
-    }
-    return { bg: 'bg-slate-100 text-slate-700 border-slate-200', dot: 'bg-slate-400' };
+    const resolvedId = effectiveTargetId || activeRfqId;
+    router.push(`/seller/opportunities/rfqs/${resolvedId}/submit-quote`);
   };
 
-  const statusStyle = getStatusBadgeStyle(status);
-
-  /* ── Timeline active calculation ── */
-  const getTimelineStages = () => {
-    const statusUpper = String(status).toUpperCase();
-    let currentIdx = 1; // Default 'Open'
-    if (submitted) currentIdx = 2;
-    if (statusUpper === 'UNDER_EVALUATION' || statusUpper === 'TECHNICAL_EVALUATION') currentIdx = 3;
-    if (statusUpper === 'AWARDED' || statusUpper === 'CLOSED') currentIdx = 4;
-
-    return [
-      { step: 1, label: 'Published', date: fmtDate(published), done: true, current: false },
-      { step: 2, label: 'Open for Quotation', date: fmtDate(published), done: currentIdx >= 1, current: currentIdx === 1 },
-      { step: 3, label: 'Quotation Submitted', date: submitted ? fmtDate(ownResponse?.submittedAt || ownResponse?.createdAt, true) : fmtDate(deadline, true), done: currentIdx >= 2, current: currentIdx === 2 },
-      { step: 4, label: 'Evaluation & Review', date: fmtDate(techOpen, true) || 'Post Closing', done: currentIdx >= 3, current: currentIdx === 3 },
-      { step: 5, label: 'Award / Order', date: 'Final Stage', done: currentIdx >= 4, current: currentIdx === 4 },
-    ];
+  const mergedBid = {
+    ...rawBid,
+    participations: buyerResponses.length ? buyerResponses : (rawBid.participations || []),
   };
 
-  const timelineStages = getTimelineStages();
+  const viewProps = adaptProcurementUnifiedProps(mergedBid, reqObj, {
+    user,
+    router,
+    requestId: activeRfqId,
+    procurementType: 'RFQ',
+    procurementLabel: 'Request for Quotation',
+    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : 'Opportunities',
+    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities/rfqs',
+    onRefresh: async () => {
+      await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
+    },
+    onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId}/results`) : handleSubmitQuotation,
+    invoiceStatusData: user?.role === 'seller' && isCurrentSellerAwarded ? {
+      exists: Boolean(invoiceStatusData?.exists),
+      invoiceId: invoiceStatusData?.invoiceId,
+      canConvertToInvoice: Boolean(invoiceStatusData?.canConvertToInvoice),
+      hasAcceptedPO: Boolean(invoiceStatusData?.hasAcceptedPO),
+      loading: invoiceStatusLoading,
+    } : null,
+    isConvertingInvoice,
+    onConvertToInvoice: invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoice : undefined,
+  });
 
-  /* ══════════════════════════════════════════════════════════════════════════
-     LOADING SKELETON
-     ══════════════════════════════════════════════════════════════════════════ */
-  if (isLoading || (isQueryInProgress && !rawBid && !reqObj)) {
-    return <ProcurementDetailSkeleton procurementTypeLabel={derivedProcurementLabel} />;
-  }
-
-  /* ══════════════════════════════════════════════════════════════════════════
-     ERROR / NOT FOUND STATE
-     ══════════════════════════════════════════════════════════════════════════ */
-  if (!rawBid && !reqObj) return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-50/70 p-6">
-      <div className="text-center space-y-4 max-w-md bg-white p-8 rounded-3xl border border-slate-200 shadow-xl">
-        <div className="h-14 w-14 rounded-2xl bg-amber-50 text-amber-500 border border-amber-200 flex items-center justify-center mx-auto">
-          <AlertTriangle className="h-7 w-7" />
-        </div>
-        <h2 className="text-xl font-extrabold text-slate-900">Procurement Requirement Not Found</h2>
-        <p className="text-xs text-slate-500 leading-relaxed">
-          The requested RFQ opportunity could not be loaded or may no longer be available.
-        </p>
-        <Button onClick={() => router.push(user?.role === 'buyer' ? '/procurements' : '/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
-          {user?.role === 'buyer' ? 'Return to Procurements' : 'Return to Opportunities'}
-        </Button>
-      </div>
-    </div>
-  );
-
-  /* ══════════════════════════════════════════════════════════════════════════
-     RENDER MAIN PAGE (UNIFIED REFERENCE UI)
-     ══════════════════════════════════════════════════════════════════════════ */
   return (
     <>
-      <ProcurementDetailUnifiedView
-      procurementType={derivedProcurementType}
-      procurementLabel={derivedProcurementLabel}
-      backRouteLabel={derivedBackRouteLabel}
-      id={rawBid?.id || reqObj?.id || targetReqId || requestId || 'RFQ'}
-      displayId={ref}
-      subject={title}
-      status={status}
-      buyerName={contact}
-      contactPerson={contact}
-      orgName={buyerOrg}
-      buyerEmail={email}
-      buyerMobile={mobile}
-      buyerAddress={buyerAddress}
-      buyer={{
-        name: contact,
-        email,
-        mobile,
-        buyerProfile: {
-          ...(reqObj?.buyerOrganization || {}),
-          ...(rawBid?.buyerOrganization || {}),
-          ...(rawBid?.buyer?.buyerProfile || {}),
-          ...(reqObj?.buyer?.buyerProfile || {}),
-          ...(rawBid?.buyerProfile || {}),
-          ...(reqObj?.buyerProfile || {}),
-          organizationName: buyerOrg,
-          representativeName: contact,
-          contactPerson: contact,
-          email,
-          mobile,
-          phone: mobile,
-          registeredAddress: buyerAddress,
-          address: buyerAddress,
-          department,
-        }
-      }}
-      estimatedValue={value}
-      discloseEstimatedCost={Boolean(
-        rawBid?.discloseEstimatedCost ??
-        reqObj?.discloseEstimatedCost ??
-        reqObj?.payload?.discloseEstimatedCost ??
-        reqObj?.payload?.basics?.discloseEstimatedCost ??
-        rawBid?.technicalPacket?.discloseEstimatedCost ??
-        rawBid?.technicalPacket?.basics?.discloseEstimatedCost ??
-        false
+      <ProcurementDetailUnifiedView {...viewProps} />
+      {canCancel && (
+        <CancelProcurementModal
+          isOpen={cancelModalOpen}
+          onClose={() => setCancelModalOpen(false)}
+          procurement={{
+            id: rawBid?.id || reqObj?.id || (!isNaN(Number(activeRfqId)) ? Number(activeRfqId) : 0) || String(activeRfqId),
+            type: rawBid?.sourceModel === 'REQUIREMENT' || reqObj?.id ? 'requirement' : 'bid_tender',
+            title: viewProps.subject,
+            referenceNumber: viewProps.displayId || String(activeRfqId),
+            typeLabel: 'Request for Quotation',
+            status: statusUpper,
+          }}
+          onConfirm={async (params) => {
+            await postApi('/api/buyer/procurements/cancel', params);
+            toast.success('RFQ cancelled successfully');
+            router.push('/buyer/my-procurements');
+          }}
+        />
       )}
-      deadlineDate={deadline}
-      createdAt={reqObj?.createdAt || rawBid?.createdAt || published}
-      publishedDate={published ? fmtDate(published, true) : undefined}
-      submissionStartDate={submissionStartDate ? String(submissionStartDate) : undefined}
-      closingDate={deadline ? String(deadline) : undefined}
-      clarificationDate={clarDeadline ? fmtDate(clarDeadline, true) : undefined}
-      technicalDate={techOpen ? fmtDate(techOpen, true) : undefined}
-      financialDate={finOpen ? fmtDate(finOpen, true) : undefined}
-      packetType={packetType}
-      bidValidityDate={bidValDate ? fmtDate(bidValDate) : undefined}
-      requiredByDate={reqByDate ? fmtDate(reqByDate, true) : undefined}
-      category={category}
-      projectDuration={projectDuration}
-      department={department}
-      procurementMethod={method}
-      buyingType={buyType}
-      deliveryLocation={location}
-      paymentTerms={payTerms}
-      deliveryTerms={delTerms}
-      description={desc}
-      urgency={resolvedUrgency}
-      payload={preferReq ? (reqObj?.payload || rawBid?.technicalPacket || {}) : (rawBid?.technicalPacket || reqObj?.payload || {})}
-      approvalAuthority={rawBid?.approvalAuthority || (preferReq ? reqObj?.approvalAuthority : rawBid?.approvalAuthority) || rawBid?.technicalPacket?.internal?.approvalAuthority || reqObj?.payload?.internal?.approvalAuthority}
-      justification={rawBid?.justification || (preferReq ? reqObj?.justification : rawBid?.justification) || rawBid?.technicalPacket?.internal?.justification || reqObj?.payload?.internal?.justification}
-      internalDetails={preferReq ? (reqObj?.payload?.internal || rawBid?.technicalPacket?.internal || rawBid?.internalDetails) : (rawBid?.technicalPacket?.internal || rawBid?.internalDetails || reqObj?.payload?.internal)}
-      boqTable={preferReq ? (reqObj?.payload?.boqTable || reqObj?.boqTable) : (rawBid?.technicalPacket?.boqTable || rawBid?.boqTable || reqObj?.payload?.boqTable)}
-      documents={docs}
-      items={items}
-      rawBid={rawBid}
-      lifecycleStage={rawBid?.lifecycleStage || reqObj?.lifecycleStage}
-      quantity={rawBid?.quantity || reqObj?.quantity}
-      unit={rawBid?.unit || reqObj?.unit}
-      evaluationMethod={evalMethod}
-      participations={sellerResponses}
-      participantsCount={sellerResponses.length}
-      hasSubmittedProposal={submitted}
-      ownParticipation={ownParticipation}
-      ownResponse={ownResponse}
-      backRoute={isBuyerOrAdmin ? "/buyer/my-procurements" : "/seller/opportunities/rfqs"}
-      submitButtonLabel={isBuyerOrAdmin ? (isAwarded ? 'View Awarded Results & Ranking' : 'View Evaluation & Results') : (submitted ? 'Quotation Submitted' : 'Submit Quotation')}
-      onSubmitClick={isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId || requestId}/results`) : handleSubmitQuotation}
-      onDownloadClick={handleDownloadPdf}
-      invoiceStatus={user?.role === 'seller' && isCurrentSellerAwarded ? { 
-        exists: Boolean(invoiceStatusData?.exists), 
-        invoiceId: invoiceStatusData?.invoiceId,
-        canConvertToInvoice: Boolean(invoiceStatusData?.canConvertToInvoice),
-        hasAcceptedPO: Boolean(invoiceStatusData?.hasAcceptedPO),
-        loading: invoiceStatusLoading 
-      } : null}
-      isConvertingInvoice={isConvertingInvoice}
-      onConvertToInvoiceClick={invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoice : undefined}
-      onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
-      cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Request' : 'Cancel RFQ'}
-      clarificationKind={requirementId || (rawBid?.sourceModel === 'REQUIREMENT') ? 'requirement' : 'quote-request'}
-      clarificationEntityId={rawBid?.id || reqObj?.id || requirementId || requestId || targetReqId}
-    />
-    {canCancel && (
-      <CancelProcurementModal
-        isOpen={cancelModalOpen}
-        onClose={() => setCancelModalOpen(false)}
-        procurement={{
-          id: rawBid?.id || reqObj?.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || ref || String(requestId || targetReqId),
-          type: requirementId || rawBid?.sourceModel === 'REQUIREMENT' ? 'requirement' : 'bid_tender',
-          title: title,
-          referenceNumber: ref,
-          typeLabel: derivedProcurementLabel || 'RFQ',
-          status: statusUpper,
-        }}
-        onConfirm={async (params) => {
-          await postApi('/api/buyer/procurements/cancel', params);
-          toast.success('RFQ cancelled successfully');
-          router.push('/buyer/my-procurements');
-        }}
-      />
-    )}
     </>
+  );
+}
+
+export default function RfqDetailPage({ initialData }: { initialData?: any } = {}) {
+  return (
+    <Suspense fallback={<ProcurementDetailSkeleton procurementTypeLabel="Request for Quotation" />}>
+      <RfqDetailContent initialData={initialData} />
+    </Suspense>
   );
 }

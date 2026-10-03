@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
@@ -10,22 +10,14 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { formatRefId } from '../../../utils/refIdUtils';
-import { formatDate, formatDateTime } from '../../shared/format';
+import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { toast } from 'sonner';
 
-function formatDateString(dateVal?: string | Date | null, includeTime: boolean = false) {
-  if (!dateVal) return undefined;
-  const formatted = includeTime ? formatDateTime(dateVal) : formatDate(dateVal);
-  return formatted === '—' ? String(dateVal) : formatted;
-}
-
-export default function OpenTenderDetailPage({ initialData }: { initialData?: any } = {}) {
+function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
   const { user } = useAuth();
-  const currentUser: any = user;
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
@@ -51,18 +43,17 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   );
 
   const { data: bidData, isLoading: isBidLoading, error: bidError, refetch: refetchBid } = useQuery({
-    queryKey: ['open-tender-bid-detail', requestId || activeOpenId, currentUser?.id],
+    queryKey: ['open-tender-bid-detail', requestId || activeOpenId, user?.id],
     queryFn: () => procurementBidApi.detail((requestId || activeOpenId)!),
     enabled: !!(requestId || activeOpenId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 10_000,
-    refetchOnWindowFocus: true,
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
 
   const { data: reqData, isLoading: isReqLoading, error: reqError, refetch: refetchReq } = useQuery({
-    queryKey: ['open-tender-req-detail', targetReqId, currentUser?.id],
+    queryKey: ['open-tender-req-detail', targetReqId, user?.id],
     queryFn: async () => {
       try {
         const res2 = await getApi<any>(`/api/marketplace/requirements/${targetReqId}`);
@@ -82,7 +73,7 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
   });
 
   const { data: tenderData, refetch: refetchTender } = useQuery({
-    queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId, currentUser?.id],
+    queryKey: ['open-tender-raw-tender-detail', targetReqId || activeOpenId, user?.id],
     queryFn: async () => {
       const candidates = [targetReqId, activeOpenId, requestId].filter(Boolean);
       for (const cand of candidates) {
@@ -104,21 +95,12 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     typeof initialData === 'object' &&
     (initialData.id || initialData.bidNumber || initialData.requirementNumber || initialData.title || initialData.tenderId)
   );
-  const isLoading = (!bidData && !reqData && !tenderData && !hasValidInitialData && isAnyLoading);
-  const bid: any = bidData || (hasValidInitialData && (initialData.bidNumber || initialData.sourceModel === 'BID') ? initialData : {});
-  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || (hasValidInitialData && (initialData.requirementNumber || initialData.sourceModel === 'REQUIREMENT') ? (initialData.requirement || initialData) : {});
-  const tender: any = tenderData || (hasValidInitialData && initialData.tenderId ? initialData : {});
-  const payload = bid.technicalPacket || tender.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
-  const basics = payload.basics || {};
-  const schedule = payload.schedule || {};
-  const terms = payload.terms || {};
 
-  if (isLoading || (isAnyLoading && !bidData && !reqObj.id && !tender.id && !hasValidInitialData)) {
+  if (!bidData && !reqData && !tenderData && !hasValidInitialData && isAnyLoading) {
     return <ProcurementDetailSkeleton procurementTypeLabel="Open Tender" />;
   }
 
-  const hasFatalError = !isAnyLoading && !bidData && !reqData && !tenderData && !hasValidInitialData;
-  if (hasFatalError) {
+  if (!isAnyLoading && !bidData && !reqData && !tenderData && !hasValidInitialData) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
@@ -135,31 +117,21 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     );
   }
 
-  const candidateTitles = [
-    bid.title,
-    reqObj.title,
-    basics.title,
-    basics.contractTitle,
-    basics.procurementTitle,
-    payload.tender?.tenderTitle,
-    payload.tender?.title,
-    payload.serviceDetails?.title,
-    payload.serviceDetails?.serviceTitle,
-    bid.subject,
-    reqObj.subject,
-    bid.itemName,
-    reqObj.itemName,
-    (Array.isArray(bid.items) && (bid.items[0]?.itemName || bid.items[0]?.name || bid.items[0]?.title)),
-    (Array.isArray(reqObj.items) && (reqObj.items[0]?.itemName || reqObj.items[0]?.name || reqObj.items[0]?.title)),
-  ];
-  const isGeneric = (s?: any) => !s || typeof s !== 'string' || ['open tender', 'tender opportunity', 'procurement requirement', 'n/a', '—'].includes(s.trim().toLowerCase()) || s.toLowerCase().includes('no description');
-  const validTitle = candidateTitles.find(t => t && !isGeneric(String(t)));
-  const title = validTitle ? String(validTitle).trim() : (bid.title || reqObj.title || 'Open Tender Procurement');
-  const rawTndRef = bid.bidNumber || bid.referenceNumber || reqObj.requirementNumber;
-  const openTenderNumber = formatRefId('TND', bid.id || reqObj.id || requestId, rawTndRef, 'TENDER');
+  const bid: any = bidData || (hasValidInitialData && (initialData.bidNumber || initialData.sourceModel === 'BID') ? initialData : {});
+  const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || (hasValidInitialData && (initialData.requirementNumber || initialData.sourceModel === 'REQUIREMENT') ? (initialData.requirement || initialData) : {});
+  const tender: any = tenderData || (hasValidInitialData && initialData.tenderId ? initialData : {});
+  const mergedBid = {
+    ...tender,
+    ...bid,
+    payload: { ...(reqObj?.payload || {}), ...(tender?.payload || {}), ...(bid?.payload || {}) },
+  };
+
+  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const statusUpper = String(mergedBid.status || reqObj.status || 'OPEN').toUpperCase();
+  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleSubmitProposal = () => {
-    if (!currentUser) {
+    if (!user) {
       toast.error('Please login to participate in this Open Tender.');
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
@@ -167,216 +139,33 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
     router.push(`/bids/${bid.id || requestId}/participate`);
   };
 
-  const participationsList = [
-    ...(bid?.myParticipation ? [bid.myParticipation] : []),
-    ...(Array.isArray(bid?.participations) ? bid.participations : []),
-    ...(Array.isArray(reqObj?.participations) ? reqObj.participations : []),
-    ...(Array.isArray(reqObj?.responses) ? reqObj.responses : []),
-  ];
-
-  const isBuyerOrAdmin = currentUser?.role === 'buyer' || currentUser?.role === 'admin' || currentUser?.role === 'master_admin';
-
-  const ownParticipation =
-    participationsList.find((p: any) =>
-      currentUser && (
-        (currentUser.id && (
-          Number(p.sellerId || p.sellerUserId) === Number(currentUser.id) ||
-          Number(p.seller?.id || p.sellerUser?.id) === Number(currentUser.id)
-        )) ||
-        (currentUser.organizationId && (
-          Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.organizationId)
-        )) ||
-        (currentUser.sellerProfile?.id && (
-          Number(p.sellerProfileId || p.sellerId) === Number(currentUser.sellerProfile.id)
-        )) ||
-        (currentUser.sellerProfile?.organizationId && (
-          Number(p.sellerOrgId || p.sellerOrganizationId || p.sellerOrganization?.id || p.seller?.organizationId) === Number(currentUser.sellerProfile.organizationId)
-        ))
-      )
-    ) || null;
-
-  const isOwnSubmitted = Boolean(
-    ownParticipation &&
-    String(ownParticipation.submissionStatus || ownParticipation.status || '').toUpperCase() === 'SUBMITTED'
-  );
-
-  const hasSubmittedProposal = Boolean(
-    isBuyerOrAdmin ? (bid.hasSubmittedProposal || isOwnSubmitted) : isOwnSubmitted
-  );
-  const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
-  const resolvedTender = tenderData || {};
-  const resolvedBuyer = resolvedTender.buyer || bid.buyer || reqObj.buyer || null;
-  const rawBuyerProfile =
-    resolvedTender.buyer?.buyerProfile ||
-    bid.buyer?.buyerProfile ||
-    reqObj.buyer?.buyerProfile ||
-    null;
-
-  const resolvedOrgName =
-    resolvedTender.buyer?.buyerProfile?.organizationName ||
-    bid.buyer?.buyerProfile?.organizationName ||
-    bid.buyerOrganizationName ||
-    reqObj.buyerOrganization?.organizationName ||
-    reqObj.organization?.organizationName ||
-    (resolvedTender.buyer?.name && resolvedTender.buyer.name !== resolvedTender.buyer?.buyerProfile?.representativeName ? resolvedTender.buyer.name : '') ||
-    'Buyer Organization';
-
-  const resolvedContactPerson =
-    resolvedTender.buyer?.buyerProfile?.contactPerson ||
-    resolvedTender.buyer?.buyerProfile?.representativeName ||
-    bid.buyer?.buyerProfile?.representativeName ||
-    bid.buyer?.buyerProfile?.contactPerson ||
-    (resolvedTender.buyer?.name && resolvedTender.buyer.name !== resolvedOrgName && resolvedTender.buyer.name !== 'Buyer' ? resolvedTender.buyer.name : '') ||
-    (bid.buyer?.name && bid.buyer.name !== resolvedOrgName && bid.buyer.name !== 'Buyer' ? bid.buyer.name : '') ||
-    (bid.buyerName && bid.buyerName !== resolvedOrgName && bid.buyerName !== 'Buyer' ? bid.buyerName : '') ||
-    reqObj.contactPerson ||
-    (reqObj.buyer?.name && reqObj.buyer.name !== resolvedOrgName && reqObj.buyer.name !== 'Buyer' ? reqObj.buyer.name : '') ||
-    'Authorized Procurement Officer';
-
-  const resolvedBuyerEmail =
-    resolvedTender.buyer?.buyerProfile?.email ||
-    resolvedTender.buyer?.email ||
-    bid.buyer?.buyerProfile?.email ||
-    bid.buyer?.email ||
-    bid.buyerEmail ||
-    reqObj.buyerEmail ||
-    reqObj.buyer?.email ||
-    '';
-
-  const resolvedBuyerMobile =
-    resolvedTender.buyer?.buyerProfile?.phone ||
-    resolvedTender.buyer?.buyerProfile?.mobile ||
-    resolvedTender.buyer?.mobile ||
-    bid.buyer?.buyerProfile?.mobile ||
-    bid.buyer?.buyerProfile?.phone ||
-    bid.buyer?.mobile ||
-    bid.buyerMobile ||
-    reqObj.buyerMobile ||
-    reqObj.buyer?.mobile ||
-    '';
-
-  const resolvedBuyerAddress =
-    resolvedTender.buyer?.buyerProfile?.address ||
-    resolvedTender.buyer?.buyerProfile?.registeredAddress ||
-    bid.buyerAddress ||
-    bid.buyer?.buyerProfile?.registeredAddress ||
-    bid.buyer?.buyerProfile?.address ||
-    reqObj.buyerAddress ||
-    reqObj.buyer?.buyerProfile?.registeredAddress ||
-    rawBuyerProfile?.registeredAddress ||
-    rawBuyerProfile?.address ||
-    '';
-
-  const resolvedBuyerProfile = rawBuyerProfile || bid.buyerOrganization || reqObj.buyerOrganization || reqObj.organization || {};
+  const viewProps = adaptProcurementUnifiedProps(mergedBid, reqObj, {
+    user,
+    router,
+    requestId: activeOpenId,
+    procurementType: 'OPEN_TENDER',
+    procurementLabel: 'Open Tender',
+    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : 'Opportunities',
+    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities',
+    onRefresh: async () => {
+      await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
+    },
+    onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
+  });
 
   return (
     <>
-      <ProcurementDetailUnifiedView
-        procurementType="OPEN_TENDER"
-        procurementLabel="Open Tender"
-        id={bid.id || reqObj.id || requestId}
-        displayId={openTenderNumber}
-        rawBid={bid}
-        awards={bid.awards || []}
-        subject={title}
-        status={bid.status || reqObj.status || 'OPEN'}
-        buyerName={resolvedContactPerson}
-        contactPerson={resolvedContactPerson}
-        orgName={resolvedOrgName}
-        buyerEmail={resolvedBuyerEmail}
-        buyerMobile={resolvedBuyerMobile}
-        buyerAddress={resolvedBuyerAddress}
-        buyer={{
-          name: resolvedContactPerson,
-          email: resolvedBuyerEmail,
-          mobile: resolvedBuyerMobile,
-          buyerProfile: {
-            ...resolvedBuyerProfile,
-            organizationName: resolvedOrgName,
-            representativeName: resolvedContactPerson,
-            contactPerson: resolvedContactPerson,
-            email: resolvedBuyerEmail,
-            mobile: resolvedBuyerMobile,
-            phone: resolvedBuyerMobile,
-            registeredAddress: resolvedBuyerAddress || resolvedBuyerProfile?.registeredAddress,
-            address: resolvedBuyerAddress || resolvedBuyerProfile?.address,
-            department: resolvedTender.buyer?.buyerProfile?.department || bid.buyer?.buyerProfile?.department || resolvedBuyerProfile?.department,
-          },
-        }}
-        estimatedValue={bid.estimatedValue || reqObj.estimatedValue || basics.estimatedValue}
-        discloseEstimatedCost={Boolean(bid.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? basics.discloseEstimatedCost ?? false)}
-        deadlineDate={schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate}
-        createdAt={reqObj.createdAt || bid.createdAt || bid.startDate}
-        publishedDate={(() => {
-          const tCreated = reqObj.createdAt || bid.createdAt;
-          const rawPub = schedule.publishDate || schedule.publishedDate;
-          if (rawPub && tCreated) {
-            const pubMs = new Date(rawPub).getTime();
-            const crMs = new Date(tCreated).getTime();
-            if (Number.isFinite(pubMs) && Number.isFinite(crMs) && pubMs > crMs + 60000) {
-              return formatDateString(rawPub);
-            }
-          }
-          return formatDateString(reqObj.approvedAt || reqObj.publishedAt || bid.publishedAt || bid.approvedAt || tCreated || bid.rawStartDate || bid.startDate);
-        })()}
-        submissionStartDate={schedule.submissionStartDate || schedule.startDate || (resolvedTender as any)?.bidStartDate || reqObj.startDate ? formatDateString(schedule.submissionStartDate || schedule.startDate || (resolvedTender as any)?.bidStartDate || reqObj.startDate, true) : undefined}
-        closingDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
-        clarificationDate={formatDateString(schedule.submissionDate || schedule.submissionDeadline || bid.rawEndDate || reqObj.lastDate || bid.endDate, true)}
-        technicalDate={formatDateString(bid.technicalOpeningDate || schedule.technicalOpeningDate || (resolvedTender as any)?.technicalEvaluationDate, true)}
-        financialDate={formatDateString(bid.financialOpeningDate || schedule.financialOpeningDate || (resolvedTender as any)?.financialEvaluationDate, true)}
-        packetType={schedule.packetType || bid.packetType || payload.packetType || ((bid.financialOpeningDate || schedule.financialOpeningDate || (resolvedTender as any)?.financialEvaluationDate) ? 'Two Packet' : 'Single Packet')}
-        category={bid.category?.name || bid.category || reqObj.category?.name || basics.category}
-        procurementMethod="Open Tender"
-        buyingType={basics.buyingType || 'Goods / Products'}
-        deliveryLocation={bid.deliveryLocation || bid.location || reqObj.location || basics.deliveryLocation}
-        projectDuration={bid.projectDuration || bid.contractPeriod || basics.projectDuration || basics.duration || terms.projectDuration || terms.contractPeriod || undefined}
-        paymentTerms={bid.paymentTerms || terms.paymentTerms || undefined}
-        deliveryTerms={bid.deliveryTerms || terms.deliveryTerms || undefined}
-        description={bid.description || reqObj.description || basics.description}
-        payload={payload}
-        approvalAuthority={bid.approvalAuthority || payload.internal?.approvalAuthority || payload.approvalAuthority}
-        justification={bid.justification || payload.internal?.justification || basics.justification}
-        internalDetails={bid.internalDetails || payload.internal}
-        documents={bid.documents || bid.bidDocuments || reqObj.documents || payload.documents || []}
-        items={bid.items || payload.items || reqObj.items || payload.boqTable || []}
-        evaluationMethod={
-          [
-            payload.evaluation?.method,
-            payload.evaluation?.evaluationMethod,
-            payload.evaluationMethod,
-            payload.rules?.evaluationMethod,
-            reqObj?.payload?.evaluation?.method,
-            bid.technicalPacket?.evaluation?.method,
-            bid.evaluationMethod,
-          ].find(c => typeof c === 'string' && c.trim().length > 0 && !['l1', 'l1 basis', 'l1 evaluation'].includes(c.trim().toLowerCase())) ||
-          bid.evaluationMethod ||
-          payload.evaluationMethod ||
-          'L1 Evaluation'
-        }
-        participations={participationsList}
-        participantsCount={bid.participantsCount ?? participationsList.length}
-        hasSubmittedProposal={hasSubmittedProposal}
-        ownParticipation={ownParticipation}
-        backRoute={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "/buyer/my-procurements" : "/seller/opportunities"}
-        backRouteLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? "My Procurements" : "Opportunities"}
-        submitButtonLabel={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Tender Proposal Submitted' : 'Submit Tender Proposal')}
-        onSubmitClick={currentUser?.role === 'buyer' || currentUser?.role === 'admin' ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal}
-        onRefresh={async () => {
-          await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
-        }}
-        onCancelClick={canCancel ? () => setCancelModalOpen(true) : undefined}
-        cancelButtonLabel={statusUpper === 'DRAFT' || statusUpper === 'SUBMITTED' ? 'Withdraw Tender' : 'Cancel Tender'}
-      />
+      <ProcurementDetailUnifiedView {...viewProps} />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}
           onClose={() => setCancelModalOpen(false)}
           procurement={{
-            id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || openTenderNumber || String(requestId),
+            id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || String(requestId),
             type: 'bid_tender',
-            title: title,
-            referenceNumber: openTenderNumber,
+            title: viewProps.subject,
+            referenceNumber: viewProps.displayId || String(requestId),
             typeLabel: 'Open Tender',
             status: statusUpper,
           }}
@@ -388,5 +177,13 @@ export default function OpenTenderDetailPage({ initialData }: { initialData?: an
         />
       )}
     </>
+  );
+}
+
+export default function OpenTenderDetailPage({ initialData }: { initialData?: any } = {}) {
+  return (
+    <Suspense fallback={<ProcurementDetailSkeleton procurementTypeLabel="Open Tender" />}>
+      <OpenTenderDetailContent initialData={initialData} />
+    </Suspense>
   );
 }
