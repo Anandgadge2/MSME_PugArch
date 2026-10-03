@@ -133,6 +133,8 @@ type ItemRow = {
   id: string;
   itemType?: 'Product' | 'Service';
   name: string;
+  category?: string;
+  categoryId?: number | null;
   specification: string;
   quantity: number;
   unit: string;
@@ -681,16 +683,20 @@ const importedCsvRowToItem = (headers: string[], row: string[], index: number): 
 const normalizeDraftItem = (it: any, idx: number): ItemRow => {
   const sp = (typeof it.specifications === 'object' && it.specifications) ? it.specifications : {};
   const specText = it.specification || it.technicalSpecification || sp.specification || sp.technicalSpecification || sp.scopeOfWork || sp.description || it.description || it.scopeOfWork || '';
+  const hsnSac = it.hsn_sac_code || it.hsnSacCode || it.hsnSac || it.hsn || it.hsnCode || it.sac || it.sacCode || sp.hsn_sac_code || sp.hsnSacCode || sp.sacCode || sp.sac || sp.hsnCode || sp.hsn || '';
   return {
     ...it,
     id: it.id || `item:${Date.now()}:${idx}:${makeId()}`,
     itemType: (it.itemType || sp.itemType || 'Product').toLowerCase().includes('service') ? 'Service' : 'Product',
     name: it.name || it.itemName || sp.name || sp.itemName || `Item #${idx + 1}`,
+    category: it.category || sp.category || '',
+    categoryId: it.categoryId || sp.categoryId || null,
     specification: specText,
     technicalSpecification: it.technicalSpecification || specText,
     unit: it.unit || it.unitOfMeasure || sp.unit || 'Nos',
     unitPrice: Number(it.unitPrice || it.estimatedUnitPrice || 0),
     gst: Number(it.gst || sp.gst || 18),
+    hsn_sac_code: hsnSac,
   };
 };
 
@@ -881,23 +887,30 @@ export const computeProcurementTotals = (items: ItemRow[]) => {
 const cartItemToProcurementItem = (item: CartItemDto): ItemRow => {
   const product = item.product;
   const service = item.service;
-  const description = product?.description || service?.description || (service as any)?.scopeOfWork || item.technicalNote || item.itemName;
+  const description = product?.description || service?.description || service?.scopeOfWork || item.technicalNote || item.itemName;
   const unitPrice = Number(item.unitPrice || product?.price || service?.basePrice || 0);
+
+  const serviceSacCode = service?.specifications?.find((s: any) => /sac/i.test(s.name))?.value || (service as any)?.sacCode || '';
+  const code = (service ? serviceSacCode : product?.hsnCode) || product?.hsnCode || serviceSacCode || '';
+  const categoryName = product?.category?.name || service?.category?.name || '';
+  const categoryId = product?.categoryId || service?.categoryId || null;
 
   return {
     id: `cart:${item.id}`,
     itemType: service ? 'Service' : 'Product',
     name: item.itemName || product?.name || service?.name || 'Catalogue Item',
+    category: categoryName,
+    categoryId: categoryId,
     specification: description || '',
     quantity: Math.max(1, Number(item.quantity || 1)),
-    unit: item.unitOfMeasure || product?.unitOfMeasure || 'Nos',
+    unit: item.unitOfMeasure || product?.unitOfMeasure || (service ? 'Set' : 'Nos'),
     unitPrice,
     gst: 18,
     deliveryDate: nextFortnight,
     brandPolicy: 'Equivalent allowed',
     technicalSpecification: description || '',
     specificationFileName: '',
-    hsn_sac_code: product?.hsnCode || '',
+    hsn_sac_code: code,
     brand_preference: '',
     brand_flexible: 'Yes',
     fileAssetId: null,
@@ -4285,6 +4298,8 @@ function ItemDrawerOrModal({
   onSaveAndAddAnother,
   token,
   onPreviewDocument,
+  categoriesList = [],
+  defaultCategory = '',
 }: {
   isOpen: boolean;
   item: ItemRow | null;
@@ -4293,11 +4308,15 @@ function ItemDrawerOrModal({
   onSaveAndAddAnother: (item: ItemRow) => void;
   token: string | null;
   onPreviewDocument?: (doc: any, label?: string) => void;
+  categoriesList?: Array<{ id: number; name: string }>;
+  defaultCategory?: string;
 }) {
   const [formData, setFormData] = useState<ItemModalFormData | null>(() => {
     if (!item) return null;
     return {
       ...item,
+      category: item.category || defaultCategory || '',
+      categoryId: item.categoryId ?? null,
       quantity: item.quantity ?? 1,
       unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
     };
@@ -4309,6 +4328,8 @@ function ItemDrawerOrModal({
     if (item) {
       setFormData({
         ...item,
+        category: item.category || defaultCategory || '',
+        categoryId: item.categoryId ?? null,
         quantity: item.quantity ?? 1,
         unitPrice: item.unitPrice && Number(item.unitPrice) > 0 ? String(item.unitPrice) : '',
       });
@@ -4316,7 +4337,7 @@ function ItemDrawerOrModal({
       setFormData(null);
     }
     setValidationErrors({});
-  }, [item]);
+  }, [item, defaultCategory]);
 
   if (!isOpen || !formData) return null;
 
@@ -4424,6 +4445,9 @@ function ItemDrawerOrModal({
       ...formData,
       quantity: Math.max(1, parseInt(String(formData.quantity), 10) || 1),
       unitPrice: Math.max(0, parseFloat(String(formData.unitPrice)) || 0),
+      category: formData.category || defaultCategory || '',
+      categoryId: formData.categoryId ?? null,
+      hsn_sac_code: formData.hsn_sac_code?.trim() || '',
     };
   };
 
@@ -4633,6 +4657,34 @@ function ItemDrawerOrModal({
                 </Field>
               </div>
             </div>
+
+            {/* Row 3.5: Category Classification */}
+            {categoriesList && categoriesList.length > 0 && (
+              <Field label="Category / Classification (Optional)">
+                <select
+                  id="line-item-category-select"
+                  aria-label="Item Category Classification"
+                  value={formData.category || defaultCategory || ''}
+                  onChange={e => {
+                    const selName = e.target.value;
+                    const matched = categoriesList.find(c => c.name === selName);
+                    setFormData({
+                      ...formData,
+                      category: selName,
+                      categoryId: matched ? matched.id : null,
+                    });
+                  }}
+                  className={cn(inputClass, "cursor-pointer font-medium")}
+                >
+                  <option value="">{defaultCategory ? `Default (${defaultCategory})` : '-- Select Category --'}</option>
+                  {categoriesList.map(cat => (
+                    <option key={cat.id || cat.name} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
 
             {/* Row 4: Commercials (Qty, UOM, Rate, GST) */}
             <div className="pt-2 border-t border-slate-100">
@@ -4865,6 +4917,174 @@ function ItemDrawerOrModal({
   );
 }
 
+/** Accessible Cart Category Alignment Review Modal */
+function CartCategoryAlignmentModal({
+  conflict,
+  onClose,
+  onImportMatchingOnly,
+  onImportAll,
+}: {
+  conflict: {
+    isOpen: boolean;
+    tenderCategory: string;
+    matchingItems: ItemRow[];
+    mismatchedItems: ItemRow[];
+    allItems: ItemRow[];
+  } | null;
+  onClose: () => void;
+  onImportMatchingOnly: () => void;
+  onImportAll: () => void;
+}) {
+  const modalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!conflict?.isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [conflict, onClose]);
+
+  if (!conflict?.isOpen) return null;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center z-[999999] p-3 sm:p-6 animate-in fade-in duration-150"
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="cart-category-alignment-title"
+      aria-describedby="cart-category-alignment-desc"
+    >
+      <div
+        ref={modalRef}
+        className="w-full max-w-2xl bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-200"
+      >
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-slate-100 bg-amber-50/60 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-100 text-amber-800 font-bold shadow-2xs">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 id="cart-category-alignment-title" className="text-base font-black text-slate-900 tracking-tight">
+                Cart Category Alignment
+              </h3>
+              <p id="cart-category-alignment-desc" className="text-[11px] text-slate-600 font-medium">
+                Review item classifications before importing into your procurement schedule
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-200/60 hover:text-slate-700 transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 overflow-y-auto space-y-4 text-xs">
+          <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 flex items-start gap-3">
+            <Info className="h-4 w-4 text-[#0b2447] shrink-0 mt-0.5" />
+            <div className="space-y-1 text-slate-700 leading-relaxed">
+              <p>
+                Your procurement tender is categorized as <strong className="text-slate-900 bg-slate-200/80 px-1.5 py-0.5 rounded font-bold">{conflict.tenderCategory}</strong>.
+              </p>
+              <p className="text-slate-600 text-[11.5px]">
+                {conflict.mismatchedItems.length} item{conflict.mismatchedItems.length === 1 ? '' : 's'} in your cart belong to different category classifications. Please choose how you want to proceed.
+              </p>
+            </div>
+          </div>
+
+          {/* Items breakdown list */}
+          <div className="space-y-2">
+            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Cart Items Classification Breakdown</span>
+            <div className="border border-slate-200 rounded-xl overflow-hidden divide-y divide-slate-100 max-h-60 overflow-y-auto custom-scrollbar">
+              {conflict.allItems.map(it => {
+                const isMatch = !it.category || it.category.trim().toLowerCase() === conflict.tenderCategory.trim().toLowerCase();
+                return (
+                  <div key={it.id} className="p-3 flex items-center justify-between gap-3 bg-white hover:bg-slate-50/50">
+                    <div className="min-w-0 flex-1">
+                      <div className="font-bold text-slate-900 truncate">{it.name}</div>
+                      <div className="text-[11px] text-slate-500 mt-0.5">
+                        Qty: <strong className="text-slate-700">{it.quantity} {it.unit}</strong>
+                        {it.hsn_sac_code && (
+                          <span className="ml-2 font-mono text-[10.5px] bg-slate-100 px-1 rounded text-slate-600">
+                            {it.itemType === 'Service' ? 'SAC ' : 'HSN '}{it.hsn_sac_code}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="shrink-0 flex items-center gap-2">
+                      <span className={cn(
+                        "rounded px-2 py-0.5 text-[10px] font-bold",
+                        isMatch
+                          ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                          : "bg-amber-50 text-amber-800 border border-amber-200"
+                      )}>
+                        {it.category || 'Unclassified'}
+                      </span>
+                      {isMatch ? (
+                        <span className="text-[10px] font-bold text-emerald-700 flex items-center gap-0.5">
+                          <Check className="h-3 w-3" /> Matches
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-bold text-amber-700 flex items-center gap-0.5">
+                          <AlertCircle className="h-3 w-3" /> Differs
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50/80 flex flex-wrap items-center justify-between gap-3 shrink-0">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+          >
+            Cancel
+          </Button>
+
+          <div className="flex items-center gap-2">
+            {conflict.matchingItems.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onImportMatchingOnly}
+                className="text-xs font-bold border-slate-300 text-slate-800 hover:bg-slate-100"
+              >
+                Import Matching Only ({conflict.matchingItems.length})
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={onImportAll}
+              className="text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f]"
+            >
+              Import All Items ({conflict.allItems.length})
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function ItemsDetailsForm({
   draft,
   updateDraft,
@@ -4888,6 +5108,13 @@ function ItemsDetailsForm({
   const [quickDocItem, setQuickDocItem] = useState<ItemRow | null>(null);
   const [quickDocBoqRowIdx, setQuickDocBoqRowIdx] = useState<number | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [cartCategoryConflict, setCartCategoryConflict] = useState<{
+    isOpen: boolean;
+    tenderCategory: string;
+    matchingItems: ItemRow[];
+    mismatchedItems: ItemRow[];
+    allItems: ItemRow[];
+  } | null>(null);
 
   // Dynamic master metadata from database / backend
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
@@ -5250,6 +5477,25 @@ function ItemsDetailsForm({
     }
   };
 
+  const applyImportedCartItems = (itemsToImport: ItemRow[], updatedCategory?: string) => {
+    updateDraft(current => {
+      const manualItems = current.items.filter(item => !String(item.id).startsWith('cart:'));
+      const nextItems = [...manualItems, ...itemsToImport];
+      const totals = computeProcurementTotals(nextItems);
+      const nextEst = totals.grossValue > 0 ? Math.round(totals.grossValue) : current.basics.estimatedValue;
+      return {
+        ...current,
+        basics: {
+          ...current.basics,
+          estimatedValue: nextEst,
+          ...(updatedCategory ? { category: updatedCategory } : {}),
+        },
+        items: nextItems,
+      };
+    });
+    toast.success(`Imported ${itemsToImport.length} ${whatBuying === 'Service' ? 'service' : 'product'} item${itemsToImport.length === 1 ? '' : 's'} from Cart`);
+  };
+
   const handleImportCartItems = () => {
     const rawCartItems = activeCart?.items || [];
     if (rawCartItems.length === 0) {
@@ -5272,21 +5518,36 @@ function ItemsDetailsForm({
     }
 
     const importedItems = cartItems.map(cartItemToProcurementItem);
-    updateDraft(current => {
-      const manualItems = current.items.filter(item => !String(item.id).startsWith('cart:'));
-      const nextItems = [...manualItems, ...importedItems];
-      const totals = computeProcurementTotals(nextItems);
-      const nextEst = totals.grossValue > 0 ? Math.round(totals.grossValue) : current.basics.estimatedValue;
-      return {
-        ...current,
-        basics: {
-          ...current.basics,
-          estimatedValue: nextEst,
-        },
-        items: nextItems,
-      };
-    });
-    toast.success(`Imported ${importedItems.length} ${whatBuying === 'Service' ? 'service' : 'product'} item${importedItems.length === 1 ? '' : 's'} from Cart`);
+    const tenderCategory = (draft.basics.category || '').trim();
+
+    // Case 1: Tender category is empty -> auto-populate from primary category of cart items
+    if (!tenderCategory) {
+      const primaryCategory = importedItems.find(it => it.category)?.category || '';
+      applyImportedCartItems(importedItems, primaryCategory || undefined);
+      if (primaryCategory) {
+        toast.info(`Procurement category automatically set to "${primaryCategory}" from imported items.`, {
+          duration: 4500,
+        });
+      }
+      return;
+    }
+
+    // Case 2: Tender category is set -> check for category alignment
+    const norm = (s: string) => s.trim().toLowerCase();
+    const matching = importedItems.filter(it => !it.category || norm(it.category) === norm(tenderCategory));
+    const mismatched = importedItems.filter(it => it.category && norm(it.category) !== norm(tenderCategory));
+
+    if (mismatched.length === 0) {
+      applyImportedCartItems(importedItems);
+    } else {
+      setCartCategoryConflict({
+        isOpen: true,
+        tenderCategory,
+        matchingItems: matching,
+        mismatchedItems: mismatched,
+        allItems: importedItems,
+      });
+    }
   };
 
   // Service details handlers
@@ -5601,8 +5862,16 @@ function ItemsDetailsForm({
         header: isServiceMode ? 'Service Title' : 'Item / Product Name',
         width: isServiceMode ? 'w-[17%] min-w-[160px]' : 'w-[16%] min-w-[150px]',
         cell: (item: any) => (
-          <div className="font-bold text-slate-900 text-xs leading-snug break-words line-clamp-2 max-w-full" title={item.name}>
-            {item.name || <span className="text-rose-500 italic font-normal">{isServiceMode ? 'Unnamed Service' : 'Unnamed Item'}</span>}
+          <div className="font-bold text-slate-900 text-xs leading-snug break-words max-w-full" title={item.name}>
+            <div className="line-clamp-2">{item.name || <span className="text-rose-500 italic font-normal">{isServiceMode ? 'Unnamed Service' : 'Unnamed Item'}</span>}</div>
+            {item.category && (
+              <div className="mt-1">
+                <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9.5px] font-semibold text-slate-600 border border-slate-200">
+                  <Tag className="h-2.5 w-2.5 text-slate-400" />
+                  {item.category}
+                </span>
+              </div>
+            )}
           </div>
         )
       },
@@ -6950,6 +7219,24 @@ function ItemsDetailsForm({
         onSaveAndAddAnother={handleSaveAndAddAnother}
         token={token}
         onPreviewDocument={handlePreviewDoc}
+        categoriesList={categoriesList}
+        defaultCategory={draft.basics.category}
+      />
+
+      {/* Cart Category Alignment Review Modal */}
+      <CartCategoryAlignmentModal
+        conflict={cartCategoryConflict}
+        onClose={() => setCartCategoryConflict(null)}
+        onImportMatchingOnly={() => {
+          if (!cartCategoryConflict) return;
+          applyImportedCartItems(cartCategoryConflict.matchingItems);
+          setCartCategoryConflict(null);
+        }}
+        onImportAll={() => {
+          if (!cartCategoryConflict) return;
+          applyImportedCartItems(cartCategoryConflict.allItems);
+          setCartCategoryConflict(null);
+        }}
       />
 
       {/* Quick Document Manager Modal */}
@@ -9579,6 +9866,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
             technicalSpecification: item.technicalSpecification || descText,
             description: descText,
             hsn_sac_code: item.hsn_sac_code || '',
+            category: item.category || draft.basics.category || '',
+            categoryId: item.categoryId ?? null,
             brand_preference: item.brand_preference || '',
             brand_flexible: item.brand_flexible || 'Yes',
             gst: Number(item.gst || 0),

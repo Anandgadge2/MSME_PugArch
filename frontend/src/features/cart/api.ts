@@ -27,8 +27,27 @@ export interface CartItemDto {
     technicalNote?: string | null;
     technicalDecidedAt?: string | null;
     createdAt: string;
-    product?: { id: number; name: string; hsnCode?: string; unitOfMeasure?: string; price?: string | number; description?: string };
-    service?: { id: number; name: string; basePrice?: string | number; description?: string };
+    product?: {
+        id: number;
+        name: string;
+        hsnCode?: string;
+        unitOfMeasure?: string;
+        price?: string | number;
+        description?: string;
+        categoryId?: number | null;
+        category?: { id: number; name: string; slug?: string } | null;
+    };
+    service?: {
+        id: number;
+        name: string;
+        basePrice?: string | number;
+        description?: string;
+        scopeOfWork?: string;
+        deliverables?: string;
+        categoryId?: number | null;
+        category?: { id: number; name: string; slug?: string } | null;
+        specifications?: Array<{ name: string; value: string }>;
+    };
     seller?: { id: number; name: string; email?: string };
     technicalApprovedBy?: { id: number; name: string };
 }

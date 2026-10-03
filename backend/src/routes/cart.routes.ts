@@ -120,8 +120,31 @@ const getOrCreateActiveCart = async (organizationId: number, createdById: number
 const cartIncludes = {
     items: {
         include: {
-            product: { select: { id: true, name: true, hsnCode: true, unitOfMeasure: true, price: true } },
-            service: { select: { id: true, name: true, basePrice: true } },
+            product: {
+                select: {
+                    id: true,
+                    name: true,
+                    hsnCode: true,
+                    unitOfMeasure: true,
+                    price: true,
+                    description: true,
+                    categoryId: true,
+                    category: { select: { id: true, name: true, slug: true } }
+                }
+            },
+            service: {
+                select: {
+                    id: true,
+                    name: true,
+                    basePrice: true,
+                    description: true,
+                    scopeOfWork: true,
+                    deliverables: true,
+                    categoryId: true,
+                    category: { select: { id: true, name: true, slug: true } },
+                    specifications: { select: { name: true, value: true } }
+                }
+            },
             seller: { select: { id: true, name: true, email: true } },
             technicalApprovedBy: { select: { id: true, name: true } }
         },
