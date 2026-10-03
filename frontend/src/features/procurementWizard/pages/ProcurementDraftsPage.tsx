@@ -1580,7 +1580,13 @@ function DraftDetailView({
       packetType={schedule.packetType || payload.packetType || (schedule.financialOpeningDate ? 'Two Packet' : 'Single Packet')}
       category={categoryName}
       procurementMethod={procurementLabel}
-      buyingType={basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'}
+      buyingType={
+        basics.procurementCategory === 'SERVICES'
+          ? 'Services & Maintenance'
+          : basics.procurementCategory === 'WORKS'
+          ? 'Works & Construction'
+          : basics.whatAreYouBuying || basics.buyingType || 'Goods / Products'
+      }
       deliveryLocation={d.deliveryLocation || basics.deliveryLocation || ''}
       paymentTerms={terms.paymentTerms || 'Standard Draft Payment Terms'}
       deliveryTerms={terms.deliveryTerms || 'Door delivery'}

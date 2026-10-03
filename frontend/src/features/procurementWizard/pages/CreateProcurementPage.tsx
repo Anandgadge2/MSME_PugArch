@@ -256,6 +256,8 @@ type Draft = {
   basics: {
     buyerType?: string;
     title: string;
+    procurementCategory: 'GOODS' | 'SERVICES' | 'WORKS';
+    pricingFormat: 'SINGLE_ITEM' | 'BOQ' | 'SOR';
     whatAreYouBuying: string;
     category: string;
     department: string;
@@ -813,7 +815,7 @@ const defaultRateContractConfig = (): RateContractConfig => {
 };
 
 const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
-  const isBoq = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
   const source = isBoq
     ? draft.boqTable.map(row => ({
       name: row.description,
@@ -851,7 +853,7 @@ const rateScheduleFromDraftItems = (draft: Draft): RateContractItem[] => {
 // Single source of truth for "total procurement quantity" — the value that drives the
 // auto-generated consignee and must be > 0 for the backend submit validator to pass.
 const getTotalProcurementQty = (draft: Draft): number => {
-  const isBoq = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const isBoq = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
   const rows = isBoq ? draft.boqTable : draft.items;
   return rows.reduce((acc: number, row: any) => acc + Number(row.quantity || 0), 0);
 };
@@ -965,6 +967,77 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
   };
 };
 
+export type ProcurementCategoryValue = 'GOODS' | 'SERVICES' | 'WORKS';
+export type ProcurementPricingFormatValue = 'SINGLE_ITEM' | 'BOQ' | 'SOR';
+
+export const CATEGORIES_BY_METHOD: Record<ProcurementMethodId, Array<{ value: ProcurementCategoryValue; label: string }>> = {
+  RFQ: [
+    { value: 'GOODS', label: 'Goods / Products' },
+    { value: 'SERVICES', label: 'Services & Maintenance' }
+  ],
+  RFP: [
+    { value: 'SERVICES', label: 'Services & Solutions' },
+    { value: 'WORKS', label: 'Works & Construction' },
+    { value: 'GOODS', label: 'Custom Goods / Machinery' }
+  ],
+  OPEN_TENDER: [
+    { value: 'GOODS', label: 'Goods / Products' },
+    { value: 'SERVICES', label: 'Services & Maintenance' },
+    { value: 'WORKS', label: 'Works & Construction' }
+  ],
+  LIMITED_TENDER: [
+    { value: 'GOODS', label: 'Goods / Products' },
+    { value: 'SERVICES', label: 'Services & Maintenance' },
+    { value: 'WORKS', label: 'Works & Construction' }
+  ],
+  REVERSE_AUCTION: [
+    { value: 'GOODS', label: 'Goods / Commodities' },
+    { value: 'SERVICES', label: 'Standardized Services' }
+  ],
+  RATE_CONTRACT: [
+    { value: 'GOODS', label: 'Goods & Consumables' },
+    { value: 'SERVICES', label: 'Recurring Services / Maintenance' }
+  ],
+  REPEAT_ORDER: [
+    { value: 'GOODS', label: 'Goods / Products' },
+    { value: 'SERVICES', label: 'Services & Maintenance' },
+    { value: 'WORKS', label: 'Works & Construction' }
+  ]
+};
+
+export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: ProcurementPricingFormatValue; label: string }>> = {
+  RFQ: [
+    { value: 'SINGLE_ITEM', label: 'Single Item / Direct Catalog' },
+    { value: 'BOQ', label: 'Multi-line BOQ (Bill of Quantities)' }
+  ],
+  RFP: [
+    { value: 'BOQ', label: 'Multi-line BOQ (Milestones & Deliverables)' },
+    { value: 'SOR', label: 'Schedule of Rates (SOR)' }
+  ],
+  OPEN_TENDER: [
+    { value: 'SINGLE_ITEM', label: 'Single Item / Direct Catalog' },
+    { value: 'BOQ', label: 'Multi-line BOQ (Bill of Quantities)' },
+    { value: 'SOR', label: 'Schedule of Rates (SOR)' }
+  ],
+  LIMITED_TENDER: [
+    { value: 'SINGLE_ITEM', label: 'Single Item / Direct Catalog' },
+    { value: 'BOQ', label: 'Multi-line BOQ (Bill of Quantities)' }
+  ],
+  REVERSE_AUCTION: [
+    { value: 'SINGLE_ITEM', label: 'Single Item / Live Auction' },
+    { value: 'BOQ', label: 'Multi-line BOQ Total Auction' }
+  ],
+  RATE_CONTRACT: [
+    { value: 'SOR', label: 'Schedule of Rates (SOR Rate Card)' },
+    { value: 'BOQ', label: 'Multi-item Rate Schedule (BOQ)' }
+  ],
+  REPEAT_ORDER: [
+    { value: 'SINGLE_ITEM', label: 'Single Item' },
+    { value: 'BOQ', label: 'Multi-line BOQ' },
+    { value: 'SOR', label: 'Schedule of Rates (SOR)' }
+  ]
+};
+
 const BUYING_OPTIONS_BY_METHOD: Partial<Record<ProcurementMethodId, Array<{ value: string; label: string }>>> = {
   RFQ: [
     { value: 'Product', label: 'Product / Goods' },
@@ -1020,16 +1093,36 @@ const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
   }
   if (isRateContractMethod(method)) updated = syncRateContractDefaults(updated);
 
-  const allowed = BUYING_OPTIONS_BY_METHOD[method] || [];
-  if (allowed.length > 0 && !allowed.some(o => o.value === updated.basics.whatAreYouBuying)) {
-    updated = {
-      ...updated,
-      basics: {
-        ...updated.basics,
-        whatAreYouBuying: allowed[0].value
-      }
-    };
+  const allowedCategories = CATEGORIES_BY_METHOD[method] || CATEGORIES_BY_METHOD.RFQ;
+  const allowedFormats = FORMATS_BY_METHOD[method] || FORMATS_BY_METHOD.RFQ;
+
+  let nextCat = updated.basics.procurementCategory || 'GOODS';
+  if (!allowedCategories.some(c => c.value === nextCat)) {
+    nextCat = allowedCategories[0].value;
   }
+
+  let nextFormat = updated.basics.pricingFormat || 'SINGLE_ITEM';
+  if (!allowedFormats.some(f => f.value === nextFormat)) {
+    nextFormat = allowedFormats[0].value;
+  }
+
+  const legacyVal = nextFormat === 'BOQ' || nextFormat === 'SOR'
+    ? 'BOQ'
+    : nextCat === 'SERVICES'
+    ? 'Service'
+    : nextCat === 'WORKS'
+    ? 'Works'
+    : 'Product';
+
+  updated = {
+    ...updated,
+    basics: {
+      ...updated.basics,
+      procurementCategory: nextCat,
+      pricingFormat: nextFormat,
+      whatAreYouBuying: legacyVal
+    }
+  };
   return updated;
 };
 
@@ -1064,6 +1157,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
   type,
   basics: {
     title: '',
+    procurementCategory: 'GOODS',
+    pricingFormat: 'SINGLE_ITEM',
     whatAreYouBuying: 'Product',
     category: 'Office Supplies & Stationery',
     department: '',
@@ -1478,6 +1573,20 @@ export default function CreateProcurementPage() {
           basics: {
             ...base.basics,
             ...(payload.basics || {}),
+            procurementCategory: payload.basics?.procurementCategory || (
+              payload.basics?.whatAreYouBuying === 'Service' || payload.basics?.whatAreYouBuying === 'Services'
+                ? 'SERVICES'
+                : payload.basics?.whatAreYouBuying === 'Works'
+                ? 'WORKS'
+                : 'GOODS'
+            ),
+            pricingFormat: payload.basics?.pricingFormat || (
+              payload.basics?.whatAreYouBuying === 'BOQ' || payload.basics?.whatAreYouBuying === 'Works'
+                ? 'BOQ'
+                : (payload.type === 'RATE_CONTRACT' || String(payload.basics?.whatAreYouBuying).includes('SOR'))
+                ? 'SOR'
+                : 'SINGLE_ITEM'
+            ),
             estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
             discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
             deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || resolvedAddress || ''
@@ -1613,13 +1722,16 @@ export default function CreateProcurementPage() {
       });
     }
 
-    if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
-      list.push({ label: d.basics.whatAreYouBuying === 'Works' ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
+    const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
+    const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+
+    if (isBoqSchedule) {
+      list.push({ label: (d.basics.procurementCategory === 'WORKS' || d.basics.whatAreYouBuying === 'Works') ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
       if (d.boqTable.length > 0) {
         list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 3 });
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
-    } else if (d.basics.whatAreYouBuying === 'Service') {
+    } else if (isServiceContract) {
       const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
       const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
       list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
@@ -1781,10 +1893,12 @@ export default function CreateProcurementPage() {
         const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
         if (!hasSowDoc && sowLen < 10) return false;
       }
-      if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
+      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
+      const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+      if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
-      } else if (d.basics.whatAreYouBuying === 'Service') {
+      } else if (isServiceContract) {
         const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
         if (!title) return false;
         const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
@@ -1990,16 +2104,18 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-      if (d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works') {
+      const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR' || d.basics.whatAreYouBuying === 'BOQ' || d.basics.whatAreYouBuying === 'Works' || d.basics.procurementCategory === 'WORKS';
+      const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.basics.whatAreYouBuying === 'Service';
+      if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
-          toast.error(d.basics.whatAreYouBuying === 'Works' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
+          toast.error((d.basics.procurementCategory === 'WORKS' || d.basics.whatAreYouBuying === 'Works') ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
           return false;
         }
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) {
           toast.error('All BOQ rows must have positive quantities & rates.');
           return false;
         }
-      } else if (d.basics.whatAreYouBuying === 'Service') {
+      } else if (isServiceContract) {
         const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
         if (!effectiveTitle) {
           toast.error('Service Contract Title is required.');
@@ -2698,7 +2814,15 @@ function BasicsStepForm({
     return cleanDeliveryAddress(raw) || raw;
   };
 
-  // Filter allowed buying options strictly by selected procurement method
+  // Filter allowed categories and pricing formats strictly by selected procurement method
+  const allowedCategories = useMemo(() => {
+    return CATEGORIES_BY_METHOD[draft.type] || CATEGORIES_BY_METHOD.RFQ;
+  }, [draft.type]);
+
+  const allowedFormats = useMemo(() => {
+    return FORMATS_BY_METHOD[draft.type] || FORMATS_BY_METHOD.RFQ;
+  }, [draft.type]);
+
   const allowedBuyingOptions = useMemo(() => {
     return BUYING_OPTIONS_BY_METHOD[draft.type] || [
       { value: 'Product', label: 'Product / Goods' },
@@ -2710,14 +2834,31 @@ function BasicsStepForm({
   }, [draft.type]);
 
   useEffect(() => {
-    const isAllowed = allowedBuyingOptions.some(o => o.value === draft.basics.whatAreYouBuying);
-    if (!isAllowed && allowedBuyingOptions.length > 0) {
+    const isCatAllowed = allowedCategories.some(c => c.value === draft.basics.procurementCategory);
+    const isFormatAllowed = allowedFormats.some(f => f.value === draft.basics.pricingFormat);
+
+    if (!isCatAllowed || !isFormatAllowed) {
+      const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
+      const nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
+      const legacyVal = nextFormat === 'BOQ' || nextFormat === 'SOR'
+        ? 'BOQ'
+        : nextCat === 'SERVICES'
+        ? 'Service'
+        : nextCat === 'WORKS'
+        ? 'Works'
+        : 'Product';
+
       updateDraft(c => ({
         ...c,
-        basics: { ...c.basics, whatAreYouBuying: allowedBuyingOptions[0].value }
+        basics: {
+          ...c.basics,
+          procurementCategory: nextCat,
+          pricingFormat: nextFormat,
+          whatAreYouBuying: legacyVal
+        }
       }));
     }
-  }, [allowedBuyingOptions, draft.basics.whatAreYouBuying, updateDraft]);
+  }, [allowedCategories, allowedFormats, draft.basics.procurementCategory, draft.basics.pricingFormat, updateDraft]);
 
   // Dynamic categories from database
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
@@ -3026,15 +3167,67 @@ function BasicsStepForm({
           />
         </Field>
 
-        <Field label="What are you buying?" required>
+        <Field label="Procurement Category" required>
           <select
-            value={draft.basics.whatAreYouBuying}
+            id="procurement-category-select"
+            value={draft.basics.procurementCategory || 'GOODS'}
             onChange={e => {
-              const val = e.target.value;
-              const isBoqType = val === 'BOQ' || val === 'Works';
+              const val = e.target.value as ProcurementCategoryValue;
+              const format = draft.basics.pricingFormat || 'SINGLE_ITEM';
+              const legacyVal = format === 'BOQ' || format === 'SOR'
+                ? 'BOQ'
+                : val === 'SERVICES'
+                ? 'Service'
+                : val === 'WORKS'
+                ? 'Works'
+                : 'Product';
+
               updateDraft(c => ({
                 ...c,
-                basics: { ...c.basics, whatAreYouBuying: val },
+                basics: {
+                  ...c.basics,
+                  procurementCategory: val,
+                  whatAreYouBuying: legacyVal
+                }
+              }));
+            }}
+            className={inputClass}
+            aria-label="Procurement Category"
+          >
+            {allowedCategories.map(opt => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-slate-500 font-semibold mt-1">
+            Primary category of what is being procured (Goods, Services, or Works).
+          </p>
+        </Field>
+
+        <Field label="Sourcing & Pricing Format" required>
+          <select
+            id="pricing-format-select"
+            value={draft.basics.pricingFormat || 'SINGLE_ITEM'}
+            onChange={e => {
+              const val = e.target.value as ProcurementPricingFormatValue;
+              const cat = draft.basics.procurementCategory || 'GOODS';
+              const isBoqType = val === 'BOQ' || val === 'SOR';
+              const legacyVal = isBoqType
+                ? 'BOQ'
+                : cat === 'SERVICES'
+                ? 'Service'
+                : cat === 'WORKS'
+                ? 'Works'
+                : 'Product';
+
+              updateDraft(c => ({
+                ...c,
+                basics: {
+                  ...c.basics,
+                  pricingFormat: val,
+                  whatAreYouBuying: legacyVal
+                },
                 boqTable: isBoqType && c.boqTable.length === 0
                   ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
                   : !isBoqType
@@ -3043,15 +3236,16 @@ function BasicsStepForm({
               }));
             }}
             className={inputClass}
+            aria-label="Sourcing and Pricing Format"
           >
-            {allowedBuyingOptions.map(opt => (
+            {allowedFormats.map(opt => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
             ))}
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Category of sourcing requirement (e.g. Products, Services, or Bill of Quantities).
+            Pricing structure: Direct Item quote, Multi-line BOQ schedule, or Schedule of Rates (SOR).
           </p>
         </Field>
 
@@ -5372,6 +5566,45 @@ function ItemsDetailsForm({
   };
 
   const handleDownloadItemTemplate = async () => {
+    const isService = draft.basics.procurementCategory === 'SERVICES';
+    const isWorks = draft.basics.procurementCategory === 'WORKS';
+    const isSor = draft.basics.pricingFormat === 'SOR';
+    const isBoq = draft.basics.pricingFormat === 'BOQ';
+
+    let templateHeaders: string[];
+    let sampleRows: any[][];
+    let templateName: string;
+
+    if (isSor) {
+      templateHeaders = ['Item Code', 'Item Description / Scope', 'UOM', 'Baseline SOR Rate (INR)', 'Estimated Annual Qty', 'GST %', 'HSN/SAC Code', 'Allowable Variation Cap %'];
+      sampleRows = [
+        ['SOR-CIV-001', 'Excavation in all types of soil including disposal within 50m', 'Cu.m', 285, 500, 18, '9954', 5],
+        ['SOR-ELE-004', 'Laying and termination of 4-core 16 sq.mm armoured copper cable', 'Meter', 145, 1200, 18, '9954', 5]
+      ];
+      templateName = 'procurement_sor_rate_schedule_template';
+    } else if (isWorks || isBoq) {
+      templateHeaders = ['Trade / Item Type', 'Item Name', 'Detailed Technical Scope / BOQ Description', 'Quantity', 'Unit', 'Estimated Unit Rate', 'GST %', 'HSN/SAC Code', 'Deliverable Milestone', 'Delivery Due Date'];
+      sampleRows = [
+        [isWorks ? 'Civil Execution' : 'Product', 'Reinforced Cement Concrete M25 Grade', 'Design mix RCC with approved aggregate and OPC 53 cement', 150, 'Cu.m', 4800, 18, '3824', 'Foundation Milestone', nextFortnight],
+        [isWorks ? 'Structural Steel' : 'Product', 'Mild Steel Fabrication & Erection', 'Supply, fabrication and erection of structural steel framing', 25, 'MT', 65000, 18, '7208', 'Superstructure Milestone', nextFortnight]
+      ];
+      templateName = isWorks ? 'procurement_works_boq_template' : 'procurement_boq_schedule_template';
+    } else if (isService) {
+      templateHeaders = ['Service Type', 'Service Title', 'Detailed Scope of Work & Deliverables', 'Staff / Units', 'UOM', 'Monthly Rate / Fee', 'GST %', 'SAC Code', 'SLA Response Time', 'Required By Date'];
+      sampleRows = [
+        ['Facility Management', 'Comprehensive Annual Maintenance Contract (CAMC)', 'Quarterly preventive maintenance with round-the-clock emergency support', 1, 'Set', 35000, 18, '9987', '4 Hours', nextFortnight],
+        ['Security Services', 'Trained Security Guards Deployment (3 Shifts)', 'Round-the-clock security surveillance by certified guards', 6, 'Person-Month', 22000, 18, '9985', 'Immediate', nextFortnight]
+      ];
+      templateName = 'procurement_services_template';
+    } else {
+      templateHeaders = itemTemplateHeaders;
+      sampleRows = [
+        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight],
+        ['Product', 'Galvanized Iron Pipes 50mm', 'Class B heavy gauge hot-dipped galvanized steel pipes conforming to IS 1239', 50, 'Length', 1250, 18, '7306', 'Tata / Jindal', 'Yes', nextFortnight]
+      ];
+      templateName = 'procurement_goods_template';
+    }
+
     try {
       const ExcelJS = (await import('exceljs')).default;
       const workbook = new ExcelJS.Workbook();
@@ -5379,7 +5612,7 @@ function ItemsDetailsForm({
       workbook.created = new Date();
       const sheet = workbook.addWorksheet('Schedule Items', { views: [{ showGridLines: true }] });
 
-      sheet.addRow(itemTemplateHeaders);
+      sheet.addRow(templateHeaders);
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
       headerRow.fill = {
@@ -5389,41 +5622,27 @@ function ItemsDetailsForm({
       };
       headerRow.height = 24;
 
-      sheet.addRow(['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight]);
-      sheet.addRow(['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight]);
+      sampleRows.forEach(row => sheet.addRow(row));
 
-      sheet.columns = [
-        { width: 14 },
-        { width: 30 },
-        { width: 50 },
-        { width: 12 },
-        { width: 10 },
-        { width: 16 },
-        { width: 10 },
-        { width: 14 },
-        { width: 24 },
-        { width: 16 },
-        { width: 16 },
-      ];
+      sheet.columns = templateHeaders.map((_, i) => ({ width: i === 1 || i === 2 ? 35 : 16 }));
 
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'procurement_items_services_template.xlsx';
+      link.download = `${templateName}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(url);
-      toast.success('Downloaded Excel template (.xlsx)');
+      toast.success(`Downloaded Excel template: ${templateName}.xlsx`);
     } catch {
-      downloadCsv('procurement-items-services-template.csv', [
-        itemTemplateHeaders,
-        ['Product', 'M30 Concrete Paver Block', 'ISI marked paver block, 60mm thickness, heavy duty traffic rated', 1000, 'Nos', 45, 18, '6810', 'UltraTech / Equivalent', 'Yes', nextFortnight],
-        ['Service', 'Annual Maintenance Contract', 'Comprehensive preventive maintenance with quarterly visits, emergency breakdown support, and calibration', 1, 'Set', 25000, 18, '9987', '', 'Yes', nextFortnight],
+      downloadCsv(`${templateName}.csv`, [
+        templateHeaders,
+        ...sampleRows
       ]);
-      toast.success('Downloaded CSV template');
+      toast.success(`Downloaded CSV template: ${templateName}.csv`);
     }
   };
 
@@ -9166,7 +9385,7 @@ function CommercialTermsForm({
   showErrors?: boolean;
 }) {
   const isRateContract = isRateContractMethod(draft.type);
-  const isService = draft.basics.whatAreYouBuying === 'Service' || draft.type === 'RFP';
+  const isService = draft.basics.procurementCategory === 'SERVICES' || draft.basics.whatAreYouBuying === 'Service' || draft.type === 'RFP';
   const effectivePenaltyClause = draft.terms.penaltyClause || draft.rateContractConfig.penaltyClause || draft.serviceDetails.penaltyClause || '';
 
   const updateTerms = (key: keyof Draft['terms'], val: any) => {
@@ -9620,7 +9839,7 @@ function PreviewPublishForm({
         priority={draft.basics.priority}
         requiredBy={draft.basics.requiredByDate}
         location={draft.basics.deliveryLocation}
-        itemsCount={(draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works') ? draft.boqTable.length : draft.items.length}
+        itemsCount={(draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works' || draft.basics.procurementCategory === 'WORKS') ? draft.boqTable.length : draft.items.length}
         suppliersCount={draft.vendors.invitedSellers.length}
         docsCount={draft.requiredDocs.length}
       />
@@ -9827,7 +10046,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const estimatedValue = draft.basics.estimatedValue || 0;
 
   // Handle BOQ item list vs Standard item list
-  const isBoqBased = draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works';
+  const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.whatAreYouBuying === 'BOQ' || draft.basics.whatAreYouBuying === 'Works' || draft.basics.procurementCategory === 'WORKS';
   const mappedItems = isBoqBased
     ? draft.boqTable.map(item => ({
         itemName: item.description,
@@ -10055,12 +10274,14 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const recommendation = suggestProcurementMethod({
     estimatedValue: draft.basics.estimatedValue,
     whatAreYouBuying: draft.basics.whatAreYouBuying,
+    procurementCategory: draft.basics.procurementCategory,
+    pricingFormat: draft.basics.pricingFormat,
     isCatalogueAvailable: draft.basics.isCatalogueAvailable,
     isOnlyOneVendor: draft.basics.isOnlyOneVendor,
     isReverseAuctionNeeded: draft.basics.isReverseAuctionNeeded,
     isTechnicalEvaluationNeeded: draft.basics.isTechnicalEvaluationNeeded,
     urgency: draft.basics.priority,
-    lineItemsCount: draft.basics.whatAreYouBuying === 'BOQ' ? draft.boqTable.length : draft.items.length,
+    lineItemsCount: isBoqBased ? draft.boqTable.length : draft.items.length,
     isSpecClear: draft.basics.isSpecClear,
     isRepeatedSupply: draft.basics.isRepeatedSupply,
     marketResearchOnly: draft.basics.marketResearchOnly,
@@ -10104,7 +10325,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
+    serviceDetails: draft.basics.whatAreYouBuying === 'Services' || draft.basics.procurementCategory === 'SERVICES' || draft.basics.whatAreYouBuying === 'Service' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),

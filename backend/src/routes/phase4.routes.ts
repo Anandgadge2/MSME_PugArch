@@ -1263,9 +1263,26 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (estimatedValue <= 0) throw new ApiError(400, 'Estimated procurement value must be positive', 'PROCUREMENT_VALUE_REQUIRED');
   if (items.length === 0) throw new ApiError(400, 'At least one item or service line is required', 'PROCUREMENT_ITEM_REQUIRED');
 
-  // Verify that all items have valid names, quantities, and units when submitting if buying a Product/Catalogue item
-  const whatAreYouBuying = basics.whatAreYouBuying || 'Product';
-  if (whatAreYouBuying === 'Product' || whatAreYouBuying === 'Catalogue item') {
+  // Verify that all items have valid names, quantities, and units based on two-tier Category and Pricing Format
+  const rawCat = basics.procurementCategory || basics.categoryType;
+  const rawFormat = basics.pricingFormat || basics.sourcingFormat;
+  const legacyBuying = basics.whatAreYouBuying || 'Product';
+
+  const categoryType: 'GOODS' | 'SERVICES' | 'WORKS' =
+    rawCat === 'SERVICES' || rawCat === 'Services' || legacyBuying === 'Service' || legacyBuying === 'Services'
+      ? 'SERVICES'
+      : rawCat === 'WORKS' || rawCat === 'Works' || legacyBuying === 'Works'
+      ? 'WORKS'
+      : 'GOODS';
+
+  const pricingFormat: 'SINGLE_ITEM' | 'BOQ' | 'SOR' =
+    rawFormat === 'SOR' || rawFormat === 'Schedule of Rates' || legacyBuying.includes('SOR') || legacyBuying.includes('Schedule of Rates')
+      ? 'SOR'
+      : rawFormat === 'BOQ' || rawFormat === 'Multi-line BOQ' || legacyBuying === 'BOQ' || legacyBuying.includes('BOQ')
+      ? 'BOQ'
+      : 'SINGLE_ITEM';
+
+  if (categoryType === 'GOODS') {
     for (const item of items) {
       if (!item.itemName || String(item.itemName).trim().length < 2) {
         throw new ApiError(400, 'Item name must be at least 2 characters long', 'PROCUREMENT_ITEM_NAME_INVALID');
@@ -1277,7 +1294,7 @@ const validateProcurementDraftForSubmit = (draft: any) => {
         throw new ApiError(400, 'Item unit of measure is required', 'PROCUREMENT_ITEM_UOM_INVALID');
       }
     }
-  } else if (whatAreYouBuying === 'Service' || whatAreYouBuying === 'Services') {
+  } else if (categoryType === 'SERVICES') {
     const serviceDetails = payload.serviceDetails || {};
     const hasSow = Boolean(serviceDetails.sowFileAssetId || serviceDetails.sowFileName || (serviceDetails.scopeOfWork && String(serviceDetails.scopeOfWork).trim().length >= 10));
     const serviceTitle = String(serviceDetails.serviceTitle || basics.title || '').trim();
@@ -1286,6 +1303,21 @@ const validateProcurementDraftForSubmit = (draft: any) => {
     }
     if (!hasSow) {
       throw new ApiError(400, 'Service Scope of Work (SOW text or document upload) is required', 'PROCUREMENT_SERVICE_SOW_REQUIRED');
+    }
+  } else if (categoryType === 'WORKS') {
+    const hasWorkScope = clean(basics.title).length >= 5 || items.length > 0;
+    if (!hasWorkScope) {
+      throw new ApiError(400, 'Works Contract Scope and line items are required', 'PROCUREMENT_WORKS_SCOPE_REQUIRED');
+    }
+  }
+
+  if (pricingFormat === 'BOQ' || pricingFormat === 'SOR') {
+    const boqTable = Array.isArray(payload.boqTable) ? payload.boqTable : [];
+    if (boqTable.length > 0) {
+      const validRows = boqTable.filter((r: any) => clean(r.description).length > 0);
+      if (validRows.length === 0) {
+        throw new ApiError(400, 'At least one valid line item is required in the BOQ schedule', 'PROCUREMENT_BOQ_EMPTY');
+      }
     }
   }
 
@@ -2009,6 +2041,20 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
     buyerType: buyer?.organization?.organizationType || buyer?.buyerProfile?.organizationType || basics.buyerType || 'Private Enterprise',
     category: basics.category || requirement.category?.name || 'General procurement',
     bidType,
+    categoryType: (
+      basics.procurementCategory === 'SERVICES' || basics.categoryType === 'SERVICES' || bidType === 'Service' || bidType === 'Services'
+        ? 'SERVICES'
+        : basics.procurementCategory === 'WORKS' || basics.categoryType === 'WORKS' || bidType === 'Works'
+        ? 'WORKS'
+        : 'GOODS'
+    ) as any,
+    pricingFormat: (
+      basics.pricingFormat === 'SOR' || basics.sourcingFormat === 'SOR' || String(bidType).includes('SOR') || methodSlug === 'rate-contract'
+        ? 'SOR'
+        : basics.pricingFormat === 'BOQ' || basics.sourcingFormat === 'BOQ' || methodSlug === 'boq-based-bid' || bidType === 'BOQ'
+        ? 'BOQ'
+        : 'SINGLE_ITEM'
+    ) as any,
     procurementType: canonicalMethod,
     canonicalMethod,
     quantity: Array.isArray(draftBody.items) && draftBody.items.length === 1 ? Number((draftBody.items[0] as any).quantity || 0) || null : null,

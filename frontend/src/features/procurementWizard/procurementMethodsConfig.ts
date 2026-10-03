@@ -135,7 +135,9 @@ export const METHOD_DEFINITIONS: MethodDefinition[] = [
 
 export interface SuggestionCriteria {
   estimatedValue: number;
-  whatAreYouBuying: 'GOODS' | 'SERVICES' | 'WORKS' | 'BOQ' | 'CATALOG_ITEM' | string;
+  whatAreYouBuying?: 'GOODS' | 'SERVICES' | 'WORKS' | 'BOQ' | 'CATALOG_ITEM' | string;
+  procurementCategory?: 'GOODS' | 'SERVICES' | 'WORKS' | string;
+  pricingFormat?: 'SINGLE_ITEM' | 'BOQ' | 'SOR' | string;
   isCatalogueAvailable: boolean;
   isOnlyOneVendor: boolean;
   isReverseAuctionNeeded: boolean;
@@ -160,6 +162,8 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
   const {
     estimatedValue,
     whatAreYouBuying,
+    procurementCategory,
+    pricingFormat,
     isCatalogueAvailable,
     isOnlyOneVendor,
     isReverseAuctionNeeded,
@@ -170,9 +174,12 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     isRepeatedSupply = false,
     marketResearchOnly = false
   } = criteria;
-  const requirementType = String(whatAreYouBuying || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  const rawCat = procurementCategory || whatAreYouBuying;
+  const requirementType = String(rawCat || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
+  const formatType = String(pricingFormat || '').trim().toUpperCase();
   const priority = String(urgency || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '_');
-  const isBoq = requirementType === 'BOQ';
+  const isBoq = formatType === 'BOQ' || requirementType === 'BOQ';
+  const isSor = formatType === 'SOR';
   const isServiceOrWorks = ['SERVICES', 'SERVICE', 'SERVICE_CONTRACT', 'WORKS', 'WORK', 'WORKS_CONTRACT'].includes(requirementType);
 
   const result: RecommendationResult = {
@@ -224,17 +231,14 @@ export const suggestProcurementMethod = (criteria: SuggestionCriteria): Recommen
     return result;
   }
 
-  // Repeated supply / rate contract
-  if (isRepeatedSupply) {
+  // Repeated supply / rate contract / Schedule of Rates
+  if (isRepeatedSupply || isSor) {
     result.id = 'RATE_CONTRACT';
-    result.reason = 'Rate Contract is recommended because you have a recurring demand for identical consumables throughout the fiscal year.';
+    result.reason = isSor
+      ? 'Rate Contract is recommended because Schedule of Rates (SOR) establishes pre-agreed unit rates for standing demand.'
+      : 'Rate Contract is recommended because you have a recurring demand for identical consumables throughout the fiscal year.';
     result.confidence = 'HIGH';
     result.alternativeMethods = ['RFQ'];
-    /* Government check commented out as requested
-    if (isGov) {
-      result.warnings.push('Ensure price variation clauses are added if the contract exceeds 12 months.');
-    }
-    */
     return result;
   }
 

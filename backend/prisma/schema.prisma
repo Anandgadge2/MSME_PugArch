@@ -3353,6 +3353,8 @@ model ProcurementBid {
   visibility            ProcurementVisibility         @default(PUBLIC)
   allowWithdrawal       Boolean                       @default(true)
   canonicalMethod       String?
+  categoryType          ProcurementCategoryType?      @default(GOODS)
+  pricingFormat         ProcurementPricingFormat?     @default(SINGLE_ITEM)
   version               Int                           @default(1)
   approvedBy            User?                         @relation("ProcurementBidApprovedBy", fields: [approvedById], references: [id])
   buyer                 User                          @relation("ProcurementBidCreatedBy", fields: [buyerId], references: [id])
@@ -3381,6 +3383,7 @@ model ProcurementBid {
   @@index([canonicalMethod, status])
   @@index([visibility, status])
   @@index([approvedById])
+  @@index([categoryType, pricingFormat])
 }
 
 model ProcurementBidInvitation {
@@ -4387,6 +4390,18 @@ enum DraftStatus {
 enum PacketType {
   SINGLE_PACKET
   TWO_PACKET
+}
+
+enum ProcurementCategoryType {
+  GOODS
+  SERVICES
+  WORKS
+}
+
+enum ProcurementPricingFormat {
+  SINGLE_ITEM
+  BOQ
+  SOR
 }
 
 enum ProcurementApprovalStatus {

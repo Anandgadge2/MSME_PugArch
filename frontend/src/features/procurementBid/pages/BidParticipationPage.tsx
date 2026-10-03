@@ -215,12 +215,14 @@ const asTenderItems = (bid?: ProcurementBid | null): TenderBoqItem[] => {
 
 const isServiceBid = (bid?: ProcurementBid | null) => {
   const tp = bid?.technicalPacket && typeof bid.technicalPacket === 'object' ? (bid.technicalPacket as any) : {};
-  const buyType = String(bid?.bidType || tp?.basics?.whatAreYouBuying || tp?.basics?.bidType || '').toUpperCase();
+  const buyType = String((bid as any)?.categoryType || bid?.bidType || tp?.basics?.procurementCategory || tp?.basics?.whatAreYouBuying || tp?.basics?.bidType || '').toUpperCase();
   return buyType.includes('SERVICE') || Boolean(tp?.serviceDetails?.scopeOfWork || tp?.serviceDetails?.sowFileName);
 };
 
 const isBoqTender = (bid?: ProcurementBid | null) => {
   if (isServiceBid(bid)) return false; // Services strictly use Lump-Sum commercial quoting
+  const pricingFormat = String((bid as any)?.pricingFormat || (bid?.technicalPacket as any)?.basics?.pricingFormat || '').toUpperCase();
+  if (pricingFormat === 'BOQ' || pricingFormat === 'SOR') return true;
   const type = String(bid?.procurementType || bid?.bidType || '').toUpperCase().replace(/[-\s]/g, '_');
   return ['BOQ_BASED_BID', 'BOQ_BID'].includes(type) || asTenderItems(bid).length > 1;
 };

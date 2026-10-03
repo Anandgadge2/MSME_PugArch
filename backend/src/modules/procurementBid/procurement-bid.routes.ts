@@ -1220,6 +1220,8 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           buyerType: requirement.organization?.organizationType || requirement.buyerOrganization?.organizationType || basics.buyerType || 'Private Enterprise',
           departmentName: requirement.buyer?.buyerProfile?.departmentName || internal.departmentName || 'Procurement',
           category: basics.category || requirement.category?.name || (isRateContract ? 'Rate Contract' : 'General procurement'),
+          categoryType: basics.procurementCategory || (isRateContract ? 'GOODS' : (basics.whatAreYouBuying === 'Service' || basics.whatAreYouBuying === 'Services' ? 'SERVICES' : basics.whatAreYouBuying === 'Works' ? 'WORKS' : 'GOODS')),
+          pricingFormat: basics.pricingFormat || (isRateContract ? 'SOR' : (basics.whatAreYouBuying === 'BOQ' ? 'BOQ' : 'SINGLE_ITEM')),
           bidType: isRateContract ? 'Rate Contract' : (basics.whatAreYouBuying || 'Product'),
           procurementType: isRateContract ? 'Rate Contract' : (requirement.procurementMethod || payload.recommendation?.id || 'RFQ'),
           quantity: basics.quantity ? Number(basics.quantity) : (requirement.items?.[0]?.quantity || null),
