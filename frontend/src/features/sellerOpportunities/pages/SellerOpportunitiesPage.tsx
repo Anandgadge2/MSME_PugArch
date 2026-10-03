@@ -488,12 +488,14 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const load = React.useCallback((forceFresh = false) => {
     let alive = true;
-    if (forceFresh) {
-      globalOpportunitiesCache = null;
-      if (items.length === 0) {
-        setLoading(true);
-      }
+    // Always clear stale cache before fetching — prevents sessionStorage
+    // ghost data from persisting when the backend returns 0 records.
+    globalOpportunitiesCache = null;
+    if (typeof window !== 'undefined') {
+      try { sessionStorage.removeItem('seller_opportunities_cached_list'); } catch { /* ignore */ }
     }
+    setItems([]);
+    setLoading(true);
 
     const dedupeAndSort = (opportunities: SellerOpportunity[]): SellerOpportunity[] => {
       const deduped: SellerOpportunity[] = [];
@@ -710,18 +712,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
     const applyChunk = (newOpportunities: SellerOpportunity[]) => {
       if (!alive) return;
-      if (newOpportunities.length > 0) {
-        setItems(prev => {
-          const sorted = dedupeAndSort([...prev, ...newOpportunities]);
-          globalOpportunitiesCache = sorted;
-          if (typeof window !== 'undefined') {
-            try {
-              sessionStorage.setItem('seller_opportunities_cached_list', JSON.stringify(sorted.slice(0, 100)));
-            } catch { /* ignore quota */ }
-          }
-          return sorted;
-        });
-      }
+      setItems(prev => {
+        const sorted = dedupeAndSort([...prev, ...newOpportunities]);
+        globalOpportunitiesCache = sorted;
+        if (typeof window !== 'undefined') {
+          try {
+            sessionStorage.setItem('seller_opportunities_cached_list', JSON.stringify(sorted.slice(0, 100)));
+          } catch { /* ignore quota */ }
+        }
+        return sorted;
+      });
       setLoading(false);
     };
 
@@ -1193,7 +1193,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    globalOpportunitiesCache = null;
     try {
       await load(true);
       await Promise.allSettled([
