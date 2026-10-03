@@ -165,11 +165,16 @@ export const isRestrictedBidMethod = (bid: any) => {
 
 export const isActorInvitedToBid = (actor: Actor | null | undefined, bid: any) => {
   if (!actor || actor.role !== 'seller') return false;
-  const actorIds = new Set([Number(actor.id), Number(actor.organizationId)].filter(Number.isFinite));
+  const actorUserId = Number(actor.id);
+  const actorOrgId = Number(actor.organizationId);
 
   // Preferred source of truth: relational invitation rows.
   if (Array.isArray(bid?.invitations) && bid.invitations.length) {
-    if (bid.invitations.some((inv: any) => actorIds.has(Number(inv.sellerOrgId)) || actorIds.has(Number(inv.sellerUserId)))) {
+    if (bid.invitations.some((inv: any) => {
+      const orgMatch = Number.isFinite(actorOrgId) && actorOrgId > 0 && Number(inv.sellerOrgId) === actorOrgId;
+      const userMatch = Number.isFinite(actorUserId) && actorUserId > 0 && Number(inv.sellerUserId) === actorUserId;
+      return orgMatch || userMatch;
+    })) {
       return true;
     }
   }
@@ -184,16 +189,17 @@ export const isActorInvitedToBid = (actor: Actor | null | undefined, bid: any) =
       : [];
   return invited.some((entry: any) => {
     if (entry && typeof entry === 'object') {
-      return [
-        entry.sellerOrgId,
-        entry.supplierId,
-        entry.organizationId,
-        entry.sellerUserId,
-        entry.userId,
-        entry.id
-      ].some(value => actorIds.has(Number(value)));
+      const orgId = Number(entry.sellerOrgId ?? entry.supplierId ?? entry.organizationId ?? 0);
+      const userId = Number(entry.sellerUserId ?? entry.userId ?? 0);
+      if (orgId > 0 && Number.isFinite(actorOrgId) && actorOrgId === orgId) return true;
+      if (userId > 0 && Number.isFinite(actorUserId) && actorUserId === userId) return true;
+      if (!orgId && !userId && Number(entry.id) > 0) {
+        return (Number.isFinite(actorOrgId) && actorOrgId === Number(entry.id)) || (Number.isFinite(actorUserId) && actorUserId === Number(entry.id));
+      }
+      return false;
     }
-    return actorIds.has(Number(entry));
+    const num = Number(entry);
+    return (Number.isFinite(actorOrgId) && actorOrgId === num) || (Number.isFinite(actorUserId) && actorUserId === num);
   });
 };
 
@@ -274,12 +280,54 @@ export const extractInvitedSellerIds = (technicalPacket: any): number[] => {
 
 // Persist relational invitation rows for a bid from its technicalPacket. Idempotent.
 export const syncBidInvitations = async (bidId: number, technicalPacket: any, invitedById?: number) => {
-  const ids = extractInvitedSellerIds(technicalPacket);
-  if (!ids.length) return;
-  await db.procurementBidInvitation.createMany({
-    data: ids.map(sellerOrgId => ({ bidId, sellerOrgId, invitedById: invitedById ?? null })),
-    skipDuplicates: true
-  }).catch(() => undefined);
+  const packet = technicalPacket && typeof technicalPacket === 'object' ? technicalPacket : {};
+  const vendors = packet.vendors || packet.wizardData?.vendors || {};
+  const list = Array.isArray(vendors.invitedSellers)
+    ? vendors.invitedSellers
+    : Array.isArray(packet.qualifiedVendors)
+      ? packet.qualifiedVendors
+      : [];
+  if (!list.length) return;
+
+  const invitationRows: Array<{ bidId: number; sellerOrgId?: number | null; sellerUserId?: number | null; invitedById?: number | null }> = [];
+  const seenKeys = new Set<string>();
+
+  for (const entry of list) {
+    let orgId: number | null = null;
+    let userId: number | null = null;
+    if (entry && typeof entry === 'object') {
+      const parsedOrg = Number(entry.sellerOrgId ?? entry.organizationId ?? entry.supplierId ?? 0);
+      const parsedUser = Number(entry.sellerUserId ?? entry.userId ?? 0);
+      if (parsedOrg > 0) orgId = parsedOrg;
+      if (parsedUser > 0) userId = parsedUser;
+      if (!orgId && !userId && Number(entry.id) > 0) {
+        orgId = Number(entry.id);
+      }
+    } else {
+      const num = Number(entry);
+      if (Number.isFinite(num) && num > 0) {
+        orgId = num;
+      }
+    }
+
+    const key = `${orgId ?? 'none'}:${userId ?? 'none'}`;
+    if ((orgId || userId) && !seenKeys.has(key)) {
+      seenKeys.add(key);
+      invitationRows.push({
+        bidId,
+        sellerOrgId: orgId,
+        sellerUserId: userId,
+        invitedById: invitedById ?? null
+      });
+    }
+  }
+
+  if (invitationRows.length > 0) {
+    await db.procurementBidInvitation.createMany({
+      data: invitationRows,
+      skipDuplicates: true
+    }).catch(() => undefined);
+  }
 };
 
 // THE authorization gate: can this actor view the full detail of this bid?

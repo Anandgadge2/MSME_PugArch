@@ -4,7 +4,8 @@ import { Eye, EyeOff } from "lucide-react";
 
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & { label?: string, error?: string, isValid?: boolean }>(
   ({ className, type, label, error, isValid, value, required, ...props }, ref) => {
-    const id = props.id || React.useId();
+    const generatedId = React.useId();
+    const id = props.id || generatedId;
     const errorId = `${id}-error`;
     const [showPassword, setShowPassword] = React.useState(false);
     const isPassword = type === "password";
@@ -57,7 +58,8 @@ Input.displayName = "Input";
 
 const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string, error?: string }>(
   ({ className, label, error, children, value, required, ...props }, ref) => {
-    const id = props.id || React.useId();
+    const generatedId = React.useId();
+    const id = props.id || generatedId;
     const errorId = `${id}-error`;
     return (
       <div className="w-full min-w-0 space-y-1">

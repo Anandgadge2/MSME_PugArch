@@ -1320,7 +1320,11 @@ const validateProcurementDraftForSubmit = (draft: any) => {
     }
   }
 
-  if (!hasConsigneeLocation || totalItemQuantity <= 0 || totalItemQuantity !== totalConsigneeQuantity) {
+  const isBoqOrWorks = pricingFormat === 'BOQ' || pricingFormat === 'SOR' || categoryType === 'WORKS';
+  if (!hasConsigneeLocation) {
+    throw new ApiError(400, 'Consignee delivery location is required', 'PROCUREMENT_CONSIGNEE_LOCATION_REQUIRED');
+  }
+  if (!isBoqOrWorks && (totalItemQuantity <= 0 || totalItemQuantity !== totalConsigneeQuantity)) {
     throw new ApiError(400, 'Total consignee quantity must equal total procurement quantity', 'PROCUREMENT_CONSIGNEE_QUANTITY_INVALID');
   }
 
@@ -1328,7 +1332,8 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   const schedule = payload.schedule || {};
   const rawSubDate = schedule.submissionDate || schedule.submissionDeadline || tender.bidClosingDate;
   if (rawSubDate) {
-    const subTime = new Date(rawSubDate).getTime();
+    const parsedSubDate = parseDateIST(rawSubDate);
+    const subTime = parsedSubDate ? parsedSubDate.getTime() : NaN;
     if (Number.isFinite(subTime) && subTime <= Date.now()) {
       throw new ApiError(400, 'Submission deadline date and time must be set in the future', 'PROCUREMENT_DEADLINE_PAST');
     }
@@ -1385,8 +1390,17 @@ const validateProcurementDraftForSubmit = (draft: any) => {
       throw new ApiError(400, 'Limited Tender / RFQ requires inviting at least one selected vendor', 'PROCUREMENT_VENDORS_REQUIRED');
     }
   }
+
   // Statutory audit field validation
   const internal = payload.internal || {};
+
+  // GFR 2017 Rule 162: Limited Tender Enquiry threshold is ₹25 Lakhs; higher values require detailed justification
+  if (methodSlug === 'limited-tender' && estimatedValue > 2500000) {
+    const justification = payload.limitedTenderJustification || basics.justification || internal.justification || '';
+    if (clean(justification).length < 50) {
+      throw new ApiError(400, 'Limited Tender exceeding ₹25 Lakhs (GFR Rule 162 threshold) requires a comprehensive justification of at least 50 characters', 'GFR_LTE_THRESHOLD_EXCEEDED');
+    }
+  }
   const approvalAuthority = clean(internal.approvalAuthority || payload.approvalAuthority || '');
   if (approvalAuthority) {
     if (approvalAuthority.length < 3) {
@@ -1401,6 +1415,16 @@ const validateProcurementDraftForSubmit = (draft: any) => {
   if (statutoryJustification) {
     if (/^(.)\1{4,}$/i.test(statutoryJustification) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(statutoryJustification.replace(/\s+/g, ''))) {
       throw new ApiError(400, 'Please provide a legitimate business justification or statutory compliance reason', 'JUSTIFICATION_INVALID');
+    }
+  }
+
+  // QCBS evaluation weightage invariant (CVC / GFR prescribed evaluation fairness)
+  const evaluation = payload.evaluation || {};
+  if (String(evaluation.method || '').toUpperCase() === 'QCBS') {
+    const techWeight = Number(evaluation.technicalWeightage ?? evaluation.techWeight ?? 70);
+    const finWeight = Number(evaluation.financialWeightage ?? evaluation.commWeight ?? evaluation.finWeight ?? 30);
+    if (techWeight + finWeight !== 100) {
+      throw new ApiError(400, `QCBS technical and financial weightage must sum to exactly 100% (currently ${techWeight + finWeight}%)`, 'QCBS_WEIGHT_INVALID');
     }
   }
 };
@@ -1537,6 +1561,13 @@ const validateAuctionConfigForDraft = (configInput: Record<string, unknown>, met
   }
   if (config.auctionStartDateTime >= config.auctionEndDateTime) {
     throw new ApiError(400, 'Auction start date/time must be before auction end date/time', 'PROCUREMENT_AUCTION_DATE_INVALID');
+  }
+  // Enforce future scheduling — standalone reverse auctions must not start in the past (GFR / CVC e-RA guidelines)
+  if (methodSlug === 'reverse-auction') {
+    const auctionStartMs = new Date(config.auctionStartDateTime).getTime();
+    if (Number.isFinite(auctionStartMs) && auctionStartMs <= Date.now() + 60000) {
+      throw new ApiError(400, 'Auction start date and time must be scheduled at least 1 minute in the future', 'PROCUREMENT_AUCTION_START_PAST');
+    }
   }
   if (config.reservePrice && Number(config.reservePrice) > Number(config.startingBidPrice)) {
     throw new ApiError(400, 'Reserve price must be less than or equal to starting bid price', 'PROCUREMENT_AUCTION_RESERVE_INVALID');
@@ -2153,7 +2184,7 @@ const createProcurementBidForSubmittedRequirement = async (req: AuthRequest, req
   if (fileAssetIds.length > 0) {
     const [assets, existingDocs] = await Promise.all([
       db.fileAsset.findMany({
-        where: { id: { in: fileAssetIds } },
+        where: { id: { in: fileAssetIds }, ownerId: userId(req) },
         select: { id: true, originalName: true, mimeType: true, size: true, url: true, key: true }
       }),
       db.procurementBidDocument.findMany({
@@ -5983,6 +6014,32 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     }
   }
 
+  // Idempotency guard: prevent double-submission race condition (VULN-02)
+  if (parsed.id) {
+    const existingReq = await db.requirement.findFirst({
+      where: { id: parsed.id, buyerId: userId(req) },
+      select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true }
+    });
+    if (existingReq && !['DRAFT', 'REJECTED'].includes(String(existingReq.status))) {
+      const existingBid = await db.procurementBid.findFirst({
+        where: {
+          OR: [
+            ...(existingReq.requirementNumber ? [{ bidNumber: existingReq.requirementNumber }] : []),
+            { technicalPacket: { path: ['sourceRequirementId'], equals: existingReq.id } },
+            { technicalPacket: { path: ['requirementId'], equals: existingReq.id } }
+          ]
+        }
+      }).catch(() => null);
+      return ok(res, {
+        procurement: serializeProcurementDraft({ ...existingReq, items: [] }),
+        procurementBid: existingBid,
+        auction: null,
+        rateContract: null,
+        referenceNumber: formatRequirementNumber(existingReq.id, existingReq.requirementNumber, existingReq.procurementMethod || existingReq.canonicalMethod)
+      });
+    }
+  }
+
   const submitted = await saveProcurementDraft(req, parsed, 'APPROVED');
   void auditWrite(req, 'workflow.requirement.submitted', 'requirement', submitted.id);
 
@@ -5991,7 +6048,32 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
       createProcurementBidForSubmittedRequirement(req, submitted, parsed),
       createAuctionForSubmittedProcurement(req, submitted, parsed)
     ]);
-    await auditWrite(req, 'procurement.submitted', 'requirement', submitted.id, { methodSlug: methodSlugForDraft(parsed) });
+
+    const submitMethodSlug = methodSlugForDraft(parsed);
+    let directPurchase: any = null;
+    if (submitMethodSlug === 'direct-purchase') {
+      const invitedSellersList = Array.isArray(parsed.payload?.vendors?.invitedSellers)
+        ? parsed.payload.vendors.invitedSellers
+        : [];
+      const firstSeller = invitedSellersList[0];
+      const invitedSellerId = Number(
+        (firstSeller && typeof firstSeller === 'object')
+          ? (firstSeller.supplierId ?? firstSeller.sellerUserId ?? firstSeller.sellerOrgId ?? firstSeller.id ?? 0)
+          : (firstSeller ?? 0)
+      );
+      if (invitedSellerId > 0) {
+        directPurchase = await procurementWorkflow.createDirectPurchase(actorFrom(req), {
+          requirementId: submitted.id,
+          sellerId: invitedSellerId,
+          totalAmount: Number(submitted.estimatedValue || 0)
+        }).catch(err => {
+          logger.warn({ err }, `Failed to auto-create DirectPurchase for requirement ${submitted.id}`);
+          return null;
+        });
+      }
+    }
+
+    await auditWrite(req, 'procurement.submitted', 'requirement', submitted.id, { methodSlug: submitMethodSlug });
     const submitBuyerId = userId(req);
     const submitOrgId = req.user?.organizationId;
     await Promise.allSettled([
@@ -6009,13 +6091,27 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
       procurementBid,
       auction,
       rateContract: null,
+      directPurchase,
       referenceNumber: formatRequirementNumber(submitted.id, submitted.requirementNumber, submitted.procurementMethod || submitted.canonicalMethod)
     });
   } catch (error) {
-    await db.requirement.update({
-      where: { id: submitted.id },
-      data: { status: 'DRAFT' }
-    }).catch(() => undefined);
+    // Only revert to DRAFT if no procurement bid was already created by a concurrent request.
+    // This prevents the ghost state where a live bid exists but the requirement shows as DRAFT.
+    const existingBidForReq = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          ...(submitted.requirementNumber ? [{ bidNumber: submitted.requirementNumber }] : []),
+          { technicalPacket: { path: ['sourceRequirementId'], equals: submitted.id } },
+          { technicalPacket: { path: ['requirementId'], equals: submitted.id } }
+        ]
+      }
+    }).catch(() => null);
+    if (!existingBidForReq) {
+      await db.requirement.update({
+        where: { id: submitted.id },
+        data: { status: 'DRAFT' }
+      }).catch(() => undefined);
+    }
     throw error;
   }
 }, 'Unable to submit procurement'));

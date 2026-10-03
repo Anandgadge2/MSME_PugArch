@@ -9946,6 +9946,8 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   // Handle BOQ item list vs Standard item list
   const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.procurementCategory === 'WORKS';
+  // ISSUE-04 fix: auto-synthesize master SOW service line when category is SERVICES and no items exist
+  const isEmptyServiceSow = !isBoqBased && draft.basics.procurementCategory === 'SERVICES' && draft.items.length === 0;
   const mappedItems = isBoqBased
     ? draft.boqTable.map(item => ({
         itemName: item.description,
@@ -9968,7 +9970,29 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           attachments: item.attachments || [],
         }
       }))
-    : draft.items.map(item => {
+    : isEmptyServiceSow
+      ? [{
+          itemType: 'Service' as const,
+          itemName: draft.serviceDetails.serviceTitle || draft.basics.title || 'Master Service Scope',
+          description: draft.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) and SLA terms',
+          quantity: 1,
+          unitOfMeasure: 'Job',
+          estimatedUnitPrice: Number(draft.basics.estimatedValue || 0),
+          specifications: {
+            itemType: 'Service',
+            specification: draft.serviceDetails.scopeOfWork || 'As per attached SOW',
+            scopeOfWork: draft.serviceDetails.scopeOfWork || '',
+            technicalSpecification: draft.serviceDetails.scopeOfWork || '',
+            description: draft.serviceDetails.scopeOfWork || '',
+            hsn_sac_code: '',
+            category: draft.basics.category || '',
+            gst: 18,
+            fileAssetId: draft.serviceDetails.sowFileAssetId || null,
+            specificationFileName: draft.serviceDetails.sowFileName || '',
+            attachments: [],
+          }
+        }]
+      : draft.items.map(item => {
         const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || '';
         return {
           itemType: item.itemType || 'Product',
