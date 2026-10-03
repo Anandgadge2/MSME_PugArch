@@ -329,18 +329,11 @@ type Draft = {
     validityDays: number | string;
     submissionStartDate: string;
     clarificationAllowed: boolean;
-    preBidMeeting: boolean;
-    preBidDate: string;
     technicalOpeningDate: string;
     financialOpeningDate: string;
     bidValidityDate: string;
-    allowWithdrawal: boolean;
-    allowRevision: boolean;
-    showSellerRank: boolean;
-    showLowestPrice: boolean;
     autoClose: boolean;
     minimumBidders: number | string;
-    rebidsAllowed: boolean;
   };
   terms: {
     paymentTerms: string;
@@ -1181,18 +1174,11 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     validityDays: 90,
     submissionStartDate: todayDateTime,
     clarificationAllowed: true,
-    preBidMeeting: false,
-    preBidDate: '',
     technicalOpeningDate: '',
     financialOpeningDate: '',
     bidValidityDate: nextFortnight,
-    allowWithdrawal: true,
-    allowRevision: true,
-    showSellerRank: true,
-    showLowestPrice: true,
     autoClose: true,
     minimumBidders: 3,
-    rebidsAllowed: true,
   },
   terms: {
     paymentTerms: 'ON_DELIVERY',
@@ -1287,7 +1273,6 @@ export default function CreateProcurementPage() {
                 submissionDate: saved.schedule.submissionDate || '',
                 technicalOpeningDate: saved.schedule.technicalOpeningDate || '',
                 financialOpeningDate: saved.schedule.financialOpeningDate || '',
-                preBidDate: saved.schedule.preBidDate || '',
               };
             }
             if (saved.auctionConfig) {
@@ -1560,7 +1545,6 @@ export default function CreateProcurementPage() {
             submissionDate: payload.schedule?.submissionDate || base.schedule.submissionDate || '',
             technicalOpeningDate: payload.schedule?.technicalOpeningDate || '',
             financialOpeningDate: payload.schedule?.financialOpeningDate || '',
-            preBidDate: payload.schedule?.preBidDate || '',
           },
           terms: { ...base.terms, ...(payload.terms || {}) },
           evaluation: {

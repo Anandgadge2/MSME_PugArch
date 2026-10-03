@@ -3531,8 +3531,7 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             const allowsRevisions = Boolean(
                 requirement.allowRevision ||
                 reqPayload.schedule?.allowRevision ||
-                reqPayload.rules?.allowRevision ||
-                reqPayload.schedule?.rebidsAllowed
+                reqPayload.rules?.allowRevision
             );
 
             const isExplicitRevisionAllowed = existing?.status === 'REVISION_REQUESTED' || 

@@ -3351,7 +3351,6 @@ model ProcurementBid {
   technicalPacket       Json?
   financialPacket       Json?
   visibility            ProcurementVisibility         @default(PUBLIC)
-  allowWithdrawal       Boolean                       @default(true)
   canonicalMethod       String?
   categoryType          ProcurementCategoryType?      @default(GOODS)
   pricingFormat         ProcurementPricingFormat?     @default(SINGLE_ITEM)

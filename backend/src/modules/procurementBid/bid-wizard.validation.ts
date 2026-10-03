@@ -96,11 +96,7 @@ export const step3Schema = z.object({
   priority: requiredString('Priority', 40),
   publishingDate: z.coerce.date(),
   closingDate: z.coerce.date(),
-  validityPeriod: requiredString('Bid validity period', 80),
-  preBidMeetingRequired: z.boolean().optional().default(false),
-  preBidDate: z.coerce.date().optional(),
-  preBidMode: optionalString(80),
-  preBidVenue: optionalString(220)
+  validityPeriod: requiredString('Bid validity period', 80)
 }).refine(data => data.closingDate > data.publishingDate, {
   path: ['closingDate'],
   message: 'Closing date must be after publishing date'

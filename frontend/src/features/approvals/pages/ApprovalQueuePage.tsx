@@ -952,10 +952,6 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                         <InfoCell label="Opening Date" value={schedule.openingDate ? formatDateTime(schedule.openingDate) : undefined} />
                                         <InfoCell label="Delivery Date" value={schedule.deliveryDate ? formatDate(schedule.deliveryDate) : undefined} />
                                         <InfoCell label="Validity (Days)" value={schedule.validityDays > 0 ? schedule.validityDays : undefined} />
-                                        <InfoCell label="Pre-Bid Meeting" value={schedule.preBidMeeting} />
-                                        {schedule.preBidMeeting && schedule.preBidDate && (
-                                            <InfoCell label="Pre-Bid Date" value={formatDateTime(schedule.preBidDate)} />
-                                        )}
                                     </div>
                                 </div>
                             )}

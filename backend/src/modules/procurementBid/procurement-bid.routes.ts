@@ -709,13 +709,10 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             publishDate: rateContract.createdAt || srcPayload?.schedule?.publishDate,
             submissionStartDate: rateContract.startDate || srcPayload?.schedule?.submissionStartDate || rateContract.createdAt,
             submissionDate: rateContract.endDate || srcPayload?.schedule?.submissionDate,
-            preBidDate: srcPayload?.schedule?.preBidDate || null,
             technicalOpeningDate: srcPayload?.schedule?.technicalOpeningDate || null,
             financialOpeningDate: srcPayload?.schedule?.financialOpeningDate || null,
             packetType: srcPayload?.schedule?.packetType || 'Single',
             clarificationAllowed: srcPayload?.schedule?.clarificationAllowed ?? true,
-            allowWithdrawal: srcPayload?.schedule?.allowWithdrawal ?? null,
-            allowRevision: srcPayload?.schedule?.allowRevision ?? null,
           },
           terms: {
             paymentTerms: meta.paymentTerms || srcPayload?.terms?.paymentTerms || '',
@@ -724,8 +721,6 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
             gstIncluded: srcPayload?.terms?.gstIncluded ?? false,
             warrantyTerms: srcPayload?.terms?.warrantyTerms || '',
             penaltyClause: meta.penaltyClause || srcPayload?.terms?.penaltyClause || '',
-            withdrawal: srcPayload?.terms?.withdrawal ?? (srcPayload?.schedule?.allowWithdrawal ?? null),
-            revision: srcPayload?.terms?.revision ?? (srcPayload?.schedule?.allowRevision ?? null),
           },
           vendors: {
             selection: srcPayload?.vendors?.selection || (meta.supplierSelectionStrategy ? meta.supplierSelectionStrategy : 'Open'),

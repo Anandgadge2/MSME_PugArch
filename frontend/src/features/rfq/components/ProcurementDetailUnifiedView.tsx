@@ -8168,10 +8168,6 @@ export function ProcurementDetailUnifiedView(
         schedule.clarificationDeadline,
         tender.clarificationEndDate,
         props.clarificationDate,
-        schedule.preBidDate,
-        schedule.preBidMeetingDate,
-        tender.preBidDate,
-        tender.preBidMeetingDate,
       )
     : undefined;
 
@@ -8231,13 +8227,6 @@ export function ProcurementDetailUnifiedView(
       )
     : undefined;
 
-  const preBidDateValue = firstPresent(
-    schedule.preBidMeetingDate,
-    schedule.preBidDate,
-    tender.preBidMeetingDate,
-    tender.preBidDate,
-    props.preBidDate,
-  );
 
   const requiredByDateValue = firstPresent(
     basics.requiredByDate,
@@ -8351,9 +8340,6 @@ export function ProcurementDetailUnifiedView(
     : publishedDateFormatted;
   const requiredByDateFormatted = requiredByDateValue
     ? formatDateString(requiredByDateValue, true)
-    : undefined;
-  const preBidDateFormatted = preBidDateValue
-    ? formatDateString(preBidDateValue, true)
     : undefined;
   const bidValidityDateFormatted = bidValidityDateComputed
     ? formatDateString(bidValidityDateComputed, false)
@@ -9105,51 +9091,6 @@ export function ProcurementDetailUnifiedView(
     return "GST Included in Budget (Gross Estimated Value)";
   }, [terms, basics, payload, props.rawBid]);
 
-  const rebidsAllowed = useMemo(() => {
-    const raw = firstPresent(
-      schedule.rebidsAllowed,
-      schedule.allowRevision,
-      payload.schedule?.rebidsAllowed,
-      (props.rawBid as any)?.rebidsAllowed,
-      true,
-    );
-    return Boolean(raw !== false && raw !== "false");
-  }, [schedule, payload, props.rawBid]);
-
-  const bidWithdrawalAllowed = useMemo(() => {
-    const raw = firstPresent(
-      schedule.allowWithdrawal,
-      payload.allowWithdrawal,
-      (props.rawBid as any)?.allowWithdrawal,
-      true,
-    );
-    return Boolean(raw !== false && raw !== "false");
-  }, [schedule, payload, props.rawBid]);
-
-  const showSellerRank = useMemo(() => {
-    const raw = firstPresent(
-      schedule.showSellerRank,
-      schedule.showLowestPrice,
-      payload.schedule?.showSellerRank,
-      true,
-    );
-    return Boolean(raw !== false && raw !== "false");
-  }, [schedule, payload]);
-
-  const preBidMeetingDisplay = useMemo(() => {
-    const hasPreBid = Boolean(
-      schedule.preBidMeeting ||
-      payload.schedule?.preBidMeeting ||
-      (props.rawBid as any)?.preBidMeeting
-    );
-    if (!hasPreBid) return "Not Required";
-    const dateVal = schedule.preBidDate || payload.schedule?.preBidDate || (props.rawBid as any)?.preBidDate;
-    if (dateVal) {
-      const formatted = formatDateString(dateVal, true);
-      return formatted ? `Mandatory (${formatted})` : "Required (Date to be notified)";
-    }
-    return "Required (Date to be notified)";
-  }, [schedule, payload, props.rawBid]);
 
   // isBuyerOrAdmin already defined at top level of component
 
@@ -11026,15 +10967,6 @@ export function ProcurementDetailUnifiedView(
     }
   };
 
-  const isPreBidConfigured = Boolean(
-    preBidDateFormatted ||
-    schedule.preBidMeeting === true ||
-    schedule.preBidMeeting === "true" ||
-    schedule.preBidMeeting === "Yes" ||
-    (schedule.preBidMeetingDate &&
-      schedule.preBidMeetingDate !== "—" &&
-      schedule.preBidMeetingDate !== "N/A"),
-  );
 
   const rawFreightVal = firstPresent(
     props.freightIncluded,
@@ -14623,22 +14555,6 @@ export function ProcurementDetailUnifiedView(
                           label="Minimum Sourcing Quorum"
                           value={minimumBiddersQuorumLabel}
                           highlight
-                        />
-                        <PropertyItem
-                          label="Pre-Bid Meeting"
-                          value={preBidMeetingDisplay}
-                        />
-                        <PropertyItem
-                          label="Price Revisions (Rebids)"
-                          value={rebidsAllowed ? "Allowed (Before Deadline)" : "Disabled (Single Final Bid)"}
-                        />
-                        <PropertyItem
-                          label="Bid Withdrawal"
-                          value={bidWithdrawalAllowed ? "Allowed (Before Deadline)" : "Locked Upon Submission"}
-                        />
-                        <PropertyItem
-                          label="Rank / Price Transparency"
-                          value={showSellerRank ? "Transparent (Live Lowest / Rank Shown)" : "Sealed Blind Bidding"}
                         />
                       </PropertyGrid>
                     </div>
