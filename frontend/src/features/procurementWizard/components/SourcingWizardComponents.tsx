@@ -849,16 +849,27 @@ export function BOQTable({
                           </button>
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          onClick={() => onAttachDocument?.(idx, row)}
-                          className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
-                          title="Attach specification, drawing or dossier"
-                          aria-label={`Attach specification or drawing for row ${row.srNo}`}
-                        >
-                          <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
-                          <span>Attach</span>
-                        </button>
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                          <button
+                            type="button"
+                            onClick={() => onAttachDocument?.(idx, row)}
+                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+                            title="Attach specification, drawing or dossier"
+                            aria-label={`Attach specification or drawing for row ${row.srNo}`}
+                          >
+                            <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+                            <span>Attach</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onAttachDocument?.(idx, row)}
+                            className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
+                            title="Add documents"
+                            aria-label={`Add documents for row ${row.srNo}`}
+                          >
+                            <Plus className="h-3 w-3" aria-hidden="true" />
+                          </button>
+                        </div>
                       )}
                     </div>
                   </td>

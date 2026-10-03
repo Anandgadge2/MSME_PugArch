@@ -6046,6 +6046,45 @@ function ItemsDetailsForm({
             toast.success('Tender estimated budget synced with BOQ Schedule Total!');
           }}
         />
+
+        {/* Quick Document Manager Modal for BOQ Rows */}
+        {quickDocBoqRowIdx !== null && draft.boqTable[quickDocBoqRowIdx] && (
+          <QuickDocumentModal
+            item={{
+              id: `boq-row-${quickDocBoqRowIdx}`,
+              name: draft.boqTable[quickDocBoqRowIdx].description || `BOQ Item #${draft.boqTable[quickDocBoqRowIdx].srNo}`,
+              itemType: draft.boqTable[quickDocBoqRowIdx].category || 'BOQ Item',
+              attachments: draft.boqTable[quickDocBoqRowIdx].attachments || [],
+              fileAssetId: draft.boqTable[quickDocBoqRowIdx].fileAssetId,
+              specificationFileName: draft.boqTable[quickDocBoqRowIdx].fileName,
+            } as any}
+            onClose={() => setQuickDocBoqRowIdx(null)}
+            onSaveAttachments={updatedAtts => {
+              const first = updatedAtts[0];
+              updateDraft(c => {
+                const nextTable = [...c.boqTable];
+                const row = nextTable[quickDocBoqRowIdx];
+                if (!row) return c;
+                nextTable[quickDocBoqRowIdx] = {
+                  ...row,
+                  attachments: updatedAtts,
+                  fileAssetId: first ? first.fileAssetId : null,
+                  fileName: first ? first.fileName : '',
+                  fileSize: first ? first.fileSize : null,
+                };
+                return { ...c, boqTable: nextTable };
+              });
+            }}
+            token={token}
+            onPreviewAttachment={att => handlePreviewDoc(att, att.fileName)}
+          />
+        )}
+
+        {/* In-App Direct Document Preview Modal */}
+        <DocumentPreviewModal
+          previewDocument={previewDocument}
+          onClose={() => setPreviewDocument(null)}
+        />
       </div>
     );
   }
