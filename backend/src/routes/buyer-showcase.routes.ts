@@ -335,9 +335,9 @@ router.get('/boq/template', (async (req, res, next) => {
   try {
     const wb = XLSX.utils.book_new();
     const data = [
-      ['Sr No', 'Item Description', 'Category', 'Quantity', 'UOM', 'Estimated Rate (INR)', 'Tax %', 'Remarks'],
-      ['1', 'Sample Item 1', 'General', '10', 'Nos', '500', '18', 'Sample remark 1'],
-      ['2', 'Sample Item 2', 'General', '5', 'Nos', '1200', '12', 'Sample remark 2']
+      ['Sr No', 'Item Description', 'Category', 'Quantity', 'UOM', 'Estimated Rate (INR)', 'Tax %', 'HSN/SAC Code', 'Remarks'],
+      ['1', 'Sample Item 1', 'General', '10', 'Nos', '500', '18', '8471', 'Sample specification remark 1'],
+      ['2', 'Sample Item 2', 'Electrical Works', '5', 'Set', '1200', '12', '9983', 'Sample specification remark 2']
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     XLSX.utils.book_append_sheet(wb, ws, 'BOQ Template');

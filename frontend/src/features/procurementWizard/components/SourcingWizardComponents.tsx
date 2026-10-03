@@ -23,7 +23,10 @@ import {
   ExternalLink,
   Award,
   Globe,
-  Pencil
+  Pencil,
+  Paperclip,
+  Eye,
+  X
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
@@ -496,6 +499,17 @@ function FolderOpenEmptyIcon(props: any) {
 // ─────────────────────────────────────────────────────────────────────────────
 // 9. BOQTable
 // ─────────────────────────────────────────────────────────────────────────────
+export interface BOQRowAttachment {
+  id: string;
+  name?: string;
+  fileAssetId: number;
+  fileName: string;
+  fileSize?: number;
+  mimeType?: string;
+  uploadedAt?: string;
+  url?: string;
+}
+
 export interface BOQRow {
   srNo: number;
   description: string;
@@ -504,9 +518,60 @@ export interface BOQRow {
   uom: string;
   estimatedRate: number;
   taxPercent: number;
+  hsnSacCode?: string;
+  fileAssetId?: number | null;
+  fileName?: string | null;
+  fileSize?: number | null;
+  attachments?: BOQRowAttachment[];
   total: number;
   remarks: string;
 }
+
+const DEFAULT_BOQ_CATEGORIES = [
+  'General',
+  'Civil Works',
+  'Electrical Works',
+  'Mechanical Works',
+  'IT Hardware & Networking',
+  'Software & IT Services',
+  'Consulting & Manpower',
+  'Raw Materials',
+  'Office Supplies & Equipment',
+  'Facility Management',
+  'Logistics & Transportation',
+  'Industrial Machinery & Spares',
+  'Chemicals & Minerals',
+  'Safety & PPE',
+];
+
+const DEFAULT_BOQ_UOMS = [
+  { value: 'NOS', label: 'NOS - Numbers' },
+  { value: 'SET', label: 'SET - Sets' },
+  { value: 'EA', label: 'EA - Each' },
+  { value: 'KG', label: 'KG - Kilograms' },
+  { value: 'MT', label: 'MT - Metric Tonnes' },
+  { value: 'METER', label: 'METER - Meters' },
+  { value: 'SQ FT', label: 'SQ FT - Square Feet' },
+  { value: 'CU.MTRS', label: 'CU.MTRS - Cubic Meters' },
+  { value: 'LTR', label: 'LTR - Litres' },
+  { value: 'PKT', label: 'PKT - Packets' },
+  { value: 'BOX', label: 'BOX - Boxes' },
+  { value: 'PACK', label: 'PACK - Packs' },
+  { value: 'RL', label: 'RL - Rolls' },
+  { value: 'LOT', label: 'LOT - Lots' },
+  { value: 'LS', label: 'LS - Lump Sum' },
+  { value: 'HOUR', label: 'HOUR - Hours' },
+  { value: 'DAY', label: 'DAY - Days' },
+  { value: 'MONTH', label: 'MONTH - Months' },
+];
+
+const DEFAULT_BOQ_TAX_SLABS = [
+  { value: 0, label: '0%' },
+  { value: 5, label: '5%' },
+  { value: 12, label: '12%' },
+  { value: 18, label: '18%' },
+  { value: 28, label: '28%' },
+];
 
 interface BOQTableProps {
   rows: BOQRow[];
@@ -515,6 +580,14 @@ interface BOQTableProps {
   onDuplicateRow: (idx: number) => void;
   onDeleteRow: (idx: number) => void;
   estimatedTotal: number;
+  categories?: Array<{ id: number; name: string } | string>;
+  loadingCategories?: boolean;
+  uomOptions?: Array<{ value: string; label: string } | string>;
+  taxRateOptions?: Array<{ value: number; label: string } | number>;
+  onAttachDocument?: (idx: number, row: BOQRow) => void;
+  onUploadRowDocument?: (idx: number, file: File) => Promise<void>;
+  onRemoveRowDocument?: (idx: number, attachmentId?: string) => void;
+  onPreviewDocument?: (attachment: { fileAssetId?: number; url?: string; fileName?: string; name?: string }) => void;
 }
 
 export function BOQTable({
@@ -523,113 +596,331 @@ export function BOQTable({
   onAddRow,
   onDuplicateRow,
   onDeleteRow,
-  estimatedTotal
+  estimatedTotal: _estimatedTotal,
+  categories = [],
+  loadingCategories = false,
+  uomOptions,
+  taxRateOptions,
+  onAttachDocument,
+  onUploadRowDocument,
+  onRemoveRowDocument,
+  onPreviewDocument,
 }: BOQTableProps) {
-  const tableInput = 'h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15';
+  const tableInput = 'h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 transition-all';
+
+  // Resolved dynamic categories
+  const resolvedCategoryNames = React.useMemo(() => {
+    const fromProps = categories.map(c => (typeof c === 'string' ? c : c.name)).filter(Boolean);
+    const combined = Array.from(new Set([...fromProps, ...DEFAULT_BOQ_CATEGORIES]));
+    return combined;
+  }, [categories]);
+
+  // Resolved dynamic UOMs
+  const resolvedUoms = React.useMemo(() => {
+    if (uomOptions && uomOptions.length > 0) {
+      return uomOptions.map(u => {
+        if (typeof u === 'string') return { value: u, label: u };
+        return u;
+      });
+    }
+    return DEFAULT_BOQ_UOMS;
+  }, [uomOptions]);
+
+  // Resolved dynamic Tax slabs
+  const resolvedTaxSlabs = React.useMemo(() => {
+    if (taxRateOptions && taxRateOptions.length > 0) {
+      return taxRateOptions.map(t => {
+        if (typeof t === 'number') return { value: t, label: `${t}%` };
+        return t;
+      });
+    }
+    return DEFAULT_BOQ_TAX_SLABS;
+  }, [taxRateOptions]);
 
   return (
     <div className="space-y-3">
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg">
-        <div className="overflow-x-auto w-full rounded-xl border border-slate-200 bg-white mb-6 shadow-sm">
-<table data-ux-wrapped="true" className="w-full min-w-[900px] border-collapse text-left text-xs">
+      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-3xs">
+        <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-xs">
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
-              <th className="px-3 py-2 text-center w-14">Sr</th>
-              <th className="px-3 py-2">Item Description</th>
-              <th className="px-3 py-2 w-28">Category</th>
-              <th className="px-3 py-2 w-24">UOM</th>
-              <th className="px-3 py-2 w-20">Quantity</th>
-              <th className="px-3 py-2 w-28">Est. Rate (INR)</th>
-              <th className="px-3 py-2 w-20">Tax %</th>
-              <th className="px-3 py-2 w-32 text-right">Total</th>
-              <th className="px-3 py-2 w-24 text-right">Actions</th>
+              <th className="px-3 py-2.5 text-center w-12">Sr</th>
+              <th className="px-3 py-2.5 min-w-[180px]">Item Description</th>
+              <th className="px-3 py-2.5 w-36">Category</th>
+              <th className="px-3 py-2.5 w-28">UOM</th>
+              <th className="px-3 py-2.5 w-20 text-center">Qty</th>
+              <th className="px-3 py-2.5 w-28 text-right">Est. Rate (₹)</th>
+              <th className="px-3 py-2.5 w-20 text-center">Tax %</th>
+              <th className="px-3 py-2.5 w-28 text-center">HSN/SAC</th>
+              <th className="px-3 py-2.5 w-36 text-center">Docs (Opt.)</th>
+              <th className="px-3 py-2.5 w-28 text-right">Total (Gross)</th>
+              <th className="px-3 py-2.5 w-20 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 font-semibold">
-            {rows.map((row, idx) => (
-              <tr key={idx} className="align-middle hover:bg-slate-50/50">
-                <td className="px-3 py-1 text-center text-slate-400">{row.srNo}</td>
-                <td className="px-3 py-1">
-                  <input
-                    value={row.description}
-                    onChange={e => onChange(idx, 'description', e.target.value)}
-                    className={tableInput}
-                    placeholder="Describe item specifications"
-                  />
-                </td>
-                <td className="px-3 py-1">
-                  <input
-                    value={row.category}
-                    onChange={e => onChange(idx, 'category', e.target.value)}
-                    className={tableInput}
-                    placeholder="General"
-                  />
-                </td>
-                <td className="px-3 py-1">
-                  <input
-                    value={row.uom}
-                    onChange={e => onChange(idx, 'uom', e.target.value)}
-                    className={tableInput}
-                    placeholder="Nos, KG..."
-                  />
-                </td>
-                <td className="px-3 py-1">
-                  <input
-                    type="number"
-                    value={row.quantity || ''}
-                    onChange={e => onChange(idx, 'quantity', Number(e.target.value || 0))}
-                    className={tableInput}
-                  />
-                </td>
-                <td className="px-3 py-1">
-                  <input
-                    type="number"
-                    value={row.estimatedRate || ''}
-                    onChange={e => onChange(idx, 'estimatedRate', Number(e.target.value || 0))}
-                    className={tableInput}
-                  />
-                </td>
-                <td className="px-3 py-1">
-                  <select
-                    value={row.taxPercent ?? 18}
-                    onChange={e => onChange(idx, 'taxPercent', Number(e.target.value || 0))}
-                    className={cn(tableInput, 'cursor-pointer')}
-                    aria-label="GST Slab"
-                  >
-                    <option value={0}>0%</option>
-                    <option value={5}>5%</option>
-                    <option value={12}>12%</option>
-                    <option value={18}>18%</option>
-                    <option value={28}>28%</option>
-                  </select>
-                </td>
-                <td className="px-3 py-1 text-right font-black text-slate-900">
-                  {formatCurrency(row.total)}
-                </td>
-                <td className="px-3 py-1 text-right space-x-1.5">
-                  <button
-                    type="button"
-                    title="Duplicate line"
-                    onClick={() => onDuplicateRow(idx)}
-                    className="p-1.5 text-slate-400 hover:text-[#12335f] hover:bg-slate-100 rounded"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Delete line"
-                    onClick={() => onDeleteRow(idx)}
-                    disabled={rows.length === 1}
-                    className="p-1.5 text-rose-500 hover:bg-rose-50 rounded disabled:opacity-40"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {rows.map((row, idx) => {
+              const rowCat = row.category || '';
+              const isCustomCat = rowCat && !resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase());
+              
+              const rowUom = row.uom || 'Nos';
+              const isCustomUom = rowUom && !resolvedUoms.some(u => u.value.toLowerCase() === rowUom.toLowerCase());
+
+              const attachmentsList = row.attachments || [];
+              const hasDocs = attachmentsList.length > 0 || Boolean(row.fileName);
+              const docCount = attachmentsList.length || (row.fileName ? 1 : 0);
+              const firstAtt = attachmentsList[0];
+              const docName = firstAtt?.fileName || row.fileName || 'Attachment';
+
+              return (
+                <tr key={idx} className="align-middle hover:bg-slate-50/60 transition-colors">
+                  <td className="px-3 py-2 text-center text-slate-400 font-bold">{row.srNo}</td>
+                  
+                  {/* Item Description */}
+                  <td className="px-3 py-2">
+                    <input
+                      value={row.description}
+                      onChange={e => onChange(idx, 'description', e.target.value)}
+                      className={tableInput}
+                      placeholder="Describe item specifications"
+                      aria-label={`Item description for row ${row.srNo}`}
+                    />
+                  </td>
+
+                  {/* Category Dropdown (Database + Standard + Custom) */}
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <select
+                        value={resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase()) ? rowCat : (rowCat ? 'Other' : '')}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === 'Other') {
+                            onChange(idx, 'category', 'Other');
+                          } else {
+                            onChange(idx, 'category', val);
+                          }
+                        }}
+                        className={cn(tableInput, 'cursor-pointer')}
+                        aria-label={`Category for row ${row.srNo}`}
+                      >
+                        <option value="">{loadingCategories ? 'Loading...' : '-- Category --'}</option>
+                        {resolvedCategoryNames.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                        <option value="Other">Other / Custom...</option>
+                      </select>
+                      {(rowCat === 'Other' || isCustomCat) && (
+                        <input
+                          type="text"
+                          value={rowCat === 'Other' ? '' : rowCat}
+                          onChange={e => onChange(idx, 'category', e.target.value || 'Other')}
+                          placeholder="Type category..."
+                          className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
+                          aria-label={`Custom category for row ${row.srNo}`}
+                        />
+                      )}
+                    </div>
+                  </td>
+
+                  {/* UOM Dropdown (Database + Standard + Custom) */}
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <select
+                        value={resolvedUoms.some(u => u.value.toLowerCase() === rowUom.toLowerCase()) ? (resolvedUoms.find(u => u.value.toLowerCase() === rowUom.toLowerCase())?.value) : (rowUom ? 'Other' : 'NOS')}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val === 'Other') {
+                            onChange(idx, 'uom', 'Other');
+                          } else {
+                            onChange(idx, 'uom', val);
+                          }
+                        }}
+                        className={cn(tableInput, 'cursor-pointer uppercase')}
+                        aria-label={`Unit of measure for row ${row.srNo}`}
+                      >
+                        {resolvedUoms.map(u => (
+                          <option key={u.value} value={u.value}>{u.label || u.value}</option>
+                        ))}
+                        <option value="Other">Other / Custom...</option>
+                      </select>
+                      {(rowUom === 'Other' || isCustomUom) && (
+                        <input
+                          type="text"
+                          value={rowUom === 'Other' ? '' : rowUom}
+                          onChange={e => onChange(idx, 'uom', e.target.value || 'Other')}
+                          placeholder="Type unit..."
+                          className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 uppercase"
+                          aria-label={`Custom UOM for row ${row.srNo}`}
+                        />
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Quantity */}
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="number"
+                      min="1"
+                      value={row.quantity || ''}
+                      onChange={e => onChange(idx, 'quantity', Number(e.target.value || 0))}
+                      className={cn(tableInput, 'text-center')}
+                      aria-label={`Quantity for row ${row.srNo}`}
+                    />
+                  </td>
+
+                  {/* Estimated Rate */}
+                  <td className="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      min="0"
+                      value={row.estimatedRate || ''}
+                      onChange={e => onChange(idx, 'estimatedRate', Number(e.target.value || 0))}
+                      className={cn(tableInput, 'text-right font-medium')}
+                      placeholder="0"
+                      aria-label={`Estimated rate for row ${row.srNo}`}
+                    />
+                  </td>
+
+                  {/* Tax % Dropdown */}
+                  <td className="px-3 py-2">
+                    <select
+                      value={row.taxPercent ?? 18}
+                      onChange={e => onChange(idx, 'taxPercent', Number(e.target.value || 0))}
+                      className={cn(tableInput, 'cursor-pointer text-center')}
+                      aria-label={`GST Slab for row ${row.srNo}`}
+                    >
+                      {resolvedTaxSlabs.map(t => (
+                        <option key={t.value} value={t.value}>{t.label}</option>
+                      ))}
+                    </select>
+                  </td>
+
+                  {/* HSN/SAC Code (Optional) */}
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="text"
+                      value={row.hsnSacCode || ''}
+                      onChange={e => onChange(idx, 'hsnSacCode', e.target.value)}
+                      className={cn(tableInput, 'text-center font-mono text-[11px]')}
+                      placeholder="HSN/SAC"
+                      maxLength={15}
+                      aria-label={`HSN or SAC code for row ${row.srNo}`}
+                    />
+                  </td>
+
+                  {/* Attach Docs (Optional) */}
+                  <td className="px-3 py-2">
+                    <div className="flex items-center justify-center gap-1.5 min-w-[125px]">
+                      <input
+                        type="file"
+                        id={`boq-file-input-${idx}`}
+                        className="sr-only"
+                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
+                        onChange={async e => {
+                          const file = e.target.files?.[0];
+                          if (file && onUploadRowDocument) {
+                            await onUploadRowDocument(idx, file);
+                          }
+                          e.target.value = '';
+                        }}
+                      />
+                      {hasDocs ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (onPreviewDocument && (firstAtt || row.fileAssetId)) {
+                                onPreviewDocument(firstAtt || { fileAssetId: row.fileAssetId || undefined, fileName: row.fileName || 'Document' });
+                              } else if (onAttachDocument) {
+                                onAttachDocument(idx, row);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-3xs truncate max-w-[100px]"
+                            title={docName}
+                            aria-label={`Preview document ${docName} for row ${row.srNo}`}
+                          >
+                            <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
+                            <span className="truncate">{docCount > 1 ? `${docCount} files` : docName}</span>
+                          </button>
+                          {onAttachDocument && (
+                            <button
+                              type="button"
+                              onClick={() => onAttachDocument(idx, row)}
+                              className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                              title="Manage documents"
+                              aria-label={`Manage documents for row ${row.srNo}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          )}
+                          {onRemoveRowDocument && (
+                            <button
+                              type="button"
+                              onClick={() => onRemoveRowDocument(idx)}
+                              className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                              title="Remove document"
+                              aria-label={`Remove document from row ${row.srNo}`}
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <label
+                            htmlFor={`boq-file-input-${idx}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-3xs transition-colors whitespace-nowrap"
+                            title="Attach drawing or spec sheet"
+                          >
+                            <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+                            <span>Attach</span>
+                          </label>
+                          {onAttachDocument && (
+                            <button
+                              type="button"
+                              onClick={() => onAttachDocument(idx, row)}
+                              className="p-1 text-slate-400 hover:text-[#12335f] hover:bg-slate-100 rounded transition-colors"
+                              title="Document manager"
+                              aria-label={`Open document manager for row ${row.srNo}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                  {/* Row Total */}
+                  <td className="px-3 py-2 text-right font-black text-slate-900 whitespace-nowrap">
+                    {formatCurrency(row.total)}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="px-3 py-2 text-right space-x-1.5 whitespace-nowrap">
+                    <button
+                      type="button"
+                      title="Duplicate line"
+                      onClick={() => onDuplicateRow(idx)}
+                      className="p-1.5 text-slate-400 hover:text-[#12335f] hover:bg-slate-100 rounded transition-colors"
+                      aria-label={`Duplicate row ${row.srNo}`}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      title="Delete line"
+                      onClick={() => onDeleteRow(idx)}
+                      disabled={rows.length === 1}
+                      className="p-1.5 text-rose-500 hover:bg-rose-50 rounded disabled:opacity-30 transition-colors"
+                      aria-label={`Delete row ${row.srNo}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-</div>
       </div>
 
       {(() => {
@@ -638,7 +929,7 @@ export function BOQTable({
         const grossTotal = baseTotal + taxTotal;
         return (
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 font-bold text-xs">
-            <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700 bg-white hover:bg-slate-100">
+            <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700 bg-white hover:bg-slate-100 shadow-3xs">
               <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
             </Button>
             <div className="flex items-center gap-4 flex-wrap text-xs">

@@ -559,6 +559,9 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
             const buyerTenderWhere = orgId
                 ? { OR: [{ buyerId: userIdNum }, { organizationId: orgId }] }
                 : { buyerId: userIdNum };
+            const buyerAuctionWhere = orgId
+                ? { OR: [{ createdByUserId: userIdNum }, { buyerOrgId: orgId }] }
+                : { createdByUserId: userIdNum };
             const sellerCatalogueWhere = orgId
                 ? { OR: [{ sellerId: userIdNum }, { organizationId: orgId }] }
                 : { sellerId: userIdNum };
@@ -718,11 +721,16 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                     isSeller
                         ? prisma.quoteRequest.count({ where: { ...sellerRecordWhere, status: { in: activeQuoteRequestStatuses } } }).catch(() => 0)
                         : Promise.resolve(0),
-                    // buyer procurement active bids
+                    // buyer procurement active bids & standalone reverse auctions
                     isBuyer
-                        ? (prisma as any).procurementBid.count({
-                            where: { ...buyerRecordWhere, status: { notIn: ['CLOSED', 'CANCELLED'] } }
-                        }).catch(() => 0)
+                        ? Promise.all([
+                            (prisma as any).procurementBid.count({
+                                where: { ...buyerRecordWhere, status: { notIn: ['CLOSED', 'CANCELLED'] } }
+                            }).catch(() => 0),
+                            (prisma as any).auction.count({
+                                where: { ...buyerAuctionWhere, linkedBidId: null, status: { notIn: ['closed', 'cancelled', 'CLOSED', 'CANCELLED'] } }
+                            }).catch(() => 0)
+                        ]).then(([bids, auctions]) => bids + auctions).catch(() => 0)
                         : Promise.resolve(0),
                     // buyer procurement spent
                     isBuyer

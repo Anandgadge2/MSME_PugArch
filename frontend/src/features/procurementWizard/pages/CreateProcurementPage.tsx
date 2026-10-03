@@ -3023,7 +3023,7 @@ function BasicsStepForm({
                 ...c,
                 basics: { ...c.basics, whatAreYouBuying: val },
                 boqTable: isBoqType && c.boqTable.length === 0
-                  ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 0, total: 0, remarks: '' }]
+                  ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
                   : !isBoqType
                     ? []
                     : c.boqTable
@@ -4886,7 +4886,66 @@ function ItemsDetailsForm({
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const [uploadingFile, setUploadingFile] = useState(false);
   const [quickDocItem, setQuickDocItem] = useState<ItemRow | null>(null);
+  const [quickDocBoqRowIdx, setQuickDocBoqRowIdx] = useState<number | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+
+  // Dynamic master metadata from database / backend
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [uomsList, setUomsList] = useState<Array<{ value: string; label: string }>>([]);
+  const [taxSlabsList, setTaxSlabsList] = useState<Array<{ value: number; label: string }>>([]);
+
+  useEffect(() => {
+    let active = true;
+    setLoadingCategories(true);
+
+    api.get('/api/categories')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(cats => {
+        if (active && Array.isArray(cats)) {
+          setCategoriesList(
+            cats
+              .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+              .filter(c => Boolean(c.name))
+          );
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load categories in ItemsDetailsForm:', err);
+      })
+      .finally(() => {
+        if (active) setLoadingCategories(false);
+      });
+
+    api.get('/api/uoms')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(uoms => {
+        if (active && Array.isArray(uoms)) {
+          setUomsList(uoms);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load UOMs from database:', err);
+      });
+
+    api.get('/api/tax-slabs')
+      .then(res => readJsonResponse(res))
+      .then(body => unwrapApiData<any>(body))
+      .then(slabs => {
+        if (active && Array.isArray(slabs)) {
+          setTaxSlabsList(slabs);
+        }
+      })
+      .catch(err => {
+        console.warn('Failed to load tax slabs:', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handlePreviewDoc = async (doc: any, label = 'Document') => {
     try {
@@ -5327,6 +5386,7 @@ function ItemsDetailsForm({
             const uomIdx = findCol('uom', 'unit', 'unitofmeasure');
             const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price');
             const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent');
+            const hsnIdx = findCol('hsnsaccode', 'hsncode', 'saccode', 'hsnsac', 'hsn', 'sac');
             const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'scopeofwork', 'scope', 'notes');
 
             dataRows.forEach((r, idx) => {
@@ -5335,6 +5395,7 @@ function ItemsDetailsForm({
                 const qty = Math.max(1, Number(qtyIdx >= 0 ? r[qtyIdx] : 1) || 1);
                 const rate = Math.max(0, Number(rateIdx >= 0 ? r[rateIdx] : 0) || 0);
                 const tax = Number(taxIdx >= 0 ? r[taxIdx] : 18) || 18;
+                const hsn = hsnIdx >= 0 && r[hsnIdx] ? String(r[hsnIdx]).trim() : '';
                 parsedBoqRows.push({
                   srNo: idx + 1,
                   description: desc,
@@ -5343,7 +5404,12 @@ function ItemsDetailsForm({
                   uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'Nos',
                   estimatedRate: rate,
                   taxPercent: tax,
-                  total: qty * rate,
+                  hsnSacCode: hsn,
+                  attachments: [],
+                  fileAssetId: null,
+                  fileName: '',
+                  fileSize: null,
+                  total: qty * rate * (1 + tax / 100),
                   remarks: remIdx >= 0 && r[remIdx] ? String(r[remIdx]).trim() : '',
                 });
               }
@@ -5389,6 +5455,11 @@ function ItemsDetailsForm({
         uom: 'Nos',
         estimatedRate: 0,
         taxPercent: 18,
+        hsnSacCode: '',
+        attachments: [],
+        fileAssetId: null,
+        fileName: '',
+        fileSize: null,
         total: 0,
         remarks: ''
       }];
@@ -5433,6 +5504,77 @@ function ItemsDetailsForm({
       const sum = nextTable.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (1 + Number(r.taxPercent ?? 18) / 100)), 0);
       return { ...c, boqTable: nextTable, basics: { ...c.basics, estimatedValue: Math.round(sum) } };
     });
+  };
+
+  const handleUploadBoqRowFile = async (rowIdx: number, file: File) => {
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('File size must be 25MB or less');
+      return;
+    }
+    const toastId = toast.loading(`Uploading "${file.name}"...`);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'procurement_draft');
+      const response = await api.fetch('/api/files/upload', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: formData,
+      });
+      const resData = await unwrap<any>(response);
+      const asset = resData.file || resData;
+      const fileId = Number(resData.fileId || asset.id || 0);
+      const newAtt = {
+        id: makeId(),
+        name: 'Technical Specification',
+        fileAssetId: fileId,
+        fileName: asset.originalName || file.name,
+        fileSize: asset.size || file.size,
+        mimeType: asset.mimeType || file.type,
+        uploadedAt: new Date().toISOString(),
+        url: asset.url || `/api/files/${fileId}`,
+      };
+
+      updateDraft(c => {
+        const nextTable = [...c.boqTable];
+        const row = nextTable[rowIdx];
+        if (!row) return c;
+        const currentAtts = Array.isArray(row.attachments) ? row.attachments : [];
+        const nextAtts = [...currentAtts, newAtt];
+        nextTable[rowIdx] = {
+          ...row,
+          fileAssetId: fileId,
+          fileName: newAtt.fileName,
+          fileSize: newAtt.fileSize,
+          attachments: nextAtts,
+        };
+        return { ...c, boqTable: nextTable };
+      });
+      toast.success(`Attached "${file.name}" successfully`, { id: toastId });
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || 'Failed to upload document', { id: toastId });
+    }
+  };
+
+  const handleRemoveBoqRowFile = (rowIdx: number, attachmentId?: string) => {
+    updateDraft(c => {
+      const nextTable = [...c.boqTable];
+      const row = nextTable[rowIdx];
+      if (!row) return c;
+      const currentAtts = Array.isArray(row.attachments) ? row.attachments : [];
+      const nextAtts = attachmentId ? currentAtts.filter(a => a.id !== attachmentId) : [];
+      const first = nextAtts[0];
+      nextTable[rowIdx] = {
+        ...row,
+        fileAssetId: first ? first.fileAssetId : null,
+        fileName: first ? first.fileName : '',
+        fileSize: first ? first.fileSize : null,
+        attachments: nextAtts,
+      };
+      return { ...c, boqTable: nextTable };
+    });
+    toast.info('Document removed');
   };
 
   const procurementItemColumns: ColumnDef<any>[] = useMemo(() => {
@@ -5888,6 +6030,14 @@ function ItemsDetailsForm({
           onDuplicateRow={handleBOQDuplicateRow}
           onDeleteRow={handleRemoveBOQRow}
           estimatedTotal={draft.basics.estimatedValue}
+          categories={categoriesList}
+          loadingCategories={loadingCategories}
+          uomOptions={uomsList}
+          taxRateOptions={taxSlabsList}
+          onAttachDocument={(idx) => setQuickDocBoqRowIdx(idx)}
+          onUploadRowDocument={handleUploadBoqRowFile}
+          onRemoveRowDocument={handleRemoveBoqRowFile}
+          onPreviewDocument={(att) => handlePreviewDoc(att, att.fileName || att.name)}
         />
       </div>
     );
@@ -6763,6 +6913,39 @@ function ItemsDetailsForm({
           onClose={() => setQuickDocItem(null)}
           onSaveAttachments={updatedAtts => {
             handleSaveItemQuickAttachments(quickDocItem.id, updatedAtts);
+          }}
+          token={token}
+          onPreviewAttachment={att => handlePreviewDoc(att, att.fileName)}
+        />
+      )}
+
+      {/* Quick Document Manager Modal for BOQ Rows */}
+      {quickDocBoqRowIdx !== null && draft.boqTable[quickDocBoqRowIdx] && (
+        <QuickDocumentModal
+          item={{
+            id: `boq-row-${quickDocBoqRowIdx}`,
+            name: draft.boqTable[quickDocBoqRowIdx].description || `BOQ Item #${draft.boqTable[quickDocBoqRowIdx].srNo}`,
+            itemType: draft.boqTable[quickDocBoqRowIdx].category || 'BOQ Item',
+            attachments: draft.boqTable[quickDocBoqRowIdx].attachments || [],
+            fileAssetId: draft.boqTable[quickDocBoqRowIdx].fileAssetId,
+            specificationFileName: draft.boqTable[quickDocBoqRowIdx].fileName,
+          } as any}
+          onClose={() => setQuickDocBoqRowIdx(null)}
+          onSaveAttachments={updatedAtts => {
+            const first = updatedAtts[0];
+            updateDraft(c => {
+              const nextTable = [...c.boqTable];
+              const row = nextTable[quickDocBoqRowIdx];
+              if (!row) return c;
+              nextTable[quickDocBoqRowIdx] = {
+                ...row,
+                attachments: updatedAtts,
+                fileAssetId: first ? first.fileAssetId : null,
+                fileName: first ? first.fileName : '',
+                fileSize: first ? first.fileSize : null,
+              };
+              return { ...c, boqTable: nextTable };
+            });
           }}
           token={token}
           onPreviewAttachment={att => handlePreviewDoc(att, att.fileName)}
@@ -9325,7 +9508,13 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           specification: item.remarks || item.description || '',
           scopeOfWork: item.remarks || item.description || '',
           category: item.category || 'General',
+          hsn_sac_code: item.hsnSacCode || '',
+          hsnCode: item.hsnSacCode || '',
           taxPercent: item.taxPercent !== undefined && item.taxPercent !== null ? Number(item.taxPercent) : 0,
+          gst: item.taxPercent !== undefined && item.taxPercent !== null ? Number(item.taxPercent) : 0,
+          fileAssetId: item.fileAssetId || item.attachments?.[0]?.fileAssetId || null,
+          specificationFileName: item.fileName || item.attachments?.[0]?.fileName || '',
+          attachments: item.attachments || [],
         }
       }))
     : draft.items.map(item => {

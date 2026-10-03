@@ -1065,9 +1065,43 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         deliveryTerms={resolvedDeliveryTerms}
         description={resolvedDescription}
         rawBid={linkedBidData?.rawBid || linkedBidData}
+        validityDays={reqData.validityDays || reqData.schedule?.validityDays || (reqData.payload as any)?.schedule?.validityDays || 90}
+        bidValidityDate={reqData.bidValidityDate || reqData.schedule?.bidValidityDate || (reqData.payload as any)?.schedule?.bidValidityDate || undefined}
+        requiredByDate={reqData.requiredBy || reqData.schedule?.requiredByDate || (reqData.payload as any)?.basics?.requiredByDate || undefined}
         payload={{
           ...(linkedBidData.payload || linkedBidData.technicalPacket || {}),
-          ...(reqData.payload || reqData || {}),
+          ...(reqData.payload || {}),
+          schedule: {
+            ...(reqData.schedule || {}),
+            ...(reqData.payload?.schedule || {}),
+            validityDays: reqData.validityDays || reqData.schedule?.validityDays || (reqData.payload as any)?.schedule?.validityDays || 90,
+            bidValidityDate: reqData.bidValidityDate || reqData.schedule?.bidValidityDate || (reqData.payload as any)?.schedule?.bidValidityDate,
+            requiredByDate: reqData.requiredBy || reqData.schedule?.requiredByDate,
+          },
+          terms: {
+            ...(reqData.terms || {}),
+            ...(reqData.payload?.terms || {}),
+            paymentTerms: resolvedPaymentTerms,
+            deliveryTerms: resolvedDeliveryTerms,
+          },
+          evaluation: {
+            ...(reqData.evaluation || {}),
+            ...(reqData.payload?.evaluation || {}),
+          },
+          rules: {
+            ...(reqData.rules || {}),
+            ...(reqData.payload?.rules || {}),
+            msmePreference: reqData.evaluation?.msmePreference ?? reqData.rules?.msmePreference ?? (reqData.payload as any)?.evaluation?.msmePreference ?? false,
+            localVendorPreference: reqData.evaluation?.localVendorPreference ?? reqData.rules?.localVendorPreference ?? (reqData.payload as any)?.evaluation?.localVendorPreference ?? false,
+          },
+          vendors: {
+            ...(reqData.vendors || {}),
+            ...(reqData.payload?.vendors || {}),
+            msmePreference: reqData.evaluation?.msmePreference ?? reqData.vendors?.msmePreference ?? (reqData.payload as any)?.evaluation?.msmePreference ?? false,
+          },
+          requiredDocs: resolvedRequiredDocuments,
+          documents: resolvedDocuments,
+          boqTable: resolvedBoqTable,
           ...(auctionData.auctionConfig || {}),
           ...(auctionData.preBidStage || {}),
           ...(auctionData || {}),

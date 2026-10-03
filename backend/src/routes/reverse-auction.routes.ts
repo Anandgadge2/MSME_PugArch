@@ -542,7 +542,7 @@ const linkedRequirementSummary = async (auction: any) => {
     }
   }
 
-  // 3. Fallback to legacy requirement
+  // 3. Fallback to requirement (primary unified table)
   if (!linkedReqId && !stripped && candidateRefs.length === 0) return null;
   const requirement = await db.requirement.findFirst({
     where: {
@@ -567,60 +567,226 @@ const linkedRequirementSummary = async (auction: any) => {
           pincode: true,
           country: true
         }
+      },
+      buyer: {
+        include: {
+          buyerProfile: {
+            include: {
+              organization: true
+            }
+          }
+        }
       }
     }
   }).catch(() => null);
   if (!requirement) return null;
+
   const payload = (requirement.payload || {}) as any;
   const basics = payload.basics || {};
   const tender = payload.tender || {};
   const terms = payload.terms || {};
+  const schedule = payload.schedule || {};
+  const evaluation = payload.evaluation || {};
+  const rules = payload.rules || {};
+  const vendors = payload.vendors || {};
   const documents = Array.isArray(payload.documents) ? payload.documents : [];
-  const org = requirement.organization;
+  const requiredDocs = Array.isArray(payload.requiredDocs)
+    ? payload.requiredDocs
+    : (Array.isArray(payload.requiredDocuments) ? payload.requiredDocuments : []);
+
+  const org = requirement.organization || requirement.buyer?.buyerProfile?.organization;
   const registeredAddress = org
     ? [org.addressLine1, org.addressLine2, org.city, org.district, org.state, org.pincode].filter(Boolean).join(', ')
     : null;
+
+  // Resolve items with robust fallback across DB requirementItems, payload.items, and payload.boqTable
+  const rawItems = (requirement.items && requirement.items.length > 0)
+    ? requirement.items
+    : (Array.isArray(payload.items) && payload.items.length > 0
+        ? payload.items
+        : (Array.isArray(payload.boqTable) ? payload.boqTable : []));
+
+  const items = rawItems.map((item: any, idx: number) => {
+    const specs = (typeof item.specifications === 'object' && item.specifications) ? item.specifications : {};
+    const name = item.itemName || item.name || item.description || `Line Item ${idx + 1}`;
+    const desc = item.description || item.specification || specs.specification || specs.description || '';
+    const qty = Number(item.quantity ?? item.qty ?? 1);
+    const uom = String(item.unitOfMeasure || item.unit || item.uom || 'Nos').trim();
+    const unitPrice = Number(item.estimatedUnitPrice ?? item.unitPrice ?? item.baseRate ?? item.estimatedRate ?? 0);
+    return {
+      id: item.id || idx + 1,
+      name,
+      itemName: name,
+      description: desc,
+      specification: desc,
+      quantity: qty,
+      qty,
+      unitOfMeasure: uom,
+      unit: uom,
+      uom,
+      estimatedUnitPrice: unitPrice,
+      unitPrice,
+      specifications: specs
+    };
+  });
+
+  const boqTable = Array.isArray(payload.boqTable) ? payload.boqTable : [];
+
+  const effectiveBidStartDate =
+    schedule.submissionStartDate ||
+    schedule.publishDate ||
+    schedule.bidStartDate ||
+    tender.bidStartDate ||
+    (auction.startTime ? new Date(auction.startTime).toISOString() : null) ||
+    requirement.createdAt;
+
+  const effectiveBidClosingDate =
+    schedule.submissionDate ||
+    schedule.bidClosingDate ||
+    schedule.bidSubmissionEnd ||
+    tender.bidClosingDate ||
+    (auction.endTime ? new Date(auction.endTime).toISOString() : null) ||
+    null;
+
+  const effectiveValidityDays = schedule.validityDays ? Number(schedule.validityDays) : 90;
+  const effectiveBidValidityDate = schedule.bidValidityDate || (effectiveBidClosingDate && effectiveValidityDays
+    ? new Date(new Date(effectiveBidClosingDate).getTime() + effectiveValidityDays * 86400000).toISOString().slice(0, 10)
+    : null);
+
+  const effectiveRequiredBy =
+    requirement.requiredBy ||
+    basics.requiredByDate ||
+    schedule.requiredByDate ||
+    schedule.expectedDeliveryDate ||
+    tender.requiredByDate ||
+    null;
+
+  const termsList = Array.isArray(terms.termsAndConditions)
+    ? terms.termsAndConditions
+    : (typeof terms.termsAndConditions === 'string'
+        ? [terms.termsAndConditions]
+        : [terms.paymentTerms, terms.deliveryTerms, terms.penaltyClause].filter(Boolean));
+
+  const resolvedEstValue = Number(
+    requirement.estimatedValue ||
+    basics.estimatedValue ||
+    payload.auctionConfig?.startingBidPrice ||
+    auction.startPrice ||
+    auction.basePrice ||
+    0
+  );
 
   return {
     id: requirement.id,
     requirementNumber: requirement.requirementNumber,
     title: requirement.title,
-    description: requirement.description,
-    canonicalMethod: requirement.canonicalMethod || requirement.procurementMethod,
+    description: requirement.description || basics.description || '',
+    canonicalMethod: requirement.canonicalMethod || requirement.procurementMethod || 'REVERSE_AUCTION',
+    procurementMethod: requirement.procurementMethod || 'REVERSE_AUCTION',
     status: requirement.status,
-    estimatedValue: requirement.estimatedValue,
-    currency: requirement.currency,
-    requiredBy: requirement.requiredBy,
-    category: requirement.category?.name || basics.category || null,
+    estimatedValue: resolvedEstValue,
+    currency: requirement.currency || 'INR',
+    requiredBy: effectiveRequiredBy,
+    category: requirement.category?.name || basics.category || auction.category || null,
     deliveryLocation: basics.deliveryLocation || tender.deliveryLocation || null,
-    items: (requirement.items || []).map((item: any) => ({
-      itemName: item.itemName,
-      description: item.description,
-      quantity: item.quantity,
-      unitOfMeasure: item.unitOfMeasure,
-      estimatedUnitPrice: item.estimatedUnitPrice
-    })),
-    boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : [],
+    items,
+    boqTable,
     documents: documents.map((doc: any, idx: number) => ({
       id: doc.id || doc.fileAssetId || `req-doc-${idx + 1}`,
-      name: doc.name || doc.fileName || `Tender Document ${idx + 1}`,
+      name: doc.name || doc.fileName || `Procurement Document ${idx + 1}`,
       fileName: doc.fileName || null,
-      fileAssetId: doc.fileAssetId || null,
+      fileAssetId: doc.fileAssetId ? Number(doc.fileAssetId) : null,
       url: doc.url || null,
       required: doc.required !== false
     })),
-    requiredDocuments: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : [],
-    termsAndConditions: Array.isArray(terms.termsAndConditions) ? terms.termsAndConditions : [],
+    requiredDocuments: requiredDocs.map((doc: any, idx: number) => {
+      if (typeof doc === 'string') return doc;
+      return {
+        id: doc.id || doc.fileAssetId || `req-doc-check-${idx + 1}`,
+        name: doc.name || doc.fileName || `Required Document ${idx + 1}`,
+        fileName: doc.fileName || null,
+        fileAssetId: doc.fileAssetId ? Number(doc.fileAssetId) : null,
+        url: doc.url || null,
+        required: doc.required !== false,
+        instructions: doc.instructions || doc.remarks || ''
+      };
+    }),
+    termsAndConditions: termsList,
     eligibilityCriteria: Array.isArray(basics.eligibilityCriteria) ? basics.eligibilityCriteria : [],
     consigneeDetails: Array.isArray(payload.consigneeDetails) ? payload.consigneeDetails : [],
     paymentTerms: terms.paymentTerms || basics.paymentTerms || null,
     deliveryTerms: terms.deliveryTerms || null,
+    penaltyClause: terms.penaltyClause || null,
+    freightTerms: terms.freightTerms || null,
     approvalAuthority: payload.internal?.approvalAuthority || null,
-    justification: payload.internal?.justification || null,
+    justification: payload.internal?.justification || basics.justification || null,
     internalDetails: payload.internal || null,
-    payload,
-    bidStartDate: tender.bidStartDate || null,
-    bidClosingDate: tender.bidClosingDate || null,
+    schedule: {
+      ...schedule,
+      submissionStartDate: effectiveBidStartDate,
+      submissionDate: effectiveBidClosingDate,
+      bidValidityDate: effectiveBidValidityDate,
+      validityDays: effectiveValidityDays,
+      requiredByDate: effectiveRequiredBy
+    },
+    terms: {
+      ...terms,
+      paymentTerms: terms.paymentTerms || basics.paymentTerms || null,
+      deliveryTerms: terms.deliveryTerms || null,
+      penaltyClause: terms.penaltyClause || null
+    },
+    evaluation: {
+      ...evaluation,
+      msmePreference: evaluation.msmePreference ?? evaluation.msmeExemption ?? false,
+      localVendorPreference: evaluation.localVendorPreference ?? evaluation.makeInIndiaPreference ?? false,
+      method: evaluation.method || 'L1 total value'
+    },
+    rules: {
+      ...rules,
+      msmePreference: rules.msmePreference ?? evaluation.msmePreference ?? false,
+      localVendorPreference: rules.localVendorPreference ?? evaluation.localVendorPreference ?? false,
+      validityDays: effectiveValidityDays
+    },
+    vendors: {
+      ...vendors,
+      msmePreference: vendors.msmePreference ?? evaluation.msmePreference ?? false
+    },
+    payload: {
+      ...payload,
+      items,
+      boqTable,
+      schedule: {
+        ...schedule,
+        submissionStartDate: effectiveBidStartDate,
+        submissionDate: effectiveBidClosingDate,
+        bidValidityDate: effectiveBidValidityDate,
+        validityDays: effectiveValidityDays,
+        requiredByDate: effectiveRequiredBy
+      },
+      terms: {
+        ...terms,
+        paymentTerms: terms.paymentTerms || basics.paymentTerms || null,
+        deliveryTerms: terms.deliveryTerms || null,
+        penaltyClause: terms.penaltyClause || null
+      },
+      evaluation: {
+        ...evaluation,
+        msmePreference: evaluation.msmePreference ?? evaluation.msmeExemption ?? false,
+        localVendorPreference: evaluation.localVendorPreference ?? evaluation.makeInIndiaPreference ?? false,
+        method: evaluation.method || 'L1 total value'
+      },
+      rules: {
+        ...rules,
+        msmePreference: rules.msmePreference ?? evaluation.msmePreference ?? false,
+        localVendorPreference: rules.localVendorPreference ?? evaluation.localVendorPreference ?? false,
+        validityDays: effectiveValidityDays
+      },
+      requiredDocs
+    },
+    bidStartDate: effectiveBidStartDate,
+    bidClosingDate: effectiveBidClosingDate,
+    bidValidityDate: effectiveBidValidityDate,
+    validityDays: effectiveValidityDays,
     buyerOrganization: org ? {
       id: org.id,
       organizationName: org.organizationName,
@@ -629,7 +795,8 @@ const linkedRequirementSummary = async (auction: any) => {
       district: org.district || null,
       state: org.state || null,
       pincode: org.pincode || null
-    } : null
+    } : null,
+    buyer: requirement.buyer || null
   };
 };
 
@@ -1883,7 +2050,17 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
         where: { OR: orConditions },
         select: { auctionId: true }
       }).catch(() => []) : [];
-      where.id = { in: participantRows.map((row: any) => row.auctionId) };
+      const participatingAuctionIds = participantRows.map((row: any) => row.auctionId);
+
+      const sellerOrList: any[] = [];
+      if (participatingAuctionIds.length > 0) {
+        sellerOrList.push({ id: { in: participatingAuctionIds } });
+      }
+      sellerOrList.push({
+        visibilityMode: 'TECHNICALLY_QUALIFIED_ONLY',
+        status: { in: ['scheduled', 'live', 'open', 'paused', 'completed', 'active', 'SCHEDULED', 'LIVE', 'OPEN', 'PAUSED', 'COMPLETED', 'ACTIVE'] }
+      });
+      where.OR = sellerOrList;
     } else if (!isAdmin(req)) {
       where.OR = [{ createdByUserId: req.user?.id }, { buyerOrgId: req.user?.organizationId || -1 }];
     }

@@ -4583,6 +4583,59 @@ function BoqTableList({
         },
       },
       {
+        key: "hsn",
+        header: "HSN / SAC",
+        cell: (item) => {
+          const hsn = firstPresent(
+            item.hsnSacCode,
+            item.hsn_sac_code,
+            item.hsnCode,
+            item.hsn,
+            item.sacCode,
+            item.sac,
+            item.specifications?.hsn_sac_code,
+            item.specifications?.hsnCode,
+          );
+          return hsn ? (
+            <span className="font-mono text-[11px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
+              {String(hsn)}
+            </span>
+          ) : (
+            <span className="text-slate-400">-</span>
+          );
+        },
+      },
+      {
+        key: "documents",
+        header: "Documents",
+        cell: (item) => {
+          const atts = item.attachments || item.specifications?.attachments || [];
+          const hasFile = atts.length > 0 || item.fileAssetId || item.fileName || item.specifications?.fileAssetId || item.specifications?.specificationFileName;
+          const fileName = atts[0]?.fileName || item.fileName || item.specifications?.specificationFileName || (hasFile ? 'Document' : '');
+          const fileAssetId = atts[0]?.fileAssetId || item.fileAssetId || item.specifications?.fileAssetId;
+
+          if (!hasFile) {
+            return <span className="text-slate-400">-</span>;
+          }
+
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                if (fileAssetId) {
+                  window.open(`/api/files/${fileAssetId}/view`, '_blank');
+                }
+              }}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-3xs truncate max-w-[120px] cursor-pointer"
+              title={fileName}
+            >
+              <FileText className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
+              <span className="truncate">{atts.length > 1 ? `${atts.length} files` : fileName}</span>
+            </button>
+          );
+        },
+      },
+      {
         key: "total",
         header: "Total",
         cell: (item) => {
@@ -7271,20 +7324,29 @@ export function ProcurementDetailUnifiedView(
       )),
   );
 
+  const hasPreBidStageRequired = Boolean(
+    props.linkedAuction?.preBidStage?.required ||
+    linkedAuction?.preBidStage?.required
+  );
+
   const isTwoStageReverseAuction = Boolean(
     !isRateContractType &&
-    (props.linkedAuction?.preBidStage ||
-      props.linkedAuction?.linkedBidId ||
-      linkedAuction?.linkedBidId ||
-      linkedAuction?.linkedRequirementId ||
-      (props.linkedAuction?.linkedRequirementId &&
-        props.procurementMethod === "BID_WITH_REVERSE_AUCTION") ||
-      (allowsReverseAuction && !isReverseAuctionType)),
+    !isReverseAuctionType &&
+    props.procurementMethod !== "REVERSE_AUCTION" &&
+    (props as any).canonicalMethod !== "REVERSE_AUCTION" &&
+    (
+      hasPreBidStageRequired ||
+      props.procurementMethod === "BID_WITH_REVERSE_AUCTION" ||
+      (props as any).canonicalMethod === "BID_WITH_REVERSE_AUCTION" ||
+      (props.linkedAuction?.linkedBidId && !isReverseAuctionType) ||
+      (linkedAuction?.linkedBidId && !isReverseAuctionType) ||
+      (allowsReverseAuction && !isReverseAuctionType)
+    ),
   );
 
   const isDirectReverseAuction = Boolean(
     !isRateContractType &&
-    (isReverseAuctionType || props.linkedAuction || linkedAuction) &&
+    (isReverseAuctionType || props.procurementMethod === "REVERSE_AUCTION" || (props as any).canonicalMethod === "REVERSE_AUCTION" || props.linkedAuction || linkedAuction) &&
     !isTwoStageReverseAuction,
   );
 

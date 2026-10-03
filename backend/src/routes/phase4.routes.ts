@@ -1836,7 +1836,11 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
           : 'ALL_TECHNICALLY_QUALIFIED'
         : null,
       auctionConfig: config,
-      visibilityMode: config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICALLY_QUALIFIED_ONLY' : 'INVITED_SELLERS_ONLY',
+      visibilityMode: (
+        config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+        (draftBody.payload as any)?.vendors?.selection === 'Open' ||
+        !config.qualifiedVendors?.length
+      ) ? 'TECHNICALLY_QUALIFIED_ONLY' : 'INVITED_SELLERS_ONLY',
       allowCompetitorNames: config.rankVisibility === 'SHOW_LOWEST_PRICE',
       remarks: 'Created from guided procurement wizard',
       startTime: config.auctionStartDateTime,
@@ -5005,6 +5009,67 @@ router.post('/upload', authenticate, upload.single('file'), asyncRoute(async (re
 router.get('/categories', asyncRoute(async (_req, res) => {
   const categories = await ensureMarketplaceCategories();
   ok(res, categories);
+}));
+
+router.get('/uoms', asyncRoute(async (_req, res) => {
+  const [productUoms, tenderUoms] = await Promise.all([
+    db.product.findMany({
+      where: { unitOfMeasure: { not: null } },
+      select: { unitOfMeasure: true },
+      distinct: ['unitOfMeasure'],
+      take: 100
+    }).catch(() => []),
+    db.tenderItem.findMany({
+      where: { unitOfMeasure: { not: '' } },
+      select: { unitOfMeasure: true },
+      distinct: ['unitOfMeasure'],
+      take: 100
+    }).catch(() => [])
+  ]);
+
+  const dbUnits = new Set<string>();
+  productUoms.forEach((p: any) => { if (p.unitOfMeasure?.trim()) dbUnits.add(p.unitOfMeasure.trim()); });
+  tenderUoms.forEach((t: any) => { if (t.unitOfMeasure?.trim()) dbUnits.add(t.unitOfMeasure.trim()); });
+
+  const standardUnits = [
+    { value: 'NOS', label: 'NOS - Numbers' },
+    { value: 'SET', label: 'SET - Sets' },
+    { value: 'EA', label: 'EA - Each' },
+    { value: 'KG', label: 'KG - Kilograms' },
+    { value: 'MT', label: 'MT - Metric Tonnes' },
+    { value: 'METER', label: 'METER - Meters' },
+    { value: 'SQ FT', label: 'SQ FT - Square Feet' },
+    { value: 'CU.MTRS', label: 'CU.MTRS - Cubic Meters' },
+    { value: 'LTR', label: 'LTR - Litres' },
+    { value: 'PKT', label: 'PKT - Packets' },
+    { value: 'BOX', label: 'BOX - Boxes' },
+    { value: 'PACK', label: 'PACK - Packs' },
+    { value: 'RL', label: 'RL - Rolls' },
+    { value: 'LOT', label: 'LOT - Lots' },
+    { value: 'LS', label: 'LS - Lump Sum' },
+    { value: 'HOUR', label: 'HOUR - Hours' },
+    { value: 'DAY', label: 'DAY - Days' },
+    { value: 'MONTH', label: 'MONTH - Months' }
+  ];
+
+  const existingUpper = new Set(standardUnits.map(u => u.value.toUpperCase()));
+  dbUnits.forEach(u => {
+    if (!existingUpper.has(u.toUpperCase())) {
+      standardUnits.push({ value: u, label: u });
+    }
+  });
+
+  ok(res, standardUnits);
+}));
+
+router.get('/tax-slabs', asyncRoute(async (_req, res) => {
+  ok(res, [
+    { value: 0, label: '0% (Exempted / Nil Rate)' },
+    { value: 5, label: '5% (Essential Goods & Services)' },
+    { value: 12, label: '12% (Standard Concessional Rate)' },
+    { value: 18, label: '18% (Standard Rate)' },
+    { value: 28, label: '28% (Luxury / Higher Rate)' }
+  ]);
 }));
 
 router.post('/categories/custom', authenticate, asyncRoute(async (req, res) => {
@@ -13694,24 +13759,35 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const reqMethod = r.procurementMethod || (r as any).canonicalMethod || payload.basics?.procurementMethod || 'TENDER';
     const reqRef = formatRequirementNumber(r.id, r.requirementNumber, reqMethod);
 
-    all.push({
-      id: r.id,
-      type: 'requirement',
-      typeLabel: 'Requirement',
-      linkedAuctionId: auctionsByRequirementId[r.id]?.id || null,
-      title: r.title || `Requirement ${reqRef}`,
-      referenceNumber: reqRef,
-      status: rStatusUpper,
-      statusLabel: statusLabel(rStatusUpper),
-      statusGroup: statusGroupFor(rStatusUpper),
-      method: methodSlug,
-      methodLabel: METHOD_LABEL_MAP[methodSlug] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
-      estimatedValue: Number(r.estimatedValue || payload.basics?.estimatedValue || 0),
-      category: (r as any).category?.name || payload.basics?.category || '',
-      description: cleanOpportunitySummary(r.description || payload.basics?.description || ''),
-      deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || (r as any).deliveryLocation || '',
-      startDate: '',
-      endDate: '',
+      const rAuction = auctionsByRequirementId[r.id];
+      const rAuctionConfig = (payload.auctionConfig || {}) as any;
+      const rEstimatedVal = Number(
+        r.estimatedValue ||
+        payload.basics?.estimatedValue ||
+        rAuctionConfig.startingBidPrice ||
+        rAuction?.startPrice ||
+        rAuction?.basePrice ||
+        0
+      );
+
+      all.push({
+        id: r.id,
+        type: 'requirement',
+        typeLabel: 'Requirement',
+        linkedAuctionId: rAuction?.id || null,
+        title: r.title || `Requirement ${reqRef}`,
+        referenceNumber: reqRef,
+        status: rStatusUpper,
+        statusLabel: statusLabel(rStatusUpper),
+        statusGroup: statusGroupFor(rStatusUpper),
+        method: methodSlug,
+        methodLabel: METHOD_LABEL_MAP[methodSlug] || methodSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        estimatedValue: rEstimatedVal,
+        category: (r as any).category?.name || payload.basics?.category || '',
+        description: cleanOpportunitySummary(r.description || payload.basics?.description || ''),
+        deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || (r as any).deliveryLocation || '',
+        startDate: rAuction?.startTime?.toISOString?.() || payload.schedule?.submissionStartDate || r.createdAt?.toISOString?.() || '',
+        endDate: rAuction?.endTime?.toISOString?.() || payload.schedule?.submissionDate || payload.schedule?.bidValidityDate || '',
       quantity: String((r as any).quantity || ''),
       unit: (r as any).unit || '',
       organizationName: (r as any).organization?.organizationName || payload.basics?.buyerOrganizationName || loggedInOrgName || '',
