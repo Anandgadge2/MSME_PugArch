@@ -25,6 +25,8 @@ export interface SellerLiveAuctionBannerProps {
   procurementTitle?: string;
   procurementReference?: string;
   onBidSubmitted?: () => void;
+  isDisqualified?: boolean;
+  isNonParticipant?: boolean;
 }
 
 export default function SellerLiveAuctionBanner({
@@ -32,7 +34,13 @@ export default function SellerLiveAuctionBanner({
   procurementTitle,
   procurementReference,
   onBidSubmitted,
+  isDisqualified,
+  isNonParticipant,
 }: SellerLiveAuctionBannerProps) {
+  if (isDisqualified || isNonParticipant) {
+    return null;
+  }
+
   const [summary, setSummary] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -121,6 +129,22 @@ export default function SellerLiveAuctionBanner({
   if (!auction) return null;
 
   if (!isLive && !isScheduled) {
+    return null;
+  }
+
+  const isParticipantDisqualified =
+    Boolean(isDisqualified) ||
+    participant?.status === 'DISQUALIFIED' ||
+    participant?.status === 'REJECTED' ||
+    participant?.status === 'FAILED' ||
+    participant?.status === 'INELIGIBLE' ||
+    Boolean((participant as any)?.isDisqualified);
+
+  const isNonEnrolledParticipant =
+    Boolean(isNonParticipant) ||
+    Boolean(!loading && summary && !participant);
+
+  if (isParticipantDisqualified || isNonEnrolledParticipant) {
     return null;
   }
 

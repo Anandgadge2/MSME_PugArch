@@ -1263,13 +1263,42 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   <p className="flex justify-between"><span>Auto Extensions Triggered:</span> <span className="font-bold text-slate-800">{extensionCount} / {maxExtensions}</span></p>
                 </div>
               ) : (() => {
-                const canBid = (participant as any)?.canBid !== false;
                 const pStatus = (participant?.status || '').toUpperCase();
-                const disqualReason = (participant as any)?.disqualificationReason || '';
+                const isDisqualified =
+                  pStatus === 'DISQUALIFIED' ||
+                  pStatus === 'REJECTED' ||
+                  pStatus === 'FAILED' ||
+                  pStatus === 'INELIGIBLE' ||
+                  pStatus === 'NOT_QUALIFIED' ||
+                  Boolean((participant as any)?.isDisqualified);
+                const disqualReason = (participant as any)?.disqualificationReason || (participant as any)?.rejectionReason || '';
                 const evalPending = (auction as any)?.evaluationPending;
+                const isEnrolledParticipant = Boolean(participant);
+                const isTechnicallyQualified =
+                  pStatus === 'TECHNICALLY_QUALIFIED' ||
+                  pStatus === 'ACCEPTED' ||
+                  (participant as any)?.canBid === true;
+                const canBid = isEnrolledParticipant && isTechnicallyQualified && !isDisqualified && !evalPending;
+
+                // Non-participant seller (Observer access only)
+                if (!isEnrolledParticipant) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 flex items-start gap-3" role="status">
+                        <Lock className="h-5 w-5 shrink-0 text-slate-600 mt-0.5" aria-hidden="true" />
+                        <div>
+                          <p className="text-xs font-black text-slate-800">Observer Mode (Non-Participant)</p>
+                          <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-600">
+                            Your organization did not submit an initial Stage 1 quotation for this requisition. Dynamic counter-bidding is restricted to qualified participating suppliers.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                }
 
                 // Disqualified seller
-                if (pStatus === 'DISQUALIFIED') {
+                if (isDisqualified) {
                   return (
                     <div className="space-y-3">
                       <div className="rounded-xl border border-red-200 bg-red-50 p-4 flex items-start gap-3" role="alert">
@@ -1277,7 +1306,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                         <div>
                           <p className="text-xs font-black text-red-800">Bidding Access Revoked</p>
                           <p className="mt-1 text-[11px] font-semibold leading-relaxed text-red-700">
-                            Your organization has been disqualified from this auction. You cannot submit bids.
+                            Your organization has been disqualified from commercial evaluation. You cannot submit bids.
                           </p>
                           {disqualReason && (
                             <p className="mt-2 text-[10px] font-semibold text-red-600 border-t border-red-200 pt-2">
@@ -1305,15 +1334,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   );
                 }
 
-                // Evaluation pending
-                if (evalPending && !canBid) {
+                // Evaluation pending or not yet technically qualified
+                if (evalPending || (!canBid && !isTechnicallyQualified)) {
                   return (
                     <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 flex items-start gap-3" role="status" aria-live="polite">
                       <Hourglass className="h-5 w-5 shrink-0 text-blue-600 mt-0.5 animate-pulse" aria-hidden="true" />
                       <div>
                         <p className="text-xs font-black text-blue-800">Evaluation In Progress</p>
                         <p className="mt-1 text-[11px] font-semibold leading-relaxed text-blue-700">
-                          The buyer is reviewing seller qualifications. Bidding will open once evaluation is completed.
+                          The buyer is reviewing seller qualifications. Bidding will open once technical scrutiny is completed and approved.
                         </p>
                       </div>
                     </div>

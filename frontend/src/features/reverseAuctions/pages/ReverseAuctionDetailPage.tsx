@@ -698,11 +698,24 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     }
   };
 
+  const isDisqualifiedSeller =
+    myStatus === 'DISQUALIFIED' ||
+    myStatus === 'REJECTED' ||
+    myStatus === 'FAILED' ||
+    myStatus === 'NOT_QUALIFIED' ||
+    myStatus === 'INELIGIBLE' ||
+    Boolean((myParticipant as any)?.isDisqualified);
+
+  const isTechnicallyQualified =
+    myStatus === 'TECHNICALLY_QUALIFIED' ||
+    myStatus === 'ACCEPTED' ||
+    (myParticipant as any)?.canBid === true;
+
   // Seller Action Notices / Banners
   const sellerAuctionActions = isSeller ? (
     <div className="space-y-3 pt-1">
       {/* 1. Disqualified Alert */}
-      {myStatus === 'DISQUALIFIED' && (
+      {isDisqualifiedSeller && (
         <div
           className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50 via-rose-50/70 to-white p-4.5 shadow-sm flex items-start gap-3"
           role="alert"
@@ -714,14 +727,15 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             <h4 className="text-xs font-black uppercase tracking-wider text-red-900">Bidding Disqualified</h4>
             <p className="mt-0.5 text-xs font-semibold text-red-800/90 leading-relaxed">
               {myParticipant?.disqualificationReason ||
-                'Your organization was disqualified from this reverse auction during evaluation.'}
+                'Your organization was disqualified from this reverse auction during technical evaluation.'}
             </p>
           </div>
         </div>
       )}
 
       {/* 2. Qualification Under Review */}
-      {myParticipant &&
+      {!isDisqualifiedSeller &&
+        myParticipant &&
         (myParticipant.qualificationStatus === 'SUBMITTED' ||
           myStatus === 'SUBMITTED' ||
           myStatus === 'IN_PROGRESS') && (
@@ -746,7 +760,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         )}
 
       {/* 3. Evaluation In Progress / Auction On Hold */}
-      {evalPending && myStatus !== 'DISQUALIFIED' && (
+      {evalPending && !isDisqualifiedSeller && (
         <div
           className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50 via-indigo-50/50 to-white p-4.5 shadow-sm flex items-start gap-3"
           role="status"
@@ -767,8 +781,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 4. Active Joined Seller Ready Alert */}
-      {hasJoined && !isAuctionClosed && !isAuctionCancelled && myStatus !== 'DISQUALIFIED' && !evalPending && (
+      {/* 4. Active Qualified Seller Ready Alert */}
+      {hasJoined && !isAuctionClosed && !isAuctionCancelled && isTechnicallyQualified && !isDisqualifiedSeller && !evalPending && (
         <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -790,6 +804,23 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             <Activity className="h-4 w-4" />
             Open Live Console
           </Link>
+        </div>
+      )}
+
+      {/* 4b. Non-Participant Observer Alert */}
+      {!hasJoined && !isAuctionClosed && !isAuctionCancelled && (
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4.5 shadow-sm flex items-start gap-3">
+          <div className="h-9 w-9 rounded-xl bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-sm">
+            <Lock className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+              Stage 2 Reverse Auction (Qualified Bidders Only)
+            </h4>
+            <p className="mt-0.5 text-xs font-medium text-slate-600 leading-relaxed">
+              Your organization did not submit an initial Stage 1 quotation for this procurement. Reverse auction dynamic bidding is restricted to qualified participating bidders.
+            </p>
+          </div>
         </div>
       )}
 

@@ -11311,6 +11311,8 @@ export function ProcurementDetailUnifiedView(
 
           {/* Live/Scheduled Reverse Auction Banner for Sellers */}
           {!isBuyerSide &&
+            !isDisqualified &&
+            !isNonParticipant &&
             linkedAuction &&
             !(linkedAuction as any).auctionPlanned &&
             ["LIVE", "SCHEDULED"].includes(
@@ -11322,6 +11324,8 @@ export function ProcurementDetailUnifiedView(
                 auctionId={linkedAuction.id}
                 procurementTitle={resolvedSubject}
                 procurementReference={displayIdStr}
+                isDisqualified={isDisqualified}
+                isNonParticipant={isNonParticipant}
                 onBidSubmitted={() => {
                   linkedAuctionQuery.refetch();
                   if (props.onAuctionBidSubmitted)
@@ -11500,6 +11504,76 @@ export function ProcurementDetailUnifiedView(
 
             // If Live:
             if (isLive) {
+              if (!isBuyerSide && isDisqualified) {
+                return (
+                  <div className="rounded-2xl border border-rose-300 bg-gradient-to-r from-rose-50/90 via-slate-50 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-700 text-white shadow-sm">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-900 border border-rose-200">
+                            Reverse Auction Active • Ineligible
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
+                          Live Reverse Auction Inactive for Your Organization
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 mt-0.5">
+                          A dynamic reverse auction is currently running for this requisition. Your organization is not eligible to enter the live auction floor or place commercial bids due to technical scrutiny disqualification.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {effectiveMyParticipation && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleOpenMyQuotationModal}
+                          className="h-9 px-3.5 text-xs font-bold rounded-xl border-rose-300 bg-white hover:bg-rose-50 text-rose-800 shadow-2xs gap-1.5 flex items-center cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>View Submitted Dossier</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (!isBuyerSide && isNonParticipant) {
+                return (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-200 shadow-sm">
+                        <Gavel className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-slate-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700 border border-slate-300">
+                            Reverse Auction Active • Qualified Bidders Only
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
+                          Stage 2 Dynamic Auction in Progress
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 mt-0.5">
+                          Stage 2 reverse auction dynamic decrement bidding is currently in progress for qualified participating suppliers who submitted compliant Stage 1 bids.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 via-rose-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
@@ -11539,6 +11613,76 @@ export function ProcurementDetailUnifiedView(
 
             // If Scheduled:
             if (isScheduled) {
+              if (!isBuyerSide && isDisqualified) {
+                return (
+                  <div className="rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50/90 via-slate-50 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-700 text-white shadow-sm">
+                        <AlertTriangle className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-rose-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-rose-900 border border-rose-200">
+                            Reverse Auction Scheduled • Ineligible
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
+                          Reverse Auction Ineligible for Your Organization
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 mt-0.5">
+                          A dynamic reverse auction has been scheduled. Your organization is not eligible to participate due to technical scrutiny disqualification.
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2.5 shrink-0">
+                      {effectiveMyParticipation && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleOpenMyQuotationModal}
+                          className="h-9 px-3.5 text-xs font-bold rounded-xl border-rose-300 bg-white hover:bg-rose-50 text-rose-800 shadow-2xs gap-1.5 flex items-center cursor-pointer"
+                        >
+                          <Eye className="h-3.5 w-3.5" />
+                          <span>View Submitted Dossier</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              }
+
+              if (!isBuyerSide && isNonParticipant) {
+                return (
+                  <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-800 text-slate-200 shadow-sm">
+                        <Clock className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-slate-200 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-slate-700 border border-slate-300">
+                            Reverse Auction Scheduled • Qualified Bidders Only
+                          </span>
+                          <span className="text-xs font-semibold text-slate-500 font-mono">
+                            RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                          </span>
+                        </div>
+                        <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
+                          Stage 2 Dynamic Auction Scheduled
+                        </h4>
+                        <p className="text-xs font-medium text-slate-600 mt-0.5">
+                          Stage 2 reverse auction dynamic decrement bidding will begin at the scheduled window start time for qualified suppliers who submitted Stage 1 bids.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div className="rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
@@ -13332,7 +13476,7 @@ export function ProcurementDetailUnifiedView(
 
 
 
-                  if (isLive) {
+                  if (isLive && (isBuyerSide || (!isDisqualified && !isNonParticipant))) {
                     return (
                       <Button
                         type="button"
@@ -15575,7 +15719,7 @@ export function ProcurementDetailUnifiedView(
                       </div>
 
                       {/* Live Auction Floor Enrolled Callout for Seller */}
-                      {linkedAuction && !(linkedAuction as any).auctionPlanned && ['LIVE', 'SCHEDULED', 'OPEN', 'ACTIVE'].includes(String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase()) && (
+                      {!isDisqualified && !isNonParticipant && linkedAuction && !(linkedAuction as any).auctionPlanned && ['LIVE', 'SCHEDULED', 'OPEN', 'ACTIVE'].includes(String(linkedAuction?.statusEnum || linkedAuction?.status || '').toUpperCase()) && (
                         <div className="rounded-xl border border-red-200 bg-gradient-to-r from-red-50/90 via-amber-50/50 to-white p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
                           <div className="flex items-start gap-3">
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-600 text-white shadow-xs">
@@ -15603,6 +15747,21 @@ export function ProcurementDetailUnifiedView(
                             <Zap className="h-3.5 w-3.5 fill-current" />
                             <span>Enter Live Bidding Floor →</span>
                           </Button>
+                        </div>
+                      )}
+
+                      {/* Technical Disqualification Notice for Reverse Auction */}
+                      {isDisqualified && linkedAuction && (
+                        <div className="rounded-xl border border-rose-200 bg-rose-50/80 p-3.5 flex items-start gap-3">
+                          <AlertTriangle className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
+                          <div>
+                            <span className="text-xs font-black text-rose-900 uppercase tracking-wide">
+                              Reverse Auction Entry Ineligible
+                            </span>
+                            <p className="text-xs text-rose-800 font-medium mt-0.5">
+                              This quotation was marked non-responsive during technical scrutiny and did not qualify for commercial unsealing or Stage 2 dynamic decrement bidding.
+                            </p>
+                          </div>
                         </div>
                       )}
 
