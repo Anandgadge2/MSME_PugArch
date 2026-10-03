@@ -26,7 +26,9 @@ import {
   Pencil,
   Paperclip,
   Eye,
-  X
+  X,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
@@ -588,6 +590,7 @@ interface BOQTableProps {
   onUploadRowDocument?: (idx: number, file: File) => Promise<void>;
   onRemoveRowDocument?: (idx: number, attachmentId?: string) => void;
   onPreviewDocument?: (attachment: { fileAssetId?: number; url?: string; fileName?: string; name?: string }) => void;
+  onSyncEstimatedTotal?: (newTotal: number) => void;
 }
 
 export function BOQTable({
@@ -596,15 +599,16 @@ export function BOQTable({
   onAddRow,
   onDuplicateRow,
   onDeleteRow,
-  estimatedTotal: _estimatedTotal,
+  estimatedTotal,
   categories = [],
   loadingCategories = false,
   uomOptions,
   taxRateOptions,
   onAttachDocument,
-  onUploadRowDocument,
-  onRemoveRowDocument,
+  onUploadRowDocument: _onUploadRowDocument,
+  onRemoveRowDocument: _onRemoveRowDocument,
   onPreviewDocument,
+  onSyncEstimatedTotal,
 }: BOQTableProps) {
   const tableInput = 'h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 transition-all';
 
@@ -807,84 +811,54 @@ export function BOQTable({
                   </td>
 
                   {/* Attach Docs (Optional) */}
-                  <td className="px-3 py-2">
-                    <div className="flex items-center justify-center gap-1.5 min-w-[125px]">
-                      <input
-                        type="file"
-                        id={`boq-file-input-${idx}`}
-                        className="sr-only"
-                        accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.png,.jpg,.jpeg"
-                        onChange={async e => {
-                          const file = e.target.files?.[0];
-                          if (file && onUploadRowDocument) {
-                            await onUploadRowDocument(idx, file);
-                          }
-                          e.target.value = '';
-                        }}
-                      />
+                  <td className="px-3 py-2 text-center">
+                    <div className="flex items-center justify-center gap-1.5 min-w-[110px]">
                       {hasDocs ? (
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
                           <button
                             type="button"
-                            onClick={() => {
-                              if (onPreviewDocument && (firstAtt || row.fileAssetId)) {
-                                onPreviewDocument(firstAtt || { fileAssetId: row.fileAssetId || undefined, fileName: row.fileName || 'Document' });
-                              } else if (onAttachDocument) {
-                                onAttachDocument(idx, row);
-                              }
-                            }}
-                            className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10.5px] font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 transition-colors shadow-3xs truncate max-w-[100px]"
-                            title={docName}
-                            aria-label={`Preview document ${docName} for row ${row.srNo}`}
+                            onClick={() => onAttachDocument?.(idx, row)}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
+                            title="Click to view and manage uploaded documents"
+                            aria-label={`View ${docCount} documents for row ${row.srNo}`}
                           >
                             <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
-                            <span className="truncate">{docCount > 1 ? `${docCount} files` : docName}</span>
+                            <span>
+                              {docCount} file{docCount === 1 ? '' : 's'}
+                            </span>
                           </button>
-                          {onAttachDocument && (
+                          {onPreviewDocument && (firstAtt || row.fileAssetId) && (
                             <button
                               type="button"
-                              onClick={() => onAttachDocument(idx, row)}
-                              className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
-                              title="Manage documents"
-                              aria-label={`Manage documents for row ${row.srNo}`}
+                              onClick={() => onPreviewDocument(firstAtt || { fileAssetId: row.fileAssetId || undefined, fileName: row.fileName || 'Document' })}
+                              className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
+                              title="Preview primary document"
+                              aria-label={`Preview document for row ${row.srNo}`}
                             >
-                              <Plus className="h-3 w-3" />
+                              <Eye className="h-3 w-3" aria-hidden="true" />
                             </button>
                           )}
-                          {onRemoveRowDocument && (
-                            <button
-                              type="button"
-                              onClick={() => onRemoveRowDocument(idx)}
-                              className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                              title="Remove document"
-                              aria-label={`Remove document from row ${row.srNo}`}
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => onAttachDocument?.(idx, row)}
+                            className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
+                            title="Add more documents"
+                            aria-label={`Add more documents for row ${row.srNo}`}
+                          >
+                            <Plus className="h-3 w-3" aria-hidden="true" />
+                          </button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1">
-                          <label
-                            htmlFor={`boq-file-input-${idx}`}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10.5px] font-bold text-slate-600 bg-slate-50 hover:bg-slate-100 border border-slate-200 cursor-pointer shadow-3xs transition-colors whitespace-nowrap"
-                            title="Attach drawing or spec sheet"
-                          >
-                            <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
-                            <span>Attach</span>
-                          </label>
-                          {onAttachDocument && (
-                            <button
-                              type="button"
-                              onClick={() => onAttachDocument(idx, row)}
-                              className="p-1 text-slate-400 hover:text-[#12335f] hover:bg-slate-100 rounded transition-colors"
-                              title="Document manager"
-                              aria-label={`Open document manager for row ${row.srNo}`}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </button>
-                          )}
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => onAttachDocument?.(idx, row)}
+                          className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+                          title="Attach specification, drawing or dossier"
+                          aria-label={`Attach specification or drawing for row ${row.srNo}`}
+                        >
+                          <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+                          <span>Attach</span>
+                        </button>
                       )}
                     </div>
                   </td>
@@ -923,26 +897,124 @@ export function BOQTable({
         </table>
       </div>
 
+      <div className="flex justify-between items-center pt-0.5">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={onAddRow}
+          className="h-8.5 px-3.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 shadow-3xs cursor-pointer"
+        >
+          <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
+        </Button>
+      </div>
+
       {(() => {
+        const totalQty = rows.reduce((acc, r) => acc + Number(r.quantity || 0), 0);
         const baseTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0)), 0);
         const taxTotal = rows.reduce((acc, r) => acc + (Number(r.quantity || 0) * Number(r.estimatedRate || 0) * (Number(r.taxPercent ?? 18) / 100)), 0);
         const grossTotal = baseTotal + taxTotal;
+        const qtyOk = totalQty > 0;
+        const isSynced = estimatedTotal > 0 ? Math.round(grossTotal) === estimatedTotal : true;
+
         return (
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3.5 rounded-xl border border-slate-200 font-bold text-xs">
-            <Button type="button" size="sm" variant="outline" onClick={onAddRow} className="h-8 text-slate-700 bg-white hover:bg-slate-100 shadow-3xs">
-              <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
-            </Button>
-            <div className="flex items-center gap-4 flex-wrap text-xs">
-              <div className="text-slate-600">
-                Base: <span className="text-slate-900 font-extrabold">{formatCurrency(baseTotal)}</span>
+          <div className="space-y-3">
+            {/* 4 Summary Metric Cards matching Image 1 */}
+            <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-900">{rows.length} Lines</span>
+                  <span className="text-xs font-bold text-slate-500">{totalQty.toLocaleString('en-IN')} Units</span>
+                </div>
               </div>
-              <div className="text-slate-600">
-                GST (Tax): <span className="text-slate-900 font-extrabold">+{formatCurrency(taxTotal)}</span>
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Base Value (Excl. GST)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-slate-800">
+                    {baseTotal > 0
+                      ? formatCurrency(baseTotal)
+                      : <span className="text-slate-400 font-bold text-xs">To be Quoted</span>}
+                  </span>
+                  <span className="text-[10px] font-medium text-slate-400">Pre-tax</span>
+                </div>
               </div>
-              <div className="rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-[#12335f] text-sm font-black">
-                BOQ Total (Gross): {formatCurrency(grossTotal)}
+
+              <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Applicable GST (Taxes)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-sm font-black text-[#0b2447]">
+                    {taxTotal > 0
+                      ? `+${formatCurrency(taxTotal)}`
+                      : '+18% GST'}
+                  </span>
+                  <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">Taxes</span>
+                </div>
+              </div>
+
+              <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">Total Est. Value (Gross)</span>
+                <div className="mt-1 flex items-baseline justify-between gap-1">
+                  <span className="text-base font-black text-[#0b2447]">
+                    {grossTotal > 0
+                      ? formatCurrency(grossTotal)
+                      : <span className="text-blue-900/80 font-black text-xs">Disclosed in Bid</span>}
+                  </span>
+                  <span className="text-[9.5px] font-black text-blue-700 bg-blue-100/70 px-1.5 py-0.5 rounded uppercase">Incl. GST</span>
+                </div>
               </div>
             </div>
+
+            {/* Reconciliation / info banner */}
+            {rows.length > 0 && (
+              grossTotal === 0 ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/80 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-slate-800 font-semibold">
+                    <Info className="h-4 w-4 text-[#0b2447] shrink-0" />
+                    <span>
+                      <strong>Competitive Price Discovery:</strong> Line item rate is ₹0. Bidders will quote unit rates during bidding.
+                    </span>
+                  </div>
+                </div>
+              ) : estimatedTotal > 0 && !isSynced ? (
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50/80 p-3 text-xs">
+                  <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                    <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <span>
+                      Step 2 initial budget is <strong>{formatCurrency(estimatedTotal)}</strong>, but BOQ Schedule total (incl. GST) is <strong>{formatCurrency(grossTotal)}</strong>.
+                    </span>
+                  </div>
+                  {onSyncEstimatedTotal && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => onSyncEstimatedTotal(Math.round(grossTotal))}
+                      className="h-7.5 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap shadow-3xs cursor-pointer"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync Tender Budget with BOQ
+                    </Button>
+                  )}
+                </div>
+              ) : estimatedTotal > 0 && isSynced && grossTotal > 0 ? (
+                <div className="flex items-center justify-between gap-2 rounded-xl border border-emerald-100 bg-emerald-50/60 px-3 py-2 text-[11px] font-semibold text-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span>Tender estimated budget is fully synchronized with schedule line items (Base + GST).</span>
+                  </div>
+                  <span className="text-[9.5px] font-black uppercase text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded">
+                    Synchronized
+                  </span>
+                </div>
+              ) : null
+            )}
+
+            {/* Zero-quantity warning banner matching Image 1 */}
+            {!qtyOk && (
+              <p className="text-[11px] font-bold text-rose-600">
+                Add at least one line with a quantity greater than 0. Submission is blocked until total quantity is above 0.
+              </p>
+            )}
           </div>
         );
       })()}

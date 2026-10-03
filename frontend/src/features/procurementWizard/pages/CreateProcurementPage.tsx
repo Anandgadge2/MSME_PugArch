@@ -6038,6 +6038,13 @@ function ItemsDetailsForm({
           onUploadRowDocument={handleUploadBoqRowFile}
           onRemoveRowDocument={handleRemoveBoqRowFile}
           onPreviewDocument={(att) => handlePreviewDoc(att, att.fileName || att.name)}
+          onSyncEstimatedTotal={(newTotal) => {
+            updateDraft(c => ({
+              ...c,
+              basics: { ...c.basics, estimatedValue: newTotal }
+            }));
+            toast.success('Tender estimated budget synced with BOQ Schedule Total!');
+          }}
         />
       </div>
     );
