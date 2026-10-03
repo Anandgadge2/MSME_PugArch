@@ -1735,7 +1735,7 @@ function InternalComplianceSection({
     >
       <div className="space-y-4">
         {/* Top summary grid */}
-        <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        <dl className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {approvalAuthority && (
             <div className="rounded-xl border border-indigo-100 bg-indigo-50/50 p-3">
               <dt className="text-[10px] font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
@@ -1844,7 +1844,7 @@ function InternalComplianceSection({
               </dd>
             </div>
           )}
-        </div>
+        </dl>
 
         {/* Purchase Justification & Compliance Reason full-width callout */}
         {justification && (
