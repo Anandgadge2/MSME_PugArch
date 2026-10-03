@@ -206,7 +206,9 @@ const isParticipatedOpportunity = (item: SellerOpportunity) => {
     stat.includes('submitted') ||
     stat.includes('participated') ||
     action.includes('track') ||
-    action.includes('view response')
+    action.includes('view response') ||
+    action.includes('view quotation') ||
+    action.includes('view quote')
   );
 };
 
@@ -657,8 +659,15 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             bestClosingDate = isBetterClosing(closeB, closeA) ? closeB : (isBetterClosing(closeA, closeB) ? closeA : (closeB || closeA));
           }
 
-          let bestActionLabel = parentOpp?.actionLabel || existing.actionLabel;
-          let bestHref = parentOpp?.href || existing.href;
+          const isMergedParticipated =
+            isParticipatedOpportunity(existing) ||
+            (parentOpp ? isParticipatedOpportunity(parentOpp) : false) ||
+            existing.eligibility === 'Already participated' ||
+            parentOpp?.eligibility === 'Already participated';
+
+          let bestEligibility = isMergedParticipated ? 'Already participated' : (parentOpp?.eligibility || existing.eligibility || 'Check documents');
+          let bestActionLabel = isMergedParticipated ? 'Track Status' : (parentOpp?.actionLabel || existing.actionLabel);
+          let bestHref = (isMergedParticipated && isParticipatedOpportunity(existing)) ? existing.href : (parentOpp?.href || existing.href);
           let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref;
 
           if (auctionOpp) {
@@ -692,6 +701,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             discloseEstimatedCost: bestDisclose,
             publishedAt: bestPublishedAt,
             closingDate: bestClosingDate,
+            eligibility: bestEligibility,
             actionLabel: bestActionLabel,
             href: bestHref,
             detailsHref: bestDetailsHref,
@@ -768,55 +778,24 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         else if (isBidDirectPurchase) opportunityType = 'Direct Purchase';
         else if (method === 'REPEAT_ORDER') opportunityType = 'Repeat Order';
 
-        const canonicalBidId = bid.bidNumber || bid.referenceNumber || bid.id;
-        let actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
-        let href = `/bids/${canonicalBidId}/participate`;
-        let detailsHref = `/bids/${canonicalBidId}`;
+        const userOrgId = Number(user?.organizationId || (user as any)?.orgId || 0);
+        const userId = Number(user?.id || 0);
+        const matchesUserOrOrg = (entity: any) => {
+          if (!entity) return false;
+          const sId = Number(entity.sellerId || entity.sellerUserId || entity.userId || 0);
+          const oId = Number(entity.sellerOrgId || entity.organizationId || entity.orgId || 0);
+          return (userId > 0 && sId === userId) || (userOrgId > 0 && oId === userOrgId);
+        };
 
-        if (opportunityType === 'Rate Contract') {
-          href = sellerRoutes.respond('RATE_CONTRACT', canonicalBidId);
-          detailsHref = sellerRoutes.detail('RATE_CONTRACT', canonicalBidId);
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Rate';
-        } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
-          href = `/seller/tenders/${bid.sourceId}/bid`;
-          detailsHref = `/bids/${bid.sourceId}?type=OPEN_TENDER`;
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Quote';
-        } else if (method === 'RFP' || opportunityType === 'RFP') {
-          href = sellerRoutes.detail('RFP', canonicalBidId);
-          detailsHref = sellerRoutes.detail('RFP', canonicalBidId);
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Proposal';
-        } else if (opportunityType === 'Open Tender') {
-          href = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
-          detailsHref = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
-        } else if (opportunityType === 'Limited Tender') {
-          href = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
-          detailsHref = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
-          actionLabel = bid.participated ? 'Track Status' : 'Submit Bid';
-        } else if (opportunityType === 'Reverse Auction') {
-          href = sellerRoutes.auctionLive(bid.id);
-          detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
-          actionLabel = 'Join Auction';
-        } else if (opportunityType === 'Direct Purchase') {
-          href = `/bids/${canonicalBidId}`;
-          detailsHref = `/bids/${canonicalBidId}`;
-          actionLabel = 'View Purchase';
-        } else {
-          href = bid.participated ? sellerRoutes.respond('RFQ', canonicalBidId) : sellerRoutes.detail('RFQ', canonicalBidId);
-          detailsHref = sellerRoutes.detail('RFQ', canonicalBidId);
-          actionLabel = bid.participated ? 'View Quotation' : 'Submit Quote';
-        }
-
-        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
-        const effectiveClosingDate = bidSchedule.submissionDate
-          || bidSchedule.submissionDeadline
-          || bidSchedule.submissionEndDate
-          || bidSchedule.bidClosingDate
-          || bid.rawEndDate
-          || bid.endDate;
-        const myParticipation = bid.myParticipation || (Array.isArray(bid.participations) && user?.id
-          ? bid.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+        const myParticipation = bid.myParticipation || (Array.isArray(bid.participations)
+          ? bid.participations.find((p: any) => matchesUserOrOrg(p))
           : null);
+        const isBidParticipated = Boolean(
+          bid.participated ||
+          bid.hasParticipated ||
+          myParticipation ||
+          (Array.isArray(bid.participations) && bid.participations.some((p: any) => matchesUserOrOrg(p)))
+        );
         const myTechStatus = String(myParticipation?.technicalStatus || '').toUpperCase();
         const myFinalStatus = String(myParticipation?.finalStatus || '').toUpperCase();
         const isBidDisqualified = myTechStatus === 'DISQUALIFIED' || myFinalStatus === 'DISQUALIFIED';
@@ -826,9 +805,56 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? 'Disqualified'
           : isBidNotSelected
           ? 'Not Selected'
-          : bid.participated
+          : isBidParticipated
           ? 'Already participated'
           : 'Check documents';
+
+        const canonicalBidId = bid.bidNumber || bid.referenceNumber || bid.id;
+        let actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
+        let href = `/bids/${canonicalBidId}/participate`;
+        let detailsHref = `/bids/${canonicalBidId}`;
+
+        if (opportunityType === 'Rate Contract') {
+          href = sellerRoutes.respond('RATE_CONTRACT', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RATE_CONTRACT', canonicalBidId);
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Rate';
+        } else if (bid.sourceModel === 'TENDER' && bid.sourceId) {
+          href = `/seller/tenders/${bid.sourceId}/bid`;
+          detailsHref = `/bids/${bid.sourceId}?type=OPEN_TENDER`;
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Quote';
+        } else if (method === 'RFP' || opportunityType === 'RFP') {
+          href = sellerRoutes.detail('RFP', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RFP', canonicalBidId);
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Proposal';
+        } else if (opportunityType === 'Open Tender') {
+          href = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
+          detailsHref = sellerRoutes.detail('OPEN_TENDER', canonicalBidId);
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Limited Tender') {
+          href = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
+          detailsHref = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
+        } else if (opportunityType === 'Reverse Auction') {
+          href = sellerRoutes.auctionLive(bid.id);
+          detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
+          actionLabel = 'Join Auction';
+        } else if (opportunityType === 'Direct Purchase') {
+          href = `/bids/${canonicalBidId}`;
+          detailsHref = `/bids/${canonicalBidId}`;
+          actionLabel = 'View Purchase';
+        } else {
+          href = isBidParticipated ? sellerRoutes.respond('RFQ', canonicalBidId) : sellerRoutes.detail('RFQ', canonicalBidId);
+          detailsHref = sellerRoutes.detail('RFQ', canonicalBidId);
+          actionLabel = isBidParticipated ? 'Track Status' : 'Submit Quote';
+        }
+
+        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
+        const effectiveClosingDate = bidSchedule.submissionDate
+          || bidSchedule.submissionDeadline
+          || bidSchedule.submissionEndDate
+          || bidSchedule.bidClosingDate
+          || bid.rawEndDate
+          || bid.endDate;
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -898,7 +924,10 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const isReqPrivate = req.visibility === 'VERIFIED_SELLERS_ONLY' || req.visibility === 'INVITED_SUPPLIERS' || ['LIMITED_TENDER', 'REPEAT_ORDER'].includes(reqMethod) || upperReqNumber.startsWith('LTND-') || upperReqNumber.startsWith('LIM-');
         
         if (isReqPrivate) {
-          const isInvited = reqInvites.includes(user?.id) || (user?.organizationId && reqInvites.includes(user?.organizationId));
+          const isInvited = reqInvites.some((inv: any) =>
+            (user?.id && Number(inv) === Number(user.id)) ||
+            (user?.organizationId && Number(inv) === Number(user.organizationId))
+          );
           if (!isInvited) return;
         }
 
@@ -949,11 +978,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', linkedBidId) : `/bids/${linkedBidId}/participate`)
           : (opportunityType === 'Rate Contract' ? sellerRoutes.respond('RATE_CONTRACT', canonicalReqId) : detailHref);
 
-        const myReqParticipation = req.myParticipation || (Array.isArray(req.participations) && user?.id
-          ? req.participations.find((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))
+        const userOrgId = Number(user?.organizationId || (user as any)?.orgId || 0);
+        const userId = Number(user?.id || 0);
+        const matchesUserOrOrg = (entity: any) => {
+          if (!entity) return false;
+          const sId = Number(entity.sellerId || entity.sellerUserId || entity.userId || 0);
+          const oId = Number(entity.sellerOrgId || entity.organizationId || entity.orgId || 0);
+          return (userId > 0 && sId === userId) || (userOrgId > 0 && oId === userOrgId);
+        };
+
+        const myReqParticipation = req.myParticipation || (Array.isArray(req.participations)
+          ? req.participations.find((p: any) => matchesUserOrOrg(p))
           : null);
-        const myReqResponse = req.ownResponse || (Array.isArray(req.responses) && user?.id
-          ? req.responses.find((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id))
+        const myReqResponse = req.ownResponse || (Array.isArray(req.responses)
+          ? req.responses.find((r: any) => matchesUserOrOrg(r))
           : null);
         const reqTechStatus = String(myReqParticipation?.technicalStatus || myReqResponse?.technicalStatus || '').toUpperCase();
         const reqFinalStatus = String(myReqParticipation?.finalStatus || myReqResponse?.status || myReqResponse?.finalStatus || '').toUpperCase();
@@ -962,12 +1000,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const isReqParticipated = Boolean(
           req.hasParticipated ||
+          req.participated ||
           myReqParticipation ||
           myReqResponse ||
-          (user?.id && (
-            (Array.isArray(req.participations) && req.participations.some((p: any) => Number(p.sellerId || p.sellerUserId) === Number(user.id))) ||
-            (Array.isArray(req.responses) && req.responses.some((r: any) => Number(r.sellerUserId || r.sellerId) === Number(user.id)))
-          ))
+          (Array.isArray(req.participations) && req.participations.some((p: any) => matchesUserOrOrg(p))) ||
+          (Array.isArray(req.responses) && req.responses.some((r: any) => matchesUserOrOrg(r)))
         );
 
         const defaultReqAction = opportunityType === 'Rate Contract'
@@ -1048,9 +1085,36 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         const isQrPrivate = qr.visibility === 'PRIVATE' || qr.visibility === 'INVITED_SUPPLIERS';
         if (isQrPrivate) {
           const invitedSellers = Array.isArray(qr.invitedSellers) ? qr.invitedSellers : [];
-          const isInvited = invitedSellers.includes(user?.id) || (user?.organizationId && invitedSellers.includes(user?.organizationId));
+          const isInvited = invitedSellers.some((inv: any) =>
+            (user?.id && Number(inv) === Number(user.id)) ||
+            (user?.organizationId && Number(inv) === Number(user.organizationId))
+          );
           if (!isInvited) return;
         }
+
+        const userOrgId = Number(user?.organizationId || (user as any)?.orgId || 0);
+        const userId = Number(user?.id || 0);
+        const matchesUserOrOrg = (entity: any) => {
+          if (!entity) return false;
+          const sId = Number(entity.sellerId || entity.sellerUserId || entity.userId || 0);
+          const oId = Number(entity.sellerOrgId || entity.organizationId || entity.orgId || 0);
+          return (userId > 0 && sId === userId) || (userOrgId > 0 && oId === userOrgId);
+        };
+
+        const myQrParticipation = qr.myParticipation || (Array.isArray(qr.participations)
+          ? qr.participations.find((p: any) => matchesUserOrOrg(p))
+          : null);
+        const myQrResponse = qr.ownResponse || (Array.isArray(qr.responses)
+          ? qr.responses.find((r: any) => matchesUserOrOrg(r))
+          : null);
+        const isQrParticipated = Boolean(
+          qr.hasParticipated ||
+          qr.participated ||
+          myQrParticipation ||
+          myQrResponse ||
+          (Array.isArray(qr.participations) && qr.participations.some((p: any) => matchesUserOrOrg(p))) ||
+          (Array.isArray(qr.responses) && qr.responses.some((r: any) => matchesUserOrOrg(r)))
+        );
 
         const upperQrTitle = String(qr.title || '').toUpperCase();
         const upperQrNumber = String(qr.quoteNumber || qr.id || '').toUpperCase();
@@ -1064,6 +1128,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         const documents = asTextList(qr.requiredDocuments);
         const qrSchedule = qr.payload?.schedule || qr.schedule || {};
+        const qrEligibility = isQrParticipated
+          ? 'Already participated'
+          : isQrPrivate
+          ? 'Invited Sellers Only'
+          : 'Open Sourcing';
+
         const opportunity: SellerOpportunity = {
           id: `qr-${qr.id}`,
           type: opportunityType,
@@ -1074,9 +1144,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           closingDate: qrSchedule.submissionDate || qrSchedule.submissionDeadline || qr.deadlineDate || qr.endDate,
           estimatedValue: toNumber(qr.estimatedValue),
           discloseEstimatedCost: Boolean(qr.discloseEstimatedCost ?? qr.payload?.discloseEstimatedCost ?? qr.payload?.basics?.discloseEstimatedCost ?? false),
-          eligibility: isQrPrivate ? 'Invited Sellers Only' : 'Open Sourcing',
+          eligibility: qrEligibility,
           status: qr.status || 'OPEN',
-          actionLabel: 'Submit Quote',
+          actionLabel: isQrParticipated ? 'Track Status' : 'Submit Quote',
           href: sellerRoutes.detail('RFQ', qr.id),
           detailsHref: sellerRoutes.detail('RFQ', qr.id),
           sourceRef: qr.quoteNumber || `RFQ-${qr.id}`,
@@ -1664,33 +1734,30 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
         return (
           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-            {!closed && (
+            {!closed && !participated && (
               <Link
                 href={item.href}
                 className={cn(
                   "inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold shadow-2xs active:scale-95 transition-all duration-200 shrink-0",
-                  participated
-                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-                    : item.type === 'Reverse Auction'
+                  item.type === 'Reverse Auction'
                     ? "bg-red-600 text-white hover:bg-red-700"
                     : "bg-[#12335f] text-white hover:bg-[#0b2445]"
                 )}
                 title={item.actionLabel}
               >
-                {participated && <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />}
                 <span>{item.actionLabel}</span>
               </Link>
             )}
-            {/* {closed && participated && (
+            {participated && (
               <Link
                 href={item.href}
-                className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-2xs shrink-0"
+                className="inline-flex h-8 items-center justify-center rounded-lg px-2.5 text-center text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 shadow-2xs active:scale-95 transition-all duration-200 shrink-0"
                 title="Track submitted response"
               >
                 <CheckCircle2 className="h-3 w-3 mr-1 text-emerald-600" />
                 <span>Track Status</span>
               </Link>
-            )} */}
+            )}
             <Link
               href={item.detailsHref}
               className="inline-flex h-8 items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-center text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 active:scale-95 transition-all duration-200 shrink-0"
@@ -2218,31 +2285,29 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
 
                       {/* Action Buttons */}
                       <div className="pt-1 flex items-center gap-2">
-                        {!closed ? (
+                        {!closed && !participated && (
                           <Link
                             href={item.href}
                             className={cn(
                               "flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold text-white shadow-2xs transition active:scale-[0.99]",
-                              participated
-                                ? "bg-emerald-600 hover:bg-emerald-700"
-                                : item.type === 'Reverse Auction'
+                              item.type === 'Reverse Auction'
                                 ? "bg-red-600 hover:bg-red-700"
                                 : "bg-[#12335f] hover:bg-[#0b2445]"
                             )}
                           >
-                            {participated && <CheckCircle2 className="h-3.5 w-3.5" />}
                             <span>{item.actionLabel}</span>
                             <ChevronDown className="h-3.5 w-3.5 -rotate-90 text-white/70" />
                           </Link>
-                        ) : participated ? (
+                        )}
+                        {participated && (
                           <Link
                             href={item.href}
-                            className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition"
+                            className="flex-1 flex h-9 items-center justify-center gap-1.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs transition active:scale-[0.99]"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             <span>Track Status</span>
                           </Link>
-                        ) : null}
+                        )}
                         <Link
                           href={item.detailsHref}
                           className={cn(
@@ -2349,7 +2414,7 @@ function OpportunityDetailPanel({ item }: { item: SellerOpportunity }) {
           <Link href={item.detailsHref} className="inline-flex h-9 items-center rounded-2xl border border-slate-200 bg-white px-3 text-xs font-black text-slate-700 hover:border-[#12335f] hover:text-[#12335f]">
             <Eye className="mr-1.5 h-4 w-4" /> View Details
           </Link>
-          {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now())) ? (
+          {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now()) && !isParticipatedOpportunity(item)) ? (
             <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
           ) : isParticipatedOpportunity(item) ? (
             <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white">Track Status</Link>
@@ -2448,7 +2513,7 @@ function OpportunityDetailsDialog({ item, onClose }: { item: SellerOpportunity; 
                   </div>
                 </div>
                 <div className="mt-4 flex flex-wrap gap-2">
-                  {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now())) ? (
+                  {(!isClosedStatus(item.status) && isOpenOpportunity(item, Date.now()) && !isParticipatedOpportunity(item)) ? (
                     <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-[#12335f] px-3 text-xs font-black text-white">{item.actionLabel}</Link>
                   ) : isParticipatedOpportunity(item) ? (
                     <Link href={item.href} className="inline-flex h-9 items-center rounded-2xl bg-emerald-600 px-3 text-xs font-black text-white">Track Status</Link>
