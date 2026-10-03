@@ -1614,6 +1614,17 @@ export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, bo
     throw new ApiError(403, 'Buyer access required to record payment', 'FORBIDDEN_ROLE');
   }
 
+  // Enterprise 3-Way Matching: Ensure invoice is approved before payment disbursement unless advance terms apply
+  const rawStatus = String(invoice.status || invoice.invoiceStatus || '').toLowerCase();
+  const isAdvance = String(invoice.purchaseOrder?.paymentTerms || '').toUpperCase().includes('ADVANCE');
+  if (!isAdvance && !['approved', 'payment_initiated', 'payment_submitted', 'paid', 'settled'].includes(rawStatus)) {
+    throw new ApiError(
+      400,
+      `Tax Invoice #${invoice.invoiceNumber || invoice.id} is pending buyer approval. In accordance with enterprise 3-way matching and GST compliance, the tax invoice must be approved before payment can be recorded.`,
+      'INVOICE_NOT_APPROVED'
+    );
+  }
+
   const transactionRef = String(body.transactionReference || body.utr || body.paymentReference || '').trim();
   if (!transactionRef) {
     throw new ApiError(400, 'Transaction reference (UTR) is required', 'UTR_REQUIRED');
@@ -1659,6 +1670,103 @@ export const recordOrderPayment = async (req: AuthRequest, invoiceId: number, bo
       const poMeta = invoice.purchaseOrder?.metadata as any;
       if (poMeta?.bidId) {
         await updateBidStatus(tx, Number(poMeta.bidId), 'PAYMENT_COMPLETED', 'PAYMENT_COMPLETED', req);
+      }
+    }
+
+    // Synchronize PaymentTransaction & offlinePaymentProof so the settlement audit ledger matches
+    const paymentAmount = Number(body.amount || invoice.amount || invoice.totalAmount || 0);
+    const buyerOrgId = req.user?.organizationId || invoice.purchaseOrder?.buyerOrgId || null;
+    const sellerOrgId = invoice.sellerOrgId || invoice.purchaseOrder?.sellerOrgId || null;
+
+    let payTx = await tx.paymentTransaction.findFirst({
+      where: { invoiceId: invoice.id }
+    });
+
+    if (!payTx) {
+      payTx = await tx.paymentTransaction.create({
+        data: {
+          referenceId: numberSeries('PAY'),
+          invoiceId: invoice.id,
+          purchaseOrderId: invoice.purchaseOrderId || undefined,
+          payerId: invoice.buyerId,
+          payeeId: invoice.sellerId,
+          amount: paymentAmount,
+          currency: invoice.currency || 'INR',
+          gateway: 'offline',
+          gatewayEnum: 'MANUAL',
+          method: paymentMode,
+          methodEnum: 'NEFT',
+          status: 'offline_proof_uploaded',
+          paymentStatus: 'OFFLINE_PROOF_UPLOADED',
+          metadata: {
+            source: 'procurement_order_payment',
+            transactionReference: transactionRef,
+            payerBankName: bankName,
+            receiptFileId: fileAssetId,
+            paymentDate: paymentDate.toISOString(),
+            offlineProofUploadedAt: now().toISOString()
+          }
+        }
+      });
+    } else {
+      payTx = await tx.paymentTransaction.update({
+        where: { id: payTx.id },
+        data: {
+          status: 'offline_proof_uploaded',
+          paymentStatus: 'OFFLINE_PROOF_UPLOADED',
+          metadata: {
+            ...(payTx.metadata as any || {}),
+            transactionReference: transactionRef,
+            payerBankName: bankName,
+            receiptFileId: fileAssetId,
+            paymentDate: paymentDate.toISOString()
+          }
+        }
+      });
+    }
+
+    if (tx.offlinePaymentProof) {
+      const existingProof = await tx.offlinePaymentProof.findFirst({
+        where: {
+          OR: [
+            { paymentTransactionId: payTx.id },
+            { purchaseOrderId: invoice.purchaseOrderId || -1 }
+          ]
+        }
+      });
+
+      if (!existingProof) {
+        await tx.offlinePaymentProof.create({
+          data: {
+            paymentTransactionId: payTx.id,
+            purchaseOrderId: invoice.purchaseOrderId || null,
+            buyerOrgId,
+            sellerOrgId,
+            amount: paymentAmount,
+            method: 'NEFT',
+            transactionReference: transactionRef,
+            paymentDate: paymentDate,
+            payerBankName: bankName || 'Bank Transfer',
+            receiptFileId: fileAssetId || null,
+            remarks: body.remarks || null,
+            status: 'UPLOADED',
+            uploadedByUserId: req.user!.id
+          }
+        }).catch(() => undefined);
+      } else {
+        await tx.offlinePaymentProof.update({
+          where: { id: existingProof.id },
+          data: {
+            paymentTransactionId: payTx.id,
+            amount: paymentAmount,
+            transactionReference: transactionRef,
+            paymentDate: paymentDate,
+            payerBankName: bankName || existingProof.payerBankName,
+            receiptFileId: fileAssetId || existingProof.receiptFileId,
+            remarks: body.remarks || existingProof.remarks,
+            status: 'UPLOADED'
+          }
+        }).catch(() => undefined);
       }
     }
 

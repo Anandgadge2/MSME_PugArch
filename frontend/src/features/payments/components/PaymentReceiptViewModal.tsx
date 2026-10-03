@@ -406,6 +406,43 @@ export function PaymentReceiptViewModal({
           }
         }
 
+        // 4b. Extract proof directly from linkedInvoice if offlinePaymentProof table has no standalone record
+        let activeInv = linkedInvoice;
+        if (!activeInv && resolvedTargetInvId) {
+          try {
+            const invRes = await getApi<any>(`/api/invoices/${resolvedTargetInvId}`);
+            activeInv = invRes?.data || invRes;
+            if (activeInv) setLinkedInvoice(activeInv);
+          } catch {
+            // Non-blocking
+          }
+        }
+
+        if (!proofData && activeInv) {
+          const invMeta = activeInv.metadata || {};
+          const utr = activeInv.paymentReference || invMeta.paymentReference || invMeta.transactionReference;
+          const slipId = activeInv.paymentSlipFileId || invMeta.paymentSlipFileId || invMeta.receiptFileId;
+          const bank = activeInv.bankName || invMeta.bankName;
+          const rawInvStatus = String(activeInv.status || activeInv.invoiceStatus || '').toLowerCase();
+          const hasRecordedPayment = Boolean(utr || slipId || ['payment_submitted', 'payment_initiated', 'paid', 'settled'].includes(rawInvStatus));
+
+          if (hasRecordedPayment) {
+            proofData = {
+              amount: activeInv.amount || activeInv.totalAmount || linkedPo?.totalValue || 0,
+              currency: activeInv.currency || 'INR',
+              method: invMeta.paymentMode || 'NEFT / RTGS / Bank Transfer',
+              transactionReference: utr || 'DIRECT_BANK_REMITTANCE',
+              paymentDate: activeInv.paymentDate || invMeta.paymentDate || activeInv.updatedAt,
+              payerBankName: bank || 'Bank Remittance',
+              receiptFileId: slipId ? Number(slipId) : undefined,
+              status: ['paid', 'settled'].includes(rawInvStatus) ? 'VERIFIED' : 'UPLOADED',
+              purchaseOrderId: activeInv.purchaseOrderId || targetOrderId,
+              invoiceId: activeInv.id,
+              remarks: invMeta.remarks
+            };
+          }
+        }
+
         // 5. Enrich file metadata if receiptFileId is present
         const effectiveFileId = proofData?.receiptFileId || currentPayment?.metadata?.receiptFileId;
         if (effectiveFileId && (!proofData?.receiptFileName || !currentPayment?.metadata?.receiptFileName)) {
@@ -443,6 +480,30 @@ export function PaymentReceiptViewModal({
   // Authentic resolution of proof details (Zero mock fallback)
   const resolvedProof = useMemo(() => {
     if (proof) return proof;
+    if (linkedInvoice) {
+      const invMeta = linkedInvoice.metadata || {};
+      const utr = linkedInvoice.paymentReference || invMeta.paymentReference || invMeta.transactionReference;
+      const slipId = linkedInvoice.paymentSlipFileId || invMeta.paymentSlipFileId || invMeta.receiptFileId;
+      const bank = linkedInvoice.bankName || invMeta.bankName;
+      const rawInvStatus = String(linkedInvoice.status || linkedInvoice.invoiceStatus || '').toLowerCase();
+      const hasRecordedPayment = Boolean(utr || slipId || ['payment_submitted', 'payment_initiated', 'paid', 'settled'].includes(rawInvStatus));
+
+      if (hasRecordedPayment) {
+        return {
+          amount: linkedInvoice.amount || linkedInvoice.totalAmount || 0,
+          currency: linkedInvoice.currency || 'INR',
+          method: invMeta.paymentMode || 'NEFT / RTGS / Bank Transfer',
+          transactionReference: utr || 'DIRECT_BANK_REMITTANCE',
+          paymentDate: linkedInvoice.paymentDate || invMeta.paymentDate || linkedInvoice.updatedAt,
+          payerBankName: bank || 'Bank Remittance',
+          receiptFileId: slipId ? Number(slipId) : undefined,
+          status: ['paid', 'settled'].includes(rawInvStatus) ? 'VERIFIED' : 'UPLOADED',
+          purchaseOrderId: linkedInvoice.purchaseOrderId,
+          invoiceId: linkedInvoice.id,
+          remarks: invMeta.remarks
+        };
+      }
+    }
     if (!activePayment) return null;
 
     const meta = activePayment.metadata || {};
@@ -538,12 +599,18 @@ export function PaymentReceiptViewModal({
   const hasRealPaymentRecord = useMemo(() => {
     if (isSettledProp) return true;
     if (proof || initialProof || resolvedProof) return true;
+    if (linkedInvoice) {
+      const rawStatus = String(linkedInvoice.status || linkedInvoice.invoiceStatus || '').toLowerCase();
+      if (['payment_submitted', 'payment_initiated', 'paid', 'settled'].includes(rawStatus)) return true;
+      if (linkedInvoice.paymentReference || linkedInvoice.paymentSlipFileId) return true;
+      if (linkedInvoice.metadata?.paymentReference || linkedInvoice.metadata?.paymentSlipFileId) return true;
+    }
     if (!activePayment) return false;
     const rawStatus = String(activePayment.status || activePayment.paymentStatus || '').toLowerCase();
     const isPaid = ['success', 'paid', 'escrow_released', 'offline_proof_verified', 'settled', 'verified', 'completed'].includes(rawStatus);
     const hasProofFile = Boolean(activePayment.metadata?.receiptFileId || activePayment.metadata?.offlineProofId || activePayment.metadata?.transactionReference);
     return isPaid || hasProofFile;
-  }, [isSettledProp, proof, initialProof, resolvedProof, activePayment]);
+  }, [isSettledProp, proof, initialProof, resolvedProof, activePayment, linkedInvoice]);
 
   const handleCopy = (text: string, type: 'utr' | 'ref') => {
     if (!text) return;

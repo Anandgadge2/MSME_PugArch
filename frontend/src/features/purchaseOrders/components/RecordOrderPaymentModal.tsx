@@ -13,7 +13,8 @@ import {
   Loader2,
   ShieldCheck,
   Zap,
-  ArrowRight
+  ArrowRight,
+  Lock
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -43,6 +44,9 @@ export function RecordOrderPaymentModal({
       String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'cancelled' &&
       String(inv.status || inv.invoiceStatus || '').toLowerCase() !== 'rejected'
   ) || order?.invoices?.[0];
+
+  const rawInvStatus = String(activeInvoice?.status || activeInvoice?.invoiceStatus || '').toLowerCase();
+  const isInvoicePendingApproval = Boolean(activeInvoice && ['submitted', 'draft', 'created', 'pending'].includes(rawInvStatus));
 
   const targetInvoiceId = propInvoiceId || activeInvoice?.id;
   const targetAmount = Number(
@@ -232,21 +236,46 @@ export function RecordOrderPaymentModal({
             </button>
           </div>
 
-          {/* Amount Due Banner */}
-          <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 flex items-center justify-between">
-            <div>
-              <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
-                Total Payable Amount
-              </span>
-              <p className="text-xl font-black text-slate-950">
-                {formatCurrency(targetAmount)}
-              </p>
+          {isInvoicePendingApproval ? (
+            <div className="mt-5 rounded-2xl border border-amber-300 bg-amber-50/90 p-6 text-center space-y-3.5 animate-in fade-in duration-200">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-100 text-amber-800 ring-4 ring-amber-100/60 shadow-xs">
+                <Lock className="h-6 w-6 text-amber-700" />
+              </div>
+              <div className="space-y-1.5">
+                <h4 className="text-base font-black text-amber-950">
+                  Tax Invoice Pending Buyer Approval
+                </h4>
+                <p className="text-xs font-semibold text-amber-800 max-w-md mx-auto leading-relaxed">
+                  Tax Invoice <strong className="font-black text-amber-950">{activeInvoice?.invoiceNumber || (activeInvoice?.id ? `#${activeInvoice.id}` : '')}</strong> is currently awaiting buyer review and approval. Under enterprise procurement 3-way matching and GST accounting compliance, the tax invoice must be approved before banking disbursements or payment slips can be recorded.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-center gap-2">
+                <Button
+                  type="button"
+                  onClick={onClose}
+                  className="h-9 px-4 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-black uppercase tracking-wider shadow-xs cursor-pointer transition active:scale-95"
+                >
+                  Close &amp; Review Invoice
+                </Button>
+              </div>
             </div>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900 border border-emerald-300">
-              <ShieldCheck className="h-3.5 w-3.5" />
-              GRN Verified
-            </span>
-          </div>
+          ) : (
+            <>
+              {/* Amount Due Banner */}
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+                    Total Payable Amount
+                  </span>
+                  <p className="text-xl font-black text-slate-950">
+                    {formatCurrency(targetAmount)}
+                  </p>
+                </div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900 border border-emerald-300">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  GRN Verified
+                </span>
+              </div>
 
           {/* Mode Switcher Tabs */}
           <div
@@ -519,6 +548,8 @@ export function RecordOrderPaymentModal({
               </div>
             </form>
           )}
+          </>
+        )}
         </div>
       </FocusTrap>
     </div>

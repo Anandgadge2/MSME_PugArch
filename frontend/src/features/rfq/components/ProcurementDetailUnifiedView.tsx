@@ -6307,6 +6307,25 @@ export function ProcurementDetailUnifiedView(
     ) || (effectiveActiveOrder as any)?.invoice || null
   ), [allOrderInvoices, effectiveActiveOrder]);
 
+  const isInvoicePendingApproval = useMemo(() => {
+    if (!existingTaxInvoice) return false;
+    const raw = String(existingTaxInvoice.status || existingTaxInvoice.invoiceStatus || '').toLowerCase();
+    return ['submitted', 'draft', 'created', 'pending'].includes(raw);
+  }, [existingTaxInvoice]);
+
+  const handleOpenTaxInvoiceForApproval = useCallback(() => {
+    if (existingTaxInvoice) {
+      setSelectedInvoiceModalId(existingTaxInvoice?.id ? Number(existingTaxInvoice.id) : null);
+      setSelectedInvoiceModalData({
+        ...existingTaxInvoice,
+        buyer: existingTaxInvoice.buyer || effectiveActiveOrder?.buyer || (props.rawBid as any)?.buyer,
+        seller: existingTaxInvoice.seller || effectiveActiveOrder?.seller || (props.rawBid as any)?.awardedSeller,
+        purchaseOrder: existingTaxInvoice.purchaseOrder || effectiveActiveOrder
+      });
+    }
+    setIsTaxInvoiceModalOpen(true);
+  }, [existingTaxInvoice, effectiveActiveOrder, props.rawBid]);
+
   const hasCreatedInvoice = Boolean(
     existingTaxInvoice ||
     (effectiveActiveOrder as any)?.invoiceId ||
@@ -10912,7 +10931,12 @@ export function ProcurementDetailUnifiedView(
               } else if (stageId === 5) {
                 if (isBuyerSide) {
                   if (fulfillmentPhase === 'GRN_APPROVED') {
-                    setIsPaymentModalOpen(true);
+                    if (isInvoicePendingApproval) {
+                      handleOpenTaxInvoiceForApproval();
+                      toast.info('Please review and approve the Tax Invoice before disbursing payment.');
+                    } else {
+                      setIsPaymentModalOpen(true);
+                    }
                   } else {
                     setIsViewPaymentProofOpen(true);
                   }
@@ -11014,7 +11038,12 @@ export function ProcurementDetailUnifiedView(
             onNavigateSettlement={() => {
               if (isBuyerSide) {
                 if (fulfillmentPhase === 'GRN_APPROVED') {
-                  setIsPaymentModalOpen(true);
+                  if (isInvoicePendingApproval) {
+                    handleOpenTaxInvoiceForApproval();
+                    toast.info('Please review and approve the Tax Invoice before disbursing payment.');
+                  } else {
+                    setIsPaymentModalOpen(true);
+                  }
                 } else {
                   setIsViewPaymentProofOpen(true);
                 }
@@ -12244,8 +12273,22 @@ export function ProcurementDetailUnifiedView(
                       </span>
                     )}
 
-                    {/* GRN Approved: Single Make Payment CTA */}
-                    {(fulfillmentPhase === 'GRN_APPROVED' || (hasApprovedGrn && fulfillmentPhase !== 'PAYMENT_SUBMITTED' && fulfillmentPhase !== 'SETTLED')) && (
+                    {/* Invoice Pending Approval Gate: Must approve invoice first */}
+                    {(fulfillmentPhase === 'GRN_APPROVED' || (hasApprovedGrn && fulfillmentPhase !== 'PAYMENT_SUBMITTED' && fulfillmentPhase !== 'SETTLED')) && isInvoicePendingApproval && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={handleOpenTaxInvoiceForApproval}
+                        className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-600 text-slate-950 shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
+                        title="Review and approve the tax invoice before disbursing payment"
+                      >
+                        <Lock className="h-3.5 w-3.5 text-slate-950" />
+                        <span>🔒 Invoice Pending Approval — Review &amp; Approve to Unlock Payment</span>
+                      </Button>
+                    )}
+
+                    {/* GRN Approved & Invoice Approved: Unlocked Make Payment CTA */}
+                    {(fulfillmentPhase === 'GRN_APPROVED' || (hasApprovedGrn && fulfillmentPhase !== 'PAYMENT_SUBMITTED' && fulfillmentPhase !== 'SETTLED')) && !isInvoicePendingApproval && (
                       <Button
                         type="button"
                         size="sm"
@@ -12253,7 +12296,7 @@ export function ProcurementDetailUnifiedView(
                         className="h-8 px-3.5 gap-1.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs rounded-lg cursor-pointer transition-transform active:scale-95"
                       >
                         <CreditCard className="h-3.5 w-3.5" />
-                        💰 Pay Now / Upload Payment Proof
+                        <span>💰 Pay Now / Upload Payment Proof</span>
                       </Button>
                     )}
 
