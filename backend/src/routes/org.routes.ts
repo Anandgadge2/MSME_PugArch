@@ -35,7 +35,7 @@ import { toSafeUser } from '../utils/routeHelpers.js';
 import type { AuthRequest } from '../middleware/authenticate.js';
 import { DEFAULT_ORG_ROLE_TEMPLATES, ORG_PERMISSION_CATALOG, type OrgPermissionKey } from '../constants/org-permissions.js';
 import { getOrgPermissionKeys, requireOrgPermission } from '../middleware/requireOrgPermission.js';
-import { getOrSetCache } from '../services/cache.service.js';
+import { getOrSetCache, deleteCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getDefaultCompanyId } from '../services/default-company.service.js';
 import { getBuyerProcurementsData } from './phase4.routes.js';
@@ -531,6 +531,10 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
     const userIdNum = req.user.id;
 
     const cacheKey = redisKeys.cacheDashboardSummary(userIdNum);
+    const bypassCache = req.query.refresh === 'true' || req.query.refresh === '1';
+    if (bypassCache) {
+        await deleteCache(cacheKey).catch(() => undefined);
+    }
     const summaryData = await getOrSetCache(
         cacheKey,
         async () => {

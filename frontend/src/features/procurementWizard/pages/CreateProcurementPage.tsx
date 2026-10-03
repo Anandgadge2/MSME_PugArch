@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import {
   Plus,
@@ -1230,6 +1231,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
 
 export default function CreateProcurementPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, token } = useAuth();
   const { orgStatus } = useOrgRole();
   const resolvedOrgName = useMemo(() => getResolvedOrgName(user, orgStatus), [user, orgStatus]);
@@ -2320,6 +2322,12 @@ export default function CreateProcurementPage() {
         } catch {}
       }
       api.invalidate('/api/buyer/my-procurements');
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: ['buyerMyProcurements'] }),
+        queryClient.invalidateQueries({ queryKey: ['buyer-dashboard-my-procurements'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['procurement-counts'] }),
+      ]);
       toast.success('Procurement request submitted successfully');
       router.push(`/buyer/my-procurements`);
     } catch (err: any) {
@@ -10232,7 +10240,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,
     allowReverseAuction: hasReverseAuction,
-    serviceDetails: draft.basics.procurementCategory === 'SERVICES' || draft.serviceDetails.scopeOfWork || draft.serviceDetails.sowFileName || draft.type === 'RFP'
+    serviceDetails: draft.basics.procurementCategory === 'SERVICES'
       ? {
           ...draft.serviceDetails,
           serviceTitle: (draft.serviceDetails?.serviceTitle || draft.basics?.title || '').trim(),

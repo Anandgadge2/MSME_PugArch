@@ -3362,7 +3362,8 @@ function ServiceDossierCard({
   scopeText?: string;
   onOpenDoc?: (doc: any, name: string) => void;
 }) {
-  if (!serviceDetails || !isPlainObject(serviceDetails)) {
+  const isGoodsCategory = String(buyingType || "").trim().toUpperCase() === "GOODS";
+  if (!serviceDetails || !isPlainObject(serviceDetails) || isGoodsCategory) {
     return null;
   }
 
@@ -3386,8 +3387,9 @@ function ServiceDossierCard({
     location,
   } = serviceDetails;
 
-  const resolvedTitle = serviceTitle || title;
-  const resolvedScope = scopeOfWork || scopeText;
+  // Genuine service fields - do not fall back to RFQ/tender title or general description
+  const resolvedTitle = serviceTitle;
+  const resolvedScope = scopeOfWork;
   const resolvedDuration = duration || projectDuration;
   const milestonesList = asArray(milestones).filter(hasDetailData);
 
@@ -3398,9 +3400,6 @@ function ServiceDossierCard({
     inclusions ||
     exclusions ||
     slaResponseTime ||
-    resolvedDuration ||
-    manpowerRequired ||
-    penaltyClause ||
     milestonesList.length > 0 ||
     sowFileName ||
     sowFileAssetId;
@@ -7098,6 +7097,15 @@ export function ProcurementDetailUnifiedView(
 
     if (props.onSubmitClick) {
       props.onSubmitClick();
+    } else {
+      const resolvedTarget = targetId || props.displayId || (props.rawBid as any)?.bidNumber || (props.rawBid as any)?.id;
+      if (resolvedTarget) {
+        if (isBuyerOrAdmin) {
+          router.push(`/bids/${encodeURIComponent(String(resolvedTarget))}/results`);
+        } else {
+          router.push(`/bids/${encodeURIComponent(String(resolvedTarget))}/participate`);
+        }
+      }
     }
   };
 
@@ -8374,10 +8382,23 @@ export function ProcurementDetailUnifiedView(
     ? cleanDeliveryAddress(rawDeliveryLocation) || rawDeliveryLocation
     : undefined;
 
+  const isGoodsCategory =
+    String(buyingType || "").trim().toUpperCase() === "GOODS" ||
+    String(payload.procurementCategory || "").trim().toUpperCase() === "GOODS" ||
+    String(payload.categoryType || "").trim().toUpperCase() === "GOODS" ||
+    String(basics.procurementCategory || "").trim().toUpperCase() === "GOODS" ||
+    String(basics.categoryType || "").trim().toUpperCase() === "GOODS";
+
   const isServices =
-    String(buyingType || "").toLowerCase().includes("service") ||
-    hasDetailData(serviceDetails?.scopeOfWork) ||
-    hasDetailData(serviceDetails?.serviceTitle);
+    !isGoodsCategory &&
+    (
+      String(buyingType || "").toLowerCase().includes("service") ||
+      String(payload.procurementCategory || "").toLowerCase().includes("service") ||
+      String(payload.categoryType || "").toLowerCase().includes("service") ||
+      String(basics.procurementCategory || "").toLowerCase().includes("service") ||
+      String(basics.categoryType || "").toLowerCase().includes("service") ||
+      hasDetailData(serviceDetails?.scopeOfWork)
+    );
   const projectDuration = (!isRfqType && (isServices || isRateContractType))
     ? firstPresent(
           props.projectDuration &&

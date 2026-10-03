@@ -1793,6 +1793,18 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
       draftStep: data.draftStep
     });
   await auditWrite(req, body.id ? 'procurement.draft.updated' : 'procurement.draft.created', 'requirement', saved.id, { methodSlug });
+  const draftBuyerId = userId(req);
+  const draftOrgId = req.user?.organizationId;
+  await Promise.allSettled([
+    deleteCache(`cache:buyer:procurements:${draftBuyerId}`),
+    invalidateByPattern(`cache:buyer:procurements:${draftBuyerId}*`),
+    deleteCache(redisKeys.cacheDashboardSummary(draftBuyerId)),
+    invalidateByPattern(`cache:dashboard:*:${draftBuyerId}*`),
+    ...(draftOrgId ? [
+      invalidateByPattern(`cache:buyer:procurements:*`),
+      invalidateByPattern(`cache:dashboard:*`),
+    ] : [])
+  ]);
   return (saved as any)?.items ? saved : db.requirement.findUnique({ where: { id: saved.id }, include: procurementDraftInclude });
 };
 
@@ -5980,6 +5992,18 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
       createAuctionForSubmittedProcurement(req, submitted, parsed)
     ]);
     await auditWrite(req, 'procurement.submitted', 'requirement', submitted.id, { methodSlug: methodSlugForDraft(parsed) });
+    const submitBuyerId = userId(req);
+    const submitOrgId = req.user?.organizationId;
+    await Promise.allSettled([
+      deleteCache(`cache:buyer:procurements:${submitBuyerId}`),
+      invalidateByPattern(`cache:buyer:procurements:${submitBuyerId}*`),
+      deleteCache(redisKeys.cacheDashboardSummary(submitBuyerId)),
+      invalidateByPattern(`cache:dashboard:*:${submitBuyerId}*`),
+      ...(submitOrgId ? [
+        invalidateByPattern(`cache:buyer:procurements:*`),
+        invalidateByPattern(`cache:dashboard:*`),
+      ] : [])
+    ]);
     ok(res, {
       procurement: serializeProcurementDraft({ ...submitted, items: (submitted as any).items || [] }),
       procurementBid,
@@ -12974,14 +12998,14 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       },
     }),
     db.procurementRequest.findMany({
-      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyerOrganizationId: buyerOrgId }] } : { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { organizationId: buyerOrgId }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         organization: { select: { organizationName: true } }
       }
     }),
     db.directPurchase.findMany({
-      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyerOrganizationId: buyerOrgId }, { requirement: { organizationId: buyerOrgId } }] } : { buyerId },
+      where: buyerOrgId > 0 ? { OR: [{ buyerId }, { buyer: { organizationId: buyerOrgId } }, { requirement: { organizationId: buyerOrgId } }] } : { buyerId },
       orderBy: { createdAt: 'desc' },
       include: {
         requirement: {
@@ -13317,7 +13341,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Commercial Terms', terms),
       detailSection('Evaluation Basis', technicalPacket.evaluation),
       detailSection('Approval Notes', technicalPacket.approval),
-      detailSection('Service Details', technicalPacket.serviceDetails),
+      detailSection('Service Details', (technicalPacket.procurementCategory === 'SERVICES' || technicalPacket.categoryType === 'SERVICES') ? technicalPacket.serviceDetails : undefined),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 
     const packetItems = Array.isArray(technicalPacket.items) && technicalPacket.items.length > 0
@@ -13797,7 +13821,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Commercial Terms', payload.terms),
       detailSection('Evaluation Basis', payload.evaluation),
       detailSection('Approval Notes', payload.approval),
-      detailSection('Service Details', payload.serviceDetails),
+      detailSection('Service Details', (payload.procurementCategory === 'SERVICES' || payload.categoryType === 'SERVICES') ? payload.serviceDetails : undefined),
       detailSection('Rate Contract', payload.rateContractConfig || payload.rateContract),
       detailSection('Reverse Auction', payload.auctionConfig),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
@@ -13982,7 +14006,7 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       detailSection('Commercial Terms', srcPayload.terms),
       detailSection('Evaluation Basis', srcPayload.evaluation),
       detailSection('Approval Notes', srcPayload.approval),
-      detailSection('Service Details', srcPayload.serviceDetails),
+      detailSection('Service Details', (srcPayload.procurementCategory === 'SERVICES' || srcPayload.categoryType === 'SERVICES') ? srcPayload.serviceDetails : undefined),
       detailSection('Rate Contract Config', metadata),
     ].filter(Boolean) as Array<{ title: string; fields: Array<{ label: string; value: string }> }>;
 

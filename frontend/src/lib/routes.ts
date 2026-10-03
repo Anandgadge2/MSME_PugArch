@@ -169,7 +169,8 @@ export function resolveLegacyUrl(
     const canonicalMethod = slugToMethod(rawSlug) || rawSlug.toUpperCase();
     return { to: `/bids/${encodeURIComponent(procLegacyDetailMatch[2])}?type=${encodeURIComponent(canonicalMethod)}`, permanent: true };
   }
-  const procLegacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/procurement\/[^/]+\/([^/]+)\/respond$/i);
+  // /(seller|shg|buyer|admin)/(procurement|opportunities)/:type/:id/(respond|submit-quote|submit-quotation) → /bids/:id/participate
+  const procLegacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/(?:procurement|opportunities)\/[^/]+\/([^/]+)\/(?:respond|submit-quote|submit-quotation)$/i);
   if (procLegacyRespondMatch) {
     return { to: `/bids/${encodeURIComponent(procLegacyRespondMatch[1])}/participate`, permanent: true };
   }

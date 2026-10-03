@@ -829,7 +829,7 @@ export default function App({
     }
 
     {
-      const legacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/procurement\/[^/]+\/([^/]+)\/respond$/i);
+      const legacyRespondMatch = pathname.match(/^\/(?:seller|shg|buyer|admin)\/(?:procurement|opportunities)\/[^/]+\/([^/]+)\/(?:respond|submit-quote|submit-quotation)$/i);
       if (legacyRespondMatch) {
         return <Redirect to={`/bids/${encodeURIComponent(legacyRespondMatch[1])}/participate`} />;
       }
@@ -1058,15 +1058,12 @@ export default function App({
         return <SellerEventDetailPage id={sellerEventDetailMatch[2]} />;
       }
     }
-    // Canonical respond routes: /{role}/procurement/{type}/{id}/respond
+    // Canonical respond routes: /{role}/procurement/{type}/{id}/respond or /{role}/opportunities/{type}/{id}/submit-quote
     {
-      const procRespondMatch = pathname.match(/^\/(seller|shg)\/procurement\/(rfq|rfp|open-tender|limited-tender|rate-contract)\/([^/]+)\/respond$/);
+      const procRespondMatch = pathname.match(/^\/(?:seller|shg)\/(?:procurement|opportunities)\/(?:rfq|rfp|open-tender|limited-tender|rate-contract|rfqs|rfps|open-tenders|limited-tenders|rate-contracts|events)\/([^/]+)\/(?:respond|submit-quote|submit-quotation)$/i);
       if (procRespondMatch && roleOk(user.role, ['seller', 'shg'])) {
-        const [, role, typeSlug, rawId] = procRespondMatch;
-        if (typeSlug.toLowerCase() === 'rate-contract') {
-          return <Redirect to={`/bids/${rawId}/participate`} />;
-        }
-        return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
+        const rawId = procRespondMatch[1];
+        return <Redirect to={`/bids/${encodeURIComponent(rawId)}/participate`} />;
       }
     }
     if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname.startsWith('/shg/rfq/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;

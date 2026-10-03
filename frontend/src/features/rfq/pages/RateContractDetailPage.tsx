@@ -125,7 +125,7 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
       return;
     }
     const resolvedId = rcData.id || requestId || requirementId;
-    router.push(`/seller/opportunities/rate-contracts/${resolvedId}/submit-quote`);
+    router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
   };
 
   const viewProps = adaptProcurementUnifiedProps(rcData, reqObj, {

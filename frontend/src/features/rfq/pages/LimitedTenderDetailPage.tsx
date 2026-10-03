@@ -112,7 +112,8 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
-    router.push(`/bids/${bid.id || requestId}/participate`);
+    const resolvedId = bid.id || activeLimitedId || requestId;
+    router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
   };
 
   const viewProps = adaptProcurementUnifiedProps(bid, reqObj, {

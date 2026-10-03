@@ -163,7 +163,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
       return;
     }
     const resolvedId = effectiveTargetId || activeRfqId;
-    router.push(`/seller/opportunities/rfqs/${resolvedId}/submit-quote`);
+    router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
   };
 
   const mergedBid = {
