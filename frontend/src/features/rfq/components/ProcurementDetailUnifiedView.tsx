@@ -9003,6 +9003,154 @@ export function ProcurementDetailUnifiedView(
     workflow: resolvedWorkflow,
   });
 
+  const resolvedMinimumBidders = useMemo(() => {
+    const raw = firstPresent(
+      payload.schedule?.minimumBidders,
+      payload.minimumBidders,
+      payload.minimumQualifiedBidders,
+      payload.vendors?.minimumBidders,
+      rules.minimumBidders,
+      (props.rawBid as any)?.minimumBidders,
+      (props.rawBid as any)?.minimumQualifiedBidders,
+      (props.rawBid?.technicalPacket as any)?.schedule?.minimumBidders,
+      (props.rawBid?.technicalPacket as any)?.minimumBidders,
+      (props.rawBid?.payload as any)?.schedule?.minimumBidders,
+    );
+    const num = Number(raw);
+    if (!Number.isNaN(num) && num > 0) return num;
+    return 3;
+  }, [payload, rules, props.rawBid]);
+
+  const minimumBiddersQuorumLabel = useMemo(() => {
+    if (resolvedMinimumBidders === 1) return "1 Bid (Proprietary / Monopoly Sourcing)";
+    if (resolvedMinimumBidders === 2) return "2 Bids (Expedited / Urgent Sourcing)";
+    if (resolvedMinimumBidders === 3) return "3 Bids (GFR Rule 173 Standard Quorum)";
+    if (resolvedMinimumBidders >= 5) return `${resolvedMinimumBidders} Bids (High Competition Quorum)`;
+    return `${resolvedMinimumBidders} Qualified Bids Required`;
+  }, [resolvedMinimumBidders]);
+
+  const sourcingStrategyLabel = useMemo(() => {
+    const sel = String(
+      firstPresent(
+        vendors.selection,
+        vendors.selectionMode,
+        vendors.strategy,
+        payload.selectionMode,
+        rules.selectionMode,
+        "Open",
+      ) || "Open"
+    ).trim();
+    if (sel.toLowerCase() === "open") return "Open Advertised / Public Sourcing";
+    if (sel.toLowerCase() === "limited") return "Limited / Empanelled Vendors";
+    if (sel.toLowerCase() === "single" || sel.toLowerCase() === "direct") return "Single Source / Direct Sourcing";
+    return sel;
+  }, [vendors, payload, rules]);
+
+  const warrantyTerms = useMemo(() => {
+    const raw = firstPresent(
+      (props as any).warranty,
+      terms.warranty,
+      terms.warrantyTerms,
+      terms.warrantyPeriod,
+      (props.rawBid as any)?.warranty,
+      (props.rawBid?.technicalPacket as any)?.terms?.warranty,
+      (props.rawBid?.payload as any)?.terms?.warranty,
+      payload.terms?.warranty,
+      payload.warranty,
+    );
+    if (!raw || typeof raw !== "string") return undefined;
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === "—" || trimmed === "N/A" || trimmed === "null" || trimmed === "undefined") {
+      return undefined;
+    }
+    return trimmed;
+  }, [(props as any).warranty, terms, props.rawBid, payload]);
+
+  const performanceSecurityDisplay = useMemo(() => {
+    const rawVal = firstPresent(
+      terms.securityDeposit,
+      tender.performanceSecurityAmount,
+      terms.performanceSecurityAmount,
+      payload.terms?.securityDeposit,
+      payload.tender?.performanceSecurityAmount,
+      (props.rawBid as any)?.performanceSecurityAmount,
+      (props.rawBid?.technicalPacket as any)?.tender?.performanceSecurityAmount,
+      (props.rawBid?.technicalPacket as any)?.terms?.securityDeposit,
+    );
+    if (rawVal === undefined || rawVal === null || rawVal === "" || rawVal === "—") {
+      return "0% (Exempt / MSE Waiver)";
+    }
+    const num = Number(rawVal);
+    if (Number.isNaN(num) || num <= 0) {
+      return "0% (Exempt / MSE Waiver)";
+    }
+    return formatCurrency(num);
+  }, [terms, tender, payload, props.rawBid]);
+
+  const gstBudgetTreatment = useMemo(() => {
+    const raw = firstPresent(
+      terms.isGstIncluded,
+      basics.isGstIncluded,
+      payload.terms?.isGstIncluded,
+      payload.basics?.isGstIncluded,
+      (props.rawBid as any)?.isGstIncluded,
+      (props.rawBid?.technicalPacket as any)?.terms?.isGstIncluded,
+    );
+    if (raw === true || raw === "true" || raw === 1 || raw === "Yes") {
+      return "GST Included in Budget (Gross Estimated Value)";
+    }
+    if (raw === false || raw === "false" || raw === 0 || raw === "No") {
+      return "GST Excluded (Net Base Value - GST Extra)";
+    }
+    return "GST Included in Budget (Gross Estimated Value)";
+  }, [terms, basics, payload, props.rawBid]);
+
+  const rebidsAllowed = useMemo(() => {
+    const raw = firstPresent(
+      schedule.rebidsAllowed,
+      schedule.allowRevision,
+      payload.schedule?.rebidsAllowed,
+      (props.rawBid as any)?.rebidsAllowed,
+      true,
+    );
+    return Boolean(raw !== false && raw !== "false");
+  }, [schedule, payload, props.rawBid]);
+
+  const bidWithdrawalAllowed = useMemo(() => {
+    const raw = firstPresent(
+      schedule.allowWithdrawal,
+      payload.allowWithdrawal,
+      (props.rawBid as any)?.allowWithdrawal,
+      true,
+    );
+    return Boolean(raw !== false && raw !== "false");
+  }, [schedule, payload, props.rawBid]);
+
+  const showSellerRank = useMemo(() => {
+    const raw = firstPresent(
+      schedule.showSellerRank,
+      schedule.showLowestPrice,
+      payload.schedule?.showSellerRank,
+      true,
+    );
+    return Boolean(raw !== false && raw !== "false");
+  }, [schedule, payload]);
+
+  const preBidMeetingDisplay = useMemo(() => {
+    const hasPreBid = Boolean(
+      schedule.preBidMeeting ||
+      payload.schedule?.preBidMeeting ||
+      (props.rawBid as any)?.preBidMeeting
+    );
+    if (!hasPreBid) return "Not Required";
+    const dateVal = schedule.preBidDate || payload.schedule?.preBidDate || (props.rawBid as any)?.preBidDate;
+    if (dateVal) {
+      const formatted = formatDateString(dateVal, true);
+      return formatted ? `Mandatory (${formatted})` : "Required (Date to be notified)";
+    }
+    return "Required (Date to be notified)";
+  }, [schedule, payload, props.rawBid]);
+
   // isBuyerOrAdmin already defined at top level of component
 
   const allParticipationsList = useMemo(() => {
@@ -14104,6 +14252,15 @@ export function ProcurementDetailUnifiedView(
                     <PropertyItem label="Buying Type" value={buyingType} />
                     <PropertyItem label="Category" value={category} />
                     <PropertyItem
+                      label="Sourcing Strategy"
+                      value={sourcingStrategyLabel}
+                    />
+                    <PropertyItem
+                      label="Minimum Bids Quorum"
+                      value={minimumBiddersQuorumLabel}
+                      highlight
+                    />
+                    <PropertyItem
                       label="Delivery Location"
                       value={deliveryLocation}
                     />
@@ -14462,6 +14619,27 @@ export function ProcurementDetailUnifiedView(
                               : "Single Packet Envelope (Commercial Only)"
                           }
                         />
+                        <PropertyItem
+                          label="Minimum Sourcing Quorum"
+                          value={minimumBiddersQuorumLabel}
+                          highlight
+                        />
+                        <PropertyItem
+                          label="Pre-Bid Meeting"
+                          value={preBidMeetingDisplay}
+                        />
+                        <PropertyItem
+                          label="Price Revisions (Rebids)"
+                          value={rebidsAllowed ? "Allowed (Before Deadline)" : "Disabled (Single Final Bid)"}
+                        />
+                        <PropertyItem
+                          label="Bid Withdrawal"
+                          value={bidWithdrawalAllowed ? "Allowed (Before Deadline)" : "Locked Upon Submission"}
+                        />
+                        <PropertyItem
+                          label="Rank / Price Transparency"
+                          value={showSellerRank ? "Transparent (Live Lowest / Rank Shown)" : "Sealed Blind Bidding"}
+                        />
                       </PropertyGrid>
                     </div>
                   </div>
@@ -14552,8 +14730,22 @@ export function ProcurementDetailUnifiedView(
                       />
                     );
                   })()}
-                  {/* Retention Amount & Security Deposit commented out / hidden on buyer side */}
-                  {/* Warranty Terms strictly commented out / hidden on buyer side in open tender */}
+                  <PropertyItem
+                    label="GST Treatment"
+                    value={gstBudgetTreatment}
+                  />
+                  {warrantyTerms && (
+                    <PropertyItem
+                      label="Warranty Terms & Support"
+                      icon={ShieldCheck}
+                      value={warrantyTerms}
+                    />
+                  )}
+                  <PropertyItem
+                    label="Performance Security (PBG)"
+                    value={performanceSecurityDisplay}
+                    subtext="Performance Bank Guarantee / Security Deposit (GFR Rule 171)"
+                  />
                   {(() => {
                     const cleanedTerms = cleanBuyerTerms(
                       props.termsAndConditions ||
@@ -14747,26 +14939,21 @@ export function ProcurementDetailUnifiedView(
                 />
               )}
 
-              {isBuyerSide && (
-                <DataCard title="Supplier & Approval Controls" icon={Users}>
+                <DataCard title="Supplier Reach & Sourcing Governance" icon={Users}>
                   <div className="space-y-5">
                     <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
                       <PropertyGrid columns={3}>
                         <PropertyItem
-                          label="Selection Mode"
-                          value={
-                            vendors.selection ||
-                            payload.selectionMode ||
-                            rules.selectionMode ||
-                            "Open"
-                          }
+                          label="Sourcing Strategy"
+                          value={sourcingStrategyLabel}
                         />
                         <PropertyItem
-                          label="Invite Count"
-                          value={String(effectiveInviteCount)}
+                          label="Min. Sourcing Bids Quorum"
+                          value={minimumBiddersQuorumLabel}
+                          highlight
                         />
                         <PropertyItem
-                          label="Workflow"
+                          label="Workflow Scheme"
                           value={resolvedWorkflow}
                         />
                       </PropertyGrid>
@@ -14775,43 +14962,43 @@ export function ProcurementDetailUnifiedView(
                     <div className="space-y-2.5 pt-1">
                       <h3 className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                         <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                        Vendor Preferences &amp; Eligibility Controls
+                        Vendor Preferences &amp; Statutory Eligibility Controls
                       </h3>
                       <PolicyRulesMatrix
                         rules={[
                           {
-                            label: "MSME Preference",
+                            label: "MSME Pricing Preference (15% Purchase Preference)",
                             value:
                               (vendors.msmePreference !== undefined
                                 ? vendors.msmePreference
                                 : payload.msmePreference) !== undefined
                                 ? (vendors.msmePreference ??
                                   payload.msmePreference)
-                                  ? "Yes"
+                                  ? "Yes (Applicable)"
                                   : "No"
-                                : "No",
+                                : "Yes (Applicable)",
                           },
                           {
-                            label: "Exclude Blacklisted",
+                            label: "Exclude Blacklisted / Debarred Suppliers",
                             value:
                               (vendors.excludeBlacklisted !== undefined
                                 ? vendors.excludeBlacklisted
                                 : payload.excludeBlacklisted) !== undefined
                                 ? (vendors.excludeBlacklisted ??
                                   payload.excludeBlacklisted)
-                                  ? "Yes"
+                                  ? "Yes (Strictly Enforced)"
                                   : "No"
-                                : "No",
+                                : "Yes (Strictly Enforced)",
                           },
                           {
-                            label: "Local Vendor Preference",
+                            label: "Local Supplier Preference (Make in India)",
                             value:
                               (vendors.localVendorPreference !== undefined
                                 ? vendors.localVendorPreference
                                 : payload.localVendorPreference) !== undefined
                                 ? (vendors.localVendorPreference ??
                                   payload.localVendorPreference)
-                                  ? "Yes"
+                                  ? "Yes (Applicable)"
                                   : "No"
                                 : "No",
                           },
@@ -14823,7 +15010,7 @@ export function ProcurementDetailUnifiedView(
                       isBuyerOrAdmin && (
                         <div className="rounded-xl bg-slate-50/80 p-3.5 border border-slate-150">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                            Approval Notes:
+                            Internal Approval Notes (Confidential):
                           </span>
                           <p className="text-xs font-semibold text-slate-700">
                             {approval.notes || payload.approvalNotes}
@@ -14832,7 +15019,6 @@ export function ProcurementDetailUnifiedView(
                       )}
                   </div>
                 </DataCard>
-              )}
             </div>
           )}
 
