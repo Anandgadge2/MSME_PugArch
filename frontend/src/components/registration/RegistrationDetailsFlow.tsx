@@ -362,7 +362,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
   const statusFetchedRef = React.useRef(false);
   const [isAadhaarVerified, setIsAadhaarVerified] = useState(false);
-  const [rawAadhaar, setRawAadhaar] = useState('');
+  const [rawAadhaar, setRawAadhaar] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('preRegisterKycFormData');
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (parsed.aadhaarNumber) return parsed.aadhaarNumber;
+        } catch { /* ignore */ }
+      }
+    }
+    return '';
+  });
   const [aadhaarKycStatus, setAadhaarKycStatus] = useState<AadhaarKycStatus['status']>('NOT_STARTED');
   const [isStartingAadhaarKyc, setIsStartingAadhaarKyc] = useState(false);
   const [isFetchingAadhaarKyc, setIsFetchingAadhaarKyc] = useState(false);
@@ -639,7 +650,26 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
     try {
       const status = await aadhaarKycApi.status();
       setAadhaarKycStatus(status.status);
-      setIsAadhaarVerified(status.status === 'VERIFIED');
+      const isVerified = status.status === 'VERIFIED';
+      setIsAadhaarVerified(isVerified);
+      if (isVerified) {
+        const fullName = status.verifiedName || '';
+        const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+        const firstName = status.firstName || nameParts[0] || '';
+        const lastName = status.lastName || nameParts.slice(1).join(' ') || '';
+
+        const enteredAadhaar = (rawAadhaar || formData.aadhaarNumber || '').replace(/\D/g, '');
+        const last4 = (status as any).aadhaarLast4 || (status.maskedAadhaar ? status.maskedAadhaar.replace(/\D/g, '').slice(-4) : (enteredAadhaar.length >= 4 ? enteredAadhaar.slice(-4) : ''));
+        const masked = status.maskedAadhaar || (last4 ? `XXXX XXXX ${last4}` : (formData.aadhaarNumber || 'XXXX XXXX 5417'));
+
+        setFormData(prev => ({
+          ...prev,
+          personalName: firstName || prev.personalName,
+          personalLastName: lastName || prev.personalLastName,
+          aadhaarNumber: masked || prev.aadhaarNumber,
+          mobile: status.mobile || status.verifiedMobile || user.mobile || prev.mobile,
+        }));
+      }
     } catch {
       toast.error('Unable to fetch Aadhaar verification status. Please try again.');
     } finally {
@@ -691,12 +721,20 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
               }
               setFormData(prev => {
                 const finalMobile = (verifiedMobile && verifiedMobile.length === 10) ? verifiedMobile : prev.mobile;
+                const fullName = status.verifiedName || '';
+                const nameParts = fullName.trim().split(/\s+/).filter(Boolean);
+                const firstName = status.firstName || nameParts[0] || prev.personalName || '';
+                const lastName = status.lastName || nameParts.slice(1).join(' ') || prev.personalLastName || '';
+
+                const last4 = verifiedLast4 || (enteredLast4.length >= 4 ? enteredLast4 : '');
+                const masked = status.maskedAadhaar || (last4 ? `XXXX XXXX ${last4}` : prev.aadhaarNumber || 'XXXX XXXX 5417');
+
                 return {
                   ...prev,
                   kycSessionToken: token,
-                  aadhaarNumber: status.maskedAadhaar || prev.aadhaarNumber || 'XXXX XXXX 5417',
-                  personalName: prev.personalName || status.firstName || '',
-                  personalLastName: prev.personalLastName || status.lastName || '',
+                  aadhaarNumber: masked,
+                  personalName: firstName,
+                  personalLastName: lastName,
                   mobile: finalMobile,
                 };
               });
@@ -763,6 +801,12 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
 
     setIsStartingAadhaarKyc(true);
     try {
+      localStorage.setItem('preRegisterKycFormData', JSON.stringify({ ...formData, aadhaarNumber: rawAadhaar }));
+      localStorage.setItem('preRegisterKycSubStep', String(currentSubStep));
+      localStorage.setItem('preRegisterKycStep', '3');
+      localStorage.setItem('preRegisterKycBusinessType', businessType);
+      localStorage.setItem('preRegisterKycShgType', shgType);
+      localStorage.setItem('preRegisterKycSelectedDocs', JSON.stringify(prereqSelectedDocuments));
       const { authorizationUrl } = await aadhaarKycApi.startUrl({ redirectPath: window.location.pathname, frontendOrigin: window.location.origin });
       if (!authorizationUrl) throw new Error('Missing authorization URL');
       window.location.assign(authorizationUrl);
@@ -1627,6 +1671,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '').slice(0, 16);
                                     setRawAadhaar(val);
+                                    setFormData(prev => ({ ...prev, aadhaarNumber: val }));
                                     handleAadhaarFieldChange({});
                                   }}
                                   onBlur={() => setAadhaarTouched(true)}
@@ -1963,6 +2008,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                                   onChange={(event) => {
                                     const val = event.target.value.replace(/\D/g, '').slice(0, 16);
                                     setRawAadhaar(val);
+                                    setFormData(prev => ({ ...prev, aadhaarNumber: val }));
                                     handleAadhaarFieldChange({});
                                   }}
                                   onBlur={() => setAadhaarTouched(true)}
