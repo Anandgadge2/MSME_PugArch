@@ -45,7 +45,6 @@
     "sharp": "^0.35.0"
   },
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "openai": "^6.43.0"
+    "dotenv": "^17.4.2"
   }
 }
