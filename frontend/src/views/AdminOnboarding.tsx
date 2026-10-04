@@ -570,7 +570,7 @@ export default function AdminOnboarding() {
   const { data: onboardingData, isLoading: isOnboardingLoading } = useQuery({
     queryKey: ['adminOnboardingList'],
     queryFn: async () => {
-      const res = await api.fetch("/api/admin/onboarding", authOptions);
+      const res = await api.fetch("/api/admin/onboarding?pageSize=1000", authOptions);
       if (!res.ok) throw new Error("Failed to load onboarding records");
       const json = await res.json();
       return json?.data ?? json;

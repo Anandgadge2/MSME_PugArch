@@ -5185,17 +5185,18 @@ app.post('/api/escrow/:paymentId/release', authenticate, authorize('buyer', 'adm
 app.get('/api/admin/onboarding', authenticate, authorizeAdmin, async (req, res) => {
   try {
     const skip = Math.max(0, Number(req.query.skip || 0));
-    const take = Math.min(100, Math.max(1, Number(req.query.take || req.query.pageSize || 50)));
+    const defaultTake = (!req.query.pageSize && !req.query.take && !req.query.page) ? 500 : 50;
+    const take = Math.min(1000, Math.max(1, Number(req.query.take || req.query.pageSize || defaultTake)));
     const role = String(req.query.role || '').trim();
     const status = String(req.query.status || '').trim();
     const q = String(req.query.q || '').trim();
     const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
-    const where: any = { role: { in: role && ['seller', 'buyer'].includes(role) ? [role] : ['seller', 'buyer'] } };
+    const baseWhere: any = {};
     if (status) {
-      where.onboardingStatus = status === 'review_queue' ? { in: pendingStatuses } : status;
+      baseWhere.onboardingStatus = status === 'review_queue' ? { in: pendingStatuses } : status;
     }
     if (q) {
-      where.OR = [
+      baseWhere.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
         { sellerProfile: { businessName: { contains: q, mode: 'insensitive' } } },
@@ -5205,42 +5206,86 @@ app.get('/api/admin/onboarding', authenticate, authorizeAdmin, async (req, res) 
         { buyerProfile: { pan: { contains: q, mode: 'insensitive' } } }
       ];
     }
-    const [users, total, statusGroups, approvedRoleGroups, flagged] = await Promise.all([
-      prisma.user.findMany({
-        where,
+
+    const userInclude = {
+      sellerProfile: {
         include: {
-          sellerProfile: {
+          sellerDocuments: {
             include: {
-              sellerDocuments: {
-                include: {
-                  fileAsset: true
-                }
-              }
+              fileAsset: true
             }
-          },
-          buyerProfile: true,
-          complianceViolations: { where: { status: 'open' }, orderBy: { createdAt: 'desc' } }
-        },
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' }
-      }),
-      prisma.user.count({ where }),
+          }
+        }
+      },
+      buyerProfile: true,
+      complianceViolations: { where: { status: 'open' as const }, orderBy: { createdAt: 'desc' as const } }
+    };
+
+    let users: any[] = [];
+    let total = 0;
+
+    const isSpecificRole = role && role !== 'all';
+    if (isSpecificRole) {
+      let roleCondition: any;
+      if (role === 'buyer') roleCondition = 'buyer';
+      else if (role === 'shg') roleCondition = { in: ['shg', 'seller'] };
+      else roleCondition = { in: ['seller', 'shg'] };
+
+      const roleWhere = { ...baseWhere, role: roleCondition };
+      const [fetchedUsers, fetchedTotal] = await Promise.all([
+        prisma.user.findMany({
+          where: roleWhere,
+          include: userInclude,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.user.count({ where: roleWhere })
+      ]);
+      users = fetchedUsers;
+      total = fetchedTotal;
+    } else {
+      const sellerWhere = { ...baseWhere, role: { in: ['seller', 'shg'] } };
+      const buyerWhere = { ...baseWhere, role: 'buyer' };
+      const totalWhere = { ...baseWhere, role: { in: ['seller', 'buyer', 'shg'] } };
+
+      const [sellerUsers, buyerUsers, fetchedTotal] = await Promise.all([
+        prisma.user.findMany({
+          where: sellerWhere,
+          include: userInclude,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.user.findMany({
+          where: buyerWhere,
+          include: userInclude,
+          skip,
+          take,
+          orderBy: { createdAt: 'desc' }
+        }),
+        prisma.user.count({ where: totalWhere })
+      ]);
+      users = [...sellerUsers, ...buyerUsers];
+      total = fetchedTotal;
+    }
+
+    const [statusGroups, approvedRoleGroups, flagged] = await Promise.all([
       prisma.user.groupBy({
         by: ['onboardingStatus'],
-        where: { role: { in: ['seller', 'buyer'] } },
+        where: { role: { in: ['seller', 'buyer', 'shg'] } },
         _count: { _all: true }
       }),
       prisma.user.groupBy({
         by: ['role'],
-        where: { role: { in: ['seller', 'buyer'] }, onboardingStatus: 'approved_for_procurement' },
+        where: { role: { in: ['seller', 'buyer', 'shg'] }, onboardingStatus: 'approved_for_procurement' },
         _count: { _all: true }
       }),
       prisma.complianceViolation.count({
-        where: { status: 'open', user: { role: { in: ['seller', 'buyer'] } } }
+        where: { status: 'open', user: { role: { in: ['seller', 'buyer', 'shg'] } } }
       })
     ]);
-    const sellers = users.filter((u: any) => u.role === 'seller');
+    const sellers = users.filter((u: any) => ['seller', 'shg'].includes(u.role));
     const buyers = users.filter((u: any) => u.role === 'buyer');
 
     const getDocumentEntries = (documents: any) =>

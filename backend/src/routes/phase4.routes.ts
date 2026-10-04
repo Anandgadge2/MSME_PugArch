@@ -104,7 +104,7 @@ const buyerIdParams = z.object({ buyerId: z.coerce.number().int().positive() });
 const gstParams = z.object({ gstin: z.string().trim().min(15).max(15) });
 const paginationQuery = z.object({
   q: z.string().trim().max(120).optional(),
-  role: z.enum(['buyer', 'seller']).optional(),
+  role: z.enum(['buyer', 'seller', 'shg', 'all']).optional(),
   status: z.string().trim().max(80).optional(),
   procurementMethod: z.string().trim().max(80).optional(),
   categoryId: z.coerce.number().int().positive().optional(),
@@ -445,8 +445,8 @@ const attachQuoteResponseFileAssets = async (rows: any[]) => {
       : row?.quoteResponses
   }));
 };
-const listWindow = (query: { page?: number; pageSize?: number; skip?: number; take?: number }) => {
-  const take = Math.min(500, Math.max(1, Number(query.pageSize ?? query.take ?? 50)));
+const listWindow = (query: { page?: number; pageSize?: number; skip?: number; take?: number }, defaultTake = 50) => {
+  const take = Math.min(1000, Math.max(1, Number(query.pageSize ?? query.take ?? defaultTake)));
   const skip = query.page ? (Math.max(1, Number(query.page)) - 1) * take : Math.max(0, Number(query.skip ?? 0));
   return { skip, take };
 };
@@ -3617,7 +3617,6 @@ router.get('/files/:id/signed-url', authenticate, asyncRoute(async (req: AuthReq
 router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const query = parse(paginationQuery, req.query);
   const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
-  const where: any = { role: { in: query.role ? [query.role] : ['buyer', 'seller', 'shg'] } };
   const conditions: any[] = [];
 
   if (query.status) {
@@ -3656,83 +3655,132 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
     });
   }
 
+  const baseWhere: any = {};
   if (conditions.length > 0) {
-    where.AND = conditions;
+    baseWhere.AND = conditions;
   }
-  const window = listWindow(query);
-  const [users, total, statusGroups, approvedRoleGroups, flagged] = await Promise.all([
-    db.user.findMany({
-      where,
+
+  const defaultTake = (!req.query.pageSize && !req.query.take && !req.query.page) ? 500 : 50;
+  const window = listWindow(query, defaultTake);
+
+  const userSelect = {
+    // List view payload - intentionally lean. Heavy fields like
+    // offices/bankAccounts/sellerDocuments/full profile are loaded only
+    // when the scrutiny modal is opened via GET /admin/onboarding/:id.
+    id: true,
+    name: true,
+    email: true,
+    role: true,
+    onboardingStatus: true,
+    registrationStatus: true,
+    registrationDetails: true,
+    createdAt: true,
+    updatedAt: true,
+    sectionStatus: true,
+    adminFeedback: true,
+    complianceViolations: { select: { id: true, type: true, severity: true, status: true } },
+    buyerProfile: {
       select: {
-        // List view payload - intentionally lean. Heavy fields like
-        // offices/bankAccounts/sellerDocuments/full profile are loaded only
-        // when the scrutiny modal is opened via GET /admin/onboarding/:id.
         id: true,
-        name: true,
+        organizationName: true,
+        businessType: true,
+        organizationType: true,
+        industry: true,
+        gst: true,
+        pan: true,
+        cin: true,
+        state: true,
+        city: true,
+        pincode: true,
+        registeredAddress: true,
+        corporateAddress: true,
+        mobile: true,
+        alternateMobile: true,
         email: true,
-        role: true,
-        onboardingStatus: true,
-        registrationStatus: true,
-        registrationDetails: true,
-        createdAt: true,
-        updatedAt: true,
-        sectionStatus: true,
-        adminFeedback: true,
-        complianceViolations: { select: { id: true, type: true, severity: true, status: true } },
-        buyerProfile: {
-          select: {
-            id: true,
-            organizationName: true,
-            businessType: true,
-            organizationType: true,
-            industry: true,
-            gst: true,
-            pan: true,
-            cin: true,
-            state: true,
-            city: true,
-            pincode: true,
-            registeredAddress: true,
-            corporateAddress: true,
-            mobile: true,
-            alternateMobile: true,
-            email: true,
-            representativeName: true,
-            designation: true,
-            department: true,
-            procurementCategories: true,
-            annualBudget: true,
-            documents: true,
-            organization: true
-          }
-        },
-        sellerProfile: {
-          select: {
-            id: true,
-            businessName: true,
-            organizationType: true,
-            pan: true,
-            msmeCategory: true,
-            msmeType: true,
-            vendorType: true,
-            turnoverMax3Yrs: true,
-            productCategories: true,
-            mobile: true,
-            isUdyamCertified: true,
-            documents: true,
-            offices: { orderBy: [{ isMandatory: 'desc' }, { id: 'asc' }] },
-            bankAccounts: true,
-            sellerDocuments: { include: { fileAsset: true } },
-            certifications: { include: { fileAsset: true } },
-            organization: true
-          }
-        },
+        representativeName: true,
+        designation: true,
+        department: true,
+        procurementCategories: true,
+        annualBudget: true,
+        documents: true,
         organization: true
-      },
-      orderBy: { updatedAt: 'desc' },
-      ...window
-    }),
-    db.user.count({ where }),
+      }
+    },
+    sellerProfile: {
+      select: {
+        id: true,
+        businessName: true,
+        organizationType: true,
+        pan: true,
+        msmeCategory: true,
+        msmeType: true,
+        vendorType: true,
+        turnoverMax3Yrs: true,
+        productCategories: true,
+        mobile: true,
+        isUdyamCertified: true,
+        documents: true,
+        offices: { orderBy: [{ isMandatory: 'desc' }, { id: 'asc' }] },
+        bankAccounts: true,
+        sellerDocuments: { include: { fileAsset: true } },
+        certifications: { include: { fileAsset: true } },
+        organization: true
+      }
+    },
+    organization: true
+  };
+
+  let users: any[] = [];
+  let total = 0;
+
+  const role = query.role;
+  const isSpecificRole = role && role !== 'all';
+
+  if (isSpecificRole) {
+    let roleCondition: any;
+    if (role === 'buyer') roleCondition = 'buyer';
+    else if (role === 'shg') roleCondition = { in: ['shg', 'seller'] };
+    else roleCondition = { in: ['seller', 'shg'] };
+
+    const roleWhere = { ...baseWhere, role: roleCondition };
+    const [fetchedUsers, fetchedTotal] = await Promise.all([
+      db.user.findMany({
+        where: roleWhere,
+        select: userSelect,
+        orderBy: { updatedAt: 'desc' },
+        ...window
+      }),
+      db.user.count({ where: roleWhere })
+    ]);
+    users = fetchedUsers;
+    total = fetchedTotal;
+  } else {
+    // When no specific role is requested, query sellers/SHG and buyers independently
+    // to prevent higher-volume buyer activity from starving seller records out of the result window.
+    const sellerWhere = { ...baseWhere, role: { in: ['seller', 'shg'] } };
+    const buyerWhere = { ...baseWhere, role: 'buyer' };
+    const totalWhere = { ...baseWhere, role: { in: ['buyer', 'seller', 'shg'] } };
+
+    const [sellerUsers, buyerUsers, fetchedTotal] = await Promise.all([
+      db.user.findMany({
+        where: sellerWhere,
+        select: userSelect,
+        orderBy: { updatedAt: 'desc' },
+        ...window
+      }),
+      db.user.findMany({
+        where: buyerWhere,
+        select: userSelect,
+        orderBy: { updatedAt: 'desc' },
+        ...window
+      }),
+      db.user.count({ where: totalWhere })
+    ]);
+    users = [...sellerUsers, ...buyerUsers];
+    total = fetchedTotal;
+  }
+
+  const [statusGroups, approvedRoleGroups, flagged] = await Promise.all([
     db.user.groupBy({
       by: ['onboardingStatus'],
       where: { role: { in: ['buyer', 'seller', 'shg'] } },
