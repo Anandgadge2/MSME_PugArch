@@ -1794,8 +1794,7 @@ export default function BuyerOnboarding() {
                         name="district"
                         value={
                           findMatchedDistrict(findMatchedState(formData.state) || formData.state, formData.district) ||
-                          formData.district ||
-                          ((findMatchedState(formData.state) || formData.state) === 'ODISHA' ? 'Jharsuguda' : '')
+                          formData.district
                         }
                         onChange={handleChange}
                         onBlur={handleBlur}

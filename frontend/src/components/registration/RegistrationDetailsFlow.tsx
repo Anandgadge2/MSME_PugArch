@@ -490,18 +490,16 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   ];
 
   const isPrimaryBuyer = role === 'buyer';
-  const effectiveState = formData.state || 'ODISHA';
-  const effectiveDistrict = formData.district || (effectiveState === 'ODISHA' ? 'Jharsuguda' : '');
   const isPrimaryBuyerOrganisationComplete = Boolean(
-    effectiveState &&
-    effectiveDistrict &&
+    formData.state &&
+    formData.district &&
     formData.organisation &&
     formData.officeZoneName
   );
-  const districtOptions = effectiveState ? indiaStatesDistricts[effectiveState] || [] : [];
+  const districtOptions = formData.state ? indiaStatesDistricts[formData.state] || [] : [];
   const missingPrimaryBuyerFields = [
-    !effectiveState && 'State',
-    !effectiveDistrict && 'District',
+    !formData.state && 'State',
+    !formData.district && 'District',
     !formData.organisation && 'Organisation',
     !formData.officeZoneName && 'Office/Zone Name'
   ].filter(Boolean);
@@ -1304,7 +1302,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         </label>
                         <Select
                           id="reg-flow-buyer-state"
-                          value={effectiveState}
+                          value={formData.state}
                           onChange={(e) => {
                             const newState = e.target.value;
                             setFormData({
@@ -1330,11 +1328,10 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         </label>
                         <Select
                           id="reg-flow-buyer-district"
-                          value={effectiveDistrict}
-                          disabled={!effectiveState}
+                          value={formData.district}
+                          disabled={!formData.state}
                           onChange={(e) => setFormData({
                             ...formData,
-                            state: effectiveState,
                             district: e.target.value,
                             city: e.target.value || formData.city,
                             organisation: ''
