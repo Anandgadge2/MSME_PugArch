@@ -746,21 +746,21 @@ export const aadhaarKycService = {
   },
 
   async status(user: AuthenticatedUser) {
-    const [row, dbUser] = await Promise.all([
-      prisma.userKycVerification.findUnique({
-        where: { userId_provider_verificationType: { userId: user.id, provider: PROVIDER, verificationType: VERIFICATION_TYPE } }
-      }),
-      prisma.user.findUnique({
-        where: { id: user.id },
-        select: { mobile: true }
-      })
-    ]);
+    const row = await prisma.userKycVerification.findUnique({
+      where: { userId_provider_verificationType: { userId: user.id, provider: PROVIDER, verificationType: VERIFICATION_TYPE } },
+      include: {
+        user: {
+          select: { mobile: true }
+        }
+      }
+    });
     if (!row) {
       return { status: 'NOT_STARTED', provider: PROVIDER, verificationType: VERIFICATION_TYPE };
     }
     const nameParts = (row.verifiedName || '').trim().split(/\s+/).filter(Boolean);
     const firstName = nameParts[0] || '';
     const lastName = nameParts.slice(1).join(' ') || '';
+    const mobile = row.user?.mobile || undefined;
 
     return {
       status: row.status,
@@ -773,8 +773,8 @@ export const aadhaarKycService = {
       ageVerified: row.ageVerified,
       verified: row.status === 'VERIFIED',
       isValid: row.status === 'VERIFIED',
-      mobile: dbUser?.mobile || undefined,
-      verifiedMobile: dbUser?.mobile || undefined,
+      mobile,
+      verifiedMobile: mobile,
     };
   },
 
