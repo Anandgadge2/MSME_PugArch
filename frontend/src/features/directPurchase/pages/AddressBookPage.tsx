@@ -43,9 +43,9 @@ export default function AddressBookPage() {
     const [email, setEmail] = useState('');
     const [addressLine1, setAddressLine1] = useState('');
     const [addressLine2, setAddressLine2] = useState('');
-    const [city, setCity] = useState('');
-    const [district, setDistrict] = useState('');
-    const [state, setState] = useState('');
+    const [city, setCity] = useState('Jharsuguda');
+    const [district, setDistrict] = useState('Jharsuguda');
+    const [state, setState] = useState('Odisha');
     const [pincode, setPincode] = useState('');
     const [landmark, setLandmark] = useState('');
     const [gstState, setGstState] = useState('');
@@ -65,8 +65,8 @@ export default function AddressBookPage() {
     // Clear district when state changes
     const handleStateChange = (newState: string) => {
         setState(newState);
-        setDistrict('');
-        setCity('');
+        setDistrict(newState === 'Odisha' ? 'Jharsuguda' : '');
+        setCity(newState === 'Odisha' ? 'Jharsuguda' : '');
     };
 
     // Clear city when district changes
@@ -112,9 +112,9 @@ export default function AddressBookPage() {
         setEmail('');
         setAddressLine1('');
         setAddressLine2('');
-        setCity('');
-        setDistrict('');
-        setState('');
+        setCity('Jharsuguda');
+        setDistrict('Jharsuguda');
+        setState('Odisha');
         setPincode('');
         setLandmark('');
         setGstState('');

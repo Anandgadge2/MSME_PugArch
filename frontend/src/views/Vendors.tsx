@@ -52,8 +52,8 @@ const Vendors = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All categories');
   const [selectedSize, setSelectedSize] = useState('All MSME categories');
-  const [selectedStateFilter, setSelectedStateFilter] = useState('All states');
-  const [selectedDistrictFilter, setSelectedDistrictFilter] = useState('All districts');
+  const [selectedStateFilter, setSelectedStateFilter] = useState('Odisha');
+  const [selectedDistrictFilter, setSelectedDistrictFilter] = useState('Jharsuguda');
   const [verifiedOnly, setVerifiedOnly] = useState(true);
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const [sortKey, setSortKey] = useState<'name' | 'region' | 'gst' | 'capability'>('name');
@@ -570,8 +570,9 @@ const Vendors = () => {
                 <select
                   value={selectedStateFilter}
                   onChange={e => {
-                    setSelectedStateFilter(e.target.value);
-                    setSelectedDistrictFilter('All districts');
+                    const nextState = e.target.value;
+                    setSelectedStateFilter(nextState);
+                    setSelectedDistrictFilter(nextState === 'Odisha' ? 'Jharsuguda' : 'All districts');
                   }}
                   className="h-9 w-full rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-2xs cursor-pointer truncate"
                 >

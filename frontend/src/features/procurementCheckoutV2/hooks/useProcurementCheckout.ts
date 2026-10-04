@@ -102,9 +102,9 @@ export function useProcurementCheckout() {
           deliveryDetails: {
             ...prev.deliveryDetails,
             deliveryAddress: addressLines,
-            city: defaultAddress.city || '',
-            district: defaultAddress.district || '',
-            state: defaultAddress.state || '',
+            city: defaultAddress.city || prev.deliveryDetails?.city || 'Jharsuguda',
+            district: defaultAddress.district || prev.deliveryDetails?.district || 'Jharsuguda',
+            state: defaultAddress.state || prev.deliveryDetails?.state || 'Odisha',
             pinCode: defaultAddress.pincode || '',
           }
         }));

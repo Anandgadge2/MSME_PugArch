@@ -60,7 +60,7 @@ export const DEFAULT_CHECKOUT_FORM = {
   demandSplittingConfirmation: false,
   buyerDetails: {},
   consigneeDetails: { consigneeType: 'Single' },
-  deliveryDetails: { deliveryPeriod: '30 Days', inspectionType: 'Department Inspection' },
+  deliveryDetails: { deliveryPeriod: '30 Days', inspectionType: 'Department Inspection', state: 'Odisha', district: 'Jharsuguda', city: 'Jharsuguda' },
   budgetSanction: { budgetAvailabilityConfirmed: 'Yes' },
   paymentAuthority: { paymentMode: 'PFMS', paymentTimeline: 'As per sanction' },
   priceReasonability: {},

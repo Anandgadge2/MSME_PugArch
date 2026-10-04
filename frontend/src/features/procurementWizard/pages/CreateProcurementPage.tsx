@@ -2787,9 +2787,9 @@ function BasicsStepForm({
   const [email, setEmail] = useState('');
   const [addressLine1, setAddressLine1] = useState('');
   const [addressLine2, setAddressLine2] = useState('');
-  const [state, setState] = useState('');
-  const [district, setDistrict] = useState('');
-  const [city, setCity] = useState('');
+  const [state, setState] = useState('Odisha');
+  const [district, setDistrict] = useState('Jharsuguda');
+  const [city, setCity] = useState('Jharsuguda');
   const [pincode, setPincode] = useState('');
   const [landmark, setLandmark] = useState('');
   const [gstState, setGstState] = useState('');
@@ -2866,7 +2866,8 @@ function BasicsStepForm({
 
   const handleStateChange = (val: string) => {
     setState(val);
-    setDistrict('');
+    setDistrict(val === 'Odisha' ? 'Jharsuguda' : '');
+    setCity(val === 'Odisha' ? 'Jharsuguda' : '');
   };
 
   const handleDistrictChange = (val: string) => {
@@ -2918,9 +2919,9 @@ function BasicsStepForm({
       setEmail('');
       setAddressLine1('');
       setAddressLine2('');
-      setState('');
-      setDistrict('');
-      setCity('');
+      setState('Odisha');
+      setDistrict('Jharsuguda');
+      setCity('Jharsuguda');
       setPincode('');
       setLandmark('');
       setGstState('');

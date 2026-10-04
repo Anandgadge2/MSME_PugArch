@@ -131,8 +131,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       password: '',
       confirmPassword: '',
       organisationType: '',
-      state: '',
-      district: '',
+      state: 'ODISHA',
+      district: 'Jharsuguda',
+      city: 'Jharsuguda',
       organisation: '',
       officeZoneName: ''
     };
@@ -140,7 +141,14 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       const saved = localStorage.getItem('preRegisterKycFormData');
       if (saved) {
         try {
-          return { ...initial, ...JSON.parse(saved) };
+          const parsed = JSON.parse(saved);
+          return {
+            ...initial,
+            ...parsed,
+            state: parsed.state || 'ODISHA',
+            district: parsed.district || (parsed.state === 'ODISHA' || !parsed.state ? 'Jharsuguda' : ''),
+            city: parsed.city || (parsed.state === 'ODISHA' || !parsed.state ? 'Jharsuguda' : '')
+          };
         } catch {
           return initial;
         }
@@ -155,6 +163,23 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
       localStorage.setItem('preRegisterKycFormData', JSON.stringify(safeFormData));
     }
   }, [formData]);
+
+  useEffect(() => {
+    setFormData(prev => {
+      const nextState = prev.state || 'ODISHA';
+      const nextDistrict = prev.district || (nextState === 'ODISHA' || !prev.state ? 'Jharsuguda' : '');
+      const nextCity = prev.city || (nextState === 'ODISHA' || !prev.state ? 'Jharsuguda' : '');
+      if (prev.state === nextState && prev.district === nextDistrict && prev.city === nextCity) {
+        return prev;
+      }
+      return {
+        ...prev,
+        state: nextState,
+        district: nextDistrict,
+        city: nextCity
+      };
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -465,16 +490,18 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   ];
 
   const isPrimaryBuyer = role === 'buyer';
+  const effectiveState = formData.state || 'ODISHA';
+  const effectiveDistrict = formData.district || (effectiveState === 'ODISHA' ? 'Jharsuguda' : '');
   const isPrimaryBuyerOrganisationComplete = Boolean(
-    formData.state &&
-    formData.district &&
+    effectiveState &&
+    effectiveDistrict &&
     formData.organisation &&
     formData.officeZoneName
   );
-  const districtOptions = formData.state ? indiaStatesDistricts[formData.state] || [] : [];
+  const districtOptions = effectiveState ? indiaStatesDistricts[effectiveState] || [] : [];
   const missingPrimaryBuyerFields = [
-    !formData.state && 'State',
-    !formData.district && 'District',
+    !effectiveState && 'State',
+    !effectiveDistrict && 'District',
     !formData.organisation && 'Organisation',
     !formData.officeZoneName && 'Office/Zone Name'
   ].filter(Boolean);
@@ -1073,8 +1100,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
           businessType: businessType || 'Proprietorship',
           shgType: shgType || null,
           pan: formData.panNumber || user.registrationDetails?.pan || '',
-          state: formData.state,
-          district: formData.district,
+          state: formData.state || 'ODISHA',
+          district: formData.district || 'Jharsuguda',
           officeZoneName: formData.officeZoneName,
           representativeName: user.name,
           mobile: formData.mobile || user.mobile || '',
@@ -1115,9 +1142,9 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
             userId: formData.userId,
             verificationMethod: formData.personalVerificationMethod,
             isEmailVerified: true,
-            state: formData.state,
-            district: formData.district,
-            city: formData.city || verifiedGstDetails?.city || formData.district || '',
+            state: formData.state || 'ODISHA',
+            district: formData.district || 'Jharsuguda',
+            city: formData.city || verifiedGstDetails?.city || formData.district || 'Jharsuguda',
             pincode: formData.pincode || verifiedGstDetails?.pincode || '',
             address: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
             registeredAddress: formData.address || formData.officeZoneName || verifiedGstDetails?.address || '',
@@ -1277,8 +1304,17 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         </label>
                         <Select
                           id="reg-flow-buyer-state"
-                          value={formData.state}
-                          onChange={(e) => setFormData({ ...formData, state: e.target.value, district: '', organisation: '' })}
+                          value={effectiveState}
+                          onChange={(e) => {
+                            const newState = e.target.value;
+                            setFormData({
+                              ...formData,
+                              state: newState,
+                              district: newState === 'ODISHA' ? 'Jharsuguda' : '',
+                              city: newState === 'ODISHA' ? 'Jharsuguda' : '',
+                              organisation: ''
+                            });
+                          }}
                           className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
                         >
                           <option value="">Select State</option>
@@ -1294,9 +1330,15 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         </label>
                         <Select
                           id="reg-flow-buyer-district"
-                          value={formData.district}
-                          disabled={!formData.state}
-                          onChange={(e) => setFormData({ ...formData, district: e.target.value, organisation: '' })}
+                          value={effectiveDistrict}
+                          disabled={!effectiveState}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            state: effectiveState,
+                            district: e.target.value,
+                            city: e.target.value || formData.city,
+                            organisation: ''
+                          })}
                           className="h-10 rounded border-slate-300 bg-slate-50/50 text-[13px] text-slate-700 focus:ring-[#12335f]"
                         >
                           <option value="">Select District</option>

@@ -253,7 +253,11 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        setShowcaseProfile(body.data);
+        setShowcaseProfile(body.data ? {
+          ...body.data,
+          state: body.data.state || 'Odisha',
+          city: body.data.city || 'Jharsuguda'
+        } : body.data);
         setBannerLoadError(false);
         initialProfileRef.current = body.data;
       }
@@ -417,7 +421,11 @@ export default function BuyerProfile() {
       });
       if (res.ok) {
         const body = await res.json();
-        setShowcaseProfile(body.data);
+        setShowcaseProfile(body.data ? {
+          ...body.data,
+          state: body.data.state || 'Odisha',
+          city: body.data.city || 'Jharsuguda'
+        } : body.data);
         initialProfileRef.current = body.data;
         setShowcaseOtpSent(false);
         setShowcaseOtp('');
@@ -957,8 +965,8 @@ export default function BuyerProfile() {
 
   const [formData, setFormData] = useState({
     pincode: '',
-    state: '',
-    district: '',
+    state: 'Odisha',
+    district: 'Jharsuguda',
     streetAddress: '',
     stdCode: '',
     officeContact: '',
@@ -1022,8 +1030,8 @@ export default function BuyerProfile() {
           if (data.profile) {
             const addressSnapshot = {
               pincode: data.profile.pincode || '',
-              state: data.profile.state || '',
-              district: data.profile.district || '',
+              state: data.profile.state || 'Odisha',
+              district: data.profile.district || 'Jharsuguda',
               streetAddress: data.profile.registeredAddress || '',
               stdCode: data.profile.stdCode || '',
               officeContact: data.profile.officeContact || data.profile.mobile || '',
@@ -1213,8 +1221,8 @@ export default function BuyerProfile() {
       setFormData(prev => ({
         ...prev,
         pincode: initialAddressRef.current.pincode || '',
-        state: initialAddressRef.current.state || '',
-        district: initialAddressRef.current.district || '',
+        state: initialAddressRef.current.state || 'Odisha',
+        district: initialAddressRef.current.district || 'Jharsuguda',
         streetAddress: initialAddressRef.current.streetAddress || '',
         stdCode: initialAddressRef.current.stdCode || '',
         officeContact: initialAddressRef.current.officeContact || '',
