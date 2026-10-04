@@ -13,7 +13,6 @@
   },
   "dependencies": {
     "@babel/runtime": "^7.29.2",
-    "@google/genai": "^1.29.0",
     "@tanstack/react-query": "^5.100.5",
     "clsx": "^2.1.1",
     "dompurify": "^3.4.16",
