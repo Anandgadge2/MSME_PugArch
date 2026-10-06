@@ -355,6 +355,13 @@ export default function BuyerOnboarding() {
 
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categorySearch, setCategorySearch] = useState('');
+
+  const filteredCategories = useMemo(() => {
+    if (!categorySearch.trim()) return categoriesList;
+    const term = categorySearch.toLowerCase().trim();
+    return categoriesList.filter(c => c.name.toLowerCase().includes(term));
+  }, [categoriesList, categorySearch]);
 
   useEffect(() => {
     let active = true;
@@ -745,19 +752,32 @@ export default function BuyerOnboarding() {
   const toggleTag = (field: string, value: string) => {
     if (isProfileLocked) return;
     const values = [...formData[field]];
-    if (values.includes(value)) {
-      setFormData({
-        ...formData,
-        [field]: values.filter(v => v !== value),
-        ...(field === 'procurementCategories' && value === 'Others'
-          ? { otherCategoryDetails: '', customProcurementCategoryInput: '', customProcurementCategories: [] }
-          : {}),
-        ...(field === 'preferredMethods' && value === 'Others'
-          ? { otherMethodDetails: '', customProcurementMethodInput: '', customPreferredMethods: [] }
-          : {})
-      });
-    } else {
-      setFormData({ ...formData, [field]: [...values, value] });
+    const isRemoving = values.includes(value);
+    const updatedValues = isRemoving ? values.filter(v => v !== value) : [...values, value];
+
+    setFormData({
+      ...formData,
+      [field]: updatedValues,
+      ...(field === 'procurementCategories' && value === 'Others' && isRemoving
+        ? { otherCategoryDetails: '', customProcurementCategoryInput: '', customProcurementCategories: [] }
+        : {}),
+      ...(field === 'preferredMethods' && value === 'Others' && isRemoving
+        ? { otherMethodDetails: '', customProcurementMethodInput: '', customPreferredMethods: [] }
+        : {})
+    });
+
+    if (field === 'procurementCategories') {
+      const validCats = (updatedValues.filter((c: string) => c !== 'Others').length > 0 || formData.customProcurementCategories.length > 0);
+      setErrors(prev => ({
+        ...prev,
+        procurementCategories: validCats ? '' : (submitAttempted ? 'Required: select at least one category' : '')
+      }));
+    } else if (field === 'preferredMethods') {
+      const validMethods = updatedValues.length > 0;
+      setErrors(prev => ({
+        ...prev,
+        preferredMethods: validMethods ? '' : (submitAttempted ? 'Required: select at least one method' : '')
+      }));
     }
   };
 
@@ -771,6 +791,7 @@ export default function BuyerOnboarding() {
         ...formData,
         procurementCategories: [...formData.procurementCategories, value]
       });
+      setErrors(prev => ({ ...prev, procurementCategories: '' }));
     }
   };
 
@@ -797,6 +818,7 @@ export default function BuyerOnboarding() {
       customProcurementCategories: updatedCustomProcurementCategories,
       otherCategoryDetails: updatedCustomProcurementCategories.join(', ')
     });
+    setErrors(prev => ({ ...prev, procurementCategories: '' }));
 
     // Register with backend to create master category & trigger admin notification
     try {
@@ -814,14 +836,19 @@ export default function BuyerOnboarding() {
   const removeCustomProcurementCategory = (categoryToRemove: string) => {
     if (isProfileLocked) return;
     const updatedCustomProcurementCategories = formData.customProcurementCategories.filter((item: string) => item !== categoryToRemove);
+    const updatedCats = updatedCustomProcurementCategories.length === 0
+      ? formData.procurementCategories.filter((item: string) => item !== 'Others')
+      : formData.procurementCategories;
     setFormData({
       ...formData,
       customProcurementCategories: updatedCustomProcurementCategories,
       otherCategoryDetails: updatedCustomProcurementCategories.join(', '),
-      procurementCategories: updatedCustomProcurementCategories.length === 0
-        ? formData.procurementCategories.filter((item: string) => item !== 'Others')
-        : formData.procurementCategories
+      procurementCategories: updatedCats
     });
+    if (submitAttempted) {
+      const validCats = (updatedCats.filter((item: string) => item !== 'Others').length > 0 || updatedCustomProcurementCategories.length > 0);
+      setErrors(prev => ({ ...prev, procurementCategories: validCats ? '' : 'Required: select at least one category' }));
+    }
   };
 
   const handleProcurementMethodSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -834,6 +861,7 @@ export default function BuyerOnboarding() {
         ...formData,
         preferredMethods: [...formData.preferredMethods, value]
       });
+      setErrors(prev => ({ ...prev, preferredMethods: '' }));
     }
   };
 
@@ -860,19 +888,25 @@ export default function BuyerOnboarding() {
       customPreferredMethods: updatedCustomPreferredMethods,
       otherMethodDetails: updatedCustomPreferredMethods.join(', ')
     });
+    setErrors(prev => ({ ...prev, preferredMethods: '' }));
   };
 
   const removeCustomPreferredMethod = (methodToRemove: string) => {
     if (isProfileLocked) return;
     const updatedCustomPreferredMethods = formData.customPreferredMethods.filter((item: string) => item !== methodToRemove);
+    const updatedMethods = updatedCustomPreferredMethods.length === 0
+      ? formData.preferredMethods.filter((item: string) => item !== 'Others')
+      : formData.preferredMethods;
     setFormData({
       ...formData,
       customPreferredMethods: updatedCustomPreferredMethods,
       otherMethodDetails: updatedCustomPreferredMethods.join(', '),
-      preferredMethods: updatedCustomPreferredMethods.length === 0
-        ? formData.preferredMethods.filter((item: string) => item !== 'Others')
-        : formData.preferredMethods
+      preferredMethods: updatedMethods
     });
+    if (submitAttempted) {
+      const validMethods = updatedMethods.length > 0;
+      setErrors(prev => ({ ...prev, preferredMethods: validMethods ? '' : 'Required: select at least one method' }));
+    }
   };
 
   const isDocFieldEditable = (fieldName: string) => {
@@ -1888,71 +1922,212 @@ export default function BuyerOnboarding() {
 
                 {activeSection === 'procurement' && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5">
-                      <div className="space-y-2">
-                        <Select
-                          label="PROCUREMENT CATEGORY (Multiple)"
-                          name="procurementCategoryPicker"
-                          value=""
-                          onChange={handleProcurementCategorySelect}
-                          error={submitAttempted ? errors.procurementCategories : ''}
-                        >
-                          <option value="" disabled>
-                            {loadingCategories ? 'Loading categories...' : 'Select a category'}
-                          </option>
-                          {categoriesList.map((cat) => (
-                            <option key={cat.id || cat.name} value={cat.name} disabled={formData.procurementCategories.includes(cat.name)}>
-                              {cat.name}
-                            </option>
-                          ))}
-                          <option value="Others" disabled={formData.procurementCategories.includes('Others')}>
-                            Others
-                          </option>
-                        </Select>
-
-                        <div className="flex flex-wrap gap-1">
-                          {formData.procurementCategories.map((cat: string) => (
-                            <span key={cat} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
-                              {cat}
-                              <button type="button" onClick={() => toggleTag('procurementCategories', cat)} className="text-slate-400 hover:text-slate-600">
-                                <X className="h-3 w-3" />
-                              </button>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
+                      {/* Left Column: PROCUREMENT CATEGORY (Multiple) */}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <label
+                            id="procurement-categories-label"
+                            className="block text-[11px] font-extrabold uppercase tracking-wide text-slate-700"
+                          >
+                            PROCUREMENT CATEGORY (Multiple)
+                            <span className="text-red-500 ml-1 font-bold">*</span>
+                          </label>
+                          {formData.procurementCategories.length > 0 && (
+                            <span className="text-[10px] font-bold text-[#12335f] bg-[#12335f]/10 px-2 py-0.5 rounded-full border border-[#12335f]/20">
+                              {formData.procurementCategories.length} selected
                             </span>
-                          ))}
+                          )}
                         </div>
 
+                        {/* Search filter for categories */}
+                        <div className="relative">
+                          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 pointer-events-none" />
+                          <input
+                            type="text"
+                            placeholder="Search categories..."
+                            value={categorySearch}
+                            onChange={(e) => setCategorySearch(e.target.value)}
+                            disabled={isProfileLocked}
+                            aria-label="Filter procurement categories"
+                            className="h-8.5 w-full rounded-lg border border-slate-200 bg-white pl-8 pr-3 text-xs placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] disabled:cursor-not-allowed disabled:opacity-50"
+                          />
+                        </div>
+
+                        {/* Checkbox Group Container */}
+                        <div
+                          role="group"
+                          aria-labelledby="procurement-categories-label"
+                          aria-describedby={submitAttempted && errors.procurementCategories ? "procurement-categories-error" : undefined}
+                          className={cn(
+                            "max-h-60 overflow-y-auto rounded-lg border bg-slate-50/50 p-2 space-y-1 transition-colors",
+                            submitAttempted && errors.procurementCategories ? "border-red-400 bg-red-50/20" : "border-slate-200"
+                          )}
+                        >
+                          {loadingCategories ? (
+                            <div className="flex items-center justify-center gap-2 py-6 text-xs text-slate-500 font-medium">
+                              <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />
+                              <span>Loading categories...</span>
+                            </div>
+                          ) : (
+                            <>
+                              {filteredCategories.map((cat) => {
+                                const isChecked = formData.procurementCategories.includes(cat.name);
+                                const catId = `proc-cat-${cat.id || cat.name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+                                return (
+                                  <label
+                                    key={cat.id || cat.name}
+                                    htmlFor={catId}
+                                    className={cn(
+                                      "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border text-xs font-semibold cursor-pointer transition-all select-none",
+                                      isChecked
+                                        ? "bg-white border-[#12335f]/30 text-[#12335f] shadow-2xs font-bold"
+                                        : "border-transparent bg-white/70 hover:bg-white hover:border-slate-200 text-slate-700"
+                                    )}
+                                  >
+                                    <div className="relative flex items-center justify-center shrink-0">
+                                      <input
+                                        id={catId}
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => toggleTag('procurementCategories', cat.name)}
+                                        disabled={isProfileLocked}
+                                        aria-invalid={Boolean(submitAttempted && errors.procurementCategories)}
+                                        className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                      />
+                                      <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                                    </div>
+                                    <span className="flex-1 truncate">{cat.name}</span>
+                                  </label>
+                                );
+                              })}
+
+                              {filteredCategories.length === 0 && !loadingCategories && (
+                                <div className="py-4 text-center text-xs text-slate-400">
+                                  No categories matching &quot;{categorySearch}&quot;
+                                </div>
+                              )}
+
+                              {/* 'Others' option */}
+                              {(!categorySearch.trim() || 'others'.includes(categorySearch.toLowerCase().trim())) && (
+                                <label
+                                  htmlFor="proc-cat-others"
+                                  className={cn(
+                                    "flex items-center gap-2.5 px-2.5 py-1.5 rounded-md border text-xs font-semibold cursor-pointer transition-all select-none border-t border-slate-200/80 mt-1",
+                                    formData.procurementCategories.includes('Others')
+                                      ? "bg-white border-[#12335f]/30 text-[#12335f] shadow-2xs font-bold"
+                                      : "border-transparent bg-white/70 hover:bg-white hover:border-slate-200 text-slate-700"
+                                  )}
+                                >
+                                  <div className="relative flex items-center justify-center shrink-0">
+                                    <input
+                                      id="proc-cat-others"
+                                      type="checkbox"
+                                      checked={formData.procurementCategories.includes('Others')}
+                                      onChange={() => toggleTag('procurementCategories', 'Others')}
+                                      disabled={isProfileLocked}
+                                      aria-invalid={Boolean(submitAttempted && errors.procurementCategories)}
+                                      className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    />
+                                    <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                                  </div>
+                                  <span className="flex-1 truncate">Others (specify custom category)</span>
+                                </label>
+                              )}
+                            </>
+                          )}
+                        </div>
+
+                        {submitAttempted && errors.procurementCategories && (
+                          <p id="procurement-categories-error" role="alert" className="text-[10px] sm:text-xs text-red-500 font-medium">
+                            {errors.procurementCategories}
+                          </p>
+                        )}
+
+                        {/* Selected Categories Chips */}
+                        {formData.procurementCategories.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            {formData.procurementCategories.map((cat: string) => (
+                              <span
+                                key={cat}
+                                className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200"
+                              >
+                                {cat}
+                                {!isProfileLocked && (
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleTag('procurementCategories', cat)}
+                                    className="text-slate-400 hover:text-slate-600 focus:outline-none"
+                                    aria-label={`Remove category ${cat}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Custom Procurement Category Input if 'Others' is selected */}
                         {formData.procurementCategories.includes('Others') && (
-                          <div className="space-y-2 pt-1">
+                          <div className="space-y-2 pt-2 border-t border-slate-100">
+                            <label htmlFor="customProcurementCategoryInput" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                              Specify Custom Category
+                            </label>
                             <div className="flex gap-2">
                               <Input
+                                id="customProcurementCategoryInput"
                                 placeholder="Enter custom category"
                                 name="customProcurementCategoryInput"
                                 value={formData.customProcurementCategoryInput}
                                 onChange={handleChange}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    addCustomProcurementCategory();
+                                  }
+                                }}
+                                disabled={isProfileLocked}
                               />
                               <Button
                                 type="button"
                                 onClick={addCustomProcurementCategory}
-                                className="bg-slate-900 text-white h-9 px-3 rounded-md"
+                                disabled={isProfileLocked || !formData.customProcurementCategoryInput?.trim()}
+                                className="bg-[#12335f] hover:bg-[#0d2342] text-white h-9 px-3 rounded-md shrink-0 flex items-center gap-1 text-xs font-bold"
+                                aria-label="Add custom category"
                               >
                                 <Plus className="h-3.5 w-3.5" />
+                                <span>Add</span>
                               </Button>
                             </div>
-                            <div className="flex flex-wrap gap-1">
-                              {formData.customProcurementCategories.map((cat: string) => (
-                                <span key={cat} className="inline-flex items-center gap-1 bg-slate-50 text-[#12335f] px-2 py-0.5 rounded text-[10px] font-black uppercase border border-slate-200">
-                                  {cat}
-                                  <button type="button" onClick={() => removeCustomProcurementCategory(cat)} className="text-teal-400 hover:text-[#12335f]">
-                                    <X className="h-2.5 w-2.5" />
-                                  </button>
-                                </span>
-                              ))}
-                            </div>
+                            {formData.customProcurementCategories.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {formData.customProcurementCategories.map((cat: string) => (
+                                  <span
+                                    key={cat}
+                                    className="inline-flex items-center gap-1 bg-slate-50 text-[#12335f] px-2 py-0.5 rounded text-[10px] font-black uppercase border border-slate-200"
+                                  >
+                                    {cat}
+                                    {!isProfileLocked && (
+                                      <button
+                                        type="button"
+                                        onClick={() => removeCustomProcurementCategory(cat)}
+                                        className="text-teal-500 hover:text-[#12335f] focus:outline-none"
+                                        aria-label={`Remove custom category ${cat}`}
+                                      >
+                                        <X className="h-2.5 w-2.5" />
+                                      </button>
+                                    )}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
 
-                      <div className="space-y-3">
+                      {/* Right Column: ANNUAL PROCUREMENT BUDGET & PREFERRED PROCUREMENT METHODS */}
+                      <div className="space-y-4">
                         <Select
                           label="ANNUAL PROCUREMENT BUDGET"
                           name="annualBudget"
@@ -1960,6 +2135,7 @@ export default function BuyerOnboarding() {
                           onChange={handleChange}
                           error={submitAttempted ? errors.annualBudget : ''}
                           required
+                          disabled={isProfileLocked}
                         >
                           <option value="">Select Budget Range</option>
                           {ANNUAL_BUDGET_OPTIONS.map(opt => (
@@ -1967,60 +2143,148 @@ export default function BuyerOnboarding() {
                           ))}
                         </Select>
 
-                        <div className="space-y-2">
-                          <Select
-                            label="PREFERRED PROCUREMENT METHODS (Multiple)"
-                            name="preferredMethodPicker"
-                            value=""
-                            onChange={handleProcurementMethodSelect}
-                            error={submitAttempted ? errors.preferredMethods : ''}
-                          >
-                            <option value="" disabled>Select a method</option>
-                            {PROCUREMENT_METHOD_OPTIONS.map((method) => (
-                              <option key={method} value={method} disabled={formData.preferredMethods.includes(method)}>
-                                {method}
-                              </option>
-                            ))}
-                          </Select>
-
-                          <div className="flex flex-wrap gap-1">
-                            {formData.preferredMethods.map((method: string) => (
-                              <span key={method} className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200">
-                                {method}
-                                <button type="button" onClick={() => toggleTag('preferredMethods', method)} className="text-slate-400 hover:text-slate-600">
-                                  <X className="h-3 w-3" />
-                                </button>
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <label
+                              id="preferred-methods-label"
+                              className="block text-[11px] font-extrabold uppercase tracking-wide text-slate-700"
+                            >
+                              PREFERRED PROCUREMENT METHODS (Multiple)
+                              <span className="text-red-500 ml-1 font-bold">*</span>
+                            </label>
+                            {formData.preferredMethods.length > 0 && (
+                              <span className="text-[10px] font-bold text-[#12335f] bg-[#12335f]/10 px-2 py-0.5 rounded-full border border-[#12335f]/20">
+                                {formData.preferredMethods.length} selected
                               </span>
-                            ))}
+                            )}
                           </div>
 
+                          {/* Checkbox Group Container */}
+                          <div
+                            role="group"
+                            aria-labelledby="preferred-methods-label"
+                            aria-describedby={submitAttempted && errors.preferredMethods ? "preferred-methods-error" : undefined}
+                            className={cn(
+                              "rounded-lg border bg-slate-50/50 p-2 space-y-1 transition-colors",
+                              submitAttempted && errors.preferredMethods ? "border-red-400 bg-red-50/20" : "border-slate-200"
+                            )}
+                          >
+                            {PROCUREMENT_METHOD_OPTIONS.map((method) => {
+                              const isChecked = formData.preferredMethods.includes(method);
+                              const methodId = `proc-method-${method.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+                              return (
+                                <label
+                                  key={method}
+                                  htmlFor={methodId}
+                                  className={cn(
+                                    "flex items-center gap-2.5 px-2.5 py-2 rounded-md border text-xs font-semibold cursor-pointer transition-all select-none",
+                                    isChecked
+                                      ? "bg-white border-[#12335f]/30 text-[#12335f] shadow-2xs font-bold"
+                                      : "border-transparent bg-white/70 hover:bg-white hover:border-slate-200 text-slate-700"
+                                  )}
+                                >
+                                  <div className="relative flex items-center justify-center shrink-0">
+                                    <input
+                                      id={methodId}
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={() => toggleTag('preferredMethods', method)}
+                                      disabled={isProfileLocked}
+                                      aria-invalid={Boolean(submitAttempted && errors.preferredMethods)}
+                                      className="peer h-4 w-4 cursor-pointer appearance-none rounded border border-slate-300 bg-white transition-all checked:bg-[#12335f] checked:border-[#12335f] hover:border-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 disabled:cursor-not-allowed disabled:opacity-50"
+                                    />
+                                    <Check className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-2.5 w-2.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity pointer-events-none stroke-[3]" />
+                                  </div>
+                                  <span className="flex-1">{method === 'Others' ? 'Others (specify custom method)' : method}</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+
+                          {submitAttempted && errors.preferredMethods && (
+                            <p id="preferred-methods-error" role="alert" className="text-[10px] sm:text-xs text-red-500 font-medium">
+                              {errors.preferredMethods}
+                            </p>
+                          )}
+
+                          {/* Selected Methods Chips */}
+                          {formData.preferredMethods.length > 0 && (
+                            <div className="flex flex-wrap gap-1 pt-0.5">
+                              {formData.preferredMethods.map((method: string) => (
+                                <span
+                                  key={method}
+                                  className="inline-flex items-center gap-1 bg-slate-100 text-slate-700 px-2 py-0.5 rounded text-[11px] font-bold border border-slate-200"
+                                >
+                                  {method}
+                                  {!isProfileLocked && (
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleTag('preferredMethods', method)}
+                                      className="text-slate-400 hover:text-slate-600 focus:outline-none"
+                                      aria-label={`Remove method ${method}`}
+                                    >
+                                      <X className="h-3 w-3" />
+                                    </button>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* Custom Preferred Method Input if 'Others' is selected */}
                           {formData.preferredMethods.includes('Others') && (
-                            <div className="space-y-2 pt-1">
+                            <div className="space-y-2 pt-2 border-t border-slate-100">
+                              <label htmlFor="customProcurementMethodInput" className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                                Specify Custom Method
+                              </label>
                               <div className="flex gap-2">
                                 <Input
+                                  id="customProcurementMethodInput"
                                   placeholder="Enter custom method"
                                   name="customProcurementMethodInput"
                                   value={formData.customProcurementMethodInput}
                                   onChange={handleChange}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      addCustomPreferredMethod();
+                                    }
+                                  }}
+                                  disabled={isProfileLocked}
                                 />
                                 <Button
                                   type="button"
                                   onClick={addCustomPreferredMethod}
-                                  className="bg-slate-900 text-white h-9 px-3 rounded-md"
+                                  disabled={isProfileLocked || !formData.customProcurementMethodInput?.trim()}
+                                  className="bg-[#12335f] hover:bg-[#0d2342] text-white h-9 px-3 rounded-md shrink-0 flex items-center gap-1 text-xs font-bold"
+                                  aria-label="Add custom method"
                                 >
                                   <Plus className="h-3.5 w-3.5" />
+                                  <span>Add</span>
                                 </Button>
                               </div>
-                              <div className="flex flex-wrap gap-1">
-                                {formData.customPreferredMethods.map((method: string) => (
-                                  <span key={method} className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black uppercase border border-indigo-100">
-                                    {method}
-                                    <button type="button" onClick={() => removeCustomPreferredMethod(method)} className="text-indigo-400 hover:text-indigo-600">
-                                      <X className="h-2.5 w-2.5" />
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
+                              {formData.customPreferredMethods.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {formData.customPreferredMethods.map((method: string) => (
+                                    <span
+                                      key={method}
+                                      className="inline-flex items-center gap-1 bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-[10px] font-black uppercase border border-indigo-100"
+                                    >
+                                      {method}
+                                      {!isProfileLocked && (
+                                        <button
+                                          type="button"
+                                          onClick={() => removeCustomPreferredMethod(method)}
+                                          className="text-indigo-400 hover:text-indigo-600 focus:outline-none"
+                                          aria-label={`Remove custom method ${method}`}
+                                        >
+                                          <X className="h-2.5 w-2.5" />
+                                        </button>
+                                      )}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
