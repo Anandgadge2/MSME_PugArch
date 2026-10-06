@@ -231,8 +231,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       name: org.organizationName || regDetails.businessName || '',
       type: 'Registered Office',
       pincode: org.pincode || gstDetails.pincode || '',
-      state: org.state || gstDetails.state || regDetails.state || '',
-      city: org.city || gstDetails.city || regDetails.district || '',
+      state: org.state || gstDetails.state || regDetails.state || 'ODISHA',
+      city: org.city || gstDetails.city || regDetails.district || 'Jharsuguda',
       flat: org.addressLine1 || gstDetails.address || '',
       premises: '',
       road: '',
@@ -401,7 +401,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     msmeType: '',
     vendorType: '',
     registrationTypes: [],
-    productCategories: []
+    productCategories: [],
+    isJharsugudaMsme: true
   };
 
   const normalizeList = (value: unknown) => Array.isArray(value) ? value : [];
@@ -413,6 +414,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     return {
       ...sellerFormDefaults,
       ...cachedProfile,
+      isJharsugudaMsme: typeof cachedProfile?.isJharsugudaMsme === 'boolean' ? cachedProfile.isJharsugudaMsme : true,
       panVerified: cachedProfile.panVerified || orgVerified,
       detailsUpdated: cachedProfile.detailsUpdated || orgVerified,
       organizationType: cachedRegDetails.businessType || (cachedProfile.organizationType && cachedProfile.organizationType !== 'MSME' ? cachedProfile.organizationType : null) || cachedProfile.organizationType || cachedOrg.organizationType || 'Proprietorship',
@@ -1138,8 +1140,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       name: org.organizationName || regDetails.businessName || '',
       type: 'Registered',
       pincode: org.pincode || gstDetails.pincode || '',
-      state: org.state || gstDetails.state || regDetails.state || '',
-      city: org.city || gstDetails.city || regDetails.district || '',
+      state: org.state || gstDetails.state || regDetails.state || 'ODISHA',
+      city: org.city || gstDetails.city || regDetails.district || 'Jharsuguda',
       flat: org.addressLine1 || gstDetails.address || '',
       premises: '',
       road: '',
@@ -2135,7 +2137,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                                 aria-invalid={!!officeErrors.state}
                                 aria-describedby={officeErrors.state ? "office-state-err" : undefined}
                                 onChange={(e) => {
-                                  const next = { ...officeForm, state: e.target.value, city: '' };
+                                  const nextState = e.target.value;
+                                  const next = { ...officeForm, state: nextState, city: nextState === 'ODISHA' ? 'Jharsuguda' : '' };
                                   setOfficeForm(next);
                                   setOfficeErrors(validateOfficeForm(next).errors);
                                 }}

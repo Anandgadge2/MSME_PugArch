@@ -203,12 +203,13 @@ const DEFAULT_BUYER_FORM_DATA: any = {
 
   // Address Details
   country: 'India',
-  state: '',
-  district: '',
-  city: '',
+  state: 'ODISHA',
+  district: 'Jharsuguda',
+  city: 'Jharsuguda',
   pincode: '',
   registeredAddress: '',
   corporateAddress: '',
+  isJharsugudaOrg: true,
 
   // Procurement Profile
   procurementCategories: [],
@@ -315,12 +316,13 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
         gst: org.gstin || data?.profile?.gst || regDetails.gstin || fallback.gst,
         pan: org.panNumber || data?.profile?.pan || regDetails.pan || fallback.pan,
 
-        state: findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || '')) || cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state,
+        isJharsugudaOrg: storedDraft?.formData?.isJharsugudaOrg !== undefined ? storedDraft.formData.isJharsugudaOrg : (data?.profile?.isJharsugudaOrg !== undefined ? data.profile.isJharsugudaOrg : true),
+        state: findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || 'ODISHA')) || cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || 'ODISHA',
         district: findMatchedDistrict(
-          findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || '')),
-          String(cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district || '')
-        ) || cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district,
-        city: cleanPlaceholder(org.city || storedDraft?.formData?.city || data?.profile?.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city),
+          findMatchedState(String(cleanPlaceholder(org.state || data?.profile?.state) || registrationState || fallback.state || 'ODISHA')),
+          String(cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district || 'Jharsuguda')
+        ) || cleanPlaceholder(org.district || data?.profile?.district) || registrationDistrict || fallback.district || 'Jharsuguda',
+        city: cleanPlaceholder(org.city || storedDraft?.formData?.city || data?.profile?.city || regDetails.city || (primaryUser ? (registrationDistrict || org.district) : '') || fallback.city || 'Jharsuguda'),
         pincode: cleanPlaceholder(org.pincode || storedDraft?.formData?.pincode || data?.profile?.pincode || regDetails.pincode || fallback.pincode),
         registeredAddress: cleanPlaceholder(org.addressLine1 || storedDraft?.formData?.registeredAddress || data?.profile?.registeredAddress || regDetails.address || fallback.registeredAddress),
     };
@@ -1800,7 +1802,12 @@ export default function BuyerOnboarding() {
                         onChange={(e) => {
                           if (!isProfileLocked) {
                             const nextState = e.target.value;
-                            setFormData((prev: any) => ({ ...prev, state: nextState, district: '' }));
+                            setFormData((prev: any) => ({
+                              ...prev,
+                              state: nextState,
+                              district: nextState === 'ODISHA' ? 'Jharsuguda' : '',
+                              city: nextState === 'ODISHA' ? (prev.city || 'Jharsuguda') : prev.city
+                            }));
                           }
                         }}
                         onBlur={handleBlur}

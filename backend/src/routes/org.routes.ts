@@ -2366,8 +2366,9 @@ router.post(
                     organizationName: body.organizationName,
                     organizationType: body.organizationType as any,
                     addressLine1: body.addressLine1 || null,
-                    city: body.city || null,
-                    state: body.state || null,
+                    city: body.city || 'Jharsuguda',
+                    district: (body as any).district || body.city || 'Jharsuguda',
+                    state: body.state || 'ODISHA',
                     pincode: body.pincode || null,
                     
                     verificationStatus: 'PENDING' as any,

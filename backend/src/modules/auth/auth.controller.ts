@@ -698,9 +698,9 @@ export const authController = {
           orgType = 'MSME';
         }
 
-        const stateVal = firstValue(rDetails.state, gstDetails.state) || null;
-        const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || null;
-        const cityVal = firstValue(rDetails.city, gstDetails.city, rDetails.district) || null;
+        const stateVal = firstValue(rDetails.state, gstDetails.state) || 'ODISHA';
+        const districtVal = firstValue(rDetails.district, gstDetails.district, gstDetails.city) || 'Jharsuguda';
+        const cityVal = firstValue(rDetails.city, gstDetails.city, rDetails.district) || 'Jharsuguda';
         const pincodeVal = firstValue(rDetails.pincode, gstDetails.pincode) || null;
         const addressLine1Val = firstValue(rDetails.address, rDetails.registeredAddress, rDetails.officeZoneName, gstDetails.address) || null;
 

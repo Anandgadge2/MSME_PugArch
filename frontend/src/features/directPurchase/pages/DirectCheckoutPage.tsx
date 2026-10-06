@@ -50,8 +50,8 @@ export default function DirectCheckoutPage() {
 
   // Delivery details form state
   const [deliveryAddress, setDeliveryAddress] = useState('');
-  const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [city, setCity] = useState('Jharsuguda');
+  const [state, setState] = useState('Odisha');
   const [pincode, setPincode] = useState('');
   const [contactName, setContactName] = useState('');
   const [mobileNumber, setMobileNumber] = useState('');
@@ -310,8 +310,8 @@ export default function DirectCheckoutPage() {
                         setSelectedAddressId(null);
                         setIsCustomAddress(true);
                         setDeliveryAddress('');
-                        setCity('');
-                        setState('');
+                        setCity('Jharsuguda');
+                        setState('Odisha');
                         setPincode('');
                       }}
                       className={`cursor-pointer rounded-xl border border-dashed p-3 transition-all flex items-center justify-center text-center ${

@@ -1,6 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import * as XLSX from 'xlsx';
+import { OrganizationType } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { authenticate, authorize, type AuthRequest } from '../middleware/auth.js';
 import { upload } from '../config/storage.js';
@@ -17,6 +18,24 @@ const db = prisma as any;
 const router = Router();
 
 // Help utilities
+const ALLOWED_ORG_TYPES = new Set<string>(Object.values(OrganizationType));
+
+const normalizeOrgTypeEnum = (val?: unknown): OrganizationType | undefined => {
+  if (!val) return undefined;
+  const upper = String(val).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (ALLOWED_ORG_TYPES.has(upper)) return upper as OrganizationType;
+  if (upper.includes('GOVERNMENT') || upper === 'GOVT') return OrganizationType.GOVERNMENT;
+  if (upper.includes('PSU') || upper.includes('PUBLIC_SECTOR')) return OrganizationType.PSU;
+  if (upper.includes('PUBLIC')) return OrganizationType.PUBLIC_LIMITED;
+  if (upper.includes('PRIVATE') || upper.includes('PVT')) return OrganizationType.PRIVATE_LIMITED;
+  if (upper.includes('LLP')) return OrganizationType.LLP;
+  if (upper.includes('PARTNER')) return OrganizationType.PARTNERSHIP;
+  if (upper.includes('PROPRIET')) return OrganizationType.PROPRIETORSHIP;
+  if (upper.includes('STARTUP')) return OrganizationType.STARTUP;
+  if (upper.includes('MSME') || upper.includes('MICRO') || upper.includes('SMALL') || upper.includes('MEDIUM')) return OrganizationType.MSME;
+  return undefined;
+};
+
 const clean = (value: unknown) => String(value ?? '').trim();
 const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
 const parse = <T>(schema: z.ZodType<T>, value: unknown) => schema.parse(value);
@@ -233,7 +252,12 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
     const orgId = req.user?.organizationId || existing.organizationId;
     if (orgId) {
       const orgUpdates: any = {};
-      if (body.organizationType) orgUpdates.organizationType = body.organizationType;
+      if (body.organizationType) {
+        const normalizedOrgType = normalizeOrgTypeEnum(body.organizationType);
+        if (normalizedOrgType) {
+          orgUpdates.organizationType = normalizedOrgType;
+        }
+      }
       if (body.registrationNumber) orgUpdates.cinNumber = body.registrationNumber;
       if (body.gstNumber && isSensitiveChanged) orgUpdates.gstin = body.gstNumber;
       if (body.panNumber && isSensitiveChanged) orgUpdates.panNumber = body.panNumber;

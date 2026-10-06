@@ -46,8 +46,8 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
 
     const [organizationName, setOrganizationName] = useState('');
     const [organizationType, setOrganizationType] = useState('STARTUP');
-    const [city, setCity] = useState('');
-    const [state, setState] = useState('');
+    const [city, setCity] = useState('Jharsuguda');
+    const [state, setState] = useState('ODISHA');
     const [pincode, setPincode] = useState('');
     const [addressLine1, setAddressLine1] = useState('');
 
@@ -56,8 +56,8 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
     const reset = () => {
         setOrganizationName('');
         setOrganizationType('STARTUP');
-        setCity('');
-        setState('');
+        setCity('Jharsuguda');
+        setState('ODISHA');
         setPincode('');
         setAddressLine1('');
     };
@@ -182,8 +182,9 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
                             <select
                                 value={state}
                                 onChange={e => {
-                                    setState(e.target.value);
-                                    setCity(''); // Clear city on state change
+                                    const nextState = e.target.value;
+                                    setState(nextState);
+                                    setCity(nextState === 'ODISHA' ? 'Jharsuguda' : '');
                                 }}
                                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30"
                             >
@@ -202,7 +203,7 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
                                 className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-[#12335f]/30 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
                             >
                                 <option value="">{state ? "Select City" : "Select State First"}</option>
-                                {(indiaStatesDistricts[state] || []).map(c => (
+                                {(state ? indiaStatesDistricts[state] || [] : []).map(c => (
                                     <option key={c} value={c}>{c}</option>
                                 ))}
                             </select>
