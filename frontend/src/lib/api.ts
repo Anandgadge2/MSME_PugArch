@@ -132,6 +132,15 @@ const isCsrfFailure = async (response: Response) => {
   }
 };
 
+const getResponseErrorCode = async (response: Response): Promise<string> => {
+  try {
+    const body = await response.clone().json();
+    return String(body?.code || body?.errorCode || body?.data?.code || body?.data?.errorCode || '');
+  } catch {
+    return '';
+  }
+};
+
 let activeRefreshPromise: Promise<boolean> | null = null;
 const refreshSessionCookies = async (): Promise<boolean> => {
   if (activeRefreshPromise) return activeRefreshPromise;
@@ -143,6 +152,12 @@ const refreshSessionCookies = async (): Promise<boolean> => {
         headers: normalizeHeaders(undefined, null),
         body: '{}',
       });
+      if (!response.ok) {
+        const code = await getResponseErrorCode(response);
+        if (code === 'SESSION_CONCURRENT_LOGIN' && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: 'SESSION_CONCURRENT_LOGIN' } }));
+        }
+      }
       return response.ok;
     } catch {
       return false;
@@ -210,23 +225,31 @@ export const api = {
         }
       }
 
-      // If unauthorized and not an auth endpoint, attempt transparent session refresh and retry once
+      // If unauthorized and not an auth endpoint, check error code
       if (response.status === 401 && !endpoint.startsWith('/api/auth/')) {
-        const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
-          getCookieValue('csrfToken') || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
-        );
-        if (hasSessionEvidence) {
-          const refreshed = await refreshSessionCookies().catch(() => false);
-          if (refreshed) {
-            const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
-            response = await sendRequest(retryHeaders);
+        const errCode = await getResponseErrorCode(response);
+        if (errCode === 'SESSION_CONCURRENT_LOGIN') {
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: 'SESSION_CONCURRENT_LOGIN' } }));
+          }
+        } else {
+          const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
+            getCookieValue('csrfToken') || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
+          );
+          if (hasSessionEvidence) {
+            const refreshed = await refreshSessionCookies().catch(() => false);
+            if (refreshed) {
+              const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
+              response = await sendRequest(retryHeaders);
+            }
           }
         }
       }
 
       if (response.status === 401 && shouldDispatchUnauthorized(endpoint)) {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+          const code = await getResponseErrorCode(response);
+          window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: code || 'SESSION_INVALID' } }));
         }
       }
       if (response.status === 503 && !endpoint.includes('/health')) {

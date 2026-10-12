@@ -25,7 +25,8 @@ import {
   Award,
   Globe2,
   Cpu,
-  Fingerprint
+  Fingerprint,
+  AlertTriangle
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { isShgUser } from '../lib/shg';
@@ -69,6 +70,17 @@ export default function Login() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
+  const reason = searchParams.get('reason');
+  const isConcurrentSession = reason === 'concurrent_session';
+
+  useEffect(() => {
+    if (isConcurrentSession) {
+      toast.error('You were signed out because your account was logged in from another device.', {
+        id: 'concurrent-session-toast',
+        duration: 8000
+      });
+    }
+  }, [isConcurrentSession]);
 
   const generateCaptcha = useCallback(() => {
     setCaptchaValue(generateSecureCaptchaString());
@@ -591,6 +603,21 @@ export default function Login() {
               Enter your authorized credentials to access your portal account
             </p>
           </div>
+
+          {/* Concurrent Session Warning Alert */}
+          {isConcurrentSession && (
+            <div className="mb-5 p-4 rounded-2xl bg-amber-50/90 border border-amber-200/90 text-amber-900 flex items-start gap-3.5 shadow-sm animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="p-2 rounded-xl bg-amber-100 text-amber-700 shrink-0 mt-0.5">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-wider text-amber-900">Session Terminated</p>
+                <p className="text-xs font-medium text-amber-800 mt-0.5 leading-relaxed">
+                  You have been signed out because your account was logged in from another device or browser.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Form Content */}
           <form onSubmit={twoFactorPending ? handleTwoFactorSubmit : handleSubmit} className="space-y-4" suppressHydrationWarning>

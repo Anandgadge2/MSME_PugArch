@@ -38,6 +38,8 @@ import { notificationService } from '../../services/notification.service.js';
 import { onUserLinkedToOrganization } from '../../services/org-membership.service.js';
 import { getDefaultCompanyId } from '../../services/default-company.service.js';
 import { invalidateUserAuthCache, getActivePermissionCodes, isMasterAdmin } from '../../services/rbac.service.js';
+import { setCache } from '../../services/cache.service.js';
+import { redisKeys } from '../../constants/redis-keys.js';
 
 // CreateNotificationSafe mock for backward compatibility if not globally service-ified yet
 
@@ -1103,9 +1105,34 @@ export const authController = {
         });
       }
 
+      const previousSessionVersion = user.sessionVersion;
+
+      // Revoke any previous active refresh sessions in DB
+      await prisma.userSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+
+      // Mark the terminated session version with concurrent login notice
+      await setCache(
+        redisKeys.concurrentLoginNotice(user.id, previousSessionVersion),
+        {
+          reason: 'CONCURRENT_LOGIN',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          loggedInAt: new Date().toISOString()
+        },
+        3600
+      );
+
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
-        data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
+        data: {
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastLoginAt: new Date(),
+          sessionVersion: { increment: 1 }
+        }
       });
       await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
@@ -1168,9 +1195,35 @@ export const authController = {
       }
 
       await consumeOtp('two_factor_login', otpIdentity);
+
+      const previousSessionVersion = user.sessionVersion;
+
+      // Revoke any previous active refresh sessions in DB
+      await prisma.userSession.updateMany({
+        where: { userId: user.id, revokedAt: null },
+        data: { revokedAt: new Date() }
+      });
+
+      // Mark the terminated session version with concurrent login notice
+      await setCache(
+        redisKeys.concurrentLoginNotice(user.id, previousSessionVersion),
+        {
+          reason: 'CONCURRENT_LOGIN',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          loggedInAt: new Date().toISOString()
+        },
+        3600
+      );
+
       const updatedUser = await prisma.user.update({
         where: { id: user.id },
-        data: { failedLoginCount: 0, lockedUntil: null, lastLoginAt: new Date() }
+        data: {
+          failedLoginCount: 0,
+          lockedUntil: null,
+          lastLoginAt: new Date(),
+          sessionVersion: { increment: 1 }
+        }
       });
       await invalidateUserAuthCache(user.id);
       const tokens = await issueCookieAuth(req, res, updatedUser);
@@ -1214,11 +1267,17 @@ export const authController = {
   refresh: async (req: Request, res: Response) => {
     try {
       const refreshToken = String(req.body.refreshToken || getRefreshTokenFromRequest(req) || '');
-      if (!refreshToken) return res.status(401).json({ message: 'Invalid refresh token' });
+      if (!refreshToken) return res.status(401).json({ message: 'Invalid refresh token', code: 'SESSION_INVALID' });
       res.json(await rotateRefreshToken(req, res, refreshToken));
-    } catch {
+    } catch (err: any) {
       clearAuthCookies(res);
-      res.status(401).json({ message: 'Invalid refresh token' });
+      if (err?.message === 'SESSION_CONCURRENT_LOGIN') {
+        return res.status(401).json({
+          message: 'You have been signed out because this account was logged in from another device.',
+          code: 'SESSION_CONCURRENT_LOGIN'
+        });
+      }
+      res.status(401).json({ message: 'Invalid refresh token', code: 'SESSION_INVALID' });
     }
   },
 
@@ -1243,6 +1302,11 @@ export const authController = {
           where: { id: userId },
           data: { sessionVersion: { increment: 1 } }
         }).catch(() => undefined);
+        prisma.userSession.updateMany({
+          where: { userId, revokedAt: null },
+          data: { revokedAt: new Date() }
+        }).catch(() => undefined);
+        invalidateUserAuthCache(userId).catch(() => undefined);
 
         auditLog({
           actorUserId: userId,

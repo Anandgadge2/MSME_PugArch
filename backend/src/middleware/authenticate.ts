@@ -3,7 +3,7 @@ import prisma from '../lib/prisma.js';
 import { verifyAccessToken } from '../services/token.service.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
-import { getOrSetCache } from '../services/cache.service.js';
+import { getCache, getOrSetCache } from '../services/cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 import { getActivePermissionCodes, getAccountTypeForUser } from '../services/rbac.service.js';
 import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
@@ -93,6 +93,10 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
           });
 
           if (!userDb || userDb.role !== decoded.role || userDb.sessionVersion !== sessionVersion) {
+            const concurrentMarker = userDb ? await getCache(redisKeys.concurrentLoginNotice(userDb.id, sessionVersion)) : null;
+            if (concurrentMarker) {
+              throw new Error('SESSION_CONCURRENT_LOGIN');
+            }
             throw new Error('SESSION_INVALID');
           }
 
@@ -168,6 +172,23 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         60 // 60 seconds TTL
       );
     } catch (err: any) {
+      if (err.message === 'SESSION_CONCURRENT_LOGIN') {
+        void auditLog({
+          actorUserId: userId || undefined,
+          actorRole: String(decoded.role || ''),
+          action: 'security.concurrent_session_terminated',
+          entityType: 'api',
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { path: req.originalUrl, method: req.method, reason: 'concurrent_login' }
+        });
+        return apiResponse.error(
+          res,
+          401,
+          'You have been signed out because this account was logged in from another device.',
+          'SESSION_CONCURRENT_LOGIN'
+        );
+      }
       if (err.message === 'SESSION_INVALID') {
         if (!isExpectedUnauthenticatedProbe(req)) {
           void auditLog({

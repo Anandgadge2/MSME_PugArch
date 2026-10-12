@@ -269,6 +269,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         if (![401, 403].includes(res.status)) return;
 
+        // Check if /api/auth/me was rejected due to concurrent login
+        const meData = await res.clone().json().catch(() => ({}));
+        if (meData?.code === 'SESSION_CONCURRENT_LOGIN' || meData?.error?.code === 'SESSION_CONCURRENT_LOGIN') {
+          logout('/login?reason=concurrent_session');
+          return;
+        }
+
         // A stale local cache/token without the cookie marker cannot be
         // refreshed. Clear it silently and keep public pages public.
         if (!getCookieValue('csrfToken')) {
@@ -278,6 +285,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const refreshRes = await api.post('/api/auth/refresh', {});
         if (!refreshRes.ok) {
+          const refreshData = await refreshRes.clone().json().catch(() => ({}));
+          if (refreshData?.code === 'SESSION_CONCURRENT_LOGIN' || refreshData?.error?.code === 'SESSION_CONCURRENT_LOGIN') {
+            logout('/login?reason=concurrent_session');
+            return;
+          }
           clearLocalSession();
           return;
         }
@@ -307,11 +319,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [refreshUser]);
 
   useEffect(() => {
-    const handleUnauthorized = () => {
-      logout();
+    const handleUnauthorized = (e?: Event) => {
+      const customEvent = e as CustomEvent<{ code?: string }> | undefined;
+      if (customEvent?.detail?.code === 'SESSION_CONCURRENT_LOGIN') {
+        logout('/login?reason=concurrent_session');
+      } else {
+        logout();
+      }
     };
-    window.addEventListener('auth:unauthorized', handleUnauthorized);
-    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized);
+    window.addEventListener('auth:unauthorized', handleUnauthorized as EventListener);
+    return () => window.removeEventListener('auth:unauthorized', handleUnauthorized as EventListener);
   }, [logout]);
 
   useEffect(() => {

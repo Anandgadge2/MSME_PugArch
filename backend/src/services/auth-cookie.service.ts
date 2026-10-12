@@ -3,6 +3,8 @@ import { isProduction } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { randomToken, sha256 } from '../utils/crypto.js';
 import { issueAuthResponse, verifyRefreshToken } from './token.service.js';
+import { getCache } from './cache.service.js';
+import { redisKeys } from '../constants/redis-keys.js';
 
 const ACCESS_COOKIE = 'token';
 const REFRESH_COOKIE = 'refreshToken';
@@ -111,6 +113,10 @@ export const rotateRefreshToken = async (req: Request, res: Response, refreshTok
   const session = await prisma.userSession.findFirst({ where: { refreshTokenHash: tokenHash } });
   const user = await prisma.user.findUnique({ where: { id: Number(decoded.id) } });
   if (!user || user.sessionVersion !== Number(decoded.sessionVersion)) {
+    const concurrentMarker = user ? await getCache(redisKeys.concurrentLoginNotice(user.id, decoded.sessionVersion)) : null;
+    if (concurrentMarker) {
+      throw new Error('SESSION_CONCURRENT_LOGIN');
+    }
     throw new Error('SESSION_INVALID');
   }
 
