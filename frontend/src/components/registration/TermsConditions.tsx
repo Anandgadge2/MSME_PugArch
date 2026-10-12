@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   Check,
@@ -38,16 +38,67 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
   const isTransitioning = transitionState !== 'idle';
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const acceptanceSectionRef = useRef<HTMLDivElement>(null);
+  const hasAutoScrolledRef = useRef(false);
+
+  // Reset auto-scroll trigger when switching document tabs
+  useEffect(() => {
+    hasAutoScrolledRef.current = false;
+  }, [activeTab]);
+
+  const scrollToAcceptance = () => {
+    if (acceptanceSectionRef.current) {
+      acceptanceSectionRef.current.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    }
+  };
 
   const scrollByAmount = (amount: number) => {
     if (scrollRef.current) {
-      scrollRef.current.scrollBy({ top: amount, behavior: 'smooth' });
+      const el = scrollRef.current;
+      const willReachBottom = el.scrollTop + amount + el.clientHeight >= el.scrollHeight - 24;
+      el.scrollBy({ top: amount, behavior: 'smooth' });
+      if (amount > 0 && willReachBottom && !hasAutoScrolledRef.current) {
+        hasAutoScrolledRef.current = true;
+        window.setTimeout(scrollToAcceptance, 250);
+      }
+    }
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const isAtBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 24;
+
+    if (isAtBottom && !hasAutoScrolledRef.current) {
+      hasAutoScrolledRef.current = true;
+      scrollToAcceptance();
+    } else if (target.scrollTop + target.clientHeight < target.scrollHeight - 100) {
+      // User scrolled up, reset so reaching bottom again triggers auto-scroll
+      hasAutoScrolledRef.current = false;
     }
   };
 
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop += e.deltaY;
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 2;
+    const isAtTop = el.scrollTop <= 0;
+
+    if (e.deltaY > 0 && isAtBottom) {
+      // Reached the end: scroll the page down smoothly
+      window.scrollBy({ top: e.deltaY, behavior: 'auto' });
+      if (!hasAutoScrolledRef.current) {
+        hasAutoScrolledRef.current = true;
+        scrollToAcceptance();
+      }
+    } else if (e.deltaY < 0 && isAtTop) {
+      // Scrolled to the very top: scroll the page up
+      window.scrollBy({ top: e.deltaY, behavior: 'auto' });
+    } else {
+      el.scrollTop += e.deltaY;
     }
   };
 
@@ -151,10 +202,11 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
           <main
             ref={scrollRef}
             onWheel={handleWheel}
+            onScroll={handleScroll}
             tabIndex={0}
             style={{ scrollbarWidth: 'thin', scrollbarColor: '#94a3b8 #f1f5f9' }}
             className={cn(
-              'bg-white p-5 sm:p-8 overflow-y-auto overscroll-contain focus:outline-none transition-all cursor-ns-resize',
+              'bg-white p-5 sm:p-8 overflow-y-auto overscroll-y-auto focus:outline-none transition-all cursor-ns-resize',
               '[&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-track]:bg-slate-100 [&::-webkit-scrollbar-thumb]:bg-slate-300 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-[#12335f]',
               isFullscreen ? 'h-[calc(100dvh-230px)] min-h-[300px]' : 'h-[440px] sm:h-[480px]'
             )}
@@ -217,7 +269,10 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
         </div>
 
         {/* Ultra-Smooth Theme-Aligned Acceptance Bar */}
-        <div className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80">
+        <div
+          ref={acceptanceSectionRef}
+          className="mt-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between bg-slate-50/90 p-5 rounded-2xl border border-slate-200/80 scroll-mt-6"
+        >
           <label className="flex cursor-pointer items-start gap-2.5 sm:gap-3.5 text-slate-800 group">
             <div className="relative flex items-center mt-0.5">
               <input
