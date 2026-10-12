@@ -97,8 +97,8 @@ backend/uploads/
 GSD-STYLE.md
 PROJECT_RULES.md
 VERSION
-adapters/
+/adapters/
 model_capabilities.yaml
-scripts/
+/scripts/
 docs/SECURITY_AUDIT_10_OUT_OF_10_IMPLEMENTATION_PLAN.*
 setup-gcp-secrets.sh
