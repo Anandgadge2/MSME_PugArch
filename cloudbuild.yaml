@@ -4,7 +4,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$COMMIT_SHA'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$_TAG'
       - '-t'
       - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
       - '-f'
@@ -17,7 +17,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$COMMIT_SHA'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$_TAG'
       - '-t'
       - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
       - '--build-arg'
@@ -47,7 +47,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'msme-backend'
-      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$COMMIT_SHA'
+      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$_TAG'
       - '--region=$_LOCATION'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -60,7 +60,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'msme-frontend'
-      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$COMMIT_SHA'
+      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$_TAG'
       - '--region=$_LOCATION'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -69,6 +69,7 @@ steps:
 substitutions:
   _LOCATION: 'asia-south1'
   _AR_REPO: 'msme-repo'
+  _TAG: 'latest'
   _NEXT_PUBLIC_API_URL: ''
   _NEXT_PUBLIC_APP_URL: 'https://www.jsgsmile.in'
 

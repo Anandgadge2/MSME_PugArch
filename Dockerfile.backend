@@ -10,8 +10,13 @@ RUN apk add --no-cache libc6-compat
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 
-# Install dependencies for the backend workspace
-RUN npm ci --workspace=backend --include-workspace-root
+# Copy Prisma schema before npm ci so that backend postinstall (npx prisma generate) finds schema.prisma
+COPY backend/prisma ./backend/prisma/
+COPY backend/prisma.config.ts ./backend/prisma.config.ts
+
+# Install dependencies for the backend workspace (runs postinstall prisma generate)
+RUN npm ci --workspace=backend --include-workspace-root --ignore-scripts || npm ci --workspace=backend --include-workspace-root
+
 
 # Copy backend prisma schema and generate client
 COPY backend/prisma ./backend/prisma/
@@ -41,8 +46,13 @@ RUN apk add --no-cache libc6-compat dumb-init
 COPY package*.json ./
 COPY backend/package*.json ./backend/
 
+# Copy prisma schema before production dependencies install
+COPY backend/prisma ./backend/prisma/
+COPY backend/prisma.config.ts ./backend/prisma.config.ts
+
 # Install production-only dependencies
-RUN npm ci --workspace=backend --include-workspace-root --omit=dev
+RUN npm ci --workspace=backend --include-workspace-root --omit=dev --ignore-scripts
+
 
 # Copy generated Prisma Client and binaries from builder
 COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
