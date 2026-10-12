@@ -366,8 +366,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     if (!candidate.vendorType) {
       errors.vendorType = 'Please select Vendor Type';
     }
-    if (!Array.isArray(candidate.productCategories) || candidate.productCategories.length === 0) {
-      errors.productCategories = 'Please select at least one Product Category';
+    if (!candidate.categoriesDeferred && (!Array.isArray(candidate.productCategories) || candidate.productCategories.length === 0)) {
+      errors.productCategories = 'Please select at least one Product Category or choose to configure later';
     }
     return { errors, isValid: Object.keys(errors).length === 0 };
   };
@@ -1903,6 +1903,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                           Product Categories <span className="text-red-500 font-bold">*</span>
                         </label>
                         <p className="text-xs text-gray-500 font-medium mb-1.5">Select the categories of products or services you provide.</p>
+                        <div className="p-2.5 bg-blue-50/70 border border-blue-200/80 rounded-lg text-xs text-blue-900 mb-2">
+                          <span className="font-bold text-blue-950">Fast-Track Tip:</span> Select at least 1 category to proceed, or choose to configure later. Categories can be updated anytime in Seller Settings after approval without re-verifying KYC.
+                        </div>
                         <select
                           id="seller-product-categories"
                           value=""
@@ -1995,6 +1998,35 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             ))}
                           </div>
                         )}
+
+                        {/* Deferral Option Checkbox */}
+                        <div className="pt-2">
+                          <label htmlFor="defer-seller-categories" className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                            <input
+                              id="defer-seller-categories"
+                              type="checkbox"
+                              checked={Boolean(formData.categoriesDeferred)}
+                              onChange={e => {
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  categoriesDeferred: e.target.checked
+                                }));
+                                if (e.target.checked) {
+                                  setAdditionalErrors((prev: any) => {
+                                    const next = { ...prev };
+                                    delete next.productCategories;
+                                    return next;
+                                  });
+                                }
+                              }}
+                              disabled={isProfileLocked}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/20"
+                            />
+                            <span className="leading-tight text-slate-600">
+                              I will configure my full product catalog categories later from Seller Settings
+                            </span>
+                          </label>
+                        </div>
                       </div>
 
                       {/* Registration Type (Multi-select Checkboxes) */}

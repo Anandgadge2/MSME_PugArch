@@ -39,12 +39,19 @@ import {
   RefreshCw,
   Stamp,
   FileSignature,
+  Tags,
 } from 'lucide-react';
+import { CategorySelector } from '../components/ui/CategorySelector';
 import { Loader2 } from '@/components/ui/loader';
 import { cn } from '../lib/utils';
 import { toast } from 'sonner';
 import { MSME_TYPES } from '../constants/dropdowns';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
+import {
+  normalizeBusinessType,
+  getBusinessTypeLabel,
+  CANONICAL_BUYER_BUSINESS_TYPES
+} from '../lib/businessType';
 import { Pagination } from '../features/shared/Pagination';
 import { SortableHeader, type SortDirection } from '../features/shared/SortableHeader';
 import { BuyerProfileSkeleton, BuyerShowcaseFormSkeleton } from '../components/ui/skeleton';
@@ -66,6 +73,7 @@ interface SidebarNavItem {
 const SIDEBAR_NAV: SidebarNavItem[] = [
   { id: 'showcase_profile', label: 'Org Profile', icon: Building2 },
   { id: 'address', label: 'Org Address', icon: MapPin },
+  { id: 'categories', label: 'Categories', icon: Tags },
   { id: 'procurement_settings', label: 'Procurement Settings', icon: Settings },
   { id: 'mobile', label: 'Update Mobile', icon: Phone },
   { id: 'email', label: 'Change Email', icon: Mail },
@@ -129,6 +137,68 @@ export default function BuyerProfile() {
   const [procurementSettings, setProcurementSettings] = useState<any>(null);
   const [procurementLoading, setProcurementLoading] = useState(false);
   const [procurementSaving, setProcurementSaving] = useState(false);
+
+  // Category management states
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [initialCategories, setInitialCategories] = useState<string[]>([]);
+  const [otherCategoryDetails, setOtherCategoryDetails] = useState('');
+  const [isSavingCategories, setIsSavingCategories] = useState(false);
+  const isCategoriesDirty = useMemo(() => {
+    if (selectedCategories.length !== initialCategories.length) return true;
+    const initialSet = new Set(initialCategories);
+    return selectedCategories.some(c => !initialSet.has(c));
+  }, [selectedCategories, initialCategories]);
+
+  useEffect(() => {
+    if (activeSection === 'categories' && categoriesList.length === 0) {
+      setLoadingCategories(true);
+      api.get('/api/categories')
+        .then(res => res.json())
+        .then(body => {
+          const list = (body?.data || body || []);
+          if (Array.isArray(list)) {
+            setCategoriesList(
+              list
+                .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+                .filter(c => Boolean(c.name))
+                .sort((a, b) => a.name.localeCompare(b.name))
+            );
+          }
+        })
+        .catch(err => console.warn('Failed to load categories:', err))
+        .finally(() => setLoadingCategories(false));
+    }
+  }, [activeSection, categoriesList.length]);
+
+  const handleSaveCategories = async () => {
+    if (selectedCategories.length === 0) {
+      toast.error('Please select at least one procurement category');
+      return;
+    }
+    setIsSavingCategories(true);
+    try {
+      const res = await api.put('/api/buyer/categories', {
+        procurementCategories: selectedCategories,
+        otherCategoryDetails
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Failed to update categories');
+      setInitialCategories([...selectedCategories]);
+      setProfile((prev: any) => ({
+        ...prev,
+        procurementCategories: selectedCategories,
+        otherCategoryDetails
+      }));
+      toast.success('Procurement categories updated successfully');
+      refreshUser();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save categories');
+    } finally {
+      setIsSavingCategories(false);
+    }
+  };
 
   useEffect(() => {
     if (activeSection !== 'procurement_settings') return;
@@ -1028,6 +1098,10 @@ export default function BuyerProfile() {
           const data = await res.json();
           setProfile(data.profile);
           if (data.profile) {
+            const rawCats = Array.isArray(data.profile.procurementCategories) ? data.profile.procurementCategories : [];
+            setSelectedCategories(rawCats);
+            setInitialCategories(rawCats);
+            setOtherCategoryDetails(data.profile.otherCategoryDetails || '');
             const addressSnapshot = {
               pincode: data.profile.pincode || '',
               state: data.profile.state || 'Odisha',
@@ -1904,21 +1978,21 @@ export default function BuyerProfile() {
                           />
                           <Select
                             label="Type of Organisation *"
-                            value={showcaseProfile.organizationType || ''}
+                            value={normalizeBusinessType(showcaseProfile.organizationType)}
                             onChange={(e) => handleShowcaseFieldChange('organizationType', e.target.value)}
                           >
                             <option value="">Select Org Type</option>
-                            <option value="central">Central Government</option>
-                            <option value="state">State Government</option>
-                            <option value="psu">PSU</option>
-                            <option value="autonomous">Autonomous Body</option>
-                            <option value="local">Local Body</option>
-                            <option value="proprietorship">Proprietorship</option>
-                            <option value="partnership">Partnership Firm</option>
-                            <option value="company">Company (Pvt Ltd / Ltd)</option>
-                            <option value="llp">LLP</option>
-                            <option value="msme">MSME</option>
-                            <option value="startup">Startup</option>
+                            {CANONICAL_BUYER_BUSINESS_TYPES.map((opt) => (
+                              <option key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </option>
+                            ))}
+                            {normalizeBusinessType(showcaseProfile.organizationType) &&
+                              !CANONICAL_BUYER_BUSINESS_TYPES.some((o) => o.value === normalizeBusinessType(showcaseProfile.organizationType)) && (
+                                <option value={normalizeBusinessType(showcaseProfile.organizationType)}>
+                                  {normalizeBusinessType(showcaseProfile.organizationType)}
+                                </option>
+                              )}
                           </Select>
                           <Input
                             label="Registration Number"
@@ -2959,6 +3033,60 @@ export default function BuyerProfile() {
               </div>
             )}
 
+            {activeSection === 'categories' && (
+              <div className="space-y-6 animate-in fade-in duration-500">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
+                  <div>
+                    <h3 className="text-lg font-black text-slate-900 uppercase">Procurement Categories</h3>
+                    <p className="text-xs font-semibold text-slate-500 mt-0.5">
+                      Configure and update the goods, materials, and services your organization procures. Tenders and recommended MSME vendors will be aligned with these selections.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase tracking-wider">
+                      Always Editable
+                    </span>
+                  </div>
+                </div>
+
+                <div className="p-6 rounded-2xl border border-slate-200 bg-white shadow-xs space-y-6">
+                  <CategorySelector
+                    id="buyer-profile-categories"
+                    label="Procurement Interest Taxonomy"
+                    description="Select the categories your organization purchases. Category changes take effect immediately without requiring KYC re-verification."
+                    categories={categoriesList}
+                    selected={selectedCategories}
+                    onChange={setSelectedCategories}
+                    industry={profile?.industry || (user as any)?.organization?.industry}
+                    loading={loadingCategories}
+                    maxSelections={30}
+                    showSaveButton={true}
+                    onSave={handleSaveCategories}
+                    isSaving={isSavingCategories}
+                    isDirty={isCategoriesDirty}
+                  />
+
+                  <div className="pt-4 border-t border-slate-100 space-y-2">
+                    <label htmlFor="buyer-other-category-details" className="text-xs font-semibold text-slate-700 block">
+                      Specific Procurement Specifications / Details (Optional)
+                    </label>
+                    <textarea
+                      id="buyer-other-category-details"
+                      rows={2}
+                      maxLength={500}
+                      value={otherCategoryDetails}
+                      onChange={e => setOtherCategoryDetails(e.target.value)}
+                      placeholder="e.g., Specific grades of industrial steel, specialized medical reagents, technical certifications required..."
+                      className="w-full p-2.5 text-xs bg-white border border-slate-300 rounded-lg text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:border-transparent transition-colors"
+                    />
+                    <p className="text-[11px] text-slate-400">
+                      Maximum 500 characters. These details help vendors understand your technical procurement needs.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {activeSection === 'procurement_settings' && (
               <div className="space-y-6 animate-in fade-in duration-500">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
@@ -3510,7 +3638,9 @@ export default function BuyerProfile() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-16">
                     <div className="space-y-1">
                       <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organisation Type</p>
-                      <p className="text-sm font-bold text-slate-700">{profile?.businessType || 'Central Government'}</p>
+                      <p className="text-sm font-bold text-slate-700">
+                        {getBusinessTypeLabel(profile?.businessType || (user as any)?.organization?.organizationType || (user as any)?.buyerProfile?.businessType)}
+                      </p>
                     </div>
                     {profile?.msmeType && (
                       <div className="space-y-1">

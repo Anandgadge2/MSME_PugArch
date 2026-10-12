@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../lib/utils';
-import { User, ShieldCheck, Mail, Lock, UserX, Building2 } from 'lucide-react';
+import { User, ShieldCheck, Mail, Lock, UserX, Building2, Tags } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface GeMSettingsSidebarProps {
@@ -18,6 +18,12 @@ export const GeMSettingsSidebar: React.FC<GeMSettingsSidebarProps> = ({ currentS
       items: [
         { id: 'profile', label: isShg ? 'SHG Profile' : 'Seller Profile', icon: User },
         { id: 'email', label: 'Change Email', icon: Mail },
+      ]
+    },
+    {
+      title: 'BUSINESS & OFFERINGS',
+      items: [
+        { id: 'categories', label: 'Product Categories', icon: Tags },
       ]
     },
     ...(!isShg ? [{
