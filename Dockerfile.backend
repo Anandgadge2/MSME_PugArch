@@ -53,10 +53,13 @@ COPY backend/prisma.config.ts ./backend/prisma.config.ts
 RUN npm ci --workspace=backend --include-workspace-root --omit=dev --ignore-scripts
 
 
-# Copy generated Prisma Client and binaries from builder
-COPY --from=builder /usr/src/app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /usr/src/app/node_modules/@prisma/client ./node_modules/@prisma/client
-COPY --from=builder /usr/src/app/backend/prisma ./backend/prisma
+# Copy generated dist and prisma from builder
+COPY --from=builder /usr/src/app/backend/dist ./backend/dist
+
+# Generate production Prisma Client directly inside runner
+WORKDIR /usr/src/app/backend
+RUN npx prisma generate
+
 
 # Copy compiled application JavaScript dist
 COPY --from=builder /usr/src/app/backend/dist ./backend/dist
