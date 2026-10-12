@@ -45,6 +45,16 @@ export const isAllowedCorsOrigin = (origin?: string) => {
     if (!isProduction && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) {
       return true;
     }
+
+    // Allow *.run.app (GCP Cloud Run frontend services)
+    if (url.protocol === 'https:' && (url.hostname.endsWith('.run.app') || url.hostname.endsWith('.a.run.app'))) {
+      return true;
+    }
+
+    // Allow official domain and subdomains
+    if (url.protocol === 'https:' && (url.hostname === 'jsgsmile.in' || url.hostname.endsWith('.jsgsmile.in'))) {
+      return true;
+    }
   } catch {
     return false;
   }
