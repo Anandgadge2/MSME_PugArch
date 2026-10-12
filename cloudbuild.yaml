@@ -1,0 +1,76 @@
+steps:
+  # 1. Build Backend Container Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$COMMIT_SHA'
+      - '-t'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
+      - '-f'
+      - 'Dockerfile.backend'
+      - '.'
+    id: 'build-backend'
+
+  # 2. Build Frontend Container Image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$COMMIT_SHA'
+      - '-t'
+      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL'
+      - '--build-arg'
+      - 'NEXT_PUBLIC_APP_URL=$_NEXT_PUBLIC_APP_URL'
+      - '-f'
+      - 'Dockerfile.frontend'
+      - '.'
+    id: 'build-frontend'
+
+
+  # 3. Push Backend Images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend']
+    id: 'push-backend'
+
+  # 4. Push Frontend Images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend']
+    id: 'push-frontend'
+
+  # 5. Deploy Backend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'msme-backend'
+      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$COMMIT_SHA'
+      - '--region=$_LOCATION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+    id: 'deploy-backend'
+
+  # 6. Deploy Frontend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'msme-frontend'
+      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$COMMIT_SHA'
+      - '--region=$_LOCATION'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+    id: 'deploy-frontend'
+
+substitutions:
+  _LOCATION: 'asia-south1'
+  _AR_REPO: 'msme-repo'
+  _NEXT_PUBLIC_API_URL: ''
+  _NEXT_PUBLIC_APP_URL: 'https://www.jsgsmile.in'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

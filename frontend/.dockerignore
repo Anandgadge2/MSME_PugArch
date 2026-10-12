@@ -11,6 +11,10 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .eslintcache
+._*
+**/._*
+.DS_Store
+.code-review-graph
 README.md
 Dockerfile
 .dockerignore

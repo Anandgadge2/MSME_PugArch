@@ -30,12 +30,17 @@ gcp-key.json
 *.key.json
 *.tmp
 
+# macOS Metadata / Resource Fork Files
+._*
+.DS_Store
+.AppleDouble
+.LSOverride
+**/._*
+
 # IDEs and Editors
 .vscode/
 .idea/
-*.swp
-*.swo
-.DS_Store
+.code-review-graph/
 
 # Miscellaneous
 coverage/

@@ -101,12 +101,10 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     const backendUrl = getBackendUrl();
-    if (process.env.VERCEL_URL && backendUrl) {
+    if (backendUrl && backendUrl.startsWith("http")) {
       console.log(
-        `[next.config] Rewrites: /proxy/:path* → ${backendUrl}/:path*`,
+        `[next.config] Rewrites configured: /api/:path* → ${backendUrl}/api/:path*`,
       );
-      // beforeFiles ensures the rewrite runs BEFORE Vercel tries to match
-      // filesystem pages, preventing false 404s on the /proxy prefix.
       return {
         beforeFiles: [
           {

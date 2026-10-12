@@ -1,0 +1,156 @@
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: msme-backend
+  labels:
+    cloud.google.com/location: asia-south1
+    app: msme-backend
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+        # Cloud SQL connection (replace with YOUR_PROJECT_ID:REGION:INSTANCE_NAME)
+        run.googleapis.com/cloudsql-instances: "PROJECT_ID:asia-south1:msme-postgres-instance"
+        # VPC Access Connector for private Redis (Memorystore) and database connectivity
+        run.googleapis.com/vpc-access-connector: "projects/PROJECT_ID/locations/asia-south1/connectors/msme-vpc-connector"
+        run.googleapis.com/vpc-access-egress: "private-ranges-only"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      serviceAccountName: msme-backend-sa@PROJECT_ID.iam.gserviceaccount.com
+      containers:
+        - image: asia-south1-docker.pkg.dev/PROJECT_ID/msme-repo/backend:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8080"
+            - name: STORAGE_PROVIDER
+              value: "gcp"
+            - name: GCS_BUCKET_NAME
+              value: "jsgsmile1"
+            - name: CACHE_DRIVER
+              value: "redis"
+            - name: LOG_LEVEL
+              value: "info"
+            - name: CORS_ALLOW_VERCEL_PREVIEWS
+              value: "false"
+            # Sensitive parameters fetched from GCP Secret Manager
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: msme-database-url
+                  key: latest
+            - name: DIRECT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: msme-direct-url
+                  key: latest
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: msme-jwt-secret
+                  key: latest
+            - name: JWT_ACCESS_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: msme-jwt-access-secret
+                  key: latest
+            - name: JWT_REFRESH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: msme-jwt-refresh-secret
+                  key: latest
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: msme-redis-url
+                  key: latest
+            - name: FRONTEND_URL
+              valueFrom:
+                secretKeyRef:
+                  name: msme-frontend-url
+                  key: latest
+            - name: CORS_ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: msme-cors-origins
+                  key: latest
+          startupProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8080
+            periodSeconds: 15
+            failureThreshold: 3
+            timeoutSeconds: 5
+---
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: msme-frontend
+  labels:
+    cloud.google.com/location: asia-south1
+    app: msme-frontend
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 60
+      containers:
+        - image: asia-south1-docker.pkg.dev/PROJECT_ID/msme-repo/frontend:latest
+          ports:
+            - name: http1
+              containerPort: 8080
+          resources:
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "8080"
+            - name: NEXT_TELEMETRY_DISABLED
+              value: "1"
+            - name: BACKEND_URL
+              value: "https://api.msme-marketplace.example.com"
+            - name: NEXT_PUBLIC_API_URL
+              value: "https://api.msme-marketplace.example.com"
+            - name: NEXT_PUBLIC_ENABLE_PROCUREMENT_DEMO_DATA
+              value: "false"
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            periodSeconds: 20
+            failureThreshold: 3
+            timeoutSeconds: 3
