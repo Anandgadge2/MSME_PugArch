@@ -6,10 +6,11 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { ShieldCheck, Mail, Lock, UserX, Info, AlertTriangle, PlayCircle, Building2, Stamp } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, UserX, Info, AlertTriangle, PlayCircle, Building2, Stamp, Tags } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { GeMSettingsSidebar } from '../components/GeMSettingsSidebar';
 import { GeMProfileHeader } from '../components/GeMProfileHeader';
+import { CategorySelector } from '../components/ui/CategorySelector';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { SignatureStampUploadModal } from '../features/invoices/components/SignatureStampUploadModal';
 import { isShgUser } from '../lib/shg';
@@ -96,6 +97,84 @@ export default function SellerSettings() {
   const [profileOtpSent, setProfileOtpSent] = useState(false);
   const [profileOtp, setProfileOtp] = useState('');
 
+  // Category management states
+  const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(() => {
+    return Array.isArray(cachedProfile?.productCategories) ? cachedProfile.productCategories : [];
+  });
+  const [initialCategories, setInitialCategories] = useState<string[]>(() => {
+    return Array.isArray(cachedProfile?.productCategories) ? cachedProfile.productCategories : [];
+  });
+  const [otherCategoryDetails, setOtherCategoryDetails] = useState(() => {
+    return cachedProfile?.otherCategoryDetails || '';
+  });
+  const [isSavingCategories, setIsSavingCategories] = useState(false);
+
+  const isCategoriesDirty = React.useMemo(() => {
+    if (selectedCategories.length !== initialCategories.length) return true;
+    const initialSet = new Set(initialCategories);
+    return selectedCategories.some(c => !initialSet.has(c));
+  }, [selectedCategories, initialCategories]);
+
+  useEffect(() => {
+    if (currentSection === 'categories' && categoriesList.length === 0) {
+      setLoadingCategories(true);
+      api.get('/api/categories')
+        .then(res => res.json())
+        .then(body => {
+          const list = (body?.data || body || []);
+          if (Array.isArray(list)) {
+            setCategoriesList(
+              list
+                .map((c: any) => ({ id: Number(c.id || 0), name: String(c.name || '').trim() }))
+                .filter(c => Boolean(c.name))
+                .sort((a, b) => a.name.localeCompare(b.name))
+            );
+          }
+        })
+        .catch(err => console.warn('Failed to load categories:', err))
+        .finally(() => setLoadingCategories(false));
+    }
+  }, [currentSection, categoriesList.length]);
+
+  useEffect(() => {
+    if (profileData?.productCategories && Array.isArray(profileData.productCategories)) {
+      setSelectedCategories(profileData.productCategories);
+      setInitialCategories(profileData.productCategories);
+    }
+    if (profileData?.otherCategoryDetails) {
+      setOtherCategoryDetails(profileData.otherCategoryDetails);
+    }
+  }, [profileData]);
+
+  const handleSaveCategories = async () => {
+    if (selectedCategories.length === 0) {
+      toast.error('Please select at least one product category');
+      return;
+    }
+    setIsSavingCategories(true);
+    try {
+      const res = await api.put('/api/seller/categories', {
+        productCategories: selectedCategories,
+        otherCategoryDetails
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Failed to update categories');
+      setInitialCategories([...selectedCategories]);
+      setProfileData((prev: any) => ({
+        ...prev,
+        productCategories: selectedCategories,
+        otherCategoryDetails
+      }));
+      toast.success('Product categories updated successfully');
+      refreshUser();
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save categories');
+    } finally {
+      setIsSavingCategories(false);
+    }
+  };
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -836,6 +915,58 @@ export default function SellerSettings() {
                         Tax identification linked to this account. Submit an amendment request to migrate GSTIN.
                       </p>
                     </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {currentSection === 'categories' && (
+              <div className="p-5 sm:p-8 space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 pb-4 gap-3">
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">Product & Service Categories</h2>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Manage the product catalog categories and commercial offerings supplied by your enterprise.
+                    </p>
+                  </div>
+                  <span className="self-start sm:self-auto bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg px-3 py-1 text-[9px] font-black uppercase tracking-wider">
+                    Always Editable
+                  </span>
+                </div>
+
+                <div className="border border-gray-100 rounded-xl p-5 sm:p-6 bg-white shadow-xs space-y-6">
+                  <CategorySelector
+                    id="seller-settings-categories"
+                    label="Active Product Categories"
+                    description="Select the categories your enterprise supplies. Changes update in real-time across the marketplace catalog."
+                    categories={categoriesList}
+                    selected={selectedCategories}
+                    onChange={setSelectedCategories}
+                    industry={profileData?.industry || (user as any)?.organization?.industry}
+                    loading={loadingCategories}
+                    maxSelections={30}
+                    showSaveButton={true}
+                    onSave={handleSaveCategories}
+                    isSaving={isSavingCategories}
+                    isDirty={isCategoriesDirty}
+                  />
+
+                  <div className="pt-4 border-t border-gray-100 space-y-2">
+                    <label htmlFor="seller-other-category-details" className="text-xs font-semibold text-gray-700 block">
+                      Additional Product Catalog Notes (Optional)
+                    </label>
+                    <textarea
+                      id="seller-other-category-details"
+                      rows={2}
+                      maxLength={500}
+                      value={otherCategoryDetails}
+                      onChange={e => setOtherCategoryDetails(e.target.value)}
+                      placeholder="e.g., Authorized distributor for Schneider Electric, ISO 9001 certified CNC machining services..."
+                      className="w-full p-2.5 text-xs bg-white border border-gray-300 rounded-lg text-gray-900 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#12335f] focus:border-transparent transition-colors"
+                    />
+                    <p className="text-[11px] text-gray-400">
+                      Maximum 500 characters. These notes help procurement officers evaluate your enterprise catalog capabilities.
+                    </p>
                   </div>
                 </div>
               </div>

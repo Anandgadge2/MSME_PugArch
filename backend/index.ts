@@ -425,8 +425,12 @@ const validateBuyerOnboardingPayload = (rawData: any, mobile: unknown) => {
   if (!normalizeSpaces(rawData.department)) errors.department = 'Department is required.';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeSpaces(rawData.email || ''))) errors.email = 'Representative email must be valid.';
   if (!onboardingPatterns.mobile.test(normalizeSpaces(mobile))) errors.mobile = 'Mobile number must be a valid 10 digit Indian mobile number.';
-  if (rawData.alternateMobile && !onboardingPatterns.mobile.test(normalizeSpaces(rawData.alternateMobile))) errors.alternateMobile = 'Alternate mobile number must be valid.';
-  if (!Array.isArray(rawData.procurementCategories) || rawData.procurementCategories.length === 0) errors.procurementCategories = 'Select at least one procurement category.';
+  const categoriesDeferred = Boolean(rawData.categoriesDeferred);
+  if (!categoriesDeferred && (!Array.isArray(rawData.procurementCategories) || rawData.procurementCategories.length === 0)) {
+    errors.procurementCategories = 'Select at least one procurement category or choose to configure later.';
+  } else if (rawData.procurementCategories && !Array.isArray(rawData.procurementCategories)) {
+    errors.procurementCategories = 'Procurement categories must be an array.';
+  }
   if (!normalizeSpaces(rawData.annualBudget)) errors.annualBudget = 'Annual budget range is required.';
   if (!Array.isArray(rawData.preferredMethods) || rawData.preferredMethods.length === 0) errors.preferredMethods = 'Select at least one procurement method.';
   const documents = rawData.documents && typeof rawData.documents === 'object' ? rawData.documents : {};

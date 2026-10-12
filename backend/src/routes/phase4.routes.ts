@@ -2799,6 +2799,180 @@ router.put('/buyer/onboarding', authenticate, authorize('buyer'), asyncRoute(asy
   ok(res, profile);
 }));
 
+// Dedicated Category Management Endpoints (Bypasses onboarding compliance lock)
+router.get('/buyer/categories', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const profile = await db.buyerProfile.findUnique({
+    where: { userId: userId(req) },
+    select: { procurementCategories: true, otherCategoryDetails: true }
+  });
+  if (!profile) throw new ApiError(404, 'Buyer profile not found');
+  ok(res, profile);
+}));
+
+router.put('/buyer/categories', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
+  const data = req.body || {};
+
+  if (!Array.isArray(data.procurementCategories)) {
+    throw new ApiError(400, 'procurementCategories must be an array');
+  }
+
+  const sanitized: string[] = [];
+  for (const item of data.procurementCategories) {
+    if (typeof item === 'string') {
+      const cleanItem = item.trim().replace(/[<>]/g, '');
+      if (cleanItem.length > 1 && !sanitized.includes(cleanItem)) {
+        sanitized.push(cleanItem);
+        if (sanitized.length >= 30) break;
+      }
+    }
+  }
+
+  if (sanitized.length === 0) {
+    throw new ApiError(400, 'At least one procurement category is required');
+  }
+
+  const profile = await db.buyerProfile.findUnique({ where: { userId: userId(req) } });
+  if (!profile) {
+    throw new ApiError(404, 'Buyer profile not found. Complete onboarding first.');
+  }
+
+  for (const catName of sanitized) {
+    const slug = slugFor(catName.trim());
+    const existing = await db.category.findFirst({
+      where: { OR: [{ slug }, { name: { equals: catName.trim(), mode: 'insensitive' } }] }
+    });
+    if (!existing) {
+      try {
+        await db.category.create({
+          data: {
+            name: catName.trim(),
+            slug,
+            type: 'BOTH',
+            organizationId: profile.organizationId || null,
+            isActive: true
+          }
+        });
+        await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+      } catch {
+        // ignore duplicate race condition
+      }
+    }
+  }
+
+  const updated = await db.buyerProfile.update({
+    where: { userId: userId(req) },
+    data: {
+      procurementCategories: sanitized,
+      otherCategoryDetails: data.otherCategoryDetails !== undefined
+        ? (data.otherCategoryDetails ? String(data.otherCategoryDetails).trim().slice(0, 500) : '')
+        : profile.otherCategoryDetails
+    }
+  });
+
+  await auditWrite(req, 'buyer.categories.updated', 'buyerProfile', profile.id, {
+    previousCount: profile.procurementCategories?.length || 0,
+    newCount: sanitized.length
+  });
+
+  ok(res, {
+    procurementCategories: updated.procurementCategories,
+    otherCategoryDetails: updated.otherCategoryDetails
+  });
+}));
+
+router.get('/seller/categories', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+  const profile = await db.sellerProfile.findUnique({
+    where: { userId: userId(req) },
+    select: { productCategories: true, otherCategoryDetails: true }
+  });
+  if (!profile) throw new ApiError(404, 'Seller profile not found');
+  ok(res, profile);
+}));
+
+router.put('/seller/categories', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+  const data = req.body || {};
+
+  if (!Array.isArray(data.productCategories)) {
+    throw new ApiError(400, 'productCategories must be an array');
+  }
+
+  const sanitized: string[] = [];
+  for (const item of data.productCategories) {
+    if (typeof item === 'string') {
+      const cleanItem = item.trim().replace(/[<>]/g, '');
+      if (cleanItem.length > 1 && !sanitized.includes(cleanItem)) {
+        sanitized.push(cleanItem);
+        if (sanitized.length >= 30) break;
+      }
+    }
+  }
+
+  if (sanitized.length === 0) {
+    throw new ApiError(400, 'At least one product category is required');
+  }
+
+  const profile = await db.sellerProfile.findUnique({ where: { userId: userId(req) } });
+  if (!profile) {
+    throw new ApiError(404, 'Seller profile not found. Complete onboarding first.');
+  }
+
+  for (const catName of sanitized) {
+    const slug = slugFor(catName.trim());
+    const existing = await db.category.findFirst({
+      where: { OR: [{ slug }, { name: { equals: catName.trim(), mode: 'insensitive' } }] }
+    });
+    if (!existing) {
+      try {
+        const newCat = await db.category.create({
+          data: {
+            name: catName.trim(),
+            slug,
+            type: 'BOTH',
+            organizationId: profile.organizationId || null,
+            isActive: true
+          }
+        });
+        await deleteCache(redisKeys.cacheCategoriesAll()).catch(() => undefined);
+        const u = await db.user.findUnique({
+          where: { id: userId(req) },
+          include: { organization: true, sellerProfile: true }
+        });
+        const sellerName = u?.name || 'A seller';
+        const businessName = u?.organization?.organizationName || u?.sellerProfile?.businessName || 'Onboarding MSME';
+        await notificationService.notifyAdmins({
+          title: `New Custom Category: "${newCat.name}"`,
+          message: `Added by ${sellerName} (${businessName}). Please review and upload a category photo.`,
+          type: 'category_custom_added',
+          priority: 'high',
+          redirectUrl: `/admin/categories?edit=${newCat.id}`
+        }).catch(() => undefined);
+      } catch {
+        // ignore duplicate race condition
+      }
+    }
+  }
+
+  const updated = await db.sellerProfile.update({
+    where: { userId: userId(req) },
+    data: {
+      productCategories: sanitized,
+      otherCategoryDetails: data.otherCategoryDetails !== undefined
+        ? (data.otherCategoryDetails ? String(data.otherCategoryDetails).trim().slice(0, 500) : '')
+        : profile.otherCategoryDetails
+    }
+  });
+
+  await auditWrite(req, 'seller.categories.updated', 'sellerProfile', profile.id, {
+    previousCount: profile.productCategories?.length || 0,
+    newCount: sanitized.length
+  });
+
+  ok(res, {
+    productCategories: updated.productCategories,
+    otherCategoryDetails: updated.otherCategoryDetails
+  });
+}));
+
 router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
   const user = await db.user.findUnique({
     where: { id: userId(req) },

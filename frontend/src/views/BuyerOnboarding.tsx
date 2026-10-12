@@ -8,7 +8,7 @@ import { Card, CardContent, Badge } from '../components/ui/card';
 import { Stepper, Step } from '../components/ui/stepper';
 import { DocumentPreviewModal } from '../components/DocumentPreviewModal';
 import { toast } from 'sonner';
-import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare, Lock } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Save, Upload, CheckCircle2, AlertTriangle, Clock, ShieldCheck, X, ExternalLink, Plus, MapPin, Check, Loader2, Search, MessageSquare, Lock, Info, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 import {
   validateField,
@@ -23,17 +23,12 @@ import { compressImage } from '../lib/compress';
 import { getFileAssetPreview, type DocumentPreview } from '../lib/files';
 import { indiaStates, indiaStatesDistricts } from '../data/indiaStatesDistricts';
 import { formatGstVerificationError } from '../features/shared/gstVerification';
-
-const PRIMARY_USER_TYPES = [
-  'Government Department / Ministry',
-  'Public Sector Undertaking (PSU)',
-  'Proprietorship',
-  'Partnership Firm',
-  'Company (Pvt Ltd / Ltd)',
-  'LLP',
-  'MSME',
-  'Startup'
-];
+import {
+  normalizeBusinessType,
+  isPrimaryUserType,
+  CANONICAL_BUYER_BUSINESS_TYPES,
+  PRIMARY_USER_TYPES
+} from '../lib/businessType';
 
 
 const SIDEBAR_SECTIONS = [
@@ -127,7 +122,6 @@ const SUBMITTED_REVIEW_STATUSES = new Set([
 ]);
 
 const hasSubmittedApplication = (userRecord: any) => userRecord?.sectionStatus?.submitted === true;
-const isPrimaryUserType = (businessType: unknown) => PRIMARY_USER_TYPES.includes(String(businessType || ''));
 
 const findMatchedState = (stateName: string): string => {
   if (!stateName) return '';
@@ -184,7 +178,7 @@ const shouldLockBuyerProfile = (userRecord: any, profileRecord: any) => {
 const DEFAULT_BUYER_FORM_DATA: any = {
   // Organisation Details
   organizationName: '',
-  businessType: 'Private Limited Company',
+  businessType: 'Company (Pvt Ltd / Ltd)',
   industry: '',
   cin: '',
   pan: '',
@@ -212,6 +206,7 @@ const DEFAULT_BUYER_FORM_DATA: any = {
   isJharsugudaOrg: true,
 
   // Procurement Profile
+  categoriesDeferred: false,
   procurementCategories: [],
   otherCategoryDetails: '',
   customProcurementCategoryInput: '',
@@ -249,7 +244,12 @@ const readBuyerDraft = () => {
 const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT_BUYER_FORM_DATA) => {
   const regDetails = data?.user?.registrationDetails || {};
   const seller = data?.user?.sellerProfile || {};
-  const resolvedBusinessType = data?.profile?.businessType || seller.organizationType || regDetails.businessType || fallback.businessType;
+  const resolvedBusinessType = normalizeBusinessType(
+    data?.profile?.businessType ||
+    seller.organizationType ||
+    regDetails.businessType ||
+    fallback.businessType
+  );
   const primaryUser = isPrimaryUserType(resolvedBusinessType);
   const registrationState = cleanPlaceholder(regDetails.state);
   const registrationDistrict = cleanPlaceholder(regDetails.district);
@@ -307,7 +307,12 @@ const buildBuyerFormData = (data: any, storedDraft: any, fallback: any = DEFAULT
         } : {}),
         email: data?.user?.email || storedDraft?.formData?.email || data?.profile?.email || fallback.email,
         organizationName: org.organizationName || data?.profile?.organizationName || seller.businessName || regDetails.businessName || data?.user?.name || fallback.organizationName,
-        businessType: org.organizationType || data?.profile?.businessType || seller.organizationType || resolvedBusinessType,
+        businessType: normalizeBusinessType(
+          org.organizationType ||
+          data?.profile?.businessType ||
+          seller.organizationType ||
+          resolvedBusinessType
+        ) || 'Company (Pvt Ltd / Ltd)',
         mobile: data?.user?.mobile || data?.profile?.mobile || seller.mobile || fallback.mobile,
         representativeName: data?.user?.name || data?.profile?.representativeName || seller.nameAsInPan || fallback.representativeName,
         officeZoneName: org.addressLine1 || data?.profile?.officeZoneName || regDetails.officeZoneName || fallback.officeZoneName,
@@ -1093,12 +1098,16 @@ export default function BuyerOnboarding() {
   const validateSection = (sectionId: string): { valid: boolean; errorFields: string[] } => {
     const errorFields: string[] = [];
     if (sectionId === 'procurement') {
-      const validCats = (formData.procurementCategories.filter((cat: string) => cat !== 'Others').length > 0 || formData.customProcurementCategories.length > 0);
+      const validCats = (
+        Boolean(formData.categoriesDeferred) ||
+        formData.procurementCategories.filter((cat: string) => cat !== 'Others').length > 0 ||
+        formData.customProcurementCategories.length > 0
+      );
       const validBudget = !!formData.annualBudget;
       const validMethods = formData.preferredMethods.length > 0;
       setErrors(prev => ({
         ...prev,
-        procurementCategories: validCats ? '' : 'Required: select at least one category',
+        procurementCategories: validCats ? '' : 'Required: select at least one category or choose to configure later',
         annualBudget: validBudget ? '' : 'Required: select a budget range',
         preferredMethods: validMethods ? '' : 'Required: select at least one method'
       }));
@@ -1267,8 +1276,9 @@ export default function BuyerOnboarding() {
     if (sectionId === 'procurement') {
       const selectedCategories = formData.procurementCategories.filter((category: string) => category !== 'Others');
       const hasCustomCategories = formData.customProcurementCategories.length > 0;
+      const categoriesSatisfied = Boolean(formData.categoriesDeferred) || selectedCategories.length > 0 || hasCustomCategories;
       return (
-        (selectedCategories.length > 0 || hasCustomCategories) &&
+        categoriesSatisfied &&
         hasValue(formData.annualBudget) &&
         formData.preferredMethods.length > 0
       );
@@ -1691,15 +1701,27 @@ export default function BuyerOnboarding() {
                 {activeSection === 'org' && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 animate-in fade-in slide-in-from-bottom-4 duration-300">
                     <Input label="Organization / Company Name" name="organizationName" value={formData.organizationName} onChange={handleChange} onBlur={handleBlur} error={getFieldError('organizationName')} required />
-                    <Select label="Business Type" name="businessType" value={formData.businessType} onChange={handleChange} onBlur={handleBlur} error={getFieldError('businessType')} required disabled={isPrimaryUserType(formData.businessType)}>
-                      <option value="GOVERNMENT">Government Department / Ministry</option>
-                      <option value="PSU">Public Sector Undertaking (PSU)</option>
-                      <option value="Private Limited Company">Private Limited Company</option>
-                      <option value="Public Limited Company">Public Limited Company</option>
-                      <option value="Partnership Firm">Partnership Firm</option>
-                      <option value="LLP">LLP</option>
-                      <option value="Proprietorship">Proprietorship</option>
-                      <option value="Startup">Startup</option>
+                    <Select
+                      label="Business Type"
+                      name="businessType"
+                      value={normalizeBusinessType(formData.businessType)}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      error={getFieldError('businessType')}
+                      required
+                      disabled={isPrimaryUserType(formData.businessType)}
+                    >
+                      {CANONICAL_BUYER_BUSINESS_TYPES.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                      {normalizeBusinessType(formData.businessType) &&
+                        !CANONICAL_BUYER_BUSINESS_TYPES.some((o) => o.value === normalizeBusinessType(formData.businessType)) && (
+                          <option value={normalizeBusinessType(formData.businessType)}>
+                            {normalizeBusinessType(formData.businessType)}
+                          </option>
+                        )}
                     </Select>
                     <SearchableSelect
                       label="Industry / Sector"
@@ -1929,6 +1951,15 @@ export default function BuyerOnboarding() {
 
                 {activeSection === 'procurement' && (
                   <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+                    <div className="p-3 bg-blue-50/70 border border-blue-200/80 rounded-xl text-xs text-blue-900 flex items-start gap-2.5">
+                      <Info className="w-4 h-4 text-blue-600 mt-0.5 shrink-0" aria-hidden="true" />
+                      <div className="space-y-0.5">
+                        <p className="font-bold text-blue-950">Fast-Track Setup:</p>
+                        <p className="text-blue-800 leading-relaxed text-[11px]">
+                          Select 1 primary category to get started, or check the option below to configure later. Categories can be freely modified or expanded anytime from your Profile Settings without re-verifying KYC.
+                        </p>
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-4">
                       {/* Left Column: PROCUREMENT CATEGORY (Multiple) */}
                       <div className="space-y-2.5">
@@ -2131,6 +2162,30 @@ export default function BuyerOnboarding() {
                             )}
                           </div>
                         )}
+                        {/* Deferral Option Checkbox */}
+                        <div className="pt-2">
+                          <label htmlFor="defer-buyer-categories" className="flex items-start gap-2 text-xs font-semibold text-slate-700 cursor-pointer select-none">
+                            <input
+                              id="defer-buyer-categories"
+                              type="checkbox"
+                              checked={Boolean(formData.categoriesDeferred)}
+                              onChange={e => {
+                                setFormData((prev: any) => ({
+                                  ...prev,
+                                  categoriesDeferred: e.target.checked
+                                }));
+                                if (e.target.checked) {
+                                  setErrors(prev => ({ ...prev, procurementCategories: '' }));
+                                }
+                              }}
+                              disabled={isProfileLocked}
+                              className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/20"
+                            />
+                            <span className="leading-tight text-slate-600">
+                              I will configure my complete procurement categories later from Profile Settings
+                            </span>
+                          </label>
+                        </div>
                       </div>
 
                       {/* Right Column: ANNUAL PROCUREMENT BUDGET & PREFERRED PROCUREMENT METHODS */}
