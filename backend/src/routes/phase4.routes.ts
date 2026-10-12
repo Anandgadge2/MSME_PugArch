@@ -13235,6 +13235,8 @@ export type NormalizedProcurement = {
   unit: string;
   organizationName: string;
   participantsCount?: number;
+  publishedAt?: string | null;
+  postPublishEditCount?: number;
   createdAt: string;
   updatedAt: string;
   actionUrl: string;
@@ -13715,6 +13717,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
         return subStatus !== 'DRAFT' && !p.isWithdrawn;
       }).length,
+      publishedAt: b.publishedAt?.toISOString?.() || null,
+      postPublishEditCount: Number(b.postPublishEditCount || 0),
       createdAt: b.createdAt?.toISOString?.() || '',
       updatedAt: b.updatedAt?.toISOString?.() || '',
       linkedAuctionId: auctionsByBidId[b.id]?.id || null,

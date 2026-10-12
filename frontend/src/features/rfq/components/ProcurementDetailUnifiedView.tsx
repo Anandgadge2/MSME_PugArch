@@ -90,6 +90,7 @@ import type { SubmittedVendorItem } from "../../reverseAuctions/components/Start
 import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuctionLeaderboard";
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
+import { EditProcurementGraceBanner } from "../../procurement/components/EditProcurementGraceBanner";
 
 const ModalLoadingFallback = () => (
   <div
@@ -5110,6 +5111,9 @@ export interface ProcurementDetailUnifiedViewProps {
   onBack?: () => void;
   onDiscardClick?: () => void;
   onCancelClick?: () => void;
+  onEditClick?: () => void;
+  publishedAt?: string | null;
+  postPublishEditCount?: number;
   cancelButtonLabel?: string;
   submitButtonLabel?: string;
   onSubmitClick?: () => void;
@@ -13730,6 +13734,21 @@ export function ProcurementDetailUnifiedView(
               </div>
             </div>
           </header>
+
+          {/* One-Time Grace Edit Banner (Within 6h, 0 bids, max 1 edit) */}
+          {isBuyerOrAdmin && (
+            <div className="mb-4">
+              <EditProcurementGraceBanner
+                publishedAt={props.publishedAt}
+                createdAt={props.createdAt}
+                postPublishEditCount={props.postPublishEditCount}
+                participantsCount={props.participantsCount}
+                status={props.status}
+                onEditClick={props.onEditClick || (() => {})}
+                onCancelClick={props.onCancelClick}
+              />
+            </div>
+          )}
 
           {/* Reverse Auction Workflow Stepper (Two-Stage Tender vs Direct Reverse Auction) */}
           {!isRateContractType &&

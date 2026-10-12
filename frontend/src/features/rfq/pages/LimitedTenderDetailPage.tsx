@@ -10,6 +10,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
+import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { toast } from 'sonner';
 
@@ -19,6 +20,7 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -128,12 +130,34 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
   });
 
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
+      <EditPublishedProcurementModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        procurement={{
+          id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || String(requestId),
+          referenceNumber: viewProps.displayId || String(requestId),
+          title: viewProps.subject,
+          description: bid.description,
+          category: bid.category,
+          quantity: bid.quantity,
+          unit: bid.unit,
+          estimatedValue: bid.estimatedValue,
+          deliveryLocation: bid.deliveryLocation,
+          pincode: bid.pincode,
+          endDate: bid.endDate,
+          termsAndConditions: bid.termsAndConditions,
+        }}
+        onSuccess={async () => {
+          await Promise.allSettled([refetchBid(), refetchReq()]);
+        }}
+      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

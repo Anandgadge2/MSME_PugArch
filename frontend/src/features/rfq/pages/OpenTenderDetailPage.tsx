@@ -10,6 +10,7 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
+import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { toast } from 'sonner';
 
@@ -19,6 +20,7 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -152,12 +154,34 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
   });
 
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
+      <EditPublishedProcurementModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        procurement={{
+          id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || String(requestId),
+          referenceNumber: viewProps.displayId || String(requestId),
+          title: viewProps.subject,
+          description: mergedBid.description,
+          category: mergedBid.category,
+          quantity: mergedBid.quantity,
+          unit: mergedBid.unit,
+          estimatedValue: mergedBid.estimatedValue,
+          deliveryLocation: mergedBid.deliveryLocation,
+          pincode: mergedBid.pincode,
+          endDate: mergedBid.endDate,
+          termsAndConditions: mergedBid.termsAndConditions,
+        }}
+        onSuccess={async () => {
+          await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
+        }}
+      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

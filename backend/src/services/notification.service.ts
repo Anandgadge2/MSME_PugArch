@@ -405,9 +405,18 @@ export const notificationService = {
         targetRedirect = `/seller/procurement/limited-tender/${encodeURIComponent(numStr)}`;
       }
 
+      const isUpdate = String(procurement.title || '').startsWith('[Updated]');
+      const cleanTitle = isUpdate ? String(procurement.title || '').replace(/^\[Updated\]\s*/i, '') : titleStr;
+
       // For invited sellers, notification type MUST contain 'invit' (e.g. 'bid.invitation')
       // so InviteLoginPopup displays the pending invitation banner popup!
-      const notifyOpts: NotifyOpts = isInvitation ? {
+      const notifyOpts: NotifyOpts = isUpdate ? {
+        title: `Procurement Updated: ${cleanTitle}`,
+        message: `${orgStr} updated the requirements for ${methodStr} (${numStr}). Please review the revised details and schedule on the portal.`,
+        type: 'procurement.updated',
+        priority: 'high',
+        redirectUrl: targetRedirect
+      } : (isInvitation ? {
         title: `Procurement Invitation: ${titleStr}`,
         message: `Your organization has been invited by ${orgStr} to participate in ${methodStr} (${numStr}).`,
         type: 'bid.invitation',
@@ -419,20 +428,22 @@ export const notificationService = {
         type: 'procurement.opportunity',
         priority: 'high',
         redirectUrl: targetRedirect
-      };
+      });
 
-      const emailSubject = isInvitation
-        ? `[JsgSmile] Invitation to Bid: ${titleStr} (${numStr})`
-        : (isCategoryMatched
-          ? `[JsgSmile] New Opportunity in your category: ${titleStr} (${numStr})`
-          : `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`);
+      const emailSubject = isUpdate
+        ? `[JsgSmile] Procurement Updated: ${cleanTitle} (${numStr})`
+        : (isInvitation
+          ? `[JsgSmile] Invitation to Bid: ${titleStr} (${numStr})`
+          : (isCategoryMatched
+            ? `[JsgSmile] New Opportunity in your category: ${titleStr} (${numStr})`
+            : `[JsgSmile] New Procurement Opportunity: ${titleStr} (${numStr})`));
 
       const emailOpts: EmailOpts = {
         subject: emailSubject,
         html: `
           <div style="margin: 0 0 20px; padding: 18px 20px; background: #0c2340; border-radius: 8px; color: #ffffff;">
-            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">${isInvitation ? 'INVITATION TO BID' : `NEW ${escapeHtml(methodStr)} OPPORTUNITY`}</p>
-            <h2 style="margin: 0; color: #ffffff; font-size: 20px; line-height: 1.3;">${escapeHtml(titleStr)}</h2>
+            <p style="margin: 0 0 6px; color: #c5a556; font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;">${isUpdate ? 'REQUIREMENTS UPDATED' : (isInvitation ? 'INVITATION TO BID' : `NEW ${escapeHtml(methodStr)} OPPORTUNITY`)}</p>
+            <h2 style="margin: 0; color: #ffffff; font-size: 20px; line-height: 1.3;">${escapeHtml(cleanTitle)}</h2>
             <p style="margin: 6px 0 0; color: #cbd5e1; font-size: 13px;">Ref No: <strong>${escapeHtml(numStr)}</strong> | Issued by: <strong>${escapeHtml(orgStr)}</strong></p>
           </div>
           <p style="margin: 0 0 16px; color: #334155; font-size: 15px; line-height: 1.6;">

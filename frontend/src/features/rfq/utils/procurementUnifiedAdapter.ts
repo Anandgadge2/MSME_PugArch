@@ -12,6 +12,7 @@ export interface AdapterContext {
   backRoute?: string;
   onRefresh?: () => void | Promise<void>;
   onCancel?: () => void;
+  onEdit?: () => void;
   onSubmitAction?: () => void;
   onDownloadPdf?: () => void;
   onConvertToInvoice?: () => void;
@@ -256,6 +257,9 @@ export function adaptProcurementUnifiedProps(
     onBack: () => ctx.router.push(ctx.backRoute || (isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities')),
     onRefresh: ctx.onRefresh,
     onCancelClick: ctx.onCancel,
+    onEditClick: ctx.onEdit,
+    publishedAt: bid.publishedAt || reqObj.publishedAt || null,
+    postPublishEditCount: Number(bid.postPublishEditCount ?? reqObj.postPublishEditCount ?? 0),
     cancelButtonLabel: status === 'DRAFT' || status === 'SUBMITTED' ? 'Withdraw' : 'Cancel',
     submitButtonLabel: isBuyerOrAdmin ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Proposal Submitted' : 'Submit Proposal'),
     onSubmitClick: ctx.onSubmitAction,

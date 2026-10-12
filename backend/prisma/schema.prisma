@@ -3344,6 +3344,8 @@ model ProcurementBid {
   requiredDocuments     String[]                      @default([])
   approvedById          Int?
   approvedAt            DateTime?
+  publishedAt           DateTime?
+  postPublishEditCount  Int                           @default(0)
   rejectedReason        String?
   createdAt             DateTime                      @default(now())
   updatedAt             DateTime                      @updatedAt

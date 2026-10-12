@@ -2622,6 +2622,41 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
     throw new ApiError(400, 'Only draft, rejected or published bids can be edited.', 'INVALID_STATUS_TRANSITION');
   }
 
+  // ── 3-Gate Validation for Published Bids ──
+  if (isPublished) {
+    // Check if bidding deadline has already closed
+    if (bid.endDate && new Date() >= new Date(bid.endDate)) {
+      throw new ApiError(400, 'Cannot edit procurement after the submission deadline has closed.', 'DEADLINE_CLOSED');
+    }
+
+    // Gate 1: Time — Must be within 6 hours of publishing
+    const GRACE_WINDOW_MS = 6 * 60 * 60 * 1000;
+    const publishTime = bid.publishedAt ? new Date(bid.publishedAt) : (bid.createdAt ? new Date(bid.createdAt) : null);
+    if (!publishTime) {
+      throw new ApiError(400, 'Publish timestamp not recorded. Cannot determine grace window.', 'PUBLISH_TIME_MISSING');
+    }
+    if (Date.now() - publishTime.getTime() > GRACE_WINDOW_MS) {
+      throw new ApiError(409, 'The 6-hour grace edit window has expired. To modify requirements, please cancel this procurement and re-publish.', 'GRACE_WINDOW_EXPIRED');
+    }
+
+    // Gate 2: Bids — Must have zero submitted quotations
+    const submittedCount = await db.procurementBidParticipation.count({
+      where: {
+        bidId: bid.id,
+        submissionStatus: { notIn: ['DRAFT', 'WITHDRAWN'] },
+        isWithdrawn: { not: true }
+      }
+    });
+    if (submittedCount > 0) {
+      throw new ApiError(409, `${submittedCount} supplier(s) have already submitted quotations. Editing is locked to protect bidder fairness. To modify requirements, please cancel this procurement and re-publish.`, 'QUOTATIONS_ALREADY_SUBMITTED');
+    }
+
+    // Gate 3: Edit Count — Only one post-publish edit allowed
+    if ((bid.postPublishEditCount || 0) >= 1) {
+      throw new ApiError(409, 'This procurement has already been edited once (maximum allowed). To make further changes, please cancel this procurement and re-publish.', 'EDIT_LIMIT_REACHED');
+    }
+  }
+
   // Recompute visibility whenever the method or vendor selection could have changed,
   // using the incoming values falling back to the persisted ones.
   const visibility = deriveVisibility({
@@ -2639,40 +2674,34 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
         where: { id: bid.id },
         data: {
           ...body,
-          version: nextVersion
+          version: nextVersion,
+          postPublishEditCount: 1
         }
       });
-
-      const submittedParticipations = await tx.procurementBidParticipation.findMany({
-        where: {
-          bidId: bid.id,
-          submissionStatus: 'SUBMITTED'
-        }
-      });
-
-      for (const p of submittedParticipations) {
-        await tx.procurementBidParticipation.update({
-          where: { id: p.id },
-          data: {
-            submissionStatus: 'DRAFT',
-            rejectionReason: `REQUIRES_RESUBMISSION: RFQ/Tender amended to V${nextVersion}`
-          }
-        });
-
-        try {
-          await notificationService.notifyUser(p.sellerId, {
-            title: 'Procurement Amendment Notification',
-            message: `The procurement opportunity "${bid.title}" has been amended to V${nextVersion}. Your previous bid has been marked as draft. Please review and resubmit.`,
-            type: 'tender.amendment',
-            redirectUrl: `/seller/procurement/events/${bid.id}`
-          }, ['in_app', 'email']);
-        } catch (err) {
-          logger.warn({ err, sellerId: p.sellerId }, 'Failed to send amendment notification');
-        }
-      }
-
       return bidUpdated;
     });
+
+    // Send ONE consolidated notification to eligible/category-matched sellers
+    try {
+      const tp = (bid.technicalPacket || {}) as any;
+      const vendorsSelection = String(tp.vendors?.selection || tp.vendors?.selectionMode || '').trim();
+      void notificationService.notifySellersAndShgsOfProcurement({
+        id: bid.id,
+        title: `[Updated] ${updated.title || bid.title}`,
+        bidNumber: bid.bidNumber,
+        procurementType: updated.procurementType || bid.procurementType,
+        canonicalMethod: updated.canonicalMethod || bid.canonicalMethod,
+        buyerOrganizationName: bid.buyerOrganizationName,
+        estimatedValue: updated.estimatedValue || bid.estimatedValue,
+        endDate: updated.endDate || bid.endDate,
+        visibility: updated.visibility || bid.visibility,
+        sourcingStrategy: vendorsSelection,
+        category: updated.category || bid.category,
+        invitedSellerOrgIds: extractInvitedSellerIds(updated.technicalPacket || bid.technicalPacket)
+      });
+    } catch (err) {
+      logger.warn({ err, bidId: bid.id }, 'Failed to send post-edit notification to sellers');
+    }
   } else {
     updated = await db.procurementBid.update({ where: { id: bid.id }, data: body });
   }
@@ -2816,6 +2845,71 @@ export const updateBuyerBid = async (req: AuthRequest, bidId: string, body: any)
   }
 
   return updated;
+};
+
+export const getBidEditEligibility = async (req: AuthRequest, bidId: string) => {
+  const bid = await resolveBid(bidId, { participations: true });
+  assertBuyerOwner(req.user!, bid);
+
+  const isPublished = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(String(bid.status).toUpperCase());
+  if (!isPublished) {
+    const isDraft = ['DRAFT'].includes(String(bid.status).toUpperCase()) || editableApprovalStatuses.includes(String(bid.approvalStatus).toUpperCase());
+    return {
+      canEdit: isDraft,
+      isPublished: false,
+      reason: isDraft ? null : 'INVALID_STATUS',
+      graceWindowExpiresAt: null,
+      submittedQuotationsCount: 0,
+      editCount: bid.postPublishEditCount || 0,
+      maxEdits: 1,
+      publishedAt: null
+    };
+  }
+
+  const GRACE_WINDOW_MS = 6 * 60 * 60 * 1000;
+  const publishTime = bid.publishedAt ? new Date(bid.publishedAt) : (bid.createdAt ? new Date(bid.createdAt) : null);
+  const expiresAt = publishTime ? new Date(publishTime.getTime() + GRACE_WINDOW_MS) : null;
+  const timeExpired = !publishTime || (Date.now() - publishTime.getTime() > GRACE_WINDOW_MS);
+  const deadlinePassed = bid.endDate ? new Date() >= new Date(bid.endDate) : false;
+
+  const submittedCount = await db.procurementBidParticipation.count({
+    where: {
+      bidId: bid.id,
+      submissionStatus: { notIn: ['DRAFT', 'WITHDRAWN'] },
+      isWithdrawn: { not: true }
+    }
+  });
+
+  const editCount = bid.postPublishEditCount || 0;
+  const editLimitReached = editCount >= 1;
+
+  let canEdit = true;
+  let reason: string | null = null;
+
+  if (deadlinePassed) {
+    canEdit = false;
+    reason = 'DEADLINE_CLOSED';
+  } else if (editLimitReached) {
+    canEdit = false;
+    reason = 'EDIT_LIMIT_REACHED';
+  } else if (submittedCount > 0) {
+    canEdit = false;
+    reason = 'QUOTATIONS_ALREADY_SUBMITTED';
+  } else if (timeExpired) {
+    canEdit = false;
+    reason = 'GRACE_WINDOW_EXPIRED';
+  }
+
+  return {
+    canEdit,
+    isPublished: true,
+    reason,
+    graceWindowExpiresAt: expiresAt ? expiresAt.toISOString() : null,
+    submittedQuotationsCount: submittedCount,
+    editCount,
+    maxEdits: 1,
+    publishedAt: publishTime ? publishTime.toISOString() : null
+  };
 };
 
 export interface ExtendScheduleInput {
@@ -3290,6 +3384,7 @@ export const submitForApproval = async (req: AuthRequest, bidId: string) => {
         lifecycleStage: openNow ? 'SELLER_PARTICIPATION' : 'BID_PUBLISHED',
         approvedById: req.user!.id,
         approvedAt: now(),
+        publishedAt: openNow ? (bid.publishedAt || now()) : null,
         rejectedReason: null
       }
     });
@@ -3362,6 +3457,7 @@ export const approveBid = async (req: AuthRequest, bidId: string) => {
       lifecycleStage: openNow ? 'SELLER_PARTICIPATION' : 'BID_PUBLISHED',
       approvedById: req.user!.id,
       approvedAt: now(),
+      publishedAt: openNow ? (bid.publishedAt || now()) : null,
       rejectedReason: null
     }
   });

@@ -51,6 +51,7 @@ import {
   GitPullRequest,
   Sparkles,
   Ban,
+  Pencil,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -149,6 +150,8 @@ interface NormalizedProcurement {
   unit?: string;
   organizationName?: string;
   participantsCount?: number;
+  publishedAt?: string | null;
+  postPublishEditCount?: number;
   documents?: Array<{ fileAssetId: number | null; fileName: string; documentType?: string; required?: boolean; instructions?: string }>;
   items?: Array<{
     itemName: string;
@@ -396,6 +399,20 @@ export const isProcurementCancellable = (p: any): boolean => {
   return true;
 };
 
+export const isProcurementEditable = (p: any): boolean => {
+  if (!p) return false;
+  const s = String(p.status || '').toUpperCase();
+  if (['DRAFT'].includes(s)) return true;
+  if (!['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(s)) return false;
+  if (Number(p.postPublishEditCount || 0) >= 1) return false;
+  if (Number(p.participantsCount || 0) > 0) return false;
+  const publishTimestamp = p.publishedAt ? new Date(p.publishedAt).getTime() : (p.createdAt ? new Date(p.createdAt).getTime() : null);
+  if (!publishTimestamp) return false;
+  const elapsed = Date.now() - publishTimestamp;
+  if (elapsed > 6 * 60 * 60 * 1000) return false;
+  return true;
+};
+
 const TYPE_BADGE_STYLES: Record<string, string> = {
   'RFQ': 'border-blue-200 bg-blue-50 text-blue-800',
   'RFP': 'border-indigo-200 bg-indigo-50 text-indigo-800',
@@ -593,6 +610,28 @@ export default function MyProcurementsPage() {
       setDetailOpen(true);
     }
   };
+
+  const handleEditProcurement = useCallback((p: NormalizedProcurement, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const typeLower = String(p.type || '').toLowerCase();
+    if (typeLower === 'bid_draft') {
+      router.push(`/buyer/create-bid?draft=${p.id}`);
+      return;
+    }
+    const targetId = encodeURIComponent(p.referenceNumber || p.id);
+    const methodLower = String(p.method || '').toLowerCase();
+    const consolidated = getConsolidatedType(p);
+    let route = `/bids/${targetId}?edit=1`;
+    if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
+      route = `/bids/${targetId}?type=${consolidated === 'Limited Tender' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}&edit=1`;
+    } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
+      route = `/bids/${targetId}?type=RFQ&edit=1`;
+    } else if (consolidated === 'RFP' || methodLower === 'rfp') {
+      route = `/bids/${targetId}?type=RFP&edit=1`;
+    }
+    router.push(route);
+  }, [router]);
+
   const closeDetail = () => {
     setDetailOpen(false);
     setSelectedProcurement(null);
@@ -946,6 +985,19 @@ export default function MyProcurementsPage() {
               </span>
             </Button>
           )}
+          {isProcurementEditable(p) && (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={e => handleEditProcurement(p, e)}
+              title="Edit Procurement (One-Time Grace Period)"
+              className="h-8 px-2.5 rounded-lg border border-blue-200 bg-blue-50/60 text-blue-700 hover:bg-blue-100/80 text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer shadow-2xs active:scale-95"
+            >
+              <Pencil className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+              <span>Edit</span>
+            </Button>
+          )}
           <Button
             type="button"
             size="sm"
@@ -1247,6 +1299,17 @@ export default function MyProcurementsPage() {
                           >
                             <Ban className="h-3.5 w-3.5" />
                             <span>{p.statusGroup === 'pending_approval' ? 'Withdraw' : 'Cancel'}</span>
+                          </button>
+                        )}
+                        {isProcurementEditable(p) && (
+                          <button
+                            type="button"
+                            onClick={e => handleEditProcurement(p, e)}
+                            title="Edit Procurement (One-Time Grace Period)"
+                            className="inline-flex h-9 items-center justify-center gap-1 rounded-lg border border-blue-200 bg-blue-50/60 px-2.5 text-center text-xs font-bold text-blue-700 shadow-2xs hover:bg-blue-100/80 active:scale-95 transition-all duration-200 cursor-pointer"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            <span>Edit</span>
                           </button>
                         )}
                         <button

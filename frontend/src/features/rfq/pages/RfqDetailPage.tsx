@@ -11,6 +11,7 @@ import { Button } from '../../../components/ui/button';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
+import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { useProcurementRealtime } from '../hooks/useProcurementRealtime';
 
@@ -20,6 +21,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
   const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
@@ -183,6 +185,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
+    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId}/results`) : handleSubmitQuotation,
     invoiceStatusData: user?.role === 'seller' && isCurrentSellerAwarded ? {
       exists: Boolean(invoiceStatusData?.exists),
@@ -198,6 +201,27 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
+      <EditPublishedProcurementModal
+        isOpen={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        procurement={{
+          id: rawBid?.id || reqObj?.id || (!isNaN(Number(activeRfqId)) ? Number(activeRfqId) : 0) || String(activeRfqId),
+          referenceNumber: viewProps.displayId || String(activeRfqId),
+          title: viewProps.subject,
+          description: rawBid?.description || reqObj?.description,
+          category: rawBid?.category || reqObj?.category?.name,
+          quantity: rawBid?.quantity,
+          unit: rawBid?.unit,
+          estimatedValue: rawBid?.estimatedValue || reqObj?.estimatedValue,
+          deliveryLocation: rawBid?.deliveryLocation,
+          pincode: rawBid?.pincode,
+          endDate: rawBid?.endDate || reqObj?.requiredBy,
+          termsAndConditions: rawBid?.termsAndConditions,
+        }}
+        onSuccess={async () => {
+          await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
+        }}
+      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

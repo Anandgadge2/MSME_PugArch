@@ -1494,8 +1494,14 @@ router.post('/buyer/procurement-bids', authenticate, requireAccountType('buyer')
   return apiResponse.created(res, bid, 'Bid draft created');
 }));
 
+router.get('/buyer/procurement-bids/:bidId/edit-eligibility', authenticate, requireAccountType('buyer'), validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
+  const eligibility = await service.getBidEditEligibility(req, req.params.bidId);
+  return apiResponse.success(res, eligibility, 200, 'Edit eligibility retrieved');
+}));
+
 router.put('/buyer/procurement-bids/:bidId', authenticate, requireAccountType('buyer'), requirePermission('tender.update'), validate({ params: idParamSchema, body: bidBaseSchema.partial() }), asyncRoute(async (req, res) => {
   const bid = await service.updateBuyerBid(req, req.params.bidId, req.body);
+  await invalidateBidCaches(bid, req.params.bidId);
   return apiResponse.success(res, bid, 200, 'Bid updated');
 }));
 
