@@ -207,14 +207,12 @@ const resolveAuctionId = async (rawId: number | string): Promise<number | null> 
     }
   }
 
-  // 3. Try lookup via linked ProcurementBid by bidNumber or tenderNumber (e.g. "RFP-2026-26500")
+  // 3. Try lookup via linked ProcurementBid by bidNumber (e.g. "RFP-2026-26500")
   const linkedBidRow = await db.procurementBid.findFirst({
     where: {
       OR: [
         { bidNumber: { equals: str, mode: 'insensitive' } },
-        { tenderNumber: { equals: str, mode: 'insensitive' } },
-        { bidNumber: str },
-        { tenderNumber: str }
+        { bidNumber: str }
       ]
     },
     select: { id: true, bidNumber: true }
@@ -2386,11 +2384,11 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
     }
 
     const orgIds = Array.from(new Set(participants.map((p: any) => p.sellerOrgId).filter(Boolean)));
-    const orgs = await db.organization.findMany({
+    const orgs = orgIds.length ? await db.organization.findMany({
       where: { id: { in: orgIds as number[] } },
-      select: { id: true, organizationName: true, legalBusinessName: true }
-    });
-    const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName || o.legalBusinessName]));
+      select: { id: true, organizationName: true }
+    }) : [];
+    const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
 
     const userIds = Array.from(new Set(participants.map((p: any) => p.sellerUserId).filter(Boolean)));
     const users = userIds.length ? await db.user.findMany({
@@ -2431,7 +2429,7 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
                 mobile: true,
                 organizationId: true,
                 organization: {
-                  select: { id: true, organizationName: true, legalBusinessName: true }
+                  select: { id: true, organizationName: true }
                 }
               }
             },
@@ -2517,6 +2515,7 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
     });
     return apiResponse.success(res, { participants: maskSensitive(mappedParticipants) });
   } catch (error: any) {
+    logger.error({ err: error, auctionId: req.params.id }, 'Failed to load reverse auction participants');
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load participants', error.code || 'REVERSE_AUCTION_PARTICIPANTS_ERROR');
   }
 });

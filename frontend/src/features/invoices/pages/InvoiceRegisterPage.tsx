@@ -27,6 +27,8 @@ import { useAuth } from '../../../hooks/useAuth';
 import { TaxInvoiceCard } from '../components/TaxInvoiceCard';
 import { SignatureStampUploadModal } from '../components/SignatureStampUploadModal';
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
+import { UploadExternalInvoiceModal } from '../components/UploadExternalInvoiceModal';
+import { RejectInvoiceModal } from '../components/RejectInvoiceModal';
 import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
 import { canDisburseInvoicePayment } from '../../shared/procurementLifecycleUtils';
@@ -55,6 +57,13 @@ type InvoiceRow = {
   buyer?: { name?: string };
   seller?: { name?: string };
   purchaseOrder?: { poNumber?: string; title?: string; poStatus?: string };
+  externalPoNumber?: string;
+  vendorCode?: string;
+  isExternalUpload?: boolean;
+  invoiceDate?: string;
+  rejectionReason?: string;
+  rejectionCount?: number;
+  invoiceFileId?: number;
 };
 
 const statusOf = (invoice: InvoiceRow) => String(invoice.invoiceStatus || invoice.status || 'draft').toLowerCase();
@@ -72,6 +81,8 @@ function InvoiceRowActionCell({
   onTrack,
   onViewReceipt,
   onApprove,
+  onReject,
+  onEdit,
   onUploadSlip,
   onPayNow,
 }: {
@@ -85,6 +96,8 @@ function InvoiceRowActionCell({
   onTrack: () => void;
   onViewReceipt: () => void;
   onApprove: () => void;
+  onReject?: () => void;
+  onEdit?: () => void;
   onUploadSlip: () => void;
   onPayNow: () => void;
 }) {
@@ -301,20 +314,55 @@ function InvoiceRowActionCell({
           )}
 
           {role === 'buyer' && isSubmitted && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={submitting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                  onApprove();
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left cursor-pointer disabled:opacity-50"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Approve</span>
+              </button>
+
+              <button
+                type="button"
+                role="menuitem"
+                disabled={submitting}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onClose();
+                  onReject?.();
+                }}
+                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left cursor-pointer disabled:opacity-50"
+              >
+                <AlertCircle className="h-3.5 w-3.5 text-rose-600" aria-hidden="true" />
+                <span>Reject with Reason</span>
+              </button>
+            </>
+          )}
+
+          {role === 'seller' && (state === 'draft' || state === 'rejected') && (
             <button
               type="button"
               role="menuitem"
-              disabled={submitting}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onClose();
-                onApprove();
+                onEdit?.();
               }}
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-white bg-[#12335f] hover:bg-slate-800 transition-colors text-left cursor-pointer disabled:opacity-50"
+              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
             >
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>Approve</span>
+              <RefreshCw className="h-3.5 w-3.5 text-indigo-600" aria-hidden="true" />
+              <span>Edit / Resubmit</span>
             </button>
           )}
 
@@ -586,6 +634,15 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const [openKebabId, setOpenKebabId] = useState<number | null>(null);
 
 
+  // Seller external SAP invoice modal state
+  const [externalInvoiceModalOpen, setExternalInvoiceModalOpen] = useState(false);
+  const [editingExternalInvoice, setEditingExternalInvoice] = useState<any | null>(null);
+
+  // Buyer invoice reject modal state
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [rejectInvoiceId, setRejectInvoiceId] = useState<number | null>(null);
+  const [rejectInvoiceNumber, setRejectInvoiceNumber] = useState<string | undefined>(undefined);
+
   // Seller invoice creation modal state
   const [createInvoiceModalOpen, setCreateInvoiceModalOpen] = useState(false);
   const [createInvoiceSubmitting, setCreateInvoiceSubmitting] = useState(false);
@@ -620,8 +677,20 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       sortable: true,
       cell: (invoice) => (
         <div>
-          <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
+            {invoice.isExternalUpload && (
+              <span className="rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[9px] font-black text-indigo-700 font-mono">
+                SAP Ariba
+              </span>
+            )}
+          </div>
           <p className="mt-1 text-[10px] font-semibold text-slate-500">{formatDate(invoice.createdAt)}</p>
+          {statusOf(invoice) === 'rejected' && invoice.rejectionReason && (
+            <p className="mt-0.5 text-[10px] font-bold text-rose-600 truncate max-w-[180px]" title={invoice.rejectionReason}>
+              Reason: {invoice.rejectionReason}
+            </p>
+          )}
         </div>
       ),
     },
@@ -632,8 +701,18 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
       sortable: true,
       cell: (invoice) => (
         <div>
-          <p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <p className="text-xs font-black text-slate-900">{invoice.purchaseOrder?.poNumber || `PO #${invoice.purchaseOrderId || '-'}`}</p>
+            {invoice.externalPoNumber && (
+              <span className="rounded-md bg-slate-100 border border-slate-200 px-1.5 py-0.2 text-[9px] font-mono font-bold text-slate-700" title={`SAP PO: ${invoice.externalPoNumber}`}>
+                SAP: {invoice.externalPoNumber}
+              </span>
+            )}
+          </div>
           <p className="text-[10px] font-semibold text-slate-500">{invoice.purchaseOrder?.title || '-'}</p>
+          {invoice.vendorCode && (
+            <p className="text-[9px] font-mono font-semibold text-slate-400">Vendor: {invoice.vendorCode}</p>
+          )}
         </div>
       ),
     },
@@ -702,7 +781,9 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
               ? 'border-blue-200 bg-slate-50 text-[#12335f]'
               : state === 'submitted'
                 ? 'border-amber-200 bg-amber-50 text-amber-700'
-                : 'border-slate-200 bg-slate-50 text-slate-600'
+                : state === 'rejected'
+                  ? 'border-rose-200 bg-rose-50 text-rose-700'
+                  : 'border-slate-200 bg-slate-50 text-slate-600'
             }`}>
             {state.replace(/_/g, ' ')}
           </span>
@@ -735,6 +816,15 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
           }}
           onApprove={() => {
             handleApproveInvoice(invoice.id);
+          }}
+          onReject={() => {
+            setRejectInvoiceId(invoice.id);
+            setRejectInvoiceNumber(invoice.invoiceNumber || `INV-${invoice.id}`);
+            setRejectModalOpen(true);
+          }}
+          onEdit={() => {
+            setEditingExternalInvoice(invoice);
+            setExternalInvoiceModalOpen(true);
           }}
           onUploadSlip={() => {
             setUploadProofInvoice(invoice);
@@ -1310,14 +1400,27 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             <Stamp className="h-4 w-4 text-indigo-600" aria-hidden="true" /> Stamp & Signature
           </Button>
           {role === 'seller' && (
-            <Button
-              variant="outline"
-              onClick={openCreateInvoiceModal}
-              disabled={submitting}
-              className="h-10 rounded-lg text-xs bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black uppercase shadow-sm"
-            >
-              Create Invoice
-            </Button>
+            <>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditingExternalInvoice(null);
+                  setExternalInvoiceModalOpen(true);
+                }}
+                disabled={submitting}
+                className="h-10 rounded-lg text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border-indigo-200 font-black uppercase shadow-sm flex items-center gap-1.5 cursor-pointer"
+              >
+                <Upload className="h-4 w-4" /> Upload External Bill (SAP)
+              </Button>
+              <Button
+                variant="outline"
+                onClick={openCreateInvoiceModal}
+                disabled={submitting}
+                className="h-10 rounded-lg text-xs bg-[#12335f] hover:bg-[#0e2a4f] text-white font-black uppercase shadow-sm cursor-pointer"
+              >
+                Create Invoice
+              </Button>
+            </>
           )}
           <Button variant="outline" onClick={reload} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} /> Refresh
@@ -1748,6 +1851,43 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         />
       )}
 
+      {/* Enterprise Upload External Invoice Modal (SAP Ariba / ERP) */}
+      {(role === 'seller' || user?.role === 'seller') && (
+        <UploadExternalInvoiceModal
+          open={externalInvoiceModalOpen}
+          onClose={() => {
+            setExternalInvoiceModalOpen(false);
+            setEditingExternalInvoice(null);
+          }}
+          onSuccess={async () => {
+            await reload();
+            await reloadPurchaseOrders();
+            if (selectedInvoice) {
+              await handleRefreshSelectedInvoice();
+            }
+          }}
+          purchaseOrders={acceptedPurchaseOrders}
+          editInvoice={editingExternalInvoice}
+        />
+      )}
+
+      {/* Reject Invoice Modal with Structured Audit Reasons */}
+      <RejectInvoiceModal
+        isOpen={rejectModalOpen}
+        onClose={() => {
+          setRejectModalOpen(false);
+          setRejectInvoiceId(null);
+        }}
+        invoiceId={rejectInvoiceId}
+        invoiceNumber={rejectInvoiceNumber}
+        onSuccess={async () => {
+          await reload();
+          if (selectedInvoice && selectedInvoice.id === rejectInvoiceId) {
+            await handleRefreshSelectedInvoice();
+          }
+        }}
+      />
+
       {selectedInvoice && (
         <div id="printable-invoice-overlay" className="fixed inset-0 z-[100] flex items-center justify-center p-0 sm:p-4 bg-slate-950/75 backdrop-blur-md">
           <div
@@ -1882,6 +2022,40 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                         <p className="text-[11px] text-blue-800 font-medium">
                           <strong>Invoice Submitted:</strong> Awaiting buyer verification and approval. Once approved, the buyer can initiate escrow payment release.
                         </p>
+                      </div>
+                    )}
+
+                    {/* Rejection Alert Banner with Seller Edit Action */}
+                    {statusOf(selectedInvoice) === 'rejected' && (
+                      <div
+                        className="rounded-2xl border border-rose-300 bg-rose-50/95 p-3.5 text-rose-950 text-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs no-print"
+                        role="alert"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-rose-100 text-rose-800 ring-1 ring-rose-300">
+                            <AlertCircle className="h-4 w-4" aria-hidden="true" />
+                          </span>
+                          <div>
+                            <p className="font-black text-rose-950 text-xs sm:text-sm">
+                              Invoice Rejected by Buyer (Correction Required)
+                            </p>
+                            <p className="text-rose-800 text-[11px] mt-0.5 leading-relaxed font-semibold">
+                              Reason: {selectedInvoice.rejectionReason || (detailedInvoice as any)?.rejectionReason || 'Discrepancy in billing, rates, or received items. Please correct and resubmit.'}
+                            </p>
+                          </div>
+                        </div>
+                        {(role === 'seller' || user?.role === 'seller') && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setEditingExternalInvoice(selectedInvoice);
+                              setExternalInvoiceModalOpen(true);
+                            }}
+                            className="bg-rose-700 hover:bg-rose-800 text-white text-xs font-bold shrink-0 h-8 shadow-xs cursor-pointer"
+                          >
+                            <RefreshCw className="mr-1 h-3.5 w-3.5" /> Edit & Resubmit Bill
+                          </Button>
+                        )}
                       </div>
                     )}
                     {/* Unified Connected Cross-Document Lifecycle Bar */}
@@ -2091,14 +2265,43 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
                       {/* Right: Actions */}
                       <div className="flex items-center gap-2 flex-nowrap shrink-0 ml-auto">
                         {statusOf(selectedInvoice) === 'submitted' && (role === 'buyer' || user?.role === 'buyer' || role === 'admin') && (
+                          <>
+                            <Button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => handleApproveInvoice(selectedInvoice.id)}
+                              className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                            >
+                              {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                              <span>Approve Invoice</span>
+                            </Button>
+                            <Button
+                              type="button"
+                              disabled={submitting}
+                              onClick={() => {
+                                setRejectInvoiceId(selectedInvoice.id);
+                                setRejectInvoiceNumber(selectedInvoice.invoiceNumber || `INV-${selectedInvoice.id}`);
+                                setRejectModalOpen(true);
+                              }}
+                              className="h-9 px-3 rounded-xl bg-rose-50 border border-rose-300 hover:bg-rose-100 text-rose-700 text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                              <span>Reject with Reason</span>
+                            </Button>
+                          </>
+                        )}
+
+                        {statusOf(selectedInvoice) === 'rejected' && (role === 'seller' || user?.role === 'seller') && (
                           <Button
                             type="button"
-                            disabled={submitting}
-                            onClick={() => handleApproveInvoice(selectedInvoice.id)}
-                            className="h-9 px-3 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
+                            onClick={() => {
+                              setEditingExternalInvoice(selectedInvoice);
+                              setExternalInvoiceModalOpen(true);
+                            }}
+                            className="h-9 px-3 rounded-xl bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black uppercase tracking-wider flex items-center gap-1.5 shadow-xs shrink-0 whitespace-nowrap cursor-pointer"
                           >
-                            {submitting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
-                            <span>Approve Invoice</span>
+                            <RefreshCw className="h-3.5 w-3.5" />
+                            <span>Edit & Resubmit</span>
                           </Button>
                         )}
 

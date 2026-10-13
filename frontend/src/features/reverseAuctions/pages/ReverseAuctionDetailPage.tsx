@@ -43,6 +43,7 @@ import {
   Lock,
   XCircle,
   Trophy,
+  Check,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -116,7 +117,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                      user?.role === 'admin' ? '/admin' :
                      user?.role === 'shg' ? '/shg' : '/seller';
 
-  const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
+  const [selectedSellers, setSelectedSellers] = useState<MarketplaceSeller[]>([]);
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
@@ -146,6 +147,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setIsInviteModalOpen(false);
+        setSelectedSellers([]);
         inviteButtonRef.current?.focus();
       }
     };
@@ -253,11 +255,16 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   });
 
   const invite = useMutation({
-    mutationFn: (args: { sellerOrgId: number; sellerUserId?: number }) =>
-      reverseAuctionApi.inviteSellers(effectiveId, [args]),
-    onSuccess: () => {
-      toast.success('Seller organization invited successfully.');
-      setSelectedSeller(null);
+    mutationFn: (sellers: Array<{ sellerOrgId: number; sellerUserId?: number }>) =>
+      reverseAuctionApi.inviteSellers(effectiveId, sellers),
+    onSuccess: (_, vars) => {
+      const count = vars.length;
+      toast.success(
+        count > 1
+          ? `${count} seller organizations invited successfully.`
+          : 'Seller organization invited successfully.'
+      );
+      setSelectedSellers([]);
       setIsInviteModalOpen(false);
       invalidate();
     },
@@ -278,6 +285,13 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const isPublicAuction =
     auctionData.auctionType === 'OPEN' || !auctionData.auctionType || auctionData.auctionType === 'ENGLISH_REVERSE';
   const participants = participantsQuery.data?.participants || (auctionData as any).participants || [];
+  const invitedOrgIds = useMemo<Set<number>>(() => {
+    return new Set<number>(
+      participants
+        .map((p: any) => p.sellerOrgId)
+        .filter((orgId: any): orgId is number => typeof orgId === 'number')
+    );
+  }, [participants]);
 
   const termsDocFileId =
     auctionData.termsDocumentFileId || (auctionData.auctionConfig as any)?.auctionTermsDocument?.fileAssetId || null;
@@ -1238,12 +1252,15 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                   <UserPlus className="h-4 w-4" />
                 </div>
                 <h3 id="invite-modal-title" className="text-base font-black text-slate-900">
-                  Invite Seller Organization
+                  Invite Seller Organizations
                 </h3>
               </div>
               <button
                 type="button"
-                onClick={() => setIsInviteModalOpen(false)}
+                onClick={() => {
+                  setIsInviteModalOpen(false);
+                  setSelectedSellers([]);
+                }}
                 className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
               >
                 <X className="h-5 w-5" />
@@ -1253,31 +1270,67 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
             <form
               onSubmit={(e: FormEvent) => {
                 e.preventDefault();
-                if (!selectedSeller) return;
-                invite.mutate({
-                  sellerOrgId: selectedSeller.id,
-                  sellerUserId: selectedSeller.sellerUserId ? Number(selectedSeller.sellerUserId) : undefined,
-                });
+                if (selectedSellers.length === 0) return;
+                invite.mutate(
+                  selectedSellers.map((seller) => ({
+                    sellerOrgId: seller.id,
+                    sellerUserId: seller.sellerUserId ? Number(seller.sellerUserId) : undefined,
+                  }))
+                );
               }}
               className="space-y-4"
             >
               <div>
-                <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 mb-1.5">
-                  Select Registered Seller
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                    Select Registered Sellers
+                  </label>
+                  {selectedSellers.length > 0 && (
+                    <span className="text-xs font-bold text-blue-600">
+                      {selectedSellers.length} selected
+                    </span>
+                  )}
+                </div>
                 <VendorSearchableDropdown
-                  value={selectedSeller?.id || ''}
-                  onChange={(seller) => setSelectedSeller(seller)}
+                  selectedSellers={selectedSellers}
+                  onChange={setSelectedSellers}
+                  alreadyInvitedOrgIds={invitedOrgIds}
                   placeholder="Search seller by business name..."
                 />
               </div>
 
-              {selectedSeller && (
-                <div className="rounded-xl border border-blue-100 bg-blue-50/60 p-3 text-xs space-y-1">
-                  <p className="font-bold text-[#0b2447]">{selectedSeller.organizationName}</p>
-                  <p className="text-slate-500">
-                    {selectedSeller.organizationType} · {[selectedSeller.city, selectedSeller.state].filter(Boolean).join(', ')}
-                  </p>
+              {selectedSellers.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex items-center justify-between text-xs text-slate-500 font-semibold px-0.5">
+                    <span>Selected ({selectedSellers.length})</span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedSellers([])}
+                      className="text-[11px] text-rose-500 hover:text-rose-700 font-bold hover:underline"
+                    >
+                      Clear all
+                    </button>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50/70 p-2">
+                    {selectedSellers.map((seller) => (
+                      <span
+                        key={seller.id}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-blue-200 shadow-2xs px-2.5 py-1 text-xs font-semibold text-[#0b2447]"
+                      >
+                        <span className="truncate max-w-[200px]" title={seller.organizationName}>
+                          {seller.organizationName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedSellers((prev) => prev.filter((s) => s.id !== seller.id))}
+                          className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition"
+                          aria-label={`Remove ${seller.organizationName}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 </div>
               )}
 
@@ -1285,18 +1338,27 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setIsInviteModalOpen(false)}
+                  onClick={() => {
+                    setIsInviteModalOpen(false);
+                    setSelectedSellers([]);
+                  }}
                   className="rounded-xl font-bold text-xs"
                 >
                   Cancel
                 </Button>
                 <Button
                   type="submit"
-                  disabled={invite.isPending || !selectedSeller}
+                  disabled={invite.isPending || selectedSellers.length === 0}
                   className="rounded-xl bg-[#0b2447] hover:bg-blue-600 text-white font-bold text-xs flex items-center gap-2"
                 >
                   {invite.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-                  {invite.isPending ? 'Inviting…' : 'Send Invitation'}
+                  {invite.isPending
+                    ? 'Inviting…'
+                    : selectedSellers.length > 1
+                    ? `Send Invitations (${selectedSellers.length})`
+                    : selectedSellers.length === 1
+                    ? 'Send Invitation (1)'
+                    : 'Send Invitation'}
                 </Button>
               </div>
             </form>
@@ -1336,23 +1398,24 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
 }
 
 interface VendorSearchableDropdownProps {
-  value: string | number;
-  onChange: (seller: MarketplaceSeller | null) => void;
+  selectedSellers: MarketplaceSeller[];
+  onChange: (sellers: MarketplaceSeller[] | ((prev: MarketplaceSeller[]) => MarketplaceSeller[])) => void;
   placeholder?: string;
   className?: string;
+  alreadyInvitedOrgIds?: Set<number>;
 }
 
 function VendorSearchableDropdown({
-  value,
+  selectedSellers,
   onChange,
   placeholder = 'Search vendor name or organization...',
   className,
+  alreadyInvitedOrgIds,
 }: VendorSearchableDropdownProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [sellers, setSellers] = useState<MarketplaceSeller[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedSeller, setSelectedSeller] = useState<MarketplaceSeller | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -1371,6 +1434,15 @@ function VendorSearchableDropdown({
 
     return () => clearTimeout(delayDebounce);
   }, [search, open]);
+
+  const toggleSeller = (seller: MarketplaceSeller) => {
+    const isSelected = selectedSellers.some((s) => s.id === seller.id);
+    if (isSelected) {
+      onChange(selectedSellers.filter((s) => s.id !== seller.id));
+    } else {
+      onChange([...selectedSellers, seller]);
+    }
+  };
 
   return (
     <div className={cn('relative w-full', className)}>
@@ -1393,11 +1465,9 @@ function VendorSearchableDropdown({
               type="button"
               onClick={() => {
                 setSearch('');
-                setSelectedSeller(null);
-                onChange(null);
-                setSellers([]);
               }}
               className="hover:text-slate-600"
+              aria-label="Clear search"
             >
               <X className="h-4 w-4" />
             </button>
@@ -1408,7 +1478,7 @@ function VendorSearchableDropdown({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 mt-1 max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-20">
+          <div className="absolute left-0 right-0 mt-1 max-h-64 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl z-20">
             {loading && sellers.length === 0 ? (
               <div className="p-3 text-center text-xs font-semibold text-slate-500">Loading sellers...</div>
             ) : sellers.length === 0 ? (
@@ -1416,37 +1486,53 @@ function VendorSearchableDropdown({
             ) : (
               sellers.map((seller) => {
                 const isValid = seller.sellerUserId !== null && seller.sellerUserId !== undefined;
-                const isSelected = selectedSeller?.id === seller.id;
+                const isSelected = selectedSellers.some((s) => s.id === seller.id);
+                const isAlreadyInvited = alreadyInvitedOrgIds?.has(seller.id);
+
                 return (
                   <button
                     key={seller.id}
                     type="button"
                     disabled={!isValid}
-                    onClick={() => {
-                      setSelectedSeller(seller);
-                      setSearch(seller.organizationName);
-                      onChange(seller);
-                      setOpen(false);
-                    }}
+                    onClick={() => toggleSeller(seller)}
                     className={cn(
-                      'flex w-full flex-col items-start rounded-lg px-3 py-2 text-left text-xs transition',
+                      'flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left text-xs transition',
                       !isValid ? 'opacity-50 cursor-not-allowed bg-slate-50/50' : 'hover:bg-slate-50',
-                      isSelected && 'bg-blue-50 text-[#0b2447]'
+                      isSelected && 'bg-blue-50/70 text-[#0b2447]'
                     )}
                   >
-                    <div className="flex w-full items-center justify-between gap-2">
-                      <span className="font-bold text-slate-900">{seller.organizationName}</span>
-                      {seller.verificationStatus === 'VERIFIED' && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] uppercase font-bold border border-emerald-200 text-emerald-700">
-                          Verified
-                        </span>
+                    <div
+                      className={cn(
+                        'mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition',
+                        isSelected
+                          ? 'border-[#0b2447] bg-[#0b2447] text-white'
+                          : 'border-slate-300 bg-white'
                       )}
+                    >
+                      {isSelected && <Check className="h-3 w-3 stroke-[3]" />}
                     </div>
-                    <div className="mt-1 flex w-full items-center justify-between text-[10px] text-slate-500 font-semibold">
-                      <span>
-                        {seller.organizationType} · {[seller.city, seller.state].filter(Boolean).join(', ')}
-                      </span>
-                      {!isValid && <span className="text-red-500 font-bold">No active user account</span>}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="font-bold text-slate-900 truncate">{seller.organizationName}</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {isAlreadyInvited && (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] font-bold border border-slate-200 text-slate-600">
+                              Already in auction
+                            </span>
+                          )}
+                          {seller.verificationStatus === 'VERIFIED' && (
+                            <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[9px] uppercase font-bold border border-emerald-200 text-emerald-700">
+                              Verified
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-1 flex w-full items-center justify-between text-[10px] text-slate-500 font-semibold">
+                        <span>
+                          {seller.organizationType} · {[seller.city, seller.state].filter(Boolean).join(', ')}
+                        </span>
+                        {!isValid && <span className="text-red-500 font-bold">No active user account</span>}
+                      </div>
                     </div>
                   </button>
                 );

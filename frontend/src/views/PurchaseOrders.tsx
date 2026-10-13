@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
@@ -11,6 +11,7 @@ import { RecordOrderPaymentModal } from '../features/purchaseOrders/components/R
 import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/components/ConfirmOrderSettlementModal';
 import { GrnCreateModal } from '../features/grn/components/GrnCreateModal';
 import { TaxInvoiceRegistryModal } from '../features/invoices/components/TaxInvoiceRegistryModal';
+import { EditPurchaseOrderModal } from '../features/purchaseOrders/components/EditPurchaseOrderModal';
 
 export const hasApprovedGrn = (order: any): boolean => {
   if (!order) return false;
@@ -164,7 +165,12 @@ const OrderActionDropdown = ({
   onConfirmSettlement,
   onOpenGrnModal,
   onViewGrn,
-  onViewInvoice
+  onViewInvoice,
+  onEditPoDraft,
+  onIssuePo,
+  onAmendPo,
+  onAcceptAmendment,
+  onDeclineAmendment,
 }: any) => {
   const router = useRouter();
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -339,6 +345,77 @@ const OrderActionDropdown = ({
         <Receipt className="h-3.5 w-3.5 text-blue-600" />
         <span>View Official PO</span>
       </button>
+
+      {/* Buyer: Draft Edit & Issue Actions */}
+      {isBuyer && (String(order.status || '').toLowerCase() === 'draft' || String(order.status || '').toLowerCase() === 'generated' || order.isDraft) && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onEditPoDraft?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
+          >
+            <FileText className="h-3.5 w-3.5 text-indigo-600" />
+            <span>Edit Draft / SAP Details</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onIssuePo?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Issue PO to Seller</span>
+          </button>
+        </>
+      )}
+
+      {/* Buyer: Propose V2 Amendment on Accepted PO */}
+      {isBuyer && isAccepted && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onAmendPo?.(order);
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-purple-700 hover:bg-purple-50 transition-colors text-left cursor-pointer"
+        >
+          <FileText className="h-3.5 w-3.5 text-purple-600" />
+          <span>Amend Order (V2)</span>
+        </button>
+      )}
+
+      {/* Seller: Accept or Decline Proposed Amendment */}
+      {isSeller && String(order.status || '').toLowerCase() === 'amendment_pending' && (
+        <>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onAcceptAmendment?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+          >
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Accept Amendment</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              onDeclineAmendment?.(order);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-rose-700 hover:bg-rose-50 transition-colors text-left cursor-pointer"
+          >
+            <XCircle className="h-3.5 w-3.5 text-rose-600" />
+            <span>Decline Amendment</span>
+          </button>
+        </>
+      )}
 
       {isSeller && isIssued && (
         <>
@@ -756,6 +833,9 @@ export default function PurchaseOrders() {
   const [taxInvoiceModalOpen, setTaxInvoiceModalOpen] = useState(false);
   const [taxInvoiceModalId, setTaxInvoiceModalId] = useState<number | null>(null);
   const [taxInvoiceModalData, setTaxInvoiceModalData] = useState<any | null>(null);
+  const [editPoModalOpen, setEditPoModalOpen] = useState(false);
+  const [editPoTarget, setEditPoTarget] = useState<any | null>(null);
+  const [editPoMode, setEditPoMode] = useState<'draft' | 'amend'>('draft');
 
   useEffect(() => {
     if (!openKebabId) return;
@@ -1235,6 +1315,43 @@ export default function PurchaseOrders() {
           setTaxInvoiceModalData(invData);
           setTaxInvoiceModalOpen(true);
         }}
+        onEditPoDraft={(target: any) => {
+          setEditPoTarget(target);
+          setEditPoMode('draft');
+          setEditPoModalOpen(true);
+        }}
+        onIssuePo={async (target: any) => {
+          try {
+            await postApi(`/api/purchase-orders/${target.id}/issue`, {});
+            toast.success(`Purchase Order ${target.poNumber || `PO-${target.id}`} officially ISSUED to supplier!`);
+            await refreshPurchaseOrders();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to issue purchase order');
+          }
+        }}
+        onAmendPo={(target: any) => {
+          setEditPoTarget(target);
+          setEditPoMode('amend');
+          setEditPoModalOpen(true);
+        }}
+        onAcceptAmendment={async (target: any) => {
+          try {
+            await postApi(`/api/purchase-orders/${target.id}/amendment-decision`, { decision: 'accept', accepted: true });
+            toast.success(`Amendment ACCEPTED for PO ${target.poNumber || `PO-${target.id}`}.`);
+            await refreshPurchaseOrders();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to accept amendment');
+          }
+        }}
+        onDeclineAmendment={async (target: any) => {
+          try {
+            await postApi(`/api/purchase-orders/${target.id}/amendment-decision`, { decision: 'decline', accepted: false, remarks: 'Declined by supplier', reason: 'Declined by supplier' });
+            toast.success(`Amendment DECLINED for PO ${target.poNumber || `PO-${target.id}`}.`);
+            await refreshPurchaseOrders();
+          } catch (err: any) {
+            toast.error(err.message || 'Failed to decline amendment');
+          }
+        }}
       />
     );
   };
@@ -1516,9 +1633,23 @@ export default function PurchaseOrders() {
       header: <SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} />,
       width: 'w-[15%]',
       cell: (order) => (
-        <span className="font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
-          <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-        </span>
+        <div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
+              <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
+            </span>
+            {(order as any).amendmentVersion && (order as any).amendmentVersion > 1 && (
+              <span className="rounded bg-purple-100 text-purple-800 border border-purple-200 px-1 py-0.2 text-[9px] font-bold font-mono">
+                v{(order as any).amendmentVersion}
+              </span>
+            )}
+          </div>
+          {(order as any).externalPoNumber && (
+            <p className="mt-0.5 text-[10px] font-mono font-bold text-slate-500 truncate" title={`SAP PO: ${(order as any).externalPoNumber}`}>
+              SAP: {(order as any).externalPoNumber}
+            </p>
+          )}
+        </div>
       ),
     },
     {
@@ -2098,6 +2229,101 @@ export default function PurchaseOrders() {
                     )}
                   </div>
                 </div>
+
+                {/* Amendment Pending Review Alert & Comparison Card */}
+                {(() => {
+                  const isAmendmentPending = String((viewingOrder as any).poStatus || viewingOrder.status || '').toLowerCase() === 'amendment_pending';
+                  if (!isAmendmentPending) return null;
+
+                  const history = Array.isArray((viewingOrder as any).amendmentHistory) ? (viewingOrder as any).amendmentHistory : [];
+                  const pendingEntry = [...history].reverse().find((h: any) => h.status === 'PENDING') || history[history.length - 1];
+                  const proposed = pendingEntry?.proposedChanges || {};
+                  const base = pendingEntry?.baseValues || {};
+
+                  return (
+                    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50/60 p-4 sm:p-5 shadow-sm space-y-3.5 animate-in fade-in">
+                      <div className="flex items-start justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white shadow-2xs">
+                            <AlertCircle className="h-5 w-5" />
+                          </span>
+                          <div>
+                            <h4 className="text-xs font-black uppercase tracking-wider text-amber-950">
+                              PO Amendment Proposal (V{pendingEntry?.version || 2}) Pending Review
+                            </h4>
+                            <p className="text-[11px] font-semibold text-amber-800">
+                              Proposed on {pendingEntry?.proposedAt ? formatDate(pendingEntry.proposedAt) : 'Recently'} • Awaiting Supplier Decision
+                            </p>
+                          </div>
+                        </div>
+                        {pendingEntry?.integrityChecksum && (
+                          <span className="font-mono text-[9px] font-bold text-amber-700 bg-amber-100/80 px-2 py-1 rounded border border-amber-300" title={`SHA-256 Checksum: ${pendingEntry.integrityChecksum}`}>
+                            SHA-256 Sealed: {String(pendingEntry.integrityChecksum).slice(0, 10)}...
+                          </span>
+                        )}
+                      </div>
+
+                      {pendingEntry?.reason && (
+                        <div className="rounded-xl bg-white/90 border border-amber-200 p-3 text-xs">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-800 block mb-0.5">Buyer Reason:</span>
+                          <p className="font-medium text-slate-800 italic">"{pendingEntry.reason}"</p>
+                        </div>
+                      )}
+
+                      {/* Header-Level Diffs */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                        {proposed.expectedDelivery && (
+                          <div className="rounded-xl bg-white/80 p-2.5 border border-amber-200">
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Revised Delivery Date:</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="line-through text-slate-400 font-mono text-[11px]">{formatDate(base.expectedDelivery || viewingOrder.expectedDelivery)}</span>
+                              <span className="font-bold text-emerald-700 font-mono text-[11px]">→ {formatDate(proposed.expectedDelivery)}</span>
+                            </div>
+                          </div>
+                        )}
+                        {proposed.paymentTerms && (
+                          <div className="rounded-xl bg-white/80 p-2.5 border border-amber-200">
+                            <span className="text-[9px] font-bold uppercase text-slate-400 block">Revised Payment Terms:</span>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="line-through text-slate-400 text-[11px]">{base.paymentTerms || viewingOrder.paymentTerms}</span>
+                              <span className="font-bold text-emerald-700 text-[11px]">→ {proposed.paymentTerms}</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Line Items Proposed Revision Diff */}
+                      {proposed.items && Array.isArray(proposed.items) && proposed.items.length > 0 && (
+                        <div className="rounded-xl bg-white border border-amber-200 overflow-hidden">
+                          <div className="bg-amber-100/70 px-3 py-2 border-b border-amber-200 flex items-center justify-between">
+                            <span className="text-[11px] font-black uppercase text-amber-900 flex items-center gap-1.5">
+                              <Package className="h-3.5 w-3.5" /> Proposed Line-Item Revisions
+                            </span>
+                            <div className="flex items-center gap-2 text-xs font-mono">
+                              <span className="line-through text-slate-400 font-bold">{formatCurrency(viewingOrder.amount || viewingOrder.totalValue)}</span>
+                              <span className="text-emerald-700 font-black">→ {formatCurrency(proposed.totalValue || proposed.amount)}</span>
+                            </div>
+                          </div>
+                          <div className="divide-y divide-slate-100 text-xs">
+                            {proposed.items.map((pItem: any, pIdx: number) => (
+                              <div key={pIdx} className="p-2.5 flex items-center justify-between gap-3">
+                                <div className="min-w-0 flex-1">
+                                  <p className="font-bold text-slate-900 truncate">{pItem.itemName}</p>
+                                  <p className="text-[10px] text-slate-500 font-mono">
+                                    Qty: {pItem.quantity} {pItem.unitOfMeasure} • Price: {formatCurrency(pItem.unitPrice)} • GST: {pItem.taxRate}%
+                                  </p>
+                                </div>
+                                <span className="font-mono font-bold text-indigo-700 text-xs shrink-0">
+                                  {formatCurrency(pItem.totalAmount)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
 
                 {/* Fulfillment Parties & Settings Grid */}
                 <div className="grid gap-4 md:grid-cols-2">
@@ -2874,6 +3100,43 @@ export default function PurchaseOrders() {
                           </>
                         )}
 
+                        {/* Seller: Accept / Decline when amendment proposed */}
+                        {isSeller && viewingStatusLower === 'amendment_pending' && (
+                          <>
+                            <Button
+                              onClick={async () => {
+                                try {
+                                  await postApi(`/api/purchase-orders/${viewingOrder.id}/amendment-decision`, { decision: 'accept', accepted: true });
+                                  toast.success(`Amendment ACCEPTED for PO ${viewingOrder.poNumber || `PO-${viewingOrder.id}`}.`);
+                                  await refreshPurchaseOrders();
+                                  setViewingOrder(prev => prev ? { ...prev, status: 'accepted' } : null);
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Failed to accept amendment');
+                                }
+                              }}
+                              className="h-9 bg-emerald-600 text-xs font-bold uppercase tracking-wider text-white hover:bg-emerald-700 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5" /> Accept Amendment
+                            </Button>
+                            <Button
+                              variant="outline"
+                              onClick={async () => {
+                                try {
+                                  await postApi(`/api/purchase-orders/${viewingOrder.id}/amendment-decision`, { decision: 'decline', accepted: false, remarks: 'Declined by seller', reason: 'Declined by seller' });
+                                  toast.success(`Amendment DECLINED for PO ${viewingOrder.poNumber || `PO-${viewingOrder.id}`}.`);
+                                  await refreshPurchaseOrders();
+                                  setViewingOrder(prev => prev ? { ...prev, status: 'accepted' } : null);
+                                } catch (err: any) {
+                                  toast.error(err.message || 'Failed to decline amendment');
+                                }
+                              }}
+                              className="h-9 border-rose-300 text-xs font-bold uppercase tracking-wider text-rose-600 hover:bg-rose-50 shadow-2xs rounded-lg px-3.5 whitespace-nowrap cursor-pointer flex items-center gap-1.5"
+                            >
+                              <XCircle className="h-3.5 w-3.5" /> Decline Amendment
+                            </Button>
+                          </>
+                        )}
+
                         {/* Seller: Invoicing & Delivery tracking */}
                         {isSeller && (isAcceptedModal || isDeliveredModal) && (
                           <>
@@ -2950,6 +3213,76 @@ export default function PurchaseOrders() {
                         {/* BUYER WORKFLOW */}
                         {isBuyer && !isCancelledModal && (
                           <>
+                            {/* Draft Editing & Issuance for Buyer */}
+                            {(viewingStatusLower === 'draft' || viewingStatusLower === 'generated' || (viewingOrder as any).isDraft) && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  onClick={() => {
+                                    setEditPoTarget(viewingOrder);
+                                    setEditPoMode('draft');
+                                    setEditPoModalOpen(true);
+                                  }}
+                                  className="h-9 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                  <span>Edit Draft / SAP Details</span>
+                                </Button>
+                                <Button
+                                  onClick={async () => {
+                                    try {
+                                      await postApi(`/api/purchase-orders/${viewingOrder.id}/issue`, {});
+                                      toast.success(`PO officially ISSUED to supplier!`);
+                                      await refreshPurchaseOrders();
+                                      setViewingOrder(prev => prev ? { ...prev, status: 'issued' } : null);
+                                    } catch (err: any) {
+                                      toast.error(err.message || 'Failed to issue PO');
+                                    }
+                                  }}
+                                  className="h-9 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer flex items-center gap-1.5"
+                                >
+                                  <CheckCircle2 className="h-3.5 w-3.5" />
+                                  <span>Issue PO to Seller</span>
+                                </Button>
+                              </>
+                            )}
+
+                            {/* Propose V2 Amendment for Buyer on Accepted PO */}
+                            {isAcceptedModal && (
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setEditPoTarget(viewingOrder);
+                                  setEditPoMode('amend');
+                                  setEditPoModalOpen(true);
+                                }}
+                                className="h-9 border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800 text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer flex items-center gap-1.5"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-purple-600" />
+                                <span>Amend PO (V2)</span>
+                              </Button>
+                            )}
+
+                            {/* View attached official external SAP PDF */}
+                            {(viewingOrder as any).externalPdfFileId && (
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  openFileAsset({
+                                    id: (viewingOrder as any).externalPdfFileId,
+                                    fileAssetId: (viewingOrder as any).externalPdfFileId,
+                                    originalName: (viewingOrder as any).externalPdfFile?.originalName || 'SAP_Purchase_Order.pdf'
+                                  }, 'SAP_Purchase_Order.pdf').catch(err => {
+                                    toast.error(err instanceof Error ? err.message : 'Unable to open PO PDF');
+                                  });
+                                }}
+                                className="h-9 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-bold uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap cursor-pointer shadow-2xs flex items-center gap-1.5"
+                              >
+                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                <span>View SAP PO PDF</span>
+                              </Button>
+                            )}
+
                             {/* Cancel PO (only if not yet delivered/settled) */}
                             {!['delivered', 'completed', 'settled', 'closed'].includes(viewingStatusLower) && (
                               <Button
@@ -3322,6 +3655,33 @@ export default function PurchaseOrders() {
           }}
         />
       )}
+
+      {editPoModalOpen && (
+        <EditPurchaseOrderModal
+          isOpen={editPoModalOpen}
+          onClose={() => {
+            setEditPoModalOpen(false);
+            setEditPoTarget(null);
+          }}
+          order={editPoTarget}
+          mode={editPoMode}
+          onSuccess={async () => {
+            await refreshPurchaseOrders();
+            if (viewingOrder && editPoTarget && viewingOrder.id === editPoTarget.id) {
+              try {
+                const res = await api.get(`/api/purchase-orders/${viewingOrder.id}`);
+                const body = await readJsonResponse(res);
+                const fullData = (body as any)?.data || body;
+                if (fullData && fullData.id) {
+                  setViewingOrder(fullData);
+                }
+              } catch {
+                // ignore
+              }
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -3347,6 +3707,7 @@ function StatusPill({ status }: { status?: string }) {
   const isPendingApproval = value === 'pending_approval';
   const isPaidOffline = value === 'paid_offline_verified';
   const isPaid = value === 'paid' || isPaidOffline;
+  const isAmendmentPending = value === 'amendment_pending';
 
   return (
     <span
@@ -3354,15 +3715,16 @@ function StatusPill({ status }: { status?: string }) {
         'inline-flex items-center rounded-lg border px-3 py-1 text-[10px] font-black uppercase tracking-wide',
         isPaidOffline && 'border-indigo-300 bg-indigo-50 text-indigo-800 shadow-2xs',
         isPaid && !isPaidOffline && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
+        !isPaid && isAmendmentPending && 'border-purple-300 bg-purple-50 text-purple-800 shadow-2xs',
         !isPaid && isAccepted && 'border-emerald-300 bg-emerald-50 text-emerald-800 shadow-2xs',
         !isPaid && isDelivered && 'border-green-300 bg-green-50 text-green-800 shadow-2xs',
         !isPaid && (isCancelled || isRejected) && 'border-rose-300 bg-rose-50 text-rose-800 shadow-2xs',
         !isPaid && isIssued && 'border-sky-300 bg-sky-50 text-sky-900 shadow-2xs',
         !isPaid && isPendingApproval && 'border-amber-300 bg-amber-50 text-amber-900 shadow-2xs',
-        !isAccepted && !isDelivered && !isCancelled && !isRejected && !isIssued && !isPaid && !isPendingApproval && 'border-slate-200 bg-slate-50 text-slate-700'
+        !isAccepted && !isDelivered && !isCancelled && !isRejected && !isIssued && !isPaid && !isPendingApproval && !isAmendmentPending && 'border-slate-200 bg-slate-50 text-slate-700'
       )}
     >
-      {isPaidOffline ? 'PAID (OFFLINE)' : isAccepted ? 'ACCEPTED' : isRejected ? 'REJECTED' : isCancelled ? 'CANCELLED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
+      {isPaidOffline ? 'PAID (OFFLINE)' : isAmendmentPending ? 'AMENDMENT PENDING' : isAccepted ? 'ACCEPTED' : isRejected ? 'REJECTED' : isCancelled ? 'CANCELLED' : isIssued ? 'ISSUED' : readableStatus(value).toUpperCase()}
     </span>
   );
 }

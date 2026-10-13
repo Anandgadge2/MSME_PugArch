@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
 import https from 'https';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
@@ -47,7 +48,8 @@ import {
 import { idempotencyKeyFromRequest, withIdempotency } from '../services/idempotency.service.js';
 import { catalogueWorkflow } from '../services/workflow/catalogue-workflow.service.js';
 import { procurementWorkflow } from '../services/workflow/procurement-workflow.service.js';
-import { numberSeries } from '../services/workflow/workflow-common.js';
+import { numberSeries, notifyWorkflowSoon } from '../services/workflow/workflow-common.js';
+import { statusTransitions, poStatusEnumFor, invoiceStatusEnumFor } from '../services/workflow/status-transition.service.js';
 import { tenderWorkflow } from '../services/workflow/tender-workflow.service.js';
 import { fulfillmentWorkflow } from '../services/workflow/fulfillment-workflow.service.js';
 import { contractWorkflow } from '../services/workflow/contract-workflow.service.js';
@@ -9580,6 +9582,400 @@ router.post('/purchase-orders/:id/cancel', authenticate, authorize('buyer', 'sel
   ok(res, updated);
 }));
 
+// ─── FileAsset Ownership & Tenancy Guard ──────────────────────────────────
+const assertFileAssetOwnership = async (fileAssetId: number, req: any) => {
+  if (isAdmin(req)) return;
+  const asset = await db.fileAsset.findUnique({
+    where: { id: fileAssetId }
+  });
+  if (!asset) {
+    throw new ApiError(404, 'Referenced file asset not found', 'FILE_NOT_FOUND');
+  }
+  if (asset.status !== 'active') {
+    throw new ApiError(400, 'Referenced file asset is not active', 'FILE_INACTIVE');
+  }
+  const uid = userId(req);
+  const userOrgId = req.user?.organizationId;
+  const isOwner = asset.ownerId === uid;
+  if (!isOwner) {
+    if (userOrgId) {
+      const ownerUser = await db.user.findUnique({
+        where: { id: asset.ownerId },
+        select: { organizationId: true }
+      });
+      if (ownerUser?.organizationId === userOrgId) {
+        return;
+      }
+    }
+    throw new ApiError(403, 'You do not have permission to attach this file asset', 'FILE_FORBIDDEN');
+  }
+};
+
+// ─── Line Item Validation Schema ──────────────────────────────────────────
+const poLineItemSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  itemName: z.string().trim().min(1, 'Item name is required').max(200),
+  description: z.string().trim().max(1000).optional().nullable(),
+  quantity: z.coerce.number().positive('Quantity must be greater than 0'),
+  unitOfMeasure: z.string().trim().max(50).default('units'),
+  unitPrice: z.coerce.number().nonnegative('Unit price cannot be negative'),
+  taxRate: z.coerce.number().min(0).max(100).optional().default(18),
+  totalAmount: z.coerce.number().nonnegative().optional()
+});
+
+// ─── PO Pre-Flight / Draft Edit / Issue / Amend Endpoints ───────────────────
+router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    title: z.string().trim().min(3).max(200).optional(),
+    expectedDelivery: safeCoercedDate.optional(),
+    deliveryAddress: z.string().trim().max(1000).optional(),
+    paymentTerms: z.string().trim().max(500).optional(),
+    deliveryType: z.string().trim().max(200).optional(),
+    externalPoNumber: z.string().trim().max(100).optional(),
+    externalPdfFileId: z.coerce.number().int().positive().optional().nullable(),
+    items: z.array(poLineItemSchema).min(1, 'At least one line item is required').optional()
+  }), req.body);
+
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: { buyer: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isBuyerOrg = req.user?.organizationId && po.buyer?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.buyerId !== userId(req) && !isBuyerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+
+  if (body.externalPdfFileId) {
+    await assertFileAssetOwnership(body.externalPdfFileId, req);
+  }
+
+  const statusLower = String(po.status || '').toLowerCase();
+  const allowedStatuses = ['generated', 'draft', 'pending_approval'];
+  if (!allowedStatuses.includes(statusLower) && !po.isDraft) {
+    throw new ApiError(409, 'Only draft or unissued purchase orders can be edited directly', 'PO_LOCKED');
+  }
+
+  const updated = await db.$transaction(async (tx) => {
+    let newTotal: number | undefined = undefined;
+    if (body.items && body.items.length > 0) {
+      const calculatedItems = body.items.map(it => {
+        const qty = Number(it.quantity);
+        const price = Number(it.unitPrice);
+        const tax = Number(it.taxRate ?? 18);
+        const subtotal = qty * price;
+        const taxAmt = (subtotal * tax) / 100;
+        const totalAmount = Math.round((subtotal + taxAmt) * 100) / 100;
+        return {
+          itemName: it.itemName,
+          description: it.description || null,
+          quantity: qty,
+          unitOfMeasure: it.unitOfMeasure || 'units',
+          unitPrice: price,
+          taxRate: tax,
+          totalAmount
+        };
+      });
+      newTotal = Number(calculatedItems.reduce((acc, it) => acc + it.totalAmount, 0).toFixed(2));
+
+      await tx.purchaseOrderItem.deleteMany({ where: { purchaseOrderId: id } });
+      await tx.purchaseOrderItem.createMany({
+        data: calculatedItems.map(it => ({
+          purchaseOrderId: id,
+          itemName: it.itemName,
+          description: it.description,
+          quantity: it.quantity,
+          unitOfMeasure: it.unitOfMeasure,
+          unitPrice: it.unitPrice,
+          taxRate: it.taxRate,
+          totalAmount: it.totalAmount
+        }))
+      });
+    }
+
+    return tx.purchaseOrder.update({
+      where: { id },
+      data: {
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.expectedDelivery !== undefined ? { expectedDelivery: body.expectedDelivery ? new Date(body.expectedDelivery) : null } : {}),
+        ...(body.deliveryAddress !== undefined ? { deliveryAddress: body.deliveryAddress } : {}),
+        ...(body.paymentTerms !== undefined ? { paymentTerms: body.paymentTerms } : {}),
+        ...(body.deliveryType !== undefined ? { deliveryType: body.deliveryType } : {}),
+        ...(body.externalPoNumber !== undefined ? { externalPoNumber: body.externalPoNumber } : {}),
+        ...(body.externalPdfFileId !== undefined ? { externalPdfFileId: body.externalPdfFileId } : {}),
+        ...(newTotal !== undefined ? { amount: newTotal, totalValue: newTotal } : {})
+      },
+      include: { items: true, buyer: true, seller: true }
+    });
+  });
+
+  await auditWrite(req, 'purchase_order.draft_updated', 'purchaseOrder', id);
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: { buyer: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isBuyerOrg = req.user?.organizationId && po.buyer?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.buyerId !== userId(req) && !isBuyerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+
+  statusTransitions.purchaseOrder(po.status, 'issued');
+  const updated = await db.purchaseOrder.update({
+    where: { id },
+    data: {
+      status: 'issued',
+      poStatus: poStatusEnumFor('issued') as any,
+      isDraft: false,
+      issuedAt: new Date(),
+      version: { increment: 1 }
+    },
+    include: { items: true, buyer: true, seller: true }
+  });
+
+  notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
+  await auditWrite(req, 'purchase_order.issued', 'purchaseOrder', id);
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    reason: z.string().trim().min(5, 'Amendment reason required').max(1000).optional(),
+    amendmentReason: z.string().trim().min(5, 'Amendment reason required').max(1000).optional(),
+    expectedDelivery: safeCoercedDate.optional(),
+    deliveryAddress: z.string().trim().max(1000).optional(),
+    paymentTerms: z.string().trim().max(500).optional(),
+    externalPoNumber: z.string().trim().max(100).optional(),
+    externalPdfFileId: z.coerce.number().int().positive().optional().nullable(),
+    items: z.array(poLineItemSchema).min(1, 'At least one line item is required').optional()
+  }), req.body);
+
+  const rawReason = (body.reason || body.amendmentReason || '').trim();
+  if (!rawReason || rawReason.length < 5) {
+    throw new ApiError(400, 'Amendment reason required (minimum 5 characters)', 'VALIDATION_ERROR');
+  }
+
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: { items: true, buyer: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isBuyerOrg = req.user?.organizationId && po.buyer?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.buyerId !== userId(req) && !isBuyerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+  if (po.status !== 'accepted' && po.poStatus !== 'ACCEPTED') {
+    throw new ApiError(409, 'Only accepted purchase orders can be formally amended', 'PO_NOT_ACCEPTED');
+  }
+
+  if (body.externalPdfFileId) {
+    await assertFileAssetOwnership(body.externalPdfFileId, req);
+  }
+
+  let proposedItems: any[] | undefined = undefined;
+  let proposedTotalValue: number | undefined = undefined;
+  if (body.items && body.items.length > 0) {
+    proposedItems = body.items.map(it => {
+      const qty = Number(it.quantity);
+      const price = Number(it.unitPrice);
+      const tax = Number(it.taxRate ?? 18);
+      const subtotal = qty * price;
+      const taxAmt = (subtotal * tax) / 100;
+      const totalAmount = Math.round((subtotal + taxAmt) * 100) / 100;
+      return {
+        ...(it.id ? { id: it.id } : {}),
+        itemName: it.itemName,
+        description: it.description || null,
+        quantity: qty,
+        unitOfMeasure: it.unitOfMeasure || 'units',
+        unitPrice: price,
+        taxRate: tax,
+        totalAmount
+      };
+    });
+    proposedTotalValue = Number(proposedItems.reduce((acc, it) => acc + it.totalAmount, 0).toFixed(2));
+  }
+
+  const history = Array.isArray(po.amendmentHistory) ? po.amendmentHistory : [];
+  const nextVersion = (po.amendmentVersion || 1) + 1;
+  const snapshot: any = {
+    version: nextVersion,
+    proposedAt: new Date().toISOString(),
+    proposedBy: userId(req),
+    reason: rawReason,
+    status: 'PENDING',
+    proposedChanges: {
+      ...(body.expectedDelivery !== undefined ? { expectedDelivery: body.expectedDelivery ? new Date(body.expectedDelivery).toISOString() : null } : {}),
+      ...(body.deliveryAddress !== undefined ? { deliveryAddress: body.deliveryAddress } : {}),
+      ...(body.paymentTerms !== undefined ? { paymentTerms: body.paymentTerms } : {}),
+      ...(body.externalPoNumber !== undefined ? { externalPoNumber: body.externalPoNumber } : {}),
+      ...(body.externalPdfFileId !== undefined ? { externalPdfFileId: body.externalPdfFileId } : {}),
+      ...(proposedItems ? { items: proposedItems, totalValue: proposedTotalValue, amount: proposedTotalValue } : {})
+    },
+    baseValues: {
+      expectedDelivery: po.expectedDelivery ? po.expectedDelivery.toISOString() : null,
+      deliveryAddress: po.deliveryAddress,
+      paymentTerms: po.paymentTerms,
+      externalPoNumber: po.externalPoNumber,
+      externalPdfFileId: po.externalPdfFileId,
+      items: po.items.map((i: any) => ({
+        id: i.id,
+        itemName: i.itemName,
+        description: i.description,
+        quantity: Number(i.quantity),
+        unitOfMeasure: i.unitOfMeasure,
+        unitPrice: Number(i.unitPrice),
+        taxRate: Number(i.taxRate ?? 18),
+        totalAmount: Number(i.totalAmount)
+      })),
+      totalValue: Number(po.totalValue || po.amount || 0),
+      amount: Number(po.amount || 0)
+    }
+  };
+
+  // Cryptographic Non-Repudiation Checksum:
+  const digestPayload = JSON.stringify({
+    poId: po.id,
+    version: nextVersion,
+    proposedChanges: snapshot.proposedChanges,
+    baseValues: snapshot.baseValues
+  });
+  snapshot.integrityChecksum = createHash('sha256').update(digestPayload).digest('hex');
+
+  // Contract integrity safeguard: DO NOT mutate base operational fields until seller accepts!
+  const updated = await db.purchaseOrder.update({
+    where: { id },
+    data: {
+      poStatus: poStatusEnumFor('amendment_pending') as any,
+      amendmentHistory: [...history, snapshot]
+    },
+    include: { items: true, buyer: true, seller: true }
+  });
+
+  notifyWorkflowSoon(
+    po.sellerId,
+    `PO Amendment Proposed: ${po.poNumber}`,
+    `Buyer proposed an amendment (V${nextVersion}) for PO ${po.poNumber}. Reason: "${rawReason}". Please review and respond.`,
+    'po_amendment',
+    '/seller/orders'
+  );
+
+  await auditWrite(req, 'purchase_order.amendment_proposed', 'purchaseOrder', id, {
+    reason: rawReason,
+    version: nextVersion,
+    integrityChecksum: snapshot.integrityChecksum,
+    proposedTotalValue
+  });
+  ok(res, updated);
+}));
+
+router.post('/purchase-orders/:id/amendment-decision', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    decision: z.enum(['accept', 'decline']).optional(),
+    accepted: z.boolean().optional(),
+    reason: z.string().trim().max(1000).optional(),
+    remarks: z.string().trim().max(1000).optional()
+  }), req.body);
+
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: { items: true, seller: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isSellerOrg = req.user?.organizationId && po.seller?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.sellerId !== userId(req) && !isSellerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+  if (po.poStatus !== 'AMENDMENT_PENDING') {
+    throw new ApiError(409, 'No pending amendment found on this purchase order', 'NO_AMENDMENT_PENDING');
+  }
+
+  const isAccepted = body.decision === 'accept' || body.accepted === true;
+  const remarks = (body.remarks || body.reason || '').trim() || undefined;
+
+  const history = Array.isArray(po.amendmentHistory) ? [...po.amendmentHistory] : [];
+  const pendingIndex = history.map(h => (h as any)?.status).lastIndexOf('PENDING');
+  const pendingEntry = pendingIndex >= 0 ? (history[pendingIndex] as any) : null;
+  const proposed = pendingEntry?.proposedChanges || {};
+
+  let updatedHistory = history;
+  if (pendingIndex >= 0) {
+    updatedHistory[pendingIndex] = {
+      ...pendingEntry,
+      status: isAccepted ? 'ACCEPTED' : 'DECLINED',
+      decidedAt: new Date().toISOString(),
+      decidedBy: userId(req),
+      remarks
+    };
+  }
+
+  const updateData: any = {
+    poStatus: 'ACCEPTED' as any,
+    amendmentHistory: updatedHistory
+  };
+
+  const updated = await db.$transaction(async (tx) => {
+    if (isAccepted) {
+      updateData.amendmentVersion = { increment: 1 };
+      if (proposed.expectedDelivery !== undefined) {
+        updateData.expectedDelivery = proposed.expectedDelivery ? new Date(proposed.expectedDelivery) : null;
+      }
+      if (proposed.deliveryAddress !== undefined) {
+        updateData.deliveryAddress = proposed.deliveryAddress;
+      }
+      if (proposed.paymentTerms !== undefined) {
+        updateData.paymentTerms = proposed.paymentTerms;
+      }
+      if (proposed.externalPoNumber !== undefined) {
+        updateData.externalPoNumber = proposed.externalPoNumber;
+      }
+      if (proposed.externalPdfFileId !== undefined) {
+        updateData.externalPdfFileId = proposed.externalPdfFileId;
+      }
+
+      // Apply line items revision atomically
+      if (proposed.items && Array.isArray(proposed.items) && proposed.items.length > 0) {
+        await tx.purchaseOrderItem.deleteMany({
+          where: { purchaseOrderId: po.id }
+        });
+        await tx.purchaseOrderItem.createMany({
+          data: proposed.items.map((it: any) => ({
+            purchaseOrderId: po.id,
+            itemName: it.itemName,
+            description: it.description || null,
+            quantity: Number(it.quantity),
+            unitOfMeasure: it.unitOfMeasure || 'units',
+            unitPrice: Number(it.unitPrice),
+            taxRate: Number(it.taxRate ?? 18),
+            totalAmount: Number(it.totalAmount)
+          }))
+        });
+        updateData.totalValue = proposed.totalValue ?? updateData.totalValue;
+        updateData.amount = proposed.amount ?? updateData.amount;
+      }
+    }
+
+    return tx.purchaseOrder.update({
+      where: { id },
+      data: updateData,
+      include: { items: true, buyer: true, seller: true }
+    });
+  });
+
+  notifyWorkflowSoon(
+    po.buyerId,
+    `PO Amendment ${isAccepted ? 'Accepted' : 'Declined'}: ${po.poNumber}`,
+    `Seller ${isAccepted ? 'accepted' : 'declined'} the amendment for PO ${po.poNumber}.${remarks ? ` Remarks: ${remarks}` : ''}`,
+    'po_amendment_decision',
+    '/buyer/orders'
+  );
+
+  await auditWrite(req, `purchase_order.amendment_${isAccepted ? 'accepted' : 'declined'}`, 'purchaseOrder', id, { ...body, remarks });
+  ok(res, updated);
+}));
+
+
+
 router.get('/purchase-orders/:id/pdf', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const po = await assertPurchaseOrderAccess(req, id);
@@ -9749,6 +10145,173 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
 
   await auditWrite(req, 'invoice.created', 'invoice', invoice.id);
   ok(res, invoice, 201);
+}));
+
+// ─── External / SAP Ariba Invoice Upload & Workspace ───────────────────────
+router.post('/invoices/upload-external', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const body = parse(z.object({
+    purchaseOrderId: z.coerce.number().int().positive(),
+    invoiceNumber: z.string().trim().min(2).max(60),
+    externalPoNumber: z.string().trim().max(100).optional(),
+    vendorCode: z.string().trim().max(100).optional(),
+    amount: z.coerce.number().positive(),
+    taxableAmount: z.coerce.number().nonnegative().optional(),
+    cgstAmount: z.coerce.number().nonnegative().optional(),
+    sgstAmount: z.coerce.number().nonnegative().optional(),
+    igstAmount: z.coerce.number().nonnegative().optional(),
+    invoiceDate: safeCoercedDate.optional(),
+    invoiceFileId: z.coerce.number().int().positive()
+  }), req.body);
+
+  // Validate referenced uploaded file asset ownership
+  await assertFileAssetOwnership(body.invoiceFileId, req);
+
+  const po = await db.purchaseOrder.findUnique({
+    where: { id: body.purchaseOrderId },
+    include: { seller: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isSellerOrg = req.user?.organizationId && po.seller?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.sellerId !== userId(req) && !isSellerOrg) {
+    throw new ApiError(403, 'You are not the seller of this purchase order', 'FORBIDDEN');
+  }
+
+  // Wrap in interactive database transaction to prevent concurrency race conditions in cumulative balance calculation
+  const invoice = await db.$transaction(async (tx) => {
+    // Duplicate invoice check
+    const duplicate = await tx.invoice.findFirst({
+      where: {
+        sellerId: po.sellerId,
+        invoiceNumber: { equals: body.invoiceNumber, mode: 'insensitive' }
+      }
+    });
+    if (duplicate) {
+      throw new ApiError(409, `An invoice with number "${body.invoiceNumber}" already exists for your account`, 'DUPLICATE_INVOICE');
+    }
+
+    // Anti-overbilling validation: check cumulative invoice amounts against PO total
+    const activeInvoices = await tx.invoice.findMany({
+      where: {
+        purchaseOrderId: po.id,
+        status: { notIn: ['cancelled', 'rejected'] }
+      },
+      select: { amount: true }
+    });
+    const alreadyBilled = activeInvoices.reduce((sum: number, inv: any) => sum + Number(inv.amount || 0), 0);
+    const remainingPoValue = Number(po.totalValue || po.amount || 0) - alreadyBilled;
+    const tolerance = 5.0; // ₹5 tolerance for rounding
+    if (body.amount > (remainingPoValue + tolerance)) {
+      throw new ApiError(
+        400,
+        `Invoice amount (₹${body.amount.toLocaleString('en-IN')}) exceeds the remaining PO balance (₹${Math.max(0, remainingPoValue).toLocaleString('en-IN')})`,
+        'PO_BALANCE_EXCEEDED'
+      );
+    }
+
+    const invoiceDate = body.invoiceDate ? new Date(body.invoiceDate) : new Date();
+    return tx.invoice.create({
+      data: {
+        invoiceNumber: body.invoiceNumber,
+        purchaseOrderId: po.id,
+        sellerId: po.sellerId,
+        buyerId: po.buyerId,
+        amount: body.amount,
+        taxableAmount: body.taxableAmount || body.amount,
+        cgstAmount: body.cgstAmount || 0,
+        sgstAmount: body.sgstAmount || 0,
+        igstAmount: body.igstAmount || 0,
+        totalTaxAmount: (body.cgstAmount || 0) + (body.sgstAmount || 0) + (body.igstAmount || 0),
+        status: 'submitted',
+        invoiceStatus: invoiceStatusEnumFor('submitted') as any,
+        isExternalUpload: true,
+        externalPoNumber: body.externalPoNumber || po.externalPoNumber || null,
+        vendorCode: body.vendorCode || null,
+        invoiceFileId: body.invoiceFileId,
+        fileAssetId: body.invoiceFileId,
+        invoiceDate,
+        metadata: {
+          externalUpload: true,
+          vendorCode: body.vendorCode,
+          uploadedAt: new Date().toISOString()
+        }
+      }
+    });
+  });
+
+  notifyWorkflowSoon(
+    po.buyerId,
+    `New External Invoice Submitted: ${invoice.invoiceNumber}`,
+    `Seller submitted SAP/External invoice ${invoice.invoiceNumber} for PO ${po.poNumber} (Amount: ₹${Number(body.amount).toLocaleString('en-IN')}). Please review and approve.`,
+    'invoice_submitted',
+    '/buyer/invoices'
+  );
+
+  await auditWrite(req, 'invoice.uploaded_external', 'invoice', invoice.id, { purchaseOrderId: po.id });
+  ok(res, invoice, 201);
+}));
+
+router.put('/invoices/:id/draft', authenticate, authorize('seller', 'admin', 'shg'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const body = parse(z.object({
+    invoiceNumber: z.string().trim().min(2).max(60).optional(),
+    externalPoNumber: z.string().trim().max(100).optional(),
+    vendorCode: z.string().trim().max(100).optional(),
+    amount: z.coerce.number().positive().optional(),
+    taxableAmount: z.coerce.number().nonnegative().optional(),
+    cgstAmount: z.coerce.number().nonnegative().optional(),
+    sgstAmount: z.coerce.number().nonnegative().optional(),
+    igstAmount: z.coerce.number().nonnegative().optional(),
+    invoiceDate: safeCoercedDate.optional(),
+    invoiceFileId: z.coerce.number().int().positive().optional().nullable()
+  }), req.body);
+
+  if (body.invoiceFileId) {
+    await assertFileAssetOwnership(body.invoiceFileId, req);
+  }
+
+  const invoice = await db.invoice.findUnique({
+    where: { id },
+    include: { purchaseOrder: true, seller: { select: { organizationId: true } } }
+  });
+  if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  const isSellerOrg = req.user?.organizationId && invoice.seller?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && invoice.sellerId !== userId(req) && !isSellerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+
+  const invStatusLower = String(invoice.status || '').toLowerCase();
+  if (!['draft', 'rejected'].includes(invStatusLower)) {
+    throw new ApiError(409, 'Only draft or rejected invoices can be edited/re-submitted', 'INVOICE_LOCKED');
+  }
+
+  const updated = await db.invoice.update({
+    where: { id },
+    data: {
+      ...(body.invoiceNumber ? { invoiceNumber: body.invoiceNumber } : {}),
+      ...(body.externalPoNumber !== undefined ? { externalPoNumber: body.externalPoNumber } : {}),
+      ...(body.vendorCode !== undefined ? { vendorCode: body.vendorCode } : {}),
+      ...(body.amount !== undefined ? { amount: body.amount } : {}),
+      ...(body.taxableAmount !== undefined ? { taxableAmount: body.taxableAmount } : {}),
+      ...(body.cgstAmount !== undefined ? { cgstAmount: body.cgstAmount } : {}),
+      ...(body.sgstAmount !== undefined ? { sgstAmount: body.sgstAmount } : {}),
+      ...(body.igstAmount !== undefined ? { igstAmount: body.igstAmount } : {}),
+      ...(body.invoiceDate !== undefined ? { invoiceDate: body.invoiceDate ? new Date(body.invoiceDate) : invoice.invoiceDate } : {}),
+      ...(body.invoiceFileId !== undefined ? { invoiceFileId: body.invoiceFileId, fileAssetId: body.invoiceFileId } : {}),
+      status: 'submitted',
+      invoiceStatus: invoiceStatusEnumFor('submitted') as any,
+      rejectionReason: null,
+      version: { increment: 1 }
+    }
+  });
+
+  notifyWorkflowSoon(
+    invoice.buyerId,
+    `Invoice Re-submitted: ${updated.invoiceNumber}`,
+    `Seller corrected and re-submitted invoice ${updated.invoiceNumber}. Please review and approve.`,
+    'invoice_resubmitted',
+    '/buyer/invoices'
+  );
+
+  await auditWrite(req, 'invoice.resubmitted', 'invoice', id);
+  ok(res, updated);
 }));
 
 
@@ -9946,22 +10509,40 @@ router.get('/invoices/:id(\\d+)/download-pdf', authenticate, asyncRoute(async (r
   res.end(buffer);
 }));
 
-for (const [path, data, action] of [
-  ['/invoices/:id/approve', { status: 'approved', invoiceStatus: 'APPROVED', approvedAt: new Date() }, 'invoice.approved'],
-  ['/invoices/:id/reject', { status: 'rejected', invoiceStatus: 'REJECTED' }, 'invoice.rejected']
-] as const) {
-  router.post(path, authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
-    const { id } = parse(idParams, req.params);
-    await assertBuyerProcurementApproved(req);
-    const existing = await db.invoice.findUnique({ where: { id }, include: { purchaseOrder: true } });
-    if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req) && existing.purchaseOrder?.buyerId !== userId(req))) {
-      throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
-    }
-    const invoice = await fulfillmentWorkflow.decideInvoice(actorFrom(req), id, data.invoiceStatus === 'APPROVED');
-    await auditWrite(req, action, 'invoice', id);
-    ok(res, invoice);
-  }));
-}
+router.post('/invoices/:id/approve', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const existing = await db.invoice.findUnique({
+    where: { id },
+    include: { purchaseOrder: { include: { grns: true } } }
+  });
+  if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req) && existing.purchaseOrder?.buyerId !== userId(req))) {
+    throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  }
+  const invoice = await fulfillmentWorkflow.decideInvoice(actorFrom(req), id, true);
+  await auditWrite(req, 'invoice.approved', 'invoice', id);
+  ok(res, invoice);
+}));
+
+router.post('/invoices/:id/reject', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  await assertBuyerProcurementApproved(req);
+  const body = parse(z.object({
+    rejectionReason: z.string().trim().min(3, 'Rejection reason must be at least 3 characters').max(1000).optional()
+  }), req.body || {});
+  const existing = await db.invoice.findUnique({ where: { id }, include: { purchaseOrder: true } });
+  if (!existing || (!isAdmin(req) && existing.buyerId !== userId(req) && existing.purchaseOrder?.buyerId !== userId(req))) {
+    throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+  }
+  const invoice = await fulfillmentWorkflow.decideInvoice(
+    actorFrom(req),
+    id,
+    false,
+    body.rejectionReason || 'Invoice rejected by buyer. Please review and resubmit.'
+  );
+  await auditWrite(req, 'invoice.rejected', 'invoice', id, { rejectionReason: body.rejectionReason });
+  ok(res, invoice);
+}));
 
 router.get('/payments/:id', authenticate, asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);

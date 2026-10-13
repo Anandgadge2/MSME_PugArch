@@ -2260,6 +2260,7 @@ model FileAsset {
   organizationLogos   Organization[]      @relation("OrganizationLogo")
   productImages       ProductImage[]
   purchaseOrderPdfs   PurchaseOrder[]     @relation("PurchaseOrderPdf")
+  purchaseOrderExternalPdfs PurchaseOrder[] @relation("PurchaseOrderExternalPdf")
   sellerDocuments     SellerDocument[]
   shgDocuments        ShgDocument[]
   shgMeetingMinutes   ShgMeeting[]        @relation("ShgMeetingMinutes")
@@ -2298,6 +2299,11 @@ model PurchaseOrder {
   deliveryAddress   String?
   amendmentHistory  Json?
   pdfFileId         Int?
+  externalPoNumber  String?
+  isDraft           Boolean                                 @default(false)
+  issuedAt          DateTime?
+  amendmentVersion  Int                                     @default(1)
+  externalPdfFileId Int?
   poStatus          POStatus?
   sourceId          Int?
   sourceType        String?
@@ -2317,6 +2323,7 @@ model PurchaseOrder {
   buyer             User                                    @relation("BuyerPurchaseOrders", fields: [buyerId], references: [id])
   contract          Contract?                               @relation(fields: [contractId], references: [id])
   pdfFile           FileAsset?                              @relation("PurchaseOrderPdf", fields: [pdfFileId], references: [id])
+  externalPdfFile   FileAsset?                              @relation("PurchaseOrderExternalPdf", fields: [externalPdfFileId], references: [id])
   seller            User                                    @relation("SellerPurchaseOrders", fields: [sellerId], references: [id])
   tender            Tender?                                 @relation(fields: [tenderId], references: [id], onDelete: Restrict)
   items             PurchaseOrderItem[]
@@ -2648,6 +2655,12 @@ model Invoice {
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   approvedAt         DateTime?
+  externalPoNumber   String?
+  vendorCode         String?
+  isExternalUpload   Boolean              @default(false)
+  invoiceDate        DateTime             @default(now())
+  rejectionReason    String?
+  rejectionCount     Int                  @default(0)
   cgstAmount         Decimal?             @db.Decimal(18, 2)
   igstAmount         Decimal?             @db.Decimal(18, 2)
   invoiceFileId      Int?
@@ -4726,9 +4739,11 @@ enum QuoteResponseStatus {
 }
 
 enum POStatus {
+  DRAFT
   GENERATED
   ISSUED
   ACCEPTED
+  AMENDMENT_PENDING
   IN_FULFILLMENT
   DISPATCHED
   DELIVERED

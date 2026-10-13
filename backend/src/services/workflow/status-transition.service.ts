@@ -24,11 +24,13 @@ export type BidWorkflowStatus =
   | 'rejected';
 
 export type POWorkflowStatus =
+  | 'draft'
   | 'generated'
   | 'order_placed'
   | 'issued'
   | 'pending_approval'
   | 'accepted'
+  | 'amendment_pending'
   | 'in_fulfillment'
   | 'delivered'
   | 'inspection_accepted'
@@ -95,11 +97,13 @@ const bidTransitions: TransitionMap<BidWorkflowStatus> = {
 };
 
 const poTransitions: TransitionMap<POWorkflowStatus> = {
+  draft: ['issued', 'cancelled'],
   pending_approval: ['issued', 'order_placed', 'accepted', 'rejected', 'cancelled'],
   generated: ['issued', 'accepted', 'rejected', 'cancelled'],
   order_placed: ['accepted', 'rejected', 'cancelled'],
   issued: ['accepted', 'rejected', 'cancelled'],
-  accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancelled'],
+  accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancelled', 'amendment_pending'],
+  amendment_pending: ['accepted', 'cancelled'],
   in_fulfillment: ['delivered', 'cancelled'],
   delivered: ['inspection_accepted', 'invoice_submitted'],
   inspection_accepted: ['invoice_submitted'],
@@ -115,7 +119,7 @@ const invoiceTransitions: TransitionMap<InvoiceWorkflowStatus> = {
   draft: ['submitted', 'cancelled'],
   submitted: ['approved', 'rejected', 'cancelled'],
   approved: ['payment_initiated', 'paid'],
-  rejected: ['submitted', 'cancelled'],
+  rejected: ['draft', 'submitted', 'cancelled'],
   payment_initiated: ['paid', 'cancelled'],
   paid: [],
   cancelled: []
@@ -209,11 +213,13 @@ export const bidStatusEnumFor = (status: BidWorkflowStatus) => {
 
 export const poStatusEnumFor = (status: POWorkflowStatus) => {
   const map: Partial<Record<POWorkflowStatus, string>> = {
+    draft: 'DRAFT',
     generated: 'GENERATED',
     order_placed: 'ORDER_PLACED',
     issued: 'ISSUED',
     pending_approval: 'GENERATED',
     accepted: 'ACCEPTED',
+    amendment_pending: 'AMENDMENT_PENDING',
     in_fulfillment: 'IN_FULFILLMENT',
     delivered: 'DELIVERED',
     completed: 'CLOSED',

@@ -203,3 +203,5 @@ export function EditProcurementGraceBanner({
     </div>
   );
 }
+
+export default EditProcurementGraceBanner;

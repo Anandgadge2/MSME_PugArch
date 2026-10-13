@@ -838,7 +838,7 @@ export function PurchaseOrderReceiptModal({
       }} />
 
       {/* Main Container Card */}
-      <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-[880px]")}>
+      <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-5xl")}>
         <div
           className={cn(
             'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-150 transform-gpu will-change-[transform,opacity] w-full',
@@ -848,9 +848,9 @@ export function PurchaseOrderReceiptModal({
           )}
         >
         {/* Top Control Header Bar (Hidden in Print) */}
-        <header className="no-print bg-[#0b1f3a] text-white px-2.5 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-1.5 sm:gap-2 overflow-hidden">
+        <header className="no-print bg-[#0b1f3a] text-white px-3 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-2">
           {/* Left: Navigation, PO info */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink min-w-0">
             <Button
               type="button"
               variant="ghost"
@@ -884,14 +884,14 @@ export function PurchaseOrderReceiptModal({
               </button>
             </div>
 
-            <span className="hidden xl:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 shrink-0">
+            <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 shrink-0">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
               {readableStatus(order.status)}
             </span>
           </div>
 
           {/* Center: View Mode Toggle */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-center">
             <div className="flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 shrink-0">
               <button
                 type="button"
@@ -983,9 +983,7 @@ export function PurchaseOrderReceiptModal({
           </div>
 
           {/* Right: Actions */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-            
-
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto pl-1">
             <Button
               type="button"
               variant="ghost"
@@ -1003,8 +1001,8 @@ export function PurchaseOrderReceiptModal({
               variant="ghost"
               size="icon"
               onClick={onClose}
-              className="h-8 w-8 sm:h-8.5 sm:w-8.5 bg-white/10 text-white hover:bg-rose-600 hover:text-white rounded-xl transition-all shrink-0 ml-0.5 cursor-pointer"
-              title="Close"
+              className="h-8 w-8 sm:h-8.5 sm:w-8.5 flex items-center justify-center rounded-xl bg-white/10 text-white hover:bg-rose-600 hover:text-white transition-all shrink-0 cursor-pointer border border-white/15 shadow-xs"
+              title="Close modal"
               aria-label="Close modal"
             >
               <X className="h-4 w-4" aria-hidden="true" />
@@ -1854,21 +1852,7 @@ export function PurchaseOrderReceiptModal({
                     </span>
                   );
                 }
-                return (
-                  <Button
-                    onClick={() => {
-                      if (onUploadPaymentSlip) {
-                        onUploadPaymentSlip(order);
-                      } else {
-                        onClose();
-                        router.push(`${payRoute}?search=${encodeURIComponent(order?.poNumber || order?.id || '')}`);
-                      }
-                    }}
-                    className="h-9 bg-purple-600 text-xs font-black uppercase tracking-wider text-white hover:bg-purple-700 shadow-sm rounded-xl px-3.5 whitespace-nowrap cursor-pointer"
-                  >
-                    <CreditCard className="mr-1.5 h-3.5 w-3.5" /> Pay Now / Upload Payment Proof
-                  </Button>
-                );
+                return null;
               }
 
               return null;

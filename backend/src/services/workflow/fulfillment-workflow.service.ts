@@ -482,15 +482,43 @@ export const fulfillmentWorkflow = {
     return invoice;
   },
 
-  async decideInvoice(actor: WorkflowActor, invoiceId: number, approved: boolean) {
-    const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { purchaseOrder: true } });
-    if (!invoice || (actor.role !== 'admin' && invoice.buyerId !== actor.id && invoice.purchaseOrder?.buyerId !== actor.id)) {
+  async decideInvoice(actor: WorkflowActor, invoiceId: number, approved: boolean, rejectionReason?: string) {
+    const invoice = await db.invoice.findUnique({
+      where: { id: invoiceId },
+      include: {
+        purchaseOrder: true,
+        buyer: { select: { organizationId: true } }
+      }
+    });
+    if (!invoice) throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
+
+    let hasAccess = actor.role === 'admin' || actor.role === 'master_admin';
+    if (!hasAccess && actor.role === 'buyer') {
+      const isDirectBuyer = Number(invoice.buyerId) === Number(actor.id) || Number(invoice.purchaseOrder?.buyerId) === Number(actor.id);
+      if (isDirectBuyer) {
+        hasAccess = true;
+      } else {
+        const actorUser = await db.user.findUnique({ where: { id: Number(actor.id) }, select: { organizationId: true } });
+        if (actorUser?.organizationId && invoice.buyer?.organizationId && actorUser.organizationId === invoice.buyer.organizationId) {
+          hasAccess = true;
+        }
+      }
+    }
+
+    if (!hasAccess) {
       throw new ApiError(404, 'Invoice not found', 'INVOICE_NOT_FOUND');
     }
     statusTransitions.invoice(invoice.status, approved ? 'approved' : 'rejected');
     const updated = await db.invoice.update({
       where: { id: invoiceId },
-      data: { status: approved ? 'approved' : 'rejected', invoiceStatus: invoiceStatusEnumFor(approved ? 'approved' : 'rejected'), approvedAt: approved ? new Date() : null, version: { increment: 1 } }
+      data: {
+        status: approved ? 'approved' : 'rejected',
+        invoiceStatus: invoiceStatusEnumFor(approved ? 'approved' : 'rejected'),
+        approvedAt: approved ? new Date() : null,
+        rejectionReason: !approved ? (rejectionReason || null) : null,
+        rejectionCount: !approved ? { increment: 1 } : undefined,
+        version: { increment: 1 }
+      }
     });
     if (approved && invoice.purchaseOrderId) {
       await db.purchaseOrder.update({
@@ -503,12 +531,13 @@ export const fulfillmentWorkflow = {
     // Notify seller when buyer approves/rejects invoice
     if (invoice.sellerId) {
       const invNum = invoice.invoiceNumber || `INV-${invoice.id}`;
+      const reasonText = rejectionReason ? ` Reason: "${rejectionReason}".` : '';
       notifyWorkflowSoon(
         invoice.sellerId,
         approved ? `Invoice Approved: ${invNum}` : `Invoice Rejected: ${invNum}`,
         approved
           ? `Buyer approved invoice ${invNum}. Payment processing will proceed.`
-          : `Buyer rejected invoice ${invNum}. Please review the invoice requirements.`,
+          : `Buyer rejected invoice ${invNum}.${reasonText} You can edit or re-upload your invoice to resubmit.`,
         approved ? 'invoice_approved' : 'invoice_rejected',
         '/seller/invoices'
       );
