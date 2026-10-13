@@ -62,8 +62,8 @@ const nextConfig: NextConfig = {
 
   env: {
     NEXT_PUBLIC_VERCEL_GIT_COMMIT_REF: process.env.VERCEL_GIT_COMMIT_REF || "",
-    // Only override NEXT_PUBLIC_API_URL if on Vercel
-    ...(process.env.VERCEL_URL ? { NEXT_PUBLIC_API_URL: "/proxy" } : {}),
+    // Use /proxy rewrite for same-origin cookies and seamless CSRF when on Vercel or deployed with BACKEND_URL
+    ...(process.env.VERCEL_URL || process.env.BACKEND_URL ? { NEXT_PUBLIC_API_URL: "/proxy" } : {}),
   },
   eslint: {
     ignoreDuringBuilds: true,
