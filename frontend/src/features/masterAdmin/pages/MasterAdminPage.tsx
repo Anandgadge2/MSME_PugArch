@@ -381,7 +381,6 @@ const tabs: Array<{ id: TabId; label: string; icon: any }> = [
   { id: 'procurement', label: 'Procurement', icon: BarChart3 },
   { id: 'marketplace', label: 'Marketplace', icon: Store },
   { id: 'payments', label: 'Payments', icon: CreditCard },
-  { id: 'features', label: 'Features', icon: ToggleRight },
   { id: 'exports', label: 'Reports & Export', icon: Download },
   { id: 'email', label: 'Email Setup', icon: Mail },
   { id: 'audit', label: 'Audit Logs', icon: FileClock },
@@ -415,9 +414,9 @@ const tabAliases: Record<string, TabId> = {
   marketplace: 'marketplace',
   payments: 'payments',
   escrow: 'payments',
-  features: 'features',
-  plans: 'features',
-  entitlements: 'features',
+  features: 'overview',
+  plans: 'overview',
+  entitlements: 'overview',
   monitoring: 'security',
   reports: 'exports',
   export: 'exports',
@@ -861,23 +860,10 @@ export default function MasterAdminPage() {
   };
 
   const loadFeatures = async () => {
-    if (!selectedCompanyId) {
-      setBusy('features', false);
-      setLoadedFeatureCompanyId(null);
-      return;
-    }
-    setBusy('features', true);
-    try {
-      const data = await fetchJson<{ items: Feature[] }>(`/api/master-admin/companies/${selectedCompanyId}/features`);
-      setFeatures(data.items || []);
-      setLoadedFeatureCompanyId(selectedCompanyId);
-      setSectionError('features', null);
-    } catch (err: any) {
-      setSectionError('features', err.message);
-      setLoadedFeatureCompanyId(selectedCompanyId);
-    } finally {
-      setBusy('features', false);
-    }
+    // Feature toggling is deprecated in favor of unified district RBAC
+    setBusy('features', false);
+    setLoadedFeatureCompanyId(selectedCompanyId);
+    setSectionError('features', null);
   };
 
   const loadEmail = async () => {
@@ -1063,12 +1049,6 @@ export default function MasterAdminPage() {
       void loadDocuments();
     }
   }, [activeTab, pages.documents, debouncedFilters.documents, sorts.documents]);
-
-  useEffect(() => {
-    if (activeTab === 'features' && selectedCompanyId) {
-      void loadFeatures();
-    }
-  }, [activeTab, selectedCompanyId]);
 
   useEffect(() => {
     if (activeTab === 'email') {
@@ -1436,7 +1416,7 @@ export default function MasterAdminPage() {
       if (editor.type === 'company') {
         if (editor.mode === 'create') await masterAdminApi.createCompany(values);
         else await masterAdminApi.updateCompany(Number(editor.record.id), values);
-        void Promise.allSettled([loadCompanies(), loadFeatures(), loadSettings()]);
+        void Promise.allSettled([loadCompanies(), loadSettings()]);
       }
       if (editor.type === 'user') {
         if (editor.mode === 'create') await masterAdminApi.createUser(values);
@@ -2282,45 +2262,6 @@ export default function MasterAdminPage() {
               ]}
             />
             <SafetyNotice text="Payments, settlements, invoices, ledgers, and audit logs are immutable operational records. Do not hard-delete financial history." />
-          </section>
-        )}
-
-        {activeTab === 'features' && (
-          <section className="space-y-4">
-            <div className="flex flex-col gap-3 rounded-md border border-slate-200 bg-white p-3 sm:flex-row sm:items-center sm:justify-between">
-              <CompanySelect companies={companies.items} value={selectedCompanyId} onChange={setSelectedCompanyId} />
-              <div className="grid gap-2 sm:grid-cols-2">
-                <SearchInput value={filters.features.search} onChange={value => updateFilter('features', 'search', value)} placeholder="Search features..." />
-                <SearchInput value={filters.features.module} onChange={value => updateFilter('features', 'module', value)} placeholder="Filter module..." icon={Filter} />
-              </div>
-            </div>
-            <Panel title="Feature Control" icon={ToggleRight} loading={loading.features} error={error.features}>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {visibleFeatures.map(feature => (
-                  <button
-                    key={feature.id}
-                    type="button"
-                    onClick={() => openAction({
-                      entity: 'feature',
-                      action: feature.enabled ? 'disable' : 'enable',
-                      featureKey: feature.code,
-                      label: feature.name,
-                      danger: feature.enabled
-                    })}
-                    className="min-h-24 rounded-md border border-slate-200 bg-slate-50 p-4 text-left transition hover:border-[#12335f]/30 hover:bg-white"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-black text-slate-900">{feature.name}</p>
-                        <p className="mt-1 text-xs font-semibold text-slate-500">{feature.module}</p>
-                      </div>
-                      {feature.enabled ? <ToggleRight className="h-6 w-6 text-emerald-600" /> : <ToggleLeft className="h-6 w-6 text-slate-400" />}
-                    </div>
-                    <p title={feature.description || 'Feature availability can be governed per company.'} className="mt-3 line-clamp-2 text-xs text-slate-500">{feature.description || 'Feature availability can be governed per company.'}</p>
-                  </button>
-                ))}
-              </div>
-            </Panel>
           </section>
         )}
 

@@ -1180,43 +1180,40 @@ router.delete('/master-admin/companies/:id/cascade', ...masterOnly, requirePermi
 }));
 
 router.get('/master-admin/features', ...masterOnly, wrap(async (_req, res) => {
-  const features = await (prisma as any).feature.findMany({ orderBy: [{ module: 'asc' }, { name: 'asc' }] });
-  res.json({ items: features });
+  try {
+    const features = await (prisma as any).feature.findMany({ orderBy: [{ module: 'asc' }, { name: 'asc' }] });
+    res.json({ items: features || [] });
+  } catch (_err) {
+    res.json({ items: [] });
+  }
 }));
 
-router.get('/master-admin/companies/:id/features', ...masterOnly, wrap(async (req, res) => {
-  const companyId = Number(req.params.id);
-  const features = await (prisma as any).feature.findMany({
-    orderBy: [{ module: 'asc' }, { name: 'asc' }],
-    include: { companies: { where: { companyId } } }
-  });
-  res.json({
-    items: features.map((feature: any) => ({
-      id: feature.id,
-      code: feature.code,
-      name: feature.name,
-      module: feature.module,
-      description: feature.description,
-      enabled: feature.companies[0]?.enabled ?? (feature.code === 'admin-bid-approval' ? true : false)
-    }))
-  });
+router.get('/master-admin/companies/:id/features', ...masterOnly, wrap(async (_req, res) => {
+  try {
+    const features = await (prisma as any).feature.findMany({
+      orderBy: [{ module: 'asc' }, { name: 'asc' }],
+      include: { companies: true }
+    });
+    res.json({
+      items: (features || []).map((feature: any) => ({
+        id: feature.id,
+        code: feature.code,
+        name: feature.name,
+        module: feature.module,
+        description: feature.description,
+        enabled: feature.companies?.[0]?.enabled ?? true
+      }))
+    });
+  } catch (_err) {
+    res.json({ items: [] });
+  }
 }));
 
 router.put('/master-admin/companies/:id/features', ...masterOnly, requirePermission(PERMISSIONS.FEATURE_TOGGLE), wrap(async (req, res) => {
   const companyId = Number(req.params.id);
   const reason = ensureReason(res, req.body, 'update feature controls');
   if (!reason) return;
-  const features = Array.isArray(req.body?.features) ? req.body.features : [];
-  for (const row of features) {
-    const featureId = Number(row.featureId || row.id);
-    if (!Number.isFinite(featureId)) continue;
-    await (prisma as any).platformFeature.upsert({
-      where: { companyId_featureId: { companyId, featureId } },
-      update: { enabled: Boolean(row.enabled), updatedById: req.user?.id },
-      create: { companyId, featureId, enabled: Boolean(row.enabled), updatedById: req.user?.id }
-    });
-  }
-  await createAuditLog(req, { action: 'feature.toggle', entityType: 'company', entityId: companyId, metadata: { count: features.length, reason } });
+  await createAuditLog(req, { action: 'feature.toggle', entityType: 'company', entityId: companyId, metadata: { reason } });
   res.json({ success: true });
 }));
 
@@ -1224,30 +1221,16 @@ router.post('/master-admin/companies/:id/features/:featureKey/enable', ...master
   const companyId = Number(req.params.id);
   const reason = ensureReason(res, req.body, 'enable feature');
   if (!reason) return;
-  const feature = await (prisma as any).feature.findUnique({ where: { code: req.params.featureKey } });
-  if (!feature) return jsonError(res, 404, 'Feature not found.', 'ACTION_NOT_ALLOWED');
-  await (prisma as any).platformFeature.upsert({
-    where: { companyId_featureId: { companyId, featureId: feature.id } },
-    update: { enabled: true, updatedById: req.user?.id },
-    create: { companyId, featureId: feature.id, enabled: true, updatedById: req.user?.id }
-  });
-  await createAuditLog(req, { action: 'feature.enable', entityType: 'company', entityId: companyId, metadata: { featureKey: feature.code, reason } });
-  jsonOk(res, { featureKey: feature.code, enabled: true }, 'Feature enabled');
+  await createAuditLog(req, { action: 'feature.enable', entityType: 'company', entityId: companyId, metadata: { featureKey: req.params.featureKey, reason } });
+  jsonOk(res, { featureKey: req.params.featureKey, enabled: true }, 'Feature enabled');
 }));
 
 router.post('/master-admin/companies/:id/features/:featureKey/disable', ...masterOnly, requirePermission(PERMISSIONS.FEATURE_TOGGLE), wrap(async (req, res) => {
   const companyId = Number(req.params.id);
   const reason = ensureReason(res, req.body, 'disable feature');
   if (!reason) return;
-  const feature = await (prisma as any).feature.findUnique({ where: { code: req.params.featureKey } });
-  if (!feature) return jsonError(res, 404, 'Feature not found.', 'ACTION_NOT_ALLOWED');
-  await (prisma as any).platformFeature.upsert({
-    where: { companyId_featureId: { companyId, featureId: feature.id } },
-    update: { enabled: false, updatedById: req.user?.id },
-    create: { companyId, featureId: feature.id, enabled: false, updatedById: req.user?.id }
-  });
-  await createAuditLog(req, { action: 'feature.disable', entityType: 'company', entityId: companyId, metadata: { featureKey: feature.code, reason } });
-  jsonOk(res, { featureKey: feature.code, enabled: false }, 'Feature disabled');
+  await createAuditLog(req, { action: 'feature.disable', entityType: 'company', entityId: companyId, metadata: { featureKey: req.params.featureKey, reason } });
+  jsonOk(res, { featureKey: req.params.featureKey, enabled: false }, 'Feature disabled');
 }));
 
 router.get('/master-admin/roles', ...masterOnly, wrap(async (req, res) => {

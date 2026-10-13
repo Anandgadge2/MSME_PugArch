@@ -520,7 +520,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Orders & Delivery', path: '/master-admin/orders', icon: Truck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Payments & Escrow', path: '/master-admin/payments', icon: CreditCard, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Reports & Data Export', path: '/master-admin/exports', icon: BarChart3, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Feature Controls', path: '/master-admin/features', icon: CheckSquare, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Branding & Homepage', path: '/master-admin/branding', icon: Images, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Email Setup', path: '/master-admin/email', icon: Mail, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Audit Logs', path: '/master-admin/audit', icon: FileText, roles: ['master_admin'], permission: 'company.manage' },
