@@ -2116,8 +2116,13 @@ router.get('/orders/procurement/:orderId', authenticate, validate({ params: orde
 }));
 
 router.get('/seller/pending-awards-and-pos', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {
-  const data = await orderService.listPendingAwardsAndPOsForSeller(req.user!);
-  return apiResponse.success(res, data, 200, 'Pending awards and purchase orders fetched');
+  try {
+    const data = await orderService.listPendingAwardsAndPOsForSeller(req.user!);
+    return apiResponse.success(res, data, 200, 'Pending awards and purchase orders fetched');
+  } catch (err: any) {
+    logger.warn({ err: err?.message || err, userId: req.user?.id }, '[PendingAwards] Failed to fetch awards & POs');
+    return apiResponse.success(res, { hasPending: false, count: 0, awards: [], purchaseOrders: [] }, 200, 'Pending awards and purchase orders fetched');
+  }
 }));
 
 router.get('/seller/awards', authenticate, requireAccountType('seller', 'shg'), asyncRoute(async (req, res) => {

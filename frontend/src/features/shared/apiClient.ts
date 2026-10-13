@@ -1,5 +1,5 @@
 import { api } from '../../lib/api';
-import { getCookieValue } from '../../lib/auth';
+import { getCookieValue, getStoredCsrfToken } from '../../lib/auth';
 import type { PaginatedResult } from './types';
 
 export type ApiEnvelope<T> = { success?: boolean; data?: T } | T;
@@ -9,7 +9,7 @@ export const authHeaders = (): Record<string, string> => {
   const token = localStorage.getItem('token');
   const headers: Record<string, string> = {};
   if (token) headers.Authorization = `Bearer ${token}`;
-  const csrfToken = getCookieValue('csrfToken');
+  const csrfToken = getStoredCsrfToken() || getCookieValue('csrfToken');
   if (csrfToken) headers['X-CSRF-Token'] = csrfToken;
   return headers;
 };

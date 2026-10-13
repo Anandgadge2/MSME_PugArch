@@ -80,7 +80,7 @@ test('admin registration and admin bid pages are not public client routes', () =
 test('anonymous marketplace visits do not enter the refresh and logout loop', () => {
   const source = read('../frontend/src/hooks/useAuth.tsx');
   assert.match(source, /if \(!hasCachedUser && !hasSessionMarker && !hasStoredSession\)/);
-  assert.match(source, /if \(!getCookieValue\('csrfToken'\)\)[^]*?clearLocalSession\(\)/);
+  assert.match(source, /if \(!getCookieValue\('csrfToken'\)[^)]*\)[^]*?clearLocalSession\(\)/);
   assert.doesNotMatch(source, /if \(!refreshRes\.ok\) \{\s*logout\(\)/);
 });
 

@@ -659,85 +659,105 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
   if (actor.role !== 'seller' && actor.role !== 'shg') {
     throw new ApiError(403, 'Seller or SHG access required', 'FORBIDDEN_ROLE');
   }
-  const sellerIds = await getSellerUserIdsForActor(actor);
-  if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
+  let sellerIds = [Number(actor.id)];
+  try {
+    sellerIds = await getSellerUserIdsForActor(actor);
+    if (!sellerIds.includes(actor.id)) sellerIds.push(actor.id);
+  } catch (err: any) {
+    logger.warn({ err: err?.message || err }, '[PendingAwards] Failed to get seller IDs');
+  }
 
   // 1. Pending Bid Awards (OFFERED, RECOMMENDED, ADMIN_APPROVED)
-  const pendingAwards = await db.procurementBidAward.findMany({
-    where: {
-      sellerId: { in: sellerIds },
-      awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
-    },
-    include: {
-      bid: {
-        select: {
-          id: true,
-          bidNumber: true,
-          title: true,
-          category: true,
-          buyerOrganizationName: true,
-          buyerId: true,
-          status: true,
-          bidType: true
+  let pendingAwards: any[] = [];
+  try {
+    pendingAwards = await db.procurementBidAward.findMany({
+      where: {
+        sellerId: { in: sellerIds },
+        awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'] }
+      },
+      include: {
+        bid: {
+          select: {
+            id: true,
+            bidNumber: true,
+            title: true,
+            category: true,
+            buyerOrganizationName: true,
+            buyerId: true,
+            status: true,
+            bidType: true
+          }
+        },
+        participation: {
+          select: {
+            id: true,
+            participationNumber: true,
+            totalAmount: true,
+            quotedAmount: true,
+            finalStatus: true
+          }
         }
       },
-      participation: {
-        select: {
-          id: true,
-          participationNumber: true,
-          totalAmount: true,
-          quotedAmount: true,
-          finalStatus: true
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+      orderBy: { createdAt: 'desc' }
+    });
+  } catch (err: any) {
+    logger.warn({ err: err?.message || err }, '[PendingAwards] Failed to query procurementBidAward');
+  }
 
   // Attach any PO associated with these awards
-  const awardIds = pendingAwards.map((a: any) => a.id);
-  const posForAwards = awardIds.length > 0 ? await db.purchaseOrder.findMany({
-    where: {
-      sourceType: 'procurement_bid_award',
-      sourceId: { in: awardIds }
-    },
-    select: {
-      id: true,
-      poNumber: true,
-      status: true,
-      poStatus: true,
-      amount: true,
-      sourceId: true,
-      buyerId: true,
-      createdAt: true
-    }
-  }) : [];
+  const awardIds = pendingAwards.map((a: any) => a.id).filter(Boolean);
+  let posForAwards: any[] = [];
+  try {
+    posForAwards = awardIds.length > 0 ? await db.purchaseOrder.findMany({
+      where: {
+        sourceType: 'procurement_bid_award',
+        sourceId: { in: awardIds }
+      },
+      select: {
+        id: true,
+        poNumber: true,
+        status: true,
+        poStatus: true,
+        amount: true,
+        sourceId: true,
+        buyerId: true,
+        createdAt: true
+      }
+    }) : [];
+  } catch (err: any) {
+    logger.warn({ err: err?.message || err }, '[PendingAwards] Failed to query posForAwards');
+  }
   const poByAwardId = new Map<number, any>(posForAwards.map((po: any) => [Number(po.sourceId), po]));
   const awardPoIds = posForAwards.map((po: any) => Number(po.id)).filter(Boolean);
 
   // 2. Standalone or related Purchase Orders issued to this seller that are NOT yet accepted
-  const pendingPOs = await db.purchaseOrder.findMany({
-    where: {
-      sellerId: { in: sellerIds },
-      ...(awardPoIds.length > 0 ? { id: { notIn: awardPoIds } } : {}),
-      status: { in: ['issued', 'generated', 'pending_acceptance', 'placed'] },
-      OR: [
-        { poStatus: null },
-        { poStatus: { in: ['GENERATED', 'ISSUED'] } }
-      ]
-    },
-    include: {
-      buyer: {
-        select: {
-          id: true,
-          name: true,
-          organization: { select: { organizationName: true } }
+  let pendingPOs: any[] = [];
+  try {
+    pendingPOs = await db.purchaseOrder.findMany({
+      where: {
+        sellerId: { in: sellerIds },
+        ...(awardPoIds.length > 0 ? { id: { notIn: awardPoIds } } : {}),
+        status: { in: ['issued', 'generated', 'pending_acceptance', 'placed'] },
+        OR: [
+          { poStatus: null },
+          { poStatus: { in: ['GENERATED', 'ISSUED'] } }
+        ]
+      },
+      include: {
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            organization: { select: { organizationName: true } }
+          }
         }
-      }
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 20
-  });
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 20
+    });
+  } catch (err: any) {
+    logger.warn({ err: err?.message || err }, '[PendingAwards] Failed to query pendingPOs');
+  }
 
   const formattedAwards = pendingAwards.map((a: any) => {
     const po: any = poByAwardId.get(Number(a.id)) || null;
@@ -779,9 +799,12 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
   const seenPoKeys = new Set<string>();
 
   for (const po of rawPOs) {
-    const meta: any = (po.metadata as any) || {};
-    const bidKey = meta.bidId ? `bid-${meta.bidId}` : null;
-    const auctionKey = meta.auctionId ? `auction-${meta.auctionId}` : null;
+    let meta: any = po.metadata || {};
+    if (typeof meta === 'string') {
+      try { meta = JSON.parse(meta); } catch { meta = {}; }
+    }
+    const bidKey = meta?.bidId ? `bid-${meta.bidId}` : null;
+    const auctionKey = meta?.auctionId ? `auction-${meta.auctionId}` : null;
 
     const normalizedTitle = String(po.title || '')
       .replace(/^Purchase Order - Reverse Auction [^ ]+ \(/i, '')

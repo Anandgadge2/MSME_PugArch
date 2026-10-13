@@ -20,6 +20,8 @@ const REMIND_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
 export default function AdminCategoryAlertPopup() {
   const { user } = useAuth();
+  const role = String(user?.role || '').toLowerCase();
+  const isAdmin = Boolean(user?.id && (role === 'admin' || role === 'master_admin'));
   const [alerts, setAlerts] = useState<PendingCategoryAlert[]>([]);
   const [visible, setVisible] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -31,8 +33,6 @@ export default function AdminCategoryAlertPopup() {
   }, [user?.id]);
 
   const loadPendingCategoryAlerts = useCallback(async () => {
-    if (!user?.id) return;
-    const isAdmin = user.role === 'admin' || user.role === 'master_admin';
     if (!isAdmin) return;
 
     try {
@@ -51,14 +51,12 @@ export default function AdminCategoryAlertPopup() {
 
       setAlerts(pendingList);
       setVisible(true);
-    } catch (err) {
-      console.warn('[AdminCategoryAlert] Failed to check alerts:', err);
+    } catch {
+      // Gracefully ignore error
     }
-  }, [user?.id, user?.role, getSnoozeKey]);
+  }, [isAdmin, getSnoozeKey]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const isAdmin = user.role === 'admin' || user.role === 'master_admin';
     if (!isAdmin) return;
 
     const snoozeKey = getSnoozeKey();

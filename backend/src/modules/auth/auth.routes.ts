@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { authController } from './auth.controller.js';
 import { validate } from '../../middleware/validate.js';
 import { authenticate, optionalAuthenticate } from '../../middleware/auth.js';
+import { getCsrfTokenFromRequest, setCsrfCookie } from '../../services/auth-cookie.service.js';
+import { apiResponse } from '../../utils/apiResponse.js';
 import {
   authLoginRateLimit,
   forgotPasswordRateLimit,
@@ -27,6 +29,15 @@ import {
 } from './auth.validation.js';
 
 export const authRoutes = Router();
+
+// CSRF Token retrieval
+authRoutes.get('/csrf-token', (req, res) => {
+  let csrfToken = getCsrfTokenFromRequest(req);
+  if (!csrfToken) {
+    csrfToken = setCsrfCookie(res);
+  }
+  return apiResponse.success(res, { csrfToken }, 200, 'CSRF token fetched');
+});
 
 // Public Routes with Rate Limiting and Validation
 authRoutes.post('/send-email-otp', otpSendRateLimit, validate({ body: sendEmailOtpSchema }), authController.sendEmailOtp);

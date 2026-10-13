@@ -1,4 +1,4 @@
-import { COOKIE_SESSION_TOKEN, getCookieValue, getStoredToken, getStoredRefreshToken, setStoredToken } from './auth';
+import { COOKIE_SESSION_TOKEN, getCookieValue, getStoredToken, getStoredRefreshToken, setStoredToken, getStoredCsrfToken, setStoredCsrfToken } from './auth';
 
 export const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -101,8 +101,8 @@ const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | nu
   } else if (!next['Content-Type'] && !next['content-type']) {
     next['Content-Type'] = 'application/json';
   }
-  const csrfToken = getCookieValue('csrfToken');
-  if (csrfToken && !next['X-CSRF-Token']) {
+  const csrfToken = getStoredCsrfToken() || getCookieValue('csrfToken');
+  if (csrfToken && !next['X-CSRF-Token'] && !next['x-csrf-token']) {
     next['X-CSRF-Token'] = csrfToken;
   }
   return next;
@@ -167,6 +167,9 @@ const refreshSessionCookies = async (): Promise<boolean> => {
         if (nextAccessToken) {
           setStoredToken(nextAccessToken, data.refreshToken || storedRefreshToken);
         }
+        if (data.csrfToken) {
+          setStoredCsrfToken(data.csrfToken);
+        }
       } catch {
         // ignore parse error if empty
       }
@@ -178,6 +181,34 @@ const refreshSessionCookies = async (): Promise<boolean> => {
     }
   })();
   return activeRefreshPromise;
+};
+
+let activeCsrfFetchPromise: Promise<string> | null = null;
+export const fetchCsrfToken = async (): Promise<string> => {
+  if (activeCsrfFetchPromise) return activeCsrfFetchPromise;
+  activeCsrfFetchPromise = (async () => {
+    try {
+      const response = await fetch(resolveUrl('/api/auth/csrf-token'), {
+        method: 'GET',
+        credentials: 'include',
+        headers: normalizeHeaders(undefined, null)
+      });
+      if (response.ok) {
+        const body = await response.json();
+        const token = body?.csrfToken || body?.data?.csrfToken;
+        if (token) {
+          setStoredCsrfToken(token);
+          return token;
+        }
+      }
+    } catch {
+      // ignore network errors
+    } finally {
+      activeCsrfFetchPromise = null;
+    }
+    return getStoredCsrfToken() || getCookieValue('csrfToken');
+  })();
+  return activeCsrfFetchPromise;
 };
 
 const networkErrorResponse = (error: unknown) => {
@@ -230,9 +261,12 @@ export const api = {
 
     const request = sendRequest(headers).then(async (response) => {
       if (isUnsafeMethod(method) && await isCsrfFailure(response)) {
-        const refreshed = await refreshSessionCookies().catch(() => false);
+        const freshCsrf = await fetchCsrfToken().catch(() => '');
+        const refreshed = freshCsrf ? true : await refreshSessionCookies().catch(() => false);
         if (refreshed) {
           const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
+          const activeCsrf = freshCsrf || getStoredCsrfToken() || getCookieValue('csrfToken');
+          if (activeCsrf) retryHeaders['X-CSRF-Token'] = activeCsrf;
           response = await sendRequest(retryHeaders);
         }
       }

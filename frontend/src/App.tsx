@@ -1441,7 +1441,7 @@ export default function App({
         {showDashboardLayout && (
           <Suspense fallback={null}>
             <InviteLoginPopup />
-            {user && (user.role === 'admin' || user.role === 'master_admin') && (
+            {user && ['admin', 'master_admin'].includes(String(user.role).toLowerCase()) && (
               <AdminCategoryAlertPopup />
             )}
             {user && (user.role === 'seller' || user.role === 'shg') && (

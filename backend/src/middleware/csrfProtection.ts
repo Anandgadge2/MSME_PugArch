@@ -4,6 +4,7 @@ import { apiResponse } from '../utils/apiResponse.js';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 const CSRF_EXEMPT_PATHS = new Set([
+  '/api/auth/csrf-token',
   '/api/auth/login',
   '/api/auth/2fa/verify',
   '/api/auth/register',
@@ -32,6 +33,19 @@ export const csrfProtection = (req: Request, res: Response, next: NextFunction) 
 
   const cookieToken = getCsrfTokenFromRequest(req);
   const headerToken = String(req.headers['x-csrf-token'] || '');
+
+  // 1. Double-submit cookie verification: match header token against cookie
+  if (cookieToken && headerToken && cookieToken === headerToken) {
+    return next();
+  }
+
+  // 2. Custom header protection: cross-site requests cannot set custom Authorization headers under CORS
+  const authHeader = String(req.headers['authorization'] || '');
+  if (authHeader.startsWith('Bearer ') && authHeader.slice(7).trim().length > 20) {
+    return next();
+  }
+
+  // 3. Ambient cookie session with missing or mismatched CSRF token
   if (!cookieToken || !headerToken || cookieToken !== headerToken) {
     return apiResponse.error(res, 403, 'Invalid CSRF token', 'CSRF_TOKEN_INVALID');
   }

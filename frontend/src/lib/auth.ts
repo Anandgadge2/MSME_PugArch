@@ -32,11 +32,34 @@ export const setStoredToken = (token?: string | null, refreshToken?: string | nu
   }
 };
 
+let memoryCsrfToken: string | null = null;
+
+export const getStoredCsrfToken = () => {
+  if (typeof window === 'undefined') return memoryCsrfToken || '';
+  const token = memoryCsrfToken || localStorage.getItem('csrfToken');
+  if (!token || token === 'null' || token === 'undefined') return '';
+  return token;
+};
+
+export const setStoredCsrfToken = (token?: string | null) => {
+  const safeToken = token && token !== 'null' && token !== 'undefined' ? token : null;
+  memoryCsrfToken = safeToken;
+  if (typeof window !== 'undefined') {
+    if (safeToken) {
+      localStorage.setItem('csrfToken', safeToken);
+    } else {
+      localStorage.removeItem('csrfToken');
+    }
+  }
+};
+
 export const clearStoredToken = () => {
   memoryToken = null;
+  memoryCsrfToken = null;
   if (typeof window !== 'undefined') {
     localStorage.removeItem('token');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('csrfToken');
   }
 };
 

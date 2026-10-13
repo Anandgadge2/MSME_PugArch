@@ -44,8 +44,18 @@ export const readCookie = (req: Request, name: string) => {
   }
 };
 
+export const setCsrfCookie = (res: Response, token?: string) => {
+  const csrfToken = token || randomToken(24);
+  res.cookie(CSRF_COOKIE, csrfToken, {
+    ...cookieBase,
+    httpOnly: false,
+    maxAge: ACCESS_MAX_AGE_MS
+  });
+  return csrfToken;
+};
+
 export const setAuthCookies = (res: Response, tokens: { accessToken: string; refreshToken: string }) => {
-  const csrfToken = randomToken(24);
+  const csrfToken = setCsrfCookie(res);
   res.cookie(ACCESS_COOKIE, tokens.accessToken, {
     ...cookieBase,
     httpOnly: true,
@@ -56,11 +66,7 @@ export const setAuthCookies = (res: Response, tokens: { accessToken: string; ref
     httpOnly: true,
     maxAge: REFRESH_MAX_AGE_MS
   });
-  res.cookie(CSRF_COOKIE, csrfToken, {
-    ...cookieBase,
-    httpOnly: false,
-    maxAge: ACCESS_MAX_AGE_MS
-  });
+  return csrfToken;
 };
 
 export const clearAuthCookies = (res: Response) => {
@@ -95,12 +101,13 @@ export const revokeRefreshSession = async (refreshToken: string) => {
 export const issueCookieAuth = async (req: Request, res: Response, user: AuthUserForTokens) => {
   const tokens = issueAuthResponse(user);
   await createRefreshSession(req, user.id, tokens.refreshToken);
-  setAuthCookies(res, tokens);
+  const csrfToken = setAuthCookies(res, tokens);
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
-    expiresIn: tokens.expiresIn
+    expiresIn: tokens.expiresIn,
+    csrfToken
   };
 };
 
@@ -150,11 +157,12 @@ export const rotateRefreshToken = async (req: Request, res: Response, refreshTok
       }
     })
   ]);
-  setAuthCookies(res, tokens);
+  const csrfToken = setAuthCookies(res, tokens);
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
-    expiresIn: tokens.expiresIn
+    expiresIn: tokens.expiresIn,
+    csrfToken
   };
 };
