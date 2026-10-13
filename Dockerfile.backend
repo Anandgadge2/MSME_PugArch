@@ -1,0 +1,73 @@
+# Multi-stage Docker build for JSG SMILE MSME Monorepo Backend
+FROM node:24-alpine AS builder
+
+WORKDIR /usr/src/app
+
+# Install build dependencies if native addons require compilation
+RUN apk add --no-cache libc6-compat
+
+# Copy workspace configuration and dependency locks
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+
+# Copy Prisma schema and config
+COPY backend/prisma ./backend/prisma/
+COPY backend/prisma.config.ts ./backend/prisma.config.ts
+
+# Install dependencies with postinstall scripts skipped
+RUN npm ci --workspace=backend --include-workspace-root --ignore-scripts
+
+# Generate Prisma Client explicitly
+WORKDIR /usr/src/app/backend
+RUN npx prisma generate
+
+
+# Copy backend source code and build
+COPY backend/tsconfig*.json ./
+COPY backend/index.ts ./
+COPY backend/prisma.config.ts ./
+COPY backend/src ./src/
+
+RUN npm run build
+
+# --- Production Runner Stage ---
+FROM node:24-alpine AS runner
+
+WORKDIR /usr/src/app
+
+ENV NODE_ENV=production
+# Default port for GCP Cloud Run
+ENV PORT=8080
+
+RUN apk add --no-cache libc6-compat dumb-init
+
+# Copy root & workspace package definition
+COPY package*.json ./
+COPY backend/package*.json ./backend/
+
+# Copy prisma schema before production dependencies install
+COPY backend/prisma ./backend/prisma/
+COPY backend/prisma.config.ts ./backend/prisma.config.ts
+
+# Install production-only dependencies
+RUN npm ci --workspace=backend --include-workspace-root --omit=dev --ignore-scripts
+
+
+# Copy compiled application JavaScript dist
+COPY --from=builder /usr/src/app/backend/dist ./backend/dist
+
+# Generate production Prisma Client directly inside runner
+WORKDIR /usr/src/app/backend
+RUN npx prisma generate
+
+# Ensure node user owns all runtime files
+RUN chown -R node:node /usr/src/app
+
+# Security: run as non-root user
+USER node
+
+EXPOSE 8080
+
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["node", "dist/index.js"]

@@ -40,9 +40,9 @@ COPY --from=builder /app/package.json ./package.json
 
 USER nextjs
 
-# Port configuration (Cloud Run uses PORT environment variable)
-EXPOSE 3000
-ENV PORT=3000
+# Port configuration (Cloud Run uses PORT environment variable, defaults to 8080)
+ENV PORT=8080
+EXPOSE 8080
 
-# Start Next.js server
-CMD ["npm", "run", "start"]
+# Start Next.js server binding to 0.0.0.0 and PORT
+CMD ["sh", "-c", "npx next start -H 0.0.0.0 -p ${PORT:-8080}"]

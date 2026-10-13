@@ -101,9 +101,9 @@ const nextConfig: NextConfig = {
   },
   async rewrites() {
     const backendUrl = getBackendUrl();
-    if (backendUrl) {
+    if (backendUrl && backendUrl.startsWith("http")) {
       console.log(
-        `[next.config] Rewrites: /proxy/:path* → ${backendUrl}/:path*`,
+        `[next.config] Rewrites configured: /api/:path* → ${backendUrl}/api/:path*`,
       );
       return {
         beforeFiles: [

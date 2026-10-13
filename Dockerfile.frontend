@@ -1,0 +1,64 @@
+# Multi-stage Docker build for JSG SMILE MSME Monorepo Frontend (Next.js)
+FROM node:24-alpine AS deps
+RUN apk add --no-cache libc6-compat
+WORKDIR /usr/src/app
+
+COPY package*.json ./
+COPY frontend/package*.json ./frontend/
+
+# Install dependencies for the frontend workspace
+RUN npm ci --workspace=frontend --include-workspace-root
+
+# --- Build Stage ---
+FROM node:24-alpine AS builder
+WORKDIR /usr/src/app
+
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY package*.json ./
+COPY frontend ./frontend
+
+ARG NEXT_PUBLIC_API_URL=""
+ARG NEXT_PUBLIC_APP_URL="https://www.jsgsmile.in"
+ARG NEXT_PUBLIC_PUSHER_KEY="68be34fe75cc4145142b"
+ARG NEXT_PUBLIC_PUSHER_CLUSTER="ap2"
+
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
+ENV NEXT_PUBLIC_PUSHER_KEY=$NEXT_PUBLIC_PUSHER_KEY
+ENV NEXT_PUBLIC_PUSHER_CLUSTER=$NEXT_PUBLIC_PUSHER_CLUSTER
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+WORKDIR /usr/src/app/frontend
+RUN npm run build
+
+# --- Runner Stage ---
+FROM node:24-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=8080
+
+RUN apk add --no-cache dumb-init
+
+# Create non-root system user
+RUN addgroup --system --gid 1001 nodejs && \
+    adduser --system --uid 1001 nextjs
+
+# Copy built application and required assets
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/frontend/public ./public
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/frontend/.next ./.next
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /usr/src/app/frontend/package.json ./package.json
+
+# Guarantee world-readable/executable directory permissions for non-root nextjs user
+RUN chmod -R a+rX ./public ./.next
+
+USER nextjs
+
+
+EXPOSE 8080
+
+ENTRYPOINT ["dumb-init", "--"]
+CMD ["sh", "-c", "npx next start -H 0.0.0.0 -p ${PORT:-8080}"]
