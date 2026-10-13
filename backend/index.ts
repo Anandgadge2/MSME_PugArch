@@ -326,7 +326,7 @@ app.post('/api/pusher/auth', authenticate, async (req: AuthRequest, res) => {
     } else if (channelName.startsWith('private-user-')) {
       const targetUserId = Number(channelName.replace('private-user-', ''));
       const isAdmin = ['admin', 'master_admin'].includes(user.role || '');
-      if (user.id !== targetUserId && !isAdmin) {
+      if (Number.isFinite(targetUserId) && Number(user.id) !== targetUserId && !isAdmin) {
         return res.status(403).json({ message: 'Forbidden: Cannot subscribe to another user channel' });
       }
     }

@@ -20,6 +20,7 @@ const staticOrigins = [
 
 const productionStaticOrigins = [
   'https://msme-frontend-27756389580.asia-south1.run.app',
+  'https://msme-frontend-yvkunmwzya-el.a.run.app',
   'https://msme-pugarch-frontend.vercel.app',
   'https://msme-portal-pug-arch-frontend.vercel.app',
   'https://msme-frontend.vercel.app',

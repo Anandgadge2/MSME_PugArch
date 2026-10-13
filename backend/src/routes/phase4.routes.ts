@@ -13946,19 +13946,23 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       where: { ownerId: buyerId, entityType: 'requirement', status: 'active' }
     }),
     db.auction.findMany({
-      where: {
-        OR: [
-          { createdByUserId: buyerId },
-          { buyerOrgId: buyerOrgId }
-        ]
-      },
+      where: buyerOrgId > 0
+        ? {
+            OR: [
+              { createdByUserId: buyerId },
+              { buyerOrgId: buyerOrgId }
+            ]
+          }
+        : { createdByUserId: buyerId },
       orderBy: { createdAt: 'desc' },
     }),
-    db.procurementApproval.findMany({
-      where: { organizationId: buyerOrgId },
-      include: { approver: { select: { id: true, name: true, email: true } } },
-      orderBy: [{ entityId: 'asc' }, { sequence: 'asc' }]
-    })
+    buyerOrgId > 0
+      ? db.procurementApproval.findMany({
+          where: { organizationId: buyerOrgId },
+          include: { approver: { select: { id: true, name: true, email: true } } },
+          orderBy: [{ entityId: 'asc' }, { sequence: 'asc' }]
+        })
+      : Promise.resolve([])
   ]);
 
   const loggedInOrgName = buyerOrg?.organizationName || '';
@@ -15072,7 +15076,27 @@ router.get('/buyer/my-procurements', authenticate, authorize('buyer'), asyncRout
   const { type, status, method, category, department, startDate, endDate, search, sortBy, sortDir, refresh } = req.query as Record<string, string | undefined>;
 
   const bypassCache = refresh === 'true' || refresh === '1';
-  const { all, kpis } = await getBuyerProcurementsData(buyerId, buyerOrgId, bypassCache);
+  let all: NormalizedProcurement[] = [];
+  let kpis = {
+    totalProcurements: 0,
+    drafts: 0,
+    pendingApproval: 0,
+    active: 0,
+    completed: 0,
+    cancelled: 0,
+    totalValue: 0,
+    activeRateContracts: 0,
+    expiredRateContracts: 0,
+    totalResponses: 0
+  };
+
+  try {
+    const data = await getBuyerProcurementsData(buyerId, buyerOrgId, bypassCache);
+    all = data.all || [];
+    kpis = data.kpis || kpis;
+  } catch (err: any) {
+    logger.error({ err: err?.message || err }, '[getBuyerProcurementsData] Failed to retrieve buyer procurements');
+  }
 
   let filtered = all;
   if (type) {
