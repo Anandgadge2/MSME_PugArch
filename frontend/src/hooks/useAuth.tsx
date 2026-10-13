@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
-import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, setStoredToken } from '../lib/auth';
+import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, getStoredRefreshToken, setStoredToken } from '../lib/auth';
 import { clearGuestCart } from '../features/marketplace/hooks/useGuestCart';
 import { disconnectPusher } from '../lib/realtime';
 import { isShgUser } from '../lib/shg';
@@ -263,8 +263,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         setUser(data.user);
-        setStoredToken(COOKIE_SESSION_TOKEN);
-        setToken(COOKIE_SESSION_TOKEN);
+        if (storedToken && storedToken !== COOKIE_SESSION_TOKEN) {
+          setStoredToken(storedToken);
+          setToken(storedToken);
+        } else {
+          setStoredToken(COOKIE_SESSION_TOKEN);
+          setToken(COOKIE_SESSION_TOKEN);
+        }
         localStorage.setItem('msme_user_cache', JSON.stringify(data.user));
       } else {
         if (![401, 403].includes(res.status)) return;
@@ -276,14 +281,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           return;
         }
 
-        // A stale local cache/token without the cookie marker cannot be
-        // refreshed. Clear it silently and keep public pages public.
-        if (!getCookieValue('csrfToken')) {
+        // A stale local cache/token without evidence cannot be refreshed.
+        // Clear it silently and keep public pages public.
+        const storedRefreshToken = getStoredRefreshToken();
+        if (!getCookieValue('csrfToken') && !storedToken && !storedRefreshToken) {
           clearLocalSession();
           return;
         }
 
-        const refreshRes = await api.post('/api/auth/refresh', {});
+        const refreshRes = await api.post('/api/auth/refresh', { refreshToken: storedRefreshToken || undefined });
         if (!refreshRes.ok) {
           const refreshData = await refreshRes.clone().json().catch(() => ({}));
           if (refreshData?.code === 'SESSION_CONCURRENT_LOGIN' || refreshData?.error?.code === 'SESSION_CONCURRENT_LOGIN') {
@@ -295,7 +301,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         const refreshData = await refreshRes.json();
         const currentToken = refreshData.accessToken || refreshData.token || COOKIE_SESSION_TOKEN;
-        setStoredToken(currentToken);
+        setStoredToken(currentToken, refreshData.refreshToken || storedRefreshToken);
         setToken(currentToken);
 
         const retry = await api.fetch('/api/auth/me', { headers: { Authorization: `Bearer ${currentToken}` }, skipCache: true });
@@ -383,7 +389,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [refreshUser]);
 
-  const login = useCallback(async (token: string, user: User, _refreshToken?: string, redirectPath?: string) => {
+  const login = useCallback(async (token: string, user: User, refreshToken?: string, redirectPath?: string) => {
     setIsLoggingIn(true);
 
     // 1. Snapshot guest cart before wiping local storage
@@ -409,8 +415,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // 3. Set the new user session
-    setStoredToken(token || COOKIE_SESSION_TOKEN);
-    localStorage.removeItem('refreshToken');
+    setStoredToken(token || COOKIE_SESSION_TOKEN, refreshToken);
     localStorage.setItem('msme_user_cache', JSON.stringify(user));
     setToken(token || COOKIE_SESSION_TOKEN);
     setUser(user);

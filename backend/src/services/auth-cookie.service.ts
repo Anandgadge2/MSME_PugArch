@@ -23,7 +23,7 @@ type AuthUserForTokens = {
 };
 
 const cookieBase = {
-  sameSite: 'strict' as const,
+  sameSite: isProduction ? ('none' as const) : ('lax' as const),
   secure: isProduction,
   path: '/'
 };
@@ -99,6 +99,7 @@ export const issueCookieAuth = async (req: Request, res: Response, user: AuthUse
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
     expiresIn: tokens.expiresIn
   };
 };
@@ -153,6 +154,7 @@ export const rotateRefreshToken = async (req: Request, res: Response, refreshTok
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,
+    refreshToken: tokens.refreshToken,
     expiresIn: tokens.expiresIn
   };
 };

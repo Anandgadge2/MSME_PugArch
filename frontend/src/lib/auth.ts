@@ -3,14 +3,32 @@ export const COOKIE_SESSION_TOKEN = 'cookie-session';
 
 export const getStoredToken = () => {
   if (typeof window === 'undefined') return null;
-  return memoryToken || localStorage.getItem('token');
+  const token = memoryToken || localStorage.getItem('token');
+  if (!token || token === 'null' || token === 'undefined') return null;
+  return token;
 };
 
-export const setStoredToken = (token: string) => {
-  memoryToken = token || COOKIE_SESSION_TOKEN;
+export const getStoredRefreshToken = () => {
+  if (typeof window === 'undefined') return null;
+  const token = localStorage.getItem('refreshToken');
+  if (!token || token === 'null' || token === 'undefined') return null;
+  return token;
+};
+
+export const setStoredToken = (token?: string | null, refreshToken?: string | null) => {
+  const safeToken = token && token !== 'null' && token !== 'undefined' ? token : null;
+  memoryToken = safeToken;
   if (typeof window !== 'undefined') {
-    localStorage.setItem('token', COOKIE_SESSION_TOKEN);
-    localStorage.removeItem('refreshToken');
+    if (safeToken) {
+      localStorage.setItem('token', safeToken);
+    } else {
+      localStorage.removeItem('token');
+    }
+    if (refreshToken && refreshToken !== 'null' && refreshToken !== 'undefined') {
+      localStorage.setItem('refreshToken', refreshToken);
+    } else if (refreshToken === null) {
+      localStorage.removeItem('refreshToken');
+    }
   }
 };
 

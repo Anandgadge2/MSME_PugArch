@@ -433,6 +433,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
         poStatus: 'ISSUED',
         sourceType: 'procurement_bid_award',
         sourceId: award.id,
+        bidId: bid.id ? Number(bid.id) : null,
         expectedDelivery: bid.bidValidityDate || bid.financialOpeningDate || null,
         deliveryAddress: bid.deliveryLocation || 'India',
         paymentTerms: Array.isArray(bid.termsAndConditions)

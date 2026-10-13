@@ -325,12 +325,15 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       const pos = await (prisma as any).purchaseOrder.findMany({
         where: { OR: poOrConditions },
         include: {
-          invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+          invoices: { include: { invoiceFile: true, paymentSlipFile: true } },
           grns: { include: { items: true } },
           items: true
         },
         orderBy: { createdAt: 'desc' }
-      }).catch(() => []);
+      }).catch((poErr: any) => {
+        logger.warn({ poErr: poErr?.message || poErr }, '[ProcurementBid] Failed to fetch purchase orders for bid');
+        return [];
+      });
 
       if (pos.length > 0) {
         (serialized as any).purchaseOrders = pos;

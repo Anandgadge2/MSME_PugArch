@@ -923,12 +923,15 @@ export const resolveAuctionAsBidRecord = async (token: string, client: any = db)
       ]
     },
     include: {
-      invoices: { include: { fileAsset: true, paymentSlipFile: true } },
+      invoices: { include: { invoiceFile: true, paymentSlipFile: true } },
       grns: { include: { items: true } },
       items: true
     },
     orderBy: { createdAt: 'desc' }
-  }).catch(() => []);
+  }).catch((poErr: any) => {
+    logger.warn({ poErr: poErr?.message || poErr }, '[ProcurementBid] Failed to fetch auction purchase orders');
+    return [];
+  });
 
   const activeAuctionOrder = auctionPurchaseOrders[0] || null;
 

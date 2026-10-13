@@ -18,7 +18,18 @@ const staticOrigins = [
   'https://msme-portal-pug-arch-frontend-onet.vercel.app'
 ];
 
+const productionStaticOrigins = [
+  'https://msme-frontend-27756389580.asia-south1.run.app',
+  'https://msme-pugarch-frontend.vercel.app',
+  'https://msme-portal-pug-arch-frontend.vercel.app',
+  'https://msme-frontend.vercel.app',
+  'https://msme-pugarch.vercel.app',
+  'https://msme-pugarch-backend.vercel.app',
+  'https://msme-portal-pug-arch-frontend-onet.vercel.app'
+];
+
 const configuredOrigins = [
+  ...productionStaticOrigins,
   ...(isProduction ? [] : staticOrigins),
   ...(env.FRONTEND_URL ? env.FRONTEND_URL.split(',') : []),
   ...(env.CORS_ALLOWED_ORIGINS ? env.CORS_ALLOWED_ORIGINS.split(',') : [])

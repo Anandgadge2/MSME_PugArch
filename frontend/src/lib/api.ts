@@ -1,4 +1,4 @@
-import { COOKIE_SESSION_TOKEN, getCookieValue, getStoredToken } from './auth';
+import { COOKIE_SESSION_TOKEN, getCookieValue, getStoredToken, getStoredRefreshToken, setStoredToken } from './auth';
 
 export const getBaseUrl = () => {
   if (process.env.NODE_ENV === 'development' && typeof window !== 'undefined') {
@@ -84,7 +84,7 @@ export const unwrapApiData = <T = any>(body: any): T => {
 const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | null) => {
   const next: Record<string, string> = { ...(headers as any) };
   const auth = next.Authorization || next.authorization || '';
-  if (/^Bearer\s*(null|undefined|cookie-session)?$/i.test(auth.trim()) || auth.trim() === `Bearer ${COOKIE_SESSION_TOKEN}`) {
+  if (/^Bearer\s*(null|undefined)?$/i.test(auth.trim())) {
     delete next.Authorization;
     delete next.authorization;
   }
@@ -146,19 +146,31 @@ const refreshSessionCookies = async (): Promise<boolean> => {
   if (activeRefreshPromise) return activeRefreshPromise;
   activeRefreshPromise = (async () => {
     try {
+      const storedRefreshToken = getStoredRefreshToken();
       const response = await fetch(resolveUrl('/api/auth/refresh'), {
         method: 'POST',
         credentials: 'include',
         headers: normalizeHeaders(undefined, null),
-        body: '{}',
+        body: JSON.stringify({ refreshToken: storedRefreshToken || undefined }),
       });
       if (!response.ok) {
         const code = await getResponseErrorCode(response);
         if (code === 'SESSION_CONCURRENT_LOGIN' && typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: 'SESSION_CONCURRENT_LOGIN' } }));
         }
+        return false;
       }
-      return response.ok;
+
+      try {
+        const data = await response.clone().json();
+        const nextAccessToken = data.accessToken || data.token;
+        if (nextAccessToken) {
+          setStoredToken(nextAccessToken, data.refreshToken || storedRefreshToken);
+        }
+      } catch {
+        // ignore parse error if empty
+      }
+      return true;
     } catch {
       return false;
     } finally {
@@ -234,7 +246,7 @@ export const api = {
           }
         } else {
           const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
-            getCookieValue('csrfToken') || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
+            getCookieValue('csrfToken') || getStoredRefreshToken() || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
           );
           if (hasSessionEvidence) {
             const refreshed = await refreshSessionCookies().catch(() => false);
