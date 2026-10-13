@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useDebounce } from "../hooks/useDebounce";
 import { api, resolveMediaUrl } from "../lib/api";
@@ -549,6 +550,18 @@ export default function AdminOnboarding() {
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState("");
 
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  const isAnySubModalOpen =
+    isRejectModalOpen ||
+    isOverrideModalOpen ||
+    isDocRequestModalOpen ||
+    isCorrectionModalOpen ||
+    isAppRejectModalOpen;
+
   // View / Toolbar UI state
   const [viewMode, setViewMode] = useResponsiveViewMode();
   const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
@@ -594,11 +607,34 @@ export default function AdminOnboarding() {
     if (selectedItem) {
       const prev = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (
+          e.key === 'Escape' &&
+          !isRejectModalOpen &&
+          !isOverrideModalOpen &&
+          !isDocRequestModalOpen &&
+          !isCorrectionModalOpen &&
+          !isAppRejectModalOpen &&
+          !previewDocument
+        ) {
+          setSelectedItem(null);
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
       return () => {
         document.body.style.overflow = prev;
+        window.removeEventListener('keydown', handleKeyDown);
       };
     }
-  }, [selectedItem]);
+  }, [
+    selectedItem,
+    isRejectModalOpen,
+    isOverrideModalOpen,
+    isDocRequestModalOpen,
+    isCorrectionModalOpen,
+    isAppRejectModalOpen,
+    previewDocument,
+  ]);
 
   useEffect(() => {
     if (selectedItem && selectedItem.role === "buyer" && selectedItem.profile?.id) {
@@ -2530,9 +2566,17 @@ export default function AdminOnboarding() {
       </div>
 
       {/* FULL SCREEN REVIEW OVERLAY */}
-      {selectedItem && (
+      {selectedItem && isMounted && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Registration Scrutiny Desk"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-[#0b1f3a]/85 p-2 animate-in fade-in duration-300 md:p-4 backdrop-blur-sm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isAnySubModalOpen) {
+              setSelectedItem(null);
+            }
+          }}
           onWheel={(e) => {
             if (scrutinyModalScrollRef.current) {
               const target = e.target as HTMLElement | null;
@@ -2546,7 +2590,10 @@ export default function AdminOnboarding() {
             }
           }}
         >
-          <div className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+          <div
+            className="flex h-[95dvh] w-full max-w-[1300px] flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Header - government-portal styling: deep navy, gold accent, embossed feel */}
             <div className="relative border-b-2 border-[#f9a825] bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#0b1f3a] px-6 py-5 text-white md:px-8">
               <div className="flex flex-col gap-2.5 sm:gap-3 md:flex-row md:items-center md:justify-between">
@@ -2566,7 +2613,7 @@ export default function AdminOnboarding() {
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2.5 sm:flex sm:flex-row sm:items-center w-full sm:w-auto">
+                <div className="flex items-center justify-end gap-2.5 sm:gap-4 w-full sm:w-auto">
                   <div className="hidden flex-col items-end gap-0.5 border-l border-white/20 pl-4 md:flex">
                     <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-slate-300">Application ID</p>
                     <p className="font-mono text-xs font-extrabold text-white">
@@ -2580,7 +2627,7 @@ export default function AdminOnboarding() {
                     onClick={() => {
                       setSelectedItem(null);
                     }}
-                    className="flex h-10 w-10 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-all hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-all hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
                     aria-label="Close application review"
                   >
                     <X className="h-5 w-5" />
@@ -4208,79 +4255,91 @@ export default function AdminOnboarding() {
               </p>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
       {/* REJECTION REASON MODAL */}
-      {isRejectModalOpen && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      {isRejectModalOpen && isMounted && typeof document !== 'undefined' && createPortal(
+        <FocusTrap active onEscape={() => {
+          setIsRejectModalOpen(false);
+          setRejectionReason("");
+        }}>
           <div
-            className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
-            onClick={() => {
-              setIsRejectModalOpen(false);
-              setRejectionReason("");
-            }}
-          />
-          <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
-            <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
-              <div className="space-y-1">
-                <h3 className="text-base font-extrabold uppercase tracking-tight">
-                  Provide Rejection Reason
-                </h3>
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
-                  Section: {activeSectionForRejection}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  setIsRejectModalOpen(false);
-                  setRejectionReason("");
-                }}
-                className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="space-y-5 p-6">
-              <div className="space-y-3">
-                <p className="text-xs font-medium leading-relaxed text-slate-600">
-                  Please specify why this section is being rejected. This
-                  feedback will be visible to the {selectedItem?.role}.
-                </p>
-                <textarea
-                  value={rejectionReason}
-                  onChange={(e) => setRejectionReason(e.target.value)}
-                  placeholder="e.g., Uploaded documents are incorrect or unreadable..."
-                  className="h-32 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-red-600"
-                  autoFocus
-                />
-              </div>
-
-              <div className="flex flex-col space-y-3">
-                <Button
-                  onClick={handleConfirmRejection}
-                  disabled={!rejectionReason.trim()}
-                  className="h-11 w-full rounded-md bg-red-700 font-bold uppercase tracking-wide text-white hover:bg-red-800"
-                >
-                  Confirm Rejection
-                </Button>
-                <Button
-                  variant="outline"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reject-section-modal-title"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
+          >
+            <div
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
+              onClick={() => {
+                setIsRejectModalOpen(false);
+                setRejectionReason("");
+              }}
+            />
+            <div className="relative w-full max-w-md overflow-hidden rounded-lg border border-slate-300 bg-white shadow-2xl animate-in zoom-in-95 duration-300">
+              <div className="flex items-center justify-between border-b border-slate-200 bg-[#12335f] px-6 py-4 text-white">
+                <div className="space-y-1">
+                  <h3 id="reject-section-modal-title" className="text-base font-extrabold uppercase tracking-tight">
+                    Provide Rejection Reason
+                  </h3>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-100">
+                    Section: {activeSectionForRejection}
+                  </p>
+                </div>
+                <button
                   onClick={() => {
                     setIsRejectModalOpen(false);
                     setRejectionReason("");
                   }}
-                  className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  className="flex h-9 w-9 items-center justify-center rounded-md border border-white/20 bg-white/10 text-white transition-colors hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-[#f9a825]"
                 >
-                  Cancel
-                </Button>
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-5 p-6">
+                <div className="space-y-3">
+                  <p className="text-xs font-medium leading-relaxed text-slate-600">
+                    Please specify why this section is being rejected. This
+                    feedback will be visible to the {selectedItem?.role}.
+                  </p>
+                  <textarea
+                    value={rejectionReason}
+                    onChange={(e) => setRejectionReason(e.target.value)}
+                    placeholder="e.g., Uploaded documents are incorrect or unreadable..."
+                    className="h-32 w-full resize-none rounded-md border border-slate-300 bg-white p-3 text-xs font-medium transition-all focus:outline-none focus:ring-2 focus:ring-red-600"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex flex-col space-y-3">
+                  <Button
+                    onClick={handleConfirmRejection}
+                    disabled={!rejectionReason.trim()}
+                    className="h-11 w-full rounded-md bg-red-700 font-bold uppercase tracking-wide text-white hover:bg-red-800"
+                  >
+                    Confirm Rejection
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setIsRejectModalOpen(false);
+                      setRejectionReason("");
+                    }}
+                    className="h-11 w-full rounded-md border-slate-300 font-bold uppercase tracking-wide text-slate-600 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </FocusTrap>,
+        document.body
       )}
       {/* COMPLIANCE OVERRIDE MODAL */}
-      {isOverrideModalOpen && (
+      {isOverrideModalOpen && isMounted && typeof document !== 'undefined' && createPortal(
         <FocusTrap active onEscape={() => {
           setIsOverrideModalOpen(false);
           setOverrideReason("");
@@ -4289,7 +4348,7 @@ export default function AdminOnboarding() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="override-modal-title"
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
           >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -4399,10 +4458,11 @@ export default function AdminOnboarding() {
               </div>
             </div>
           </div>
-        </FocusTrap>
+        </FocusTrap>,
+        document.body
       )}
       {/* DOCUMENT RE-UPLOAD REQUEST MODAL */}
-      {isDocRequestModalOpen && docRequestTarget && (
+      {isDocRequestModalOpen && docRequestTarget && isMounted && typeof document !== 'undefined' && createPortal(
         <FocusTrap active onEscape={() => {
           setIsDocRequestModalOpen(false);
           setDocRequestReason("");
@@ -4411,7 +4471,7 @@ export default function AdminOnboarding() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="doc-request-modal-title"
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
           >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -4497,11 +4557,12 @@ export default function AdminOnboarding() {
               </div>
             </div>
           </div>
-        </FocusTrap>
+        </FocusTrap>,
+        document.body
       )}
 
       {/* APPLICATION CORRECTION MODAL */}
-      {isCorrectionModalOpen && (
+      {isCorrectionModalOpen && isMounted && typeof document !== 'undefined' && createPortal(
         <FocusTrap active onEscape={() => {
           setIsCorrectionModalOpen(false);
           setCorrectionReason("");
@@ -4510,7 +4571,7 @@ export default function AdminOnboarding() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="app-correction-modal-title"
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
           >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -4596,11 +4657,12 @@ export default function AdminOnboarding() {
               </div>
             </div>
           </div>
-        </FocusTrap>
+        </FocusTrap>,
+        document.body
       )}
 
       {/* APPLICATION REJECTION MODAL */}
-      {isAppRejectModalOpen && (
+      {isAppRejectModalOpen && isMounted && typeof document !== 'undefined' && createPortal(
         <FocusTrap active onEscape={() => {
           setIsAppRejectModalOpen(false);
           setAppRejectReason("");
@@ -4609,7 +4671,7 @@ export default function AdminOnboarding() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="app-reject-modal-title"
-            className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+            className="fixed inset-0 z-[110] flex items-center justify-center p-4"
           >
             <div
               className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
@@ -4695,7 +4757,8 @@ export default function AdminOnboarding() {
               </div>
             </div>
           </div>
-        </FocusTrap>
+        </FocusTrap>,
+        document.body
       )}
       {Boolean(previewDocument) && (
         <DocumentPreviewModal previewDocument={previewDocument} onClose={handleClosePreview} />
