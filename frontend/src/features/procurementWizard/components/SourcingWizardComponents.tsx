@@ -562,6 +562,8 @@ const DEFAULT_BOQ_UOMS = [
   { value: 'RL', label: 'RL - Rolls' },
   { value: 'LOT', label: 'LOT - Lots' },
   { value: 'LS', label: 'LS - Lump Sum' },
+  { value: 'JOB', label: 'JOB - Jobs' },
+  { value: 'AU', label: 'AU - Activity Units' },
   { value: 'HOUR', label: 'HOUR - Hours' },
   { value: 'DAY', label: 'DAY - Days' },
   { value: 'MONTH', label: 'MONTH - Months' },

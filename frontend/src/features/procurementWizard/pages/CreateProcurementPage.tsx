@@ -1004,8 +1004,9 @@ export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: Procu
     { value: 'BOQ', label: 'Multi-line BOQ (Bill of Quantities)' }
   ],
   RFP: [
+    { value: 'SINGLE_ITEM', label: 'Lump-Sum SOW (Single Commercial Turnkey Quote)' },
     { value: 'BOQ', label: 'Multi-line BOQ (Milestones & Deliverables)' },
-    { value: 'SOR', label: 'Schedule of Rates (SOR)' }
+    { value: 'SOR', label: 'Schedule of Rates (SOR Rate Card)' }
   ],
   OPEN_TENDER: [
     { value: 'SINGLE_ITEM', label: 'Single Item / Direct Catalog' },
@@ -1029,6 +1030,27 @@ export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: Procu
     { value: 'BOQ', label: 'Multi-line BOQ' },
     { value: 'SOR', label: 'Schedule of Rates (SOR)' }
   ]
+};
+
+export const getPricingFormatLabel = (
+  format: ProcurementPricingFormatValue,
+  category: ProcurementCategoryValue = 'GOODS',
+  baseLabel?: string
+): string => {
+  if (format === 'SINGLE_ITEM') {
+    if (category === 'SERVICES') return 'Lump-Sum Contract (Single SOW / Turnkey Scope)';
+    if (category === 'WORKS') return 'Lump-Sum EPC / Turnkey Works';
+    return baseLabel || 'Single Item / Direct Catalog';
+  }
+  if (format === 'BOQ') {
+    if (category === 'SERVICES') return 'Multi-line BOQ (Milestones & Deliverables)';
+    if (category === 'WORKS') return 'Works Schedule / Bill of Quantities (BOQ)';
+    return baseLabel || 'Multi-line BOQ (Bill of Quantities)';
+  }
+  if (format === 'SOR') {
+    return baseLabel || 'Schedule of Rates (SOR Rate Card)';
+  }
+  return baseLabel || format;
 };
 
 const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft => {
@@ -2030,7 +2052,7 @@ export default function CreateProcurementPage() {
         }
       }
       const isBoqSchedule = d.basics.pricingFormat === 'BOQ' || d.basics.pricingFormat === 'SOR';
-      const isServiceContract = d.basics.procurementCategory === 'SERVICES';
+      const isServiceContract = d.basics.procurementCategory === 'SERVICES' || d.type === 'RFP';
       if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
           toast.error(d.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
@@ -2061,6 +2083,31 @@ export default function CreateProcurementPage() {
         if (!isRateContractMethod(d.type) && !d.serviceDetails.duration.trim()) {
           toast.error('Service duration is required.');
           return false;
+        }
+
+        // Auto-initialize single SOW service line item if empty so downstream PO/Bid data is complete
+        if (d.items.length === 0) {
+          const est = Number(d.basics.estimatedValue || 0);
+          const baseRate = est > 0 ? Math.round((est / 1.18) * 100) / 100 : 0;
+          d.items.push({
+            id: 'sow-master-line',
+            itemType: 'Service',
+            name: effectiveTitle,
+            specification: d.serviceDetails.scopeOfWork || 'As per attached Scope of Work (SOW) specification document and SLA terms.',
+            quantity: 1,
+            unit: 'Job',
+            unitPrice: baseRate,
+            gst: 18,
+            deliveryDate: nextFortnight,
+            brandPolicy: 'Equivalent allowed',
+            technicalSpecification: d.serviceDetails.scopeOfWork || '',
+            specificationFileName: d.serviceDetails.sowFileName || '',
+            hsn_sac_code: '9983',
+            brand_preference: '',
+            brand_flexible: 'Yes',
+            fileAssetId: d.serviceDetails.sowFileAssetId || null,
+            attachments: [],
+          });
         }
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) {
@@ -3116,6 +3163,7 @@ function BasicsStepForm({
             onChange={e => {
               const val = e.target.value as ProcurementPricingFormatValue;
               const isBoqType = val === 'BOQ' || val === 'SOR';
+              const isService = (draft.basics.procurementCategory || 'GOODS') === 'SERVICES' || draft.type === 'RFP';
 
               updateDraft(c => ({
                 ...c,
@@ -3124,7 +3172,22 @@ function BasicsStepForm({
                   pricingFormat: val
                 },
                 boqTable: isBoqType && c.boqTable.length === 0
-                  ? [{ srNo: 1, description: '', category: c.basics.category || 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
+                  ? [{
+                      srNo: 1,
+                      description: isService ? (c.serviceDetails.serviceTitle || c.basics.title || 'Service Scope as per SOW') : '',
+                      category: c.basics.category || (isService ? 'Service' : 'General'),
+                      quantity: 1,
+                      uom: isService ? 'Job' : 'Nos',
+                      estimatedRate: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0,
+                      taxPercent: 18,
+                      hsnSacCode: isService ? '9983' : '',
+                      attachments: [],
+                      fileAssetId: null,
+                      fileName: '',
+                      fileSize: null,
+                      total: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) * 1.18 : 0,
+                      remarks: ''
+                    }]
                   : !isBoqType
                     ? []
                     : c.boqTable
@@ -3135,12 +3198,12 @@ function BasicsStepForm({
           >
             {allowedFormats.map(opt => (
               <option key={opt.value} value={opt.value}>
-                {opt.label}
+                {getPricingFormatLabel(opt.value, draft.basics.procurementCategory, opt.label)}
               </option>
             ))}
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Pricing structure: Direct Item quote, Multi-line BOQ schedule, or Schedule of Rates (SOR).
+            Pricing structure: Lump-Sum SOW contract, Multi-line BOQ / Milestones schedule, or Schedule of Rates (SOR).
           </p>
         </Field>
 
@@ -5837,17 +5900,121 @@ function ItemsDetailsForm({
   };
 
   // BOQ Handlers
+  const handlePreFillTurnkeySOW = () => {
+    const title = draft.serviceDetails.serviceTitle || draft.basics.title || 'Turnkey Scope as per attached Scope of Work (SOW)';
+    const est = Number(draft.basics.estimatedValue || 0);
+    const tax = 18;
+    const baseRate = est > 0 ? Math.round((est / (1 + tax / 100)) * 100) / 100 : 0;
+    const sowAtts = draft.serviceDetails.sowFileAssetId ? [{
+      id: makeId(),
+      name: 'Scope of Work Dossier',
+      fileAssetId: draft.serviceDetails.sowFileAssetId,
+      fileName: draft.serviceDetails.sowFileName || 'SOW.pdf',
+      fileSize: 0,
+      mimeType: 'application/pdf',
+      uploadedAt: new Date().toISOString(),
+      url: draft.serviceDetails.sowFileUrl || `/api/files/${draft.serviceDetails.sowFileAssetId}`,
+    }] : [];
+
+    updateDraft(c => ({
+      ...c,
+      boqTable: [{
+        srNo: 1,
+        description: title,
+        category: c.basics.category || 'Service',
+        quantity: 1,
+        uom: 'JOB',
+        estimatedRate: baseRate,
+        taxPercent: tax,
+        hsnSacCode: '9983',
+        attachments: sowAtts,
+        fileAssetId: c.serviceDetails.sowFileAssetId || null,
+        fileName: c.serviceDetails.sowFileName || '',
+        fileSize: null,
+        total: est > 0 ? est : 0,
+        remarks: 'Complete turnkey scope governed by attached SOW and SLA terms'
+      }]
+    }));
+    toast.success('Pre-filled 1 Turnkey SOW commercial line synchronized with budget');
+  };
+
+  const handlePreFillMilestones = () => {
+    const est = Number(draft.basics.estimatedValue || 0);
+    const tax = 18;
+    const baseEst = est > 0 ? Math.round((est / (1 + tax / 100)) * 100) / 100 : 0;
+    const m1Rate = Math.round(baseEst * 0.20 * 100) / 100;
+    const m2Rate = Math.round(baseEst * 0.50 * 100) / 100;
+    const m3Rate = Math.round((baseEst - m1Rate - m2Rate) * 100) / 100;
+
+    const milestones = [
+      {
+        srNo: 1,
+        description: 'Milestone 1: Project Kick-off, Architecture & Specification Sign-off (20%)',
+        category: draft.basics.category || 'Service',
+        quantity: 1,
+        uom: 'LOT',
+        estimatedRate: m1Rate,
+        taxPercent: tax,
+        hsnSacCode: '9983',
+        attachments: [],
+        fileAssetId: null,
+        fileName: '',
+        fileSize: null,
+        total: Math.round(m1Rate * (1 + tax / 100)),
+        remarks: 'Phase 1 deliverables acceptance'
+      },
+      {
+        srNo: 2,
+        description: 'Milestone 2: Core Execution, Solution Delivery & User Acceptance Testing (UAT) (50%)',
+        category: draft.basics.category || 'Service',
+        quantity: 1,
+        uom: 'LOT',
+        estimatedRate: m2Rate,
+        taxPercent: tax,
+        hsnSacCode: '9983',
+        attachments: [],
+        fileAssetId: null,
+        fileName: '',
+        fileSize: null,
+        total: Math.round(m2Rate * (1 + tax / 100)),
+        remarks: 'Phase 2 core milestones'
+      },
+      {
+        srNo: 3,
+        description: 'Milestone 3: Final Deployment, Handover, Training & Sign-off (30%)',
+        category: draft.basics.category || 'Service',
+        quantity: 1,
+        uom: 'LOT',
+        estimatedRate: m3Rate,
+        taxPercent: tax,
+        hsnSacCode: '9983',
+        attachments: [],
+        fileAssetId: null,
+        fileName: '',
+        fileSize: null,
+        total: Math.round(m3Rate * (1 + tax / 100)),
+        remarks: 'Phase 3 final sign-off & warranty'
+      }
+    ];
+
+    updateDraft(c => ({
+      ...c,
+      boqTable: milestones
+    }));
+    toast.success('Pre-filled 3 standard milestone stages (20% - 50% - 30%)');
+  };
+
   const handleAddBOQRow = () => {
     updateDraft(c => {
       const nextTable = [...c.boqTable, {
         srNo: c.boqTable.length + 1,
         description: '',
-        category: c.basics.category || 'General',
+        category: c.basics.category || (isService ? 'Service' : 'General'),
         quantity: 1,
-        uom: 'Nos',
+        uom: isService ? 'JOB' : 'Nos',
         estimatedRate: 0,
         taxPercent: 18,
-        hsnSacCode: '',
+        hsnSacCode: isService ? '9983' : '',
         attachments: [],
         fileAssetId: null,
         fileName: '',
@@ -6243,10 +6410,135 @@ function ItemsDetailsForm({
     return baseColumns;
   }, [isService, handleDuplicateItem, handleRemoveItem]);
 
+  const allowedFormats = useMemo(() => {
+    return FORMATS_BY_METHOD[draft.type] || FORMATS_BY_METHOD.RFQ;
+  }, [draft.type]);
+
+  const pricingStructureSwitcher = (
+    <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-slate-50/40 to-slate-100/50 p-3 sm:p-4 shadow-3xs space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-slate-100 pb-2.5">
+        <div>
+          <div className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-[#0b2447]" />
+            <span className="text-xs font-black uppercase tracking-wider text-slate-900">
+              Commercial Pricing Structure
+            </span>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-800">
+              {draft.type} Commercial Model
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+            Select how participating bidders submit commercial quotes. Switch anytime between Lump-Sum SOW and Itemized Schedules.
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+        {allowedFormats.map(fmt => {
+          const isSelected = (draft.basics.pricingFormat || 'SINGLE_ITEM') === fmt.value;
+          const isLump = fmt.value === 'SINGLE_ITEM';
+          const isBoq = fmt.value === 'BOQ';
+          const isSor = fmt.value === 'SOR';
+
+          let title = getPricingFormatLabel(fmt.value, draft.basics.procurementCategory, fmt.label);
+          let desc = '';
+          let badge = '';
+
+          if (isLump) {
+            title = isService ? 'Lump-Sum Total Contract (SOW Scope)' : 'Single Item / Direct Quote';
+            desc = isService 
+              ? 'Bidders quote a single total contract fee + GST covering the attached SOW. No itemized breakdown required.'
+              : 'Bidders quote a single unit price for the specified catalog item.';
+            badge = isService ? 'GeM / Ariba Standard' : 'Direct Quote';
+          } else if (isBoq) {
+            title = isService ? 'Milestones & Deliverables Schedule' : (isWorks ? 'Works Schedule / BOQ' : 'Multi-line BOQ Schedule');
+            desc = isService
+              ? 'Itemized schedule of project phases, milestone stages, or deliverable modules.'
+              : 'Spreadsheet schedule of materials, quantities, and itemized unit rates.';
+            badge = isService ? 'Milestone Quoting' : 'Itemized BOQ';
+          } else if (isSor) {
+            title = 'Schedule of Rates (SOR Rate Card)';
+            desc = 'Establishes legally binding price ceiling unit rates for call-off releases.';
+            badge = 'Rate Agreement';
+          }
+
+          return (
+            <button
+              key={fmt.value}
+              type="button"
+              onClick={() => {
+                const isBoqType = fmt.value === 'BOQ' || fmt.value === 'SOR';
+                updateDraft(c => ({
+                  ...c,
+                  basics: { ...c.basics, pricingFormat: fmt.value },
+                  boqTable: isBoqType && c.boqTable.length === 0
+                    ? [{
+                        srNo: 1,
+                        description: isService ? (c.serviceDetails.serviceTitle || c.basics.title || 'Service Scope as per SOW') : '',
+                        category: c.basics.category || (isService ? 'Service' : 'General'),
+                        quantity: 1,
+                        uom: isService ? 'JOB' : 'Nos',
+                        estimatedRate: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0,
+                        taxPercent: 18,
+                        hsnSacCode: isService ? '9983' : '',
+                        attachments: [],
+                        fileAssetId: null,
+                        fileName: '',
+                        fileSize: null,
+                        total: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) * 1.18 : 0,
+                        remarks: ''
+                      }]
+                    : c.boqTable
+                }));
+                toast.info(`Switched commercial structure to: ${title}`);
+              }}
+              className={cn(
+                "text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative",
+                isSelected
+                  ? "border-[#0b2447] bg-[#0b2447]/5 shadow-sm ring-1 ring-[#0b2447]"
+                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"
+              )}
+            >
+              <div className="space-y-1">
+                <div className="flex items-center justify-between gap-1">
+                  <span className={cn("text-xs font-black", isSelected ? "text-[#0b2447]" : "text-slate-800")}>
+                    {title}
+                  </span>
+                  <span className={cn(
+                    "text-[9.5px] font-extrabold px-1.5 py-0.5 rounded",
+                    isSelected ? "bg-[#0b2447] text-white" : "bg-slate-100 text-slate-600"
+                  )}>
+                    {badge}
+                  </span>
+                </div>
+                <p className="text-[10.5px] text-slate-500 font-medium leading-snug">
+                  {desc}
+                </p>
+              </div>
+              <div className="pt-2 flex items-center gap-1.5 mt-auto">
+                <span className={cn(
+                  "h-2 w-2 rounded-full",
+                  isSelected ? "bg-emerald-500 ring-2 ring-emerald-200" : "bg-slate-300"
+                )} />
+                <span className={cn("text-[10px] font-bold", isSelected ? "text-emerald-700" : "text-slate-400")}>
+                  {isSelected ? "Active Commercial Model" : "Click to select"}
+                </span>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  const isBoqMode = isBoqOrSor || (isWorks && pricingFormat !== 'SINGLE_ITEM');
+
   // 1. BOQ Table Mode (for BOQ Sourced, SOR, or Works Contracts)
-  if (isBoqOrSor || isWorks) {
+  if (isBoqMode) {
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
+        {pricingStructureSwitcher}
+
         {/* Scope of Work (SOW) Dossier Section for RFP, Works, or BOQ */}
         <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -6298,10 +6590,11 @@ function ItemsDetailsForm({
           </div>
 
           {draft.serviceDetails.sowFileName && (
-            <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl animate-fadeIn">
+            <div className="flex items-center gap-2 text-xs font-bold text-emerald-900 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl animate-fadeIn flex-wrap sm:flex-nowrap">
               <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" aria-hidden="true" />
               <span className="truncate">Attached SOW: <strong>{draft.serviceDetails.sowFileName}</strong></span>
-              <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold shrink-0">Scope Satisfied</span>
+              <span className="ml-1 text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-semibold shrink-0">SOW Dossier Attached</span>
+              <span className="text-[10.5px] text-emerald-700 font-semibold hidden md:inline ml-1">✓ Terms &amp; Scope satisfied. Specify pricing rows below.</span>
               {draft.serviceDetails.sowFileAssetId && (
                 <button
                   type="button"
@@ -6340,13 +6633,42 @@ function ItemsDetailsForm({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
-              {isWorks ? 'Works Schedule / Bill of Quantities (BOQ)' : 'Structured Bill of Quantities (BOQ)'}
+              {isWorks ? 'Works Schedule / Bill of Quantities (BOQ)' : (isService ? 'Milestones & Deliverables Schedule (BOQ)' : 'Structured Bill of Quantities (BOQ)')}
             </h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
-              {isWorks ? 'Itemized schedule of construction, fabrication, or execution trades' : 'Invite quotes using an itemized spreadsheet schedule'}
+              {isWorks
+                ? 'Itemized schedule of construction, fabrication, or execution trades'
+                : isService
+                ? 'Itemized schedule of service milestones, deliverables, or payment stages'
+                : 'Invite quotes using an itemized spreadsheet schedule'}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0 flex-nowrap overflow-x-auto no-scrollbar">
+            {isService && (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreFillTurnkeySOW}
+                  className="h-8.5 text-xs font-bold text-purple-900 border-purple-200 bg-purple-50 hover:bg-purple-100 shrink-0 whitespace-nowrap"
+                  title="Pre-fill 1 Turnkey commercial line item synchronized with budget and SOW"
+                >
+                  <Sparkles className="h-3.5 w-3.5 mr-1 text-purple-600" aria-hidden="true" /> Turnkey SOW Line
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreFillMilestones}
+                  className="h-8.5 text-xs font-bold text-indigo-900 border-indigo-200 bg-indigo-50 hover:bg-indigo-100 shrink-0 whitespace-nowrap"
+                  title="Pre-fill standard 3-stage milestone schedule (20% - 50% - 30%)"
+                >
+                  <Repeat className="h-3.5 w-3.5 mr-1 text-indigo-600" aria-hidden="true" /> Milestones (3 Stages)
+                </Button>
+              </>
+            )}
+
             <Button
               type="button"
               variant="outline"
@@ -6906,6 +7228,7 @@ function ItemsDetailsForm({
   // 2. Item / Service Schedule Mode
   return (
     <div className="space-y-5 w-full min-w-0 max-w-full">
+      {pricingStructureSwitcher}
       {serviceDetailsPanel}
       <div className="border-b border-slate-100 pb-3.5 space-y-3">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
@@ -9752,7 +10075,7 @@ function PreviewPublishForm({
         priority={draft.basics.priority}
         requiredBy={draft.basics.requiredByDate}
         location={draft.basics.deliveryLocation}
-        itemsCount={(draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.procurementCategory === 'WORKS') ? draft.boqTable.length : draft.items.length}
+        itemsCount={(draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || (draft.basics.procurementCategory === 'WORKS' && draft.basics.pricingFormat !== 'SINGLE_ITEM')) ? draft.boqTable.length : (draft.items.length || ((draft.basics.procurementCategory === 'SERVICES' || draft.type === 'RFP') ? 1 : 0))}
         suppliersCount={draft.vendors.invitedSellers.length}
         docsCount={draft.requiredDocs.length}
       />
@@ -9959,9 +10282,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
   const estimatedValue = draft.basics.estimatedValue || 0;
 
   // Handle BOQ item list vs Standard item list
-  const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || draft.basics.procurementCategory === 'WORKS';
-  // ISSUE-04 fix: auto-synthesize master SOW service line when category is SERVICES and no items exist
-  const isEmptyServiceSow = !isBoqBased && draft.basics.procurementCategory === 'SERVICES' && draft.items.length === 0;
+  const isBoqBased = draft.basics.pricingFormat === 'BOQ' || draft.basics.pricingFormat === 'SOR' || (draft.basics.procurementCategory === 'WORKS' && draft.basics.pricingFormat !== 'SINGLE_ITEM');
+  // Auto-synthesize master SOW service line when category is SERVICES or method is RFP and no items exist
+  const isEmptyServiceSow = !isBoqBased && (draft.basics.procurementCategory === 'SERVICES' || draft.type === 'RFP') && draft.items.length === 0;
   const mappedItems = isBoqBased
     ? draft.boqTable.map(item => ({
         itemName: item.description,
