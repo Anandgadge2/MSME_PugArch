@@ -23,6 +23,9 @@ This directory contains the canonical architectural specifications, procurement 
 5. [CVC_EPROCUREMENT_COMPLIANCE_JUSTIFICATION.md](file:///c:/Pugarch/MSME_Portal_PugArch/MSME_PugArch/docs/CVC_EPROCUREMENT_COMPLIANCE_JUSTIFICATION.md)
    - Formal statutory memorandum for STQC and CVC auditors regarding dual-factor OTP authentication equivalence to Class-3 DSC hardware tokens for MSME inclusion.
 
+6. [GFR_COMPLIANT_PROCUREMENT_IMPLEMENTATION_PLAN.md](file:///c:/Pugarch/MSME_Portal_PugArch/MSME_PugArch/docs/GFR_COMPLIANT_PROCUREMENT_IMPLEMENTATION_PLAN.md)
+   - Master 10/10 sovereign grade procurement implementation plan covering GFR 171 (PBG & 5% MSME Retention), GFR 172 (Advance Mobilization), GFR 175 (Automated LD), CVC L1 Negotiation, Maker-Checker authorization, and Anti-Fraud UTR verification.
+
 ---
 
 ## ⚖️ Legal Agreements & Compliance Policies
