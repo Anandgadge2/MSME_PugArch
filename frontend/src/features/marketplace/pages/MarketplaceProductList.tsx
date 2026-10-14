@@ -1273,11 +1273,11 @@ export default function MarketplaceProductList() {
                                                         )}
                                                     </div>
 
-                                                    {/* Realistic Centered Product Image */}
+                                                    {/* Realistic Centered Product Image with Smooth Rounded Edges */}
                                                     <Link
                                                         href={detailUrl}
                                                         onClick={() => { if (!isFallback) cacheAndTrackItem(item); }}
-                                                        className="relative block h-28 sm:h-44 w-full bg-white flex items-center justify-center overflow-hidden my-1.5 sm:my-2 cursor-pointer"
+                                                        className="relative flex h-32 sm:h-44 w-full items-center justify-center overflow-hidden rounded-xl bg-slate-50/60 border border-slate-100/80 my-1.5 sm:my-2 cursor-pointer isolate [transform:translateZ(0)]"
                                                     >
                                                         {imageUrl ? (
                                                             <img
@@ -1288,7 +1288,7 @@ export default function MarketplaceProductList() {
                                                                 onError={(e) => {
                                                                     e.currentTarget.src = resolveMarketplaceImage({}, 'product');
                                                                 }}
-                                                                className="max-h-full max-w-full object-contain p-1.5 sm:p-2 transition-transform duration-300 group-hover:scale-105"
+                                                                className="h-full w-full object-cover rounded-xl transition-transform duration-300 group-hover:scale-105 will-change-transform"
                                                             />
                                                         ) : (
                                                             <Package className="h-10 w-10 sm:h-16 sm:w-16 text-slate-300" />

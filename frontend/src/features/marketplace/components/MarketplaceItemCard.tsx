@@ -120,7 +120,7 @@ export function MarketplaceItemCard({
                 <Link
                     href={detailHref}
                     onClick={cacheDetail}
-                    className="relative block h-32 sm:h-36 w-full overflow-hidden rounded-lg flex items-center justify-center shrink-0 cursor-pointer isolate [transform:translateZ(0)]"
+                    className="relative block h-32 sm:h-36 w-full overflow-hidden rounded-xl bg-slate-50/60 border border-slate-100/80 flex items-center justify-center shrink-0 cursor-pointer isolate [transform:translateZ(0)]"
                 >
                     {imageUrl ? (
                         <img
@@ -132,7 +132,7 @@ export function MarketplaceItemCard({
                             decoding="async"
                             fetchPriority={priority ? 'high' : 'auto'}
                             onError={() => setImageFailed(true)}
-                            className="h-full w-full object-cover rounded-lg transition-transform duration-300 ease-out group-hover:scale-105 will-change-transform [transform:translateZ(0)]"
+                            className="h-full w-full object-cover rounded-xl transition-transform duration-300 ease-out group-hover:scale-105 will-change-transform [transform:translateZ(0)]"
                         />
                     ) : (
                         <span className="flex h-full w-full items-center justify-center text-slate-300">
