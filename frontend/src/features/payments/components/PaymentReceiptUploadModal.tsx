@@ -67,9 +67,6 @@ export function PaymentReceiptUploadModal({
 }: PaymentReceiptUploadModalProps) {
   const { user } = useAuth();
 
-  // Strict role enforcement: Sellers can NEVER upload payment proof
-  if (!isOpen || user?.role === 'seller') return null;
-
   const isGlobalSelectorMode = !invoice && !order && !payment;
 
   const [referenceType, setReferenceType] = useState<'PO' | 'INVOICE'>('PO');
@@ -201,7 +198,7 @@ export function PaymentReceiptUploadModal({
     return 'Record Offline Payment';
   }, [invoice, order, payment, isGlobalSelectorMode, referenceType, selectedOrder, selectedInvoice]);
 
-  if (!isOpen) return null;
+  if (!isOpen || user?.role === 'seller') return null;
 
   const handleClose = () => {
     setSelectedOrderId('');

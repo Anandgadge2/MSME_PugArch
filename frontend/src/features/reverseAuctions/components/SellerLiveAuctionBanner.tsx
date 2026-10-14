@@ -37,10 +37,6 @@ export default function SellerLiveAuctionBanner({
   isDisqualified,
   isNonParticipant,
 }: SellerLiveAuctionBannerProps) {
-  if (isDisqualified || isNonParticipant) {
-    return null;
-  }
-
   const [summary, setSummary] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -58,10 +54,11 @@ export default function SellerLiveAuctionBanner({
   };
 
   useEffect(() => {
+    if (isDisqualified || isNonParticipant) return;
     fetchLiveSummary();
     const interval = setInterval(fetchLiveSummary, 3000);
     return () => clearInterval(interval);
-  }, [auctionId]);
+  }, [auctionId, isDisqualified, isNonParticipant]);
 
   const auction: ReverseAuction | undefined = summary?.auction;
   const participant: ReverseAuctionParticipant | undefined = summary?.participant;
@@ -75,6 +72,7 @@ export default function SellerLiveAuctionBanner({
   const isLive = status === 'LIVE' && !isScheduled;
 
   useEffect(() => {
+    if (isDisqualified || isNonParticipant) return;
     const targetMs = isScheduled ? startTimeMs : endTimeMs;
     if (!targetMs) return;
 
@@ -121,6 +119,10 @@ export default function SellerLiveAuctionBanner({
       return String(auction.startTime);
     }
   }, [auction?.startTime]);
+
+  if (isDisqualified || isNonParticipant) {
+    return null;
+  }
 
   if (loading && !summary) {
     return null;

@@ -107,9 +107,6 @@ export function CreateInvoiceModal({
 }: CreateInvoiceModalProps) {
   const { user } = useAuth();
 
-  // Strict role enforcement: Buyers can NEVER create tax invoices
-  if (!open || user?.role === 'buyer') return null;
-
   // Live Financial Computations
   const numAmount = useMemo(() => {
     const parsed = parseFloat(invoiceAmount);
@@ -170,7 +167,7 @@ export function CreateInvoiceModal({
     ? (selectedPurchaseOrder?.totalValue || selectedPurchaseOrder?.amount || 0)
     : ((Number(selectedQuotation?.offeredPrice || 0) * Number(selectedQuotation?.offeredQuantity || 1)) || Number(selectedQuotation?.offeredPrice || 0));
 
-  if (!open) return null;
+  if (!open || user?.role === 'buyer') return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">
