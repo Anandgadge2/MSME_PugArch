@@ -433,7 +433,7 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
         poStatus: 'ISSUED',
         sourceType: 'procurement_bid_award',
         sourceId: award.id,
-        bidId: bid.id ? Number(bid.id) : null,
+        bidId: null,
         expectedDelivery: bid.bidValidityDate || bid.financialOpeningDate || null,
         deliveryAddress: bid.deliveryLocation || 'India',
         paymentTerms: Array.isArray(bid.termsAndConditions)
@@ -502,10 +502,29 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
         remarks: 'Delivery shell created from procurement award.'
       }
     });
-    await tx.procurementBid.update({
-      where: { id: bid.id },
-      data: { status: 'PO_GENERATED' }
-    });
+    if (bid.isBuyerRequirement) {
+      await tx.buyerRequirement.update({
+        where: { id: bid.id },
+        data: { status: 'PO_GENERATED' }
+      }).catch(() => null);
+    } else {
+      await tx.procurementBid.update({
+        where: { id: bid.id },
+        data: { status: 'PO_GENERATED' }
+      });
+    }
+    if (participation?.id) {
+      await tx.procurementBidParticipation.update({
+        where: { id: participation.id },
+        data: { finalStatus: 'ORDERED' }
+      }).catch(() => null);
+    }
+    if (award?.id) {
+      await tx.procurementBidAward.update({
+        where: { id: award.id },
+        data: { awardStatus: 'ACCEPTED' }
+      }).catch(() => null);
+    }
     await tx.procurementAuditLog.create({
       data: {
         userId: req.user?.id,
