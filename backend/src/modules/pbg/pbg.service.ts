@@ -221,6 +221,10 @@ export class PbgService {
       throw new ApiError(403, 'Checker approval is restricted to authorized Finance / Admin officers', 'ADMIN_ONLY');
     }
 
+    if (pbg.makerReviewerId && pbg.makerReviewerId === actor.id) {
+      throw new ApiError(403, 'Maker-Checker violation: Checker cannot be the same user who initiated Maker review', 'MAKER_CHECKER_VIOLATION');
+    }
+
     const updated = await db.performanceGuarantee.update({
       where: { id: pbgId },
       data: {

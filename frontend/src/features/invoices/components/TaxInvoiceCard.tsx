@@ -7,6 +7,12 @@ export interface TaxInvoiceCardProps {
   invoiceNumber: string;
   dateStr: string;
   placeOfSupply?: string;
+  isAdvanceProforma?: boolean;
+  advanceDeduction?: number;
+  ldDeduction?: number;
+  retentionDeduction?: number;
+  gstTdsAmount?: number;
+  netPayableAmount?: number;
   seller: {
     name: string;
     address: string;
@@ -60,6 +66,12 @@ export function TaxInvoiceCard({
   invoiceNumber,
   dateStr,
   placeOfSupply = 'Maharashtra(27)',
+  isAdvanceProforma = false,
+  advanceDeduction = 0,
+  ldDeduction = 0,
+  retentionDeduction = 0,
+  gstTdsAmount = 0,
+  netPayableAmount,
   seller,
   billTo,
   shipTo,
@@ -174,8 +186,13 @@ export function TaxInvoiceCard({
       {/* 2. TITLE BAR: Tax Invoice - [Copy Type] */}
       <div className="py-2.5 px-4 text-center border-b-2 border-slate-900 bg-white">
         <h1 className="text-sm md:text-base font-black text-slate-950 uppercase tracking-wide">
-          Tax Invoice - {copyType || 'Original Copy'}
+          {isAdvanceProforma ? 'PROFORMA INVOICE FOR ADVANCE MOBILIZATION (GFR RULE 172)' : `Tax Invoice - ${copyType || 'Original Copy'}`}
         </h1>
+        {isAdvanceProforma && (
+          <p className="text-[10px] font-bold text-blue-900 mt-0.5">
+            Advance Mobilization Proforma • Adjusted against final supply delivery invoice
+          </p>
+        )}
       </div>
 
       {/* 3. METADATA ROW: INV No, Date (left), Place Of Supply (right) */}
@@ -351,13 +368,81 @@ export function TaxInvoiceCard({
         <div className="flex justify-end border-b-2 border-slate-900 bg-slate-50/50">
           <div className="w-full md:w-80 flex">
             <div className="flex-1 p-2.5 px-3 text-right font-black text-xs border-r-2 border-slate-900">
-              Total Amount
+              {((Number(advanceDeduction) || 0) > 0 || (Number(ldDeduction) || 0) > 0 || (Number(retentionDeduction) || 0) > 0 || (Number(gstTdsAmount) || 0) > 0) ? 'Gross Invoice Total' : 'Total Amount'}
             </div>
             <div className="w-32 p-2.5 px-3 text-right font-mono font-black text-xs text-slate-950">
               {formatNumber(totalAmount)}
             </div>
           </div>
         </div>
+
+        {/* GFR Deductions Breakdown */}
+        {((Number(advanceDeduction) || 0) > 0 || (Number(ldDeduction) || 0) > 0 || (Number(retentionDeduction) || 0) > 0 || (Number(gstTdsAmount) || 0) > 0) && (
+          <>
+            {(Number(advanceDeduction) || 0) > 0 && (
+              <div className="flex justify-end border-b border-slate-900 bg-blue-50/40">
+                <div className="w-full md:w-80 flex">
+                  <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900 text-blue-900">
+                    Less: Advance Mobilization Adjusted (GFR 172)
+                  </div>
+                  <div className="w-32 p-2 px-3 text-right font-mono font-bold text-xs text-blue-950">
+                    - {formatNumber(advanceDeduction)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(Number(ldDeduction) || 0) > 0 && (
+              <div className="flex justify-end border-b border-slate-900 bg-rose-50/40">
+                <div className="w-full md:w-80 flex">
+                  <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900 text-rose-900">
+                    Less: Liquidated Damages for Delay (GFR 175)
+                  </div>
+                  <div className="w-32 p-2 px-3 text-right font-mono font-bold text-xs text-rose-950">
+                    - {formatNumber(ldDeduction)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(Number(retentionDeduction) || 0) > 0 && (
+              <div className="flex justify-end border-b border-slate-900 bg-amber-50/40">
+                <div className="w-full md:w-80 flex">
+                  <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900 text-amber-900">
+                    Less: MSME 5% Retention Money in Escrow (GFR 171)
+                  </div>
+                  <div className="w-32 p-2 px-3 text-right font-mono font-bold text-xs text-amber-950">
+                    - {formatNumber(retentionDeduction)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {(Number(gstTdsAmount) || 0) > 0 && (
+              <div className="flex justify-end border-b border-slate-900 bg-slate-50">
+                <div className="w-full md:w-80 flex">
+                  <div className="flex-1 p-2 px-3 text-right font-bold text-xs border-r-2 border-slate-900 text-slate-800">
+                    Less: GST-TDS (2% Withholding)
+                  </div>
+                  <div className="w-32 p-2 px-3 text-right font-mono font-bold text-xs text-slate-950">
+                    - {formatNumber(gstTdsAmount)}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end border-b-2 border-slate-900 bg-emerald-50/60">
+              <div className="w-full md:w-80 flex">
+                <div className="flex-1 p-2.5 px-3 text-right font-black text-xs border-r-2 border-slate-900 text-emerald-950">
+                  Net Disbursable Balance
+                </div>
+                <div className="w-32 p-2.5 px-3 text-right font-mono font-black text-xs text-emerald-950">
+                  {formatNumber(netPayableAmount ?? (totalAmount - (advanceDeduction || 0) - (ldDeduction || 0) - (retentionDeduction || 0) - (gstTdsAmount || 0)))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* 7. FOOTER SECTION: Bank Details (Left) & Stamp / Signature (Right) */}

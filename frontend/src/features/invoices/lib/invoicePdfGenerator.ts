@@ -49,6 +49,12 @@ export interface TaxInvoiceData {
   igstAmount?: number;
   otherTaxAmount?: number;
   totalAmount: number;
+  isAdvanceProforma?: boolean;
+  advanceDeduction?: number;
+  ldDeduction?: number;
+  retentionDeduction?: number;
+  gstTdsAmount?: number;
+  netPayableAmount?: number;
   bankDetails: {
     bankName: string;
     accountNo: string;

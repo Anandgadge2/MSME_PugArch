@@ -30,6 +30,7 @@ import {
   Lock,
   ShieldCheck,
   ExternalLink,
+  Scale
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { toast } from 'sonner';
@@ -40,6 +41,8 @@ import { FocusTrap } from '../../../components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { useRouter } from 'next/navigation';
 import { prewarmFileAssetPreview } from '../../../lib/files';
+import { PbgManagementCard } from './PbgManagementCard';
+import { L1NegotiationModal } from './L1NegotiationModal';
 
 export interface PurchaseOrderItemDto {
   id?: number;
@@ -210,7 +213,8 @@ export function PurchaseOrderReceiptModal({
     return !hasSeller || !hasItems;
   });
 
-  const [activeTab, setActiveTab] = useState<'receipt' | 'audit'>('receipt');
+  const [activeTab, setActiveTab] = useState<'receipt' | 'audit' | 'gfr'>('receipt');
+  const [isNegotiationModalOpen, setIsNegotiationModalOpen] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [canvasBg, setCanvasBg] = useState<'light' | 'dark'>('light');
 
@@ -348,6 +352,21 @@ export function PurchaseOrderReceiptModal({
       setOrder(initialOrder);
     }
   }, [initialOrder]);
+
+  const reloadDetails = async () => {
+    if (!initialOrder?.id) return;
+    try {
+      const res = await api.get(`/api/purchase-orders/${initialOrder.id}`);
+      const body = await readJsonResponse(res);
+      const fullData = (body as any)?.data || body;
+      if (fullData && fullData.id) {
+        poDetailCache.set(initialOrder.id, fullData);
+        setOrder(prev => ({ ...(prev || initialOrder), ...fullData }));
+      }
+    } catch (err) {
+      console.warn('Failed to refresh PO details', err);
+    }
+  };
 
   // Fetch full details whenever the modal opens to guarantee all organization relations are populated
   useEffect(() => {
@@ -920,6 +939,20 @@ export function PurchaseOrderReceiptModal({
                 <span className="hidden sm:inline">Audit & Tracking</span>
                 <span className="sm:hidden">Audit</span>
               </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('gfr')}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-black uppercase tracking-wider transition-all cursor-pointer whitespace-nowrap',
+                  activeTab === 'gfr'
+                    ? 'bg-white text-slate-950 shadow-sm'
+                    : 'text-white/80 hover:text-white hover:bg-white/5'
+                )}
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
+                <span className="hidden sm:inline">GFR Compliance (PBG &amp; LD)</span>
+                <span className="sm:hidden">GFR</span>
+              </button>
             </div>
 
             {/* Zoom / Page Fit Switcher when in Receipt tab */}
@@ -1302,7 +1335,7 @@ export function PurchaseOrderReceiptModal({
             </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === 'audit' ? (
           /* Audit & Workflow Tracking View */
           <div className="min-h-full w-full py-5 sm:py-7 px-3 sm:px-6 lg:px-8 flex justify-center">
             <div className={cn("w-full space-y-5 transition-all duration-200", isFullscreen ? "max-w-6xl 2xl:max-w-7xl" : "max-w-5xl")}>
@@ -1721,6 +1754,17 @@ export function PurchaseOrderReceiptModal({
               </div>
             </div>
           </div>
+        ) : (
+          <div className="min-h-full w-full p-4 sm:p-6 max-w-4xl mx-auto space-y-6">
+            <PbgManagementCard
+              purchaseOrderId={Number(order.id)}
+              poAmount={Number(order.totalValue || order.amount || 0)}
+              isBuyer={Boolean(isBuyer)}
+              isSeller={Boolean(isSeller)}
+              isAdmin={Boolean(user?.role === 'admin' || user?.role === 'master_admin')}
+              onRefresh={reloadDetails}
+            />
+          </div>
         )}
         </div>
 
@@ -1757,6 +1801,14 @@ export function PurchaseOrderReceiptModal({
                 <FileText className="mr-1.5 h-3.5 w-3.5 text-slate-500" /> View Quotation
               </Button>
             )}
+
+            <Button
+              variant="outline"
+              onClick={() => setIsNegotiationModalOpen(true)}
+              className="h-9 border-blue-300 bg-blue-50/90 text-blue-900 hover:bg-blue-100 text-xs font-black uppercase tracking-wider rounded-xl px-3.5 whitespace-nowrap cursor-pointer shadow-xs"
+            >
+              <Scale className="mr-1.5 h-3.5 w-3.5 text-blue-700" /> CVC L1 Negotiation
+            </Button>
 
             {(() => {
               const hasInvoice = Boolean(
@@ -1900,6 +1952,21 @@ export function PurchaseOrderReceiptModal({
         </footer>
       </div>
       </FocusTrap>
+
+      {isNegotiationModalOpen && (
+        <L1NegotiationModal
+          isOpen={isNegotiationModalOpen}
+          onClose={() => setIsNegotiationModalOpen(false)}
+          purchaseOrderId={Number(order.id)}
+          poNumber={order.poNumber || `PO-${order.id}`}
+          originalPrice={Number(order.totalValue || order.amount || 0)}
+          sellerUserId={(order as any).seller?.userId || (order as any).sellerUserId}
+          sellerName={(order as any).seller?.name || (order as any).vendorName}
+          isBuyer={Boolean(isBuyer)}
+          isSeller={Boolean(isSeller)}
+          onSuccess={reloadDetails}
+        />
+      )}
     </div>
   );
 }

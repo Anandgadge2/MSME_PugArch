@@ -72,11 +72,18 @@ export function RecordOrderPaymentModal({
   );
 
   const targetInvoiceId = propInvoiceId || activeInvoice?.id;
+  const isAdvanceProforma = Boolean(activeInvoice?.isAdvanceProforma);
+  const advanceDeduction = Number(activeInvoice?.advanceDeduction || 0);
+  const ldDeduction = Number(activeInvoice?.ldDeduction || 0);
+  const retentionDeduction = Number(activeInvoice?.retentionDeduction || 0);
+  const gstTdsAmount = Number(activeInvoice?.gstTdsAmount || 0);
+
   const targetAmount = Number(
-    activeInvoice?.amount ||
-    activeInvoice?.totalAmount ||
-    order?.amount ||
-    order?.totalValue ||
+    activeInvoice?.netPayableAmount ??
+    activeInvoice?.amount ??
+    activeInvoice?.totalAmount ??
+    order?.amount ??
+    order?.totalValue ??
     0
   );
 
@@ -309,19 +316,46 @@ export function RecordOrderPaymentModal({
           ) : (
             <>
               {/* Amount Due Banner */}
-              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
-                    Total Payable Amount
+              <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-black uppercase text-emerald-800 tracking-wider">
+                      {isAdvanceProforma ? 'Advance Mobilization Amount (GFR 172)' : 'Net Payable Amount'}
+                    </span>
+                    <p className="text-xl font-black text-slate-950">
+                      {formatCurrency(targetAmount)}
+                    </p>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900 border border-emerald-300">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    {isAdvanceProforma ? 'GFR 172 Mobilization' : 'GRN Verified'}
                   </span>
-                  <p className="text-xl font-black text-slate-950">
-                    {formatCurrency(targetAmount)}
-                  </p>
                 </div>
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-900 border border-emerald-300">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  GRN Verified
-                </span>
+
+                {(advanceDeduction > 0 || ldDeduction > 0 || retentionDeduction > 0 || gstTdsAmount > 0) && (
+                  <div className="pt-2 border-t border-emerald-200/60 grid grid-cols-2 gap-2 text-[11px]">
+                    {advanceDeduction > 0 && (
+                      <div className="text-blue-900">
+                        <span className="font-semibold">Advance Deducted:</span> <strong className="font-mono">-{formatCurrency(advanceDeduction)}</strong>
+                      </div>
+                    )}
+                    {ldDeduction > 0 && (
+                      <div className="text-rose-900">
+                        <span className="font-semibold">LD Penalty Deducted:</span> <strong className="font-mono">-{formatCurrency(ldDeduction)}</strong>
+                      </div>
+                    )}
+                    {retentionDeduction > 0 && (
+                      <div className="text-amber-900">
+                        <span className="font-semibold">5% Retention:</span> <strong className="font-mono">-{formatCurrency(retentionDeduction)}</strong>
+                      </div>
+                    )}
+                    {gstTdsAmount > 0 && (
+                      <div className="text-slate-800">
+                        <span className="font-semibold">GST-TDS (2%):</span> <strong className="font-mono">-{formatCurrency(gstTdsAmount)}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
           {/* Mode Switcher Tabs */}

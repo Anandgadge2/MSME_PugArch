@@ -443,6 +443,12 @@ export function TaxInvoiceRegistryModal({
       igstAmount,
       otherTaxAmount: Number(invoice.otherTaxAmount || 0),
       totalAmount,
+      isAdvanceProforma: Boolean(invoice.isAdvanceProforma),
+      advanceDeduction: Number(invoice.advanceDeduction || 0),
+      ldDeduction: Number(invoice.ldDeduction || 0),
+      retentionDeduction: Number(invoice.retentionDeduction || 0),
+      gstTdsAmount: Number(invoice.gstTdsAmount || 0),
+      netPayableAmount: invoice.netPayableAmount !== undefined && invoice.netPayableAmount !== null ? Number(invoice.netPayableAmount) : undefined,
       bankDetails: {
         bankName,
         accountNo,
@@ -935,6 +941,12 @@ export function TaxInvoiceRegistryModal({
                   igstAmount={invoiceData.igstAmount}
                   otherTaxAmount={invoiceData.otherTaxAmount}
                   totalAmount={invoiceData.totalAmount}
+                  isAdvanceProforma={invoiceData.isAdvanceProforma}
+                  advanceDeduction={invoiceData.advanceDeduction}
+                  ldDeduction={invoiceData.ldDeduction}
+                  retentionDeduction={invoiceData.retentionDeduction}
+                  gstTdsAmount={invoiceData.gstTdsAmount}
+                  netPayableAmount={invoiceData.netPayableAmount}
                   bankDetails={invoiceData.bankDetails}
                   logoUrl={invoiceData.seller.logoUrl}
                   stampUrl={invoiceData.seller.stampUrl}
