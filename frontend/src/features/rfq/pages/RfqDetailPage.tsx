@@ -135,6 +135,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   }
 
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const statusUpper = String(rawBid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
@@ -179,8 +180,8 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeRfqId,
     procurementType: 'RFQ',
     procurementLabel: 'Request for Quotation',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : 'Opportunities',
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities/rfqs',
+    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
+    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rfqs' : undefined,
     onRefresh: async () => {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
     },

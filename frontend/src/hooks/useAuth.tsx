@@ -326,16 +326,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     const handleUnauthorized = (e?: Event) => {
+      // Guard against logging out or redirecting unauthenticated visitors
+      const hasActiveSession = Boolean(
+        getStoredToken() || getCookieValue('csrfToken') || (typeof window !== 'undefined' && localStorage.getItem('msme_user_cache'))
+      );
+      if (!hasActiveSession) return;
+
       const customEvent = e as CustomEvent<{ code?: string }> | undefined;
       if (customEvent?.detail?.code === 'SESSION_CONCURRENT_LOGIN') {
         logout('/login?reason=concurrent_session');
       } else {
-        logout();
+        // If the user is currently on a public route, wipe credentials locally without violently bouncing them away from the page
+        const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+        const publicPrefixes = ['/marketplace', '/bids', '/tenders', '/help', '/user-guide', '/benefits', '/benifits'];
+        const isPublic = currentPath === '/' || publicPrefixes.some(p => currentPath === p || currentPath.startsWith(p + '/'));
+        if (isPublic) {
+          clearLocalSession();
+        } else {
+          logout();
+        }
       }
     };
     window.addEventListener('auth:unauthorized', handleUnauthorized as EventListener);
     return () => window.removeEventListener('auth:unauthorized', handleUnauthorized as EventListener);
-  }, [logout]);
+  }, [logout, clearLocalSession]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

@@ -11008,28 +11008,29 @@ export function ProcurementDetailUnifiedView(
         <div className="mx-auto max-w-7xl space-y-2.5 px-3 py-2 sm:px-6 sm:py-3 lg:px-8">
           {/* Navigation Breadcrumb & Back Button */}
           <div className="flex flex-wrap items-center gap-3">
-            <nav
-              aria-label="Breadcrumb"
-              className="flex flex-wrap items-center gap-2"
-            >
-              <button
-                type="button"
-                onClick={() => {
-                  if (props.onBack) props.onBack();
-                  else router.push(props.backRoute || "/seller/opportunities");
-                }}
-                className="h-7 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+            {props.backRouteLabel && (
+              <nav
+                aria-label="Breadcrumb"
+                className="flex flex-wrap items-center gap-2"
               >
-                <ArrowLeft
-                  className="h-3 w-3 text-slate-400"
-                  aria-hidden="true"
-                />
-                <span>
-                  {props.backRouteLabel ||
-                    `${procurementTypeLabel} Opportunities`}
-                </span>
-              </button>
-            </nav>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (props.onBack) props.onBack();
+                    else if (props.backRoute) router.push(props.backRoute);
+                  }}
+                  className="h-7 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-2.5 text-[11px] font-bold text-slate-700 shadow-2xs hover:bg-slate-100 hover:text-slate-950 transition-colors"
+                >
+                  <ArrowLeft
+                    className="h-3 w-3 text-slate-400"
+                    aria-hidden="true"
+                  />
+                  <span>
+                    {props.backRouteLabel}
+                  </span>
+                </button>
+              </nav>
+            )}
             <button
               type="button"
               onClick={async () => {

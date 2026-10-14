@@ -21,6 +21,7 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
@@ -136,8 +137,8 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeRcId,
     procurementType: 'RATE_CONTRACT',
     procurementLabel: 'Rate Contract',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : 'Rate Contract Opportunities',
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities/rate-contracts',
+    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Rate Contract Opportunities' : undefined,
+    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rate-contracts' : undefined,
     onRefresh: async () => {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);
     },

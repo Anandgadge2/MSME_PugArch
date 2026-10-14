@@ -36,6 +36,7 @@ export function adaptProcurementUnifiedProps(
   const reqObj: any = reqInput?.requirement || reqInput?.data?.requirement || reqInput?.data || reqInput || {};
   const user = ctx.user;
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin';
+  const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
 
   const payload = bid.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
   const basics = payload.basics || {};
@@ -173,8 +174,8 @@ export function adaptProcurementUnifiedProps(
   return {
     procurementType: ctx.procurementType,
     procurementLabel: ctx.procurementLabel,
-    backRouteLabel: ctx.backRouteLabel || (isBuyerOrAdmin ? 'My Procurements' : 'Opportunities'),
-    backRoute: ctx.backRoute || (isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'),
+    backRouteLabel: ctx.backRouteLabel ?? (isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined),
+    backRoute: ctx.backRoute ?? (isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined),
     id: targetId,
     displayId: rawDisplayId,
     subject: title,
@@ -254,7 +255,9 @@ export function adaptProcurementUnifiedProps(
     linkedAuction: bid.linkedAuction || null,
 
     // Actions & Handlers
-    onBack: () => ctx.router.push(ctx.backRoute || (isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities')),
+    onBack: (ctx.backRoute || ctx.backRouteLabel)
+      ? () => ctx.router.push(ctx.backRoute || (isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'))
+      : undefined,
     onRefresh: ctx.onRefresh,
     onCancelClick: ctx.onCancel,
     onEditClick: ctx.onEdit,

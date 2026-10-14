@@ -54,27 +54,34 @@ export default function BidDetailsPage() {
           const item = req?.requirement || req?.data || req;
           if (item && (item.id || item.title || item.requirementNumber)) return item;
         } catch {}
-        try {
-          const req = await getApi<any>(`/api/requirements/${requestId}`);
-          const item = req?.data || req;
-          if (item && (item.id || item.title || item.requirementNumber)) return item;
-        } catch {}
+        if (user && (user.role === 'buyer' || user.role === 'admin')) {
+          try {
+            const req = await getApi<any>(`/api/requirements/${requestId}`);
+            const item = req?.data || req;
+            if (item && (item.id || item.title || item.requirementNumber)) return item;
+          } catch {}
+        }
       }
 
       // On /bids/:id routes, procurement bids are the primary resource. Prioritize bid API first!
-      const [bidRes, mktRes, reqRes] = await Promise.allSettled([
+      const promises: Promise<any>[] = [
         procurementBidApi.detail(requestId, true),
-        getApi<any>(`/api/marketplace/requirements/${requestId}`),
-        getApi<any>(`/api/requirements/${requestId}`)
-      ]);
+        getApi<any>(`/api/marketplace/requirements/${requestId}`)
+      ];
+      if (user && (user.role === 'buyer' || user.role === 'admin')) {
+        promises.push(getApi<any>(`/api/requirements/${requestId}`));
+      }
 
-      if (bidRes.status === 'fulfilled' && bidRes.value) {
+      const results = await Promise.allSettled(promises);
+      const [bidRes, mktRes, reqRes] = results;
+
+      if (bidRes && bidRes.status === 'fulfilled' && bidRes.value) {
         const val: any = bidRes.value;
         if (val && (val.id || val.bidNumber || val.title)) {
           return val;
         }
       }
-      if (mktRes.status === 'fulfilled' && mktRes.value) {
+      if (mktRes && mktRes.status === 'fulfilled' && mktRes.value) {
         const val: any = mktRes.value;
         const item = val?.requirement || val?.data || val;
         if (item && (item.id || item.title || item.requirementNumber)) {
@@ -86,7 +93,7 @@ export default function BidDetailsPage() {
           if (matches) return item;
         }
       }
-      if (reqRes.status === 'fulfilled' && reqRes.value) {
+      if (reqRes && reqRes.status === 'fulfilled' && reqRes.value) {
         const val: any = reqRes.value;
         const item = val?.data || val;
         if (item && (item.id || item.title || item.requirementNumber)) {

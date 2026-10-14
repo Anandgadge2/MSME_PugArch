@@ -274,28 +274,22 @@ export const api = {
       // If unauthorized and not an auth endpoint, check error code
       if (response.status === 401 && !endpoint.startsWith('/api/auth/')) {
         const errCode = await getResponseErrorCode(response);
+        const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
+          getCookieValue('csrfToken') || getStoredRefreshToken() || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
+        );
+
         if (errCode === 'SESSION_CONCURRENT_LOGIN') {
-          if (typeof window !== 'undefined') {
+          if (typeof window !== 'undefined' && hasSessionEvidence) {
             window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: 'SESSION_CONCURRENT_LOGIN' } }));
           }
-        } else {
-          const hasSessionEvidence = typeof window !== 'undefined' && Boolean(
-            getCookieValue('csrfToken') || getStoredRefreshToken() || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')
-          );
-          if (hasSessionEvidence) {
-            const refreshed = await refreshSessionCookies().catch(() => false);
-            if (refreshed) {
-              const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
-              response = await sendRequest(retryHeaders);
-            }
+        } else if (hasSessionEvidence) {
+          const refreshed = await refreshSessionCookies().catch(() => false);
+          if (refreshed) {
+            const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
+            response = await sendRequest(retryHeaders);
+          } else if (shouldDispatchUnauthorized(endpoint) && typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: errCode || 'SESSION_INVALID' } }));
           }
-        }
-      }
-
-      if (response.status === 401 && shouldDispatchUnauthorized(endpoint)) {
-        if (typeof window !== 'undefined') {
-          const code = await getResponseErrorCode(response);
-          window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: code || 'SESSION_INVALID' } }));
         }
       }
       if (response.status === 503 && !endpoint.includes('/health')) {

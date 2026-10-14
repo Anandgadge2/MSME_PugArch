@@ -1070,8 +1070,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       <ProcurementDetailUnifiedView
         procurementType="REVERSE_AUCTION"
         procurementLabel={effectiveProcurementLabel}
-        backRouteLabel={isSeller ? 'Opportunities' : 'Reverse Auctions'}
-        backRoute={isSeller ? '/seller/opportunities' : '/buyer/my-procurements'}
+        backRouteLabel={isBuyerOrAdmin ? 'Reverse Auctions' : isSeller ? 'Opportunities' : undefined}
+        backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : isSeller ? '/seller/opportunities' : undefined}
         id={effectiveId}
         displayId={compositeDisplayId}
         subject={resolvedSubject}

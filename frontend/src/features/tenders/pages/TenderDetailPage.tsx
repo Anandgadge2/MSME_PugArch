@@ -489,8 +489,8 @@ export default function TenderDetailPage() {
         tender.evaluationMethod ||
         'L1 Basis'
       }
-      backRoute={user?.role === 'seller' ? '/seller/opportunities' : '/buyer/tenders'}
-      backRouteLabel="Tender Opportunities"
+      backRoute={user?.role === 'seller' || user?.role === 'shg' ? '/seller/opportunities' : user?.role === 'buyer' || user?.role === 'admin' ? '/buyer/tenders' : undefined}
+      backRouteLabel={user ? (user?.role === 'buyer' || user?.role === 'admin' ? 'My Tenders' : 'Tender Opportunities') : undefined}
       participations={tenderParticipations}
       hasSubmittedProposal={hasSubmittedProposal}
       ownParticipation={ownParticipation}
