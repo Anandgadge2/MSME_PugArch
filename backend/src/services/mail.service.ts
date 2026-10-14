@@ -5,14 +5,17 @@ import { buildGovernmentGradeEmailHtml } from './email-template.builder.js';
 
 const db = prisma as any;
 
+// Transporter type resolved dynamically from nodemailer.createTransport
+type Transporter = ReturnType<typeof nodemailer.createTransport>;
+
 // Transporter Cache per companyId (key: companyId, value: transporter)
-const transporterCache = new Map<number, nodemailer.Transporter>();
-let globalTransporter: nodemailer.Transporter | null = null;
+const transporterCache = new Map<number, Transporter>();
+let globalTransporter: Transporter | null = null;
 
 /**
  * Resolve or create a nodemailer SMTP transporter for the specified company.
  */
-export const getTransporterForCompany = async (companyId: number): Promise<nodemailer.Transporter> => {
+export const getTransporterForCompany = async (companyId: number): Promise<Transporter> => {
   if (transporterCache.has(companyId)) {
     return transporterCache.get(companyId)!;
   }

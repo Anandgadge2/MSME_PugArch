@@ -20,6 +20,9 @@ This directory contains the canonical architectural specifications, procurement 
 4. [SECURITY_AUDIT_10_OUT_OF_10_IMPLEMENTATION_PLAN.md](file:///c:/Pugarch/MSME_Portal_PugArch/MSME_PugArch/docs/SECURITY_AUDIT_10_OUT_OF_10_IMPLEMENTATION_PLAN.md)
    - Historical implementation roadmap for VPAT (WCAG 2.1 AA), DPDPA compliance, RBAC, input sanitization, and secret management.
 
+5. [CVC_EPROCUREMENT_COMPLIANCE_JUSTIFICATION.md](file:///c:/Pugarch/MSME_Portal_PugArch/MSME_PugArch/docs/CVC_EPROCUREMENT_COMPLIANCE_JUSTIFICATION.md)
+   - Formal statutory memorandum for STQC and CVC auditors regarding dual-factor OTP authentication equivalence to Class-3 DSC hardware tokens for MSME inclusion.
+
 ---
 
 ## ⚖️ Legal Agreements & Compliance Policies

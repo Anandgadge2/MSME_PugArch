@@ -574,14 +574,16 @@ export function PrivacyPolicyContent() {
       <p className="leading-relaxed text-slate-700">The Portal reserves the right to modify this Privacy Policy at any time.</p>
       <p className="leading-relaxed text-slate-700">Updated versions shall become effective upon publication on www.jsgsmile.in.</p>
       <p className="leading-relaxed text-slate-700">Continued use of the Portal constitutes acceptance of the revised Privacy Policy.</p>
-      <h3 id="19--grievance-and-contact-information" className="text-sm font-black text-[#0b2447] mt-6 mb-2 border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">19. GRIEVANCE AND CONTACT INFORMATION</h3>
-      <p className="leading-relaxed text-slate-700">For privacy-related concerns, users may contact:</p>
-      <p className="leading-relaxed text-slate-700">Portal Administrator</p>
-      <p className="text-center text-xs font-bold text-slate-500 uppercase tracking-wide">JSG SMILE (www.jsgsmile.in)</p>
-      <p className="leading-relaxed text-slate-700">District Industries Centre (DIC), Jharsuguda</p>
-      <p className="leading-relaxed text-slate-700">Government of Odisha</p>
-      <p className="leading-relaxed text-slate-700">Email: [Insert Official Email ID]</p>
-      <p className="leading-relaxed text-slate-700">Phone: [Insert Contact Number]</p>
+      <h3 id="19--grievance-and-contact-information" className="text-sm font-black text-[#0b2447] mt-6 mb-2 border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">19. GRIEVANCE REDRESSAL & DATA PROTECTION OFFICER (DPO)</h3>
+      <p className="leading-relaxed text-slate-700">In accordance with the Digital Personal Data Protection Act (DPDPA), 2023 and the Information Technology Rules, 2021, users may address data privacy grievances or request withdrawal of consent to:</p>
+      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 my-3 text-slate-800 space-y-1">
+        <p className="font-bold text-[#0b2447]">Designated Data Protection Officer (DPO) & Nodal Grievance Officer</p>
+        <p className="text-xs text-slate-600">District Industries Centre (DIC), Jharsuguda • Government of Odisha</p>
+        <p className="text-xs text-slate-600">District Collectorate Campus, Jharsuguda, Odisha — 768201</p>
+        <p className="text-xs pt-1"><span className="font-semibold text-slate-700">Official Grievance Email:</span> <a href="mailto:jsgsmileportal@gmail.com" className="text-blue-700 underline">jsgsmileportal@gmail.com</a></p>
+        <p className="text-xs"><span className="font-semibold text-slate-700">Helpline / Phone:</span> +91 (06645) 272-100 / 1800-345-7111</p>
+        <p className="text-xs text-slate-500 pt-1">Statutory Response Window: Acknowledgement within 24 hours; formal resolution within 7 working days.</p>
+      </div>
       <h3 id="20--consent" className="text-sm font-black text-[#0b2447] mt-6 mb-2 border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">20. CONSENT</h3>
       <p className="leading-relaxed text-slate-700">By registering, accessing, or using JSG SMILE (www.jsgsmile.in), the User expressly</p>
       <p className="leading-relaxed text-slate-700">acknowledges and agrees that:</p>
