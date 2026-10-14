@@ -8,9 +8,7 @@ const repoRoot = path.resolve(__dirname, '../..');
 
 const targetDirs = [
   path.resolve(repoRoot, 'frontend/public'),
-  path.resolve(repoRoot, 'backend/uploads'),
-  path.resolve(repoRoot, 'backend/frontend/public'),
-  path.resolve(repoRoot, 'backend/backend/uploads')
+  path.resolve(repoRoot, 'backend/uploads')
 ];
 
 const ensureDirs = () => {

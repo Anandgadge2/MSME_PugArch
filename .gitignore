@@ -102,3 +102,16 @@ model_capabilities.yaml
 /scripts/
 docs/SECURITY_AUDIT_10_OUT_OF_10_IMPLEMENTATION_PLAN.*
 setup-gcp-secrets.sh
+
+# IDE Rules & Tooling
+.windsurfrules
+.cursorrules
+CLAUDE.md
+QODER.md
+.claude/
+.qoder/
+.backend-port
+*.docx
+docs_extracted*.json
+backend/frontend/
+
