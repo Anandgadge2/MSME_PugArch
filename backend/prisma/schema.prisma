@@ -175,6 +175,10 @@ model User {
   sessions                           UserSession[]
   dpExtensionsRequested              DeliveryDpExtension[]                   @relation("DpExtensionRequester")
   dpExtensionsResponded              DeliveryDpExtension[]                   @relation("DpExtensionResponder")
+  sellerPbgs                         PerformanceGuarantee[]                  @relation("SellerPbg")
+  buyerPbgs                          PerformanceGuarantee[]                  @relation("BuyerPbg")
+  buyerNegotiations                  ProcurementNegotiation[]                @relation("NegotiationBuyer")
+  sellerNegotiations                 ProcurementNegotiation[]                @relation("NegotiationSeller")
 
   @@index([role, onboardingStatus])
   @@index([role])
@@ -2309,6 +2313,16 @@ model PurchaseOrder {
   sourceType        String?
   paymentTerms      String?
   deliveryType      String?
+  advancePercentage Decimal?                                @default(0.00) @db.Decimal(5, 2)
+  advanceAmount     Decimal?                                @default(0.00) @db.Decimal(18, 2)
+  advancePaid       Boolean                                 @default(false)
+  advancePaidAt     DateTime?
+  pbgRequired       Boolean                                 @default(false)
+  pbgPercentage     Decimal?                                @default(3.00) @db.Decimal(5, 2)
+  pbgType           PbgType?
+  performanceGuarantee PerformanceGuarantee?
+  negotiations      ProcurementNegotiation[]
+  offlinePaymentProofs OfflinePaymentProof[]
   cracs             ConsigneeReceiptAcceptanceCertificate[]
   deliveryTrackings DeliveryTracking[]
   deliveryWorkflow  DeliveryWorkflow?
@@ -2669,6 +2683,12 @@ model Invoice {
   taxableAmount      Decimal?             @db.Decimal(18, 2)
   tdsAmount          Decimal?             @db.Decimal(18, 2)
   totalTaxAmount     Decimal?             @db.Decimal(18, 2)
+  isAdvanceProforma  Boolean              @default(false)
+  advanceDeduction   Decimal?             @default(0.00) @db.Decimal(18, 2)
+  ldDeduction        Decimal?             @default(0.00) @db.Decimal(18, 2)
+  retentionDeduction Decimal?             @default(0.00) @db.Decimal(18, 2)
+  gstTdsAmount       Decimal?             @default(0.00) @db.Decimal(18, 2)
+  netPayableAmount   Decimal?             @db.Decimal(18, 2)
   buyer              User                 @relation("BuyerInvoices", fields: [buyerId], references: [id])
   grnId              Int?
   grn                GoodsReceiptNote?    @relation(fields: [grnId], references: [id])
@@ -2685,6 +2705,7 @@ model Invoice {
   milestonePayments  MilestonePayment[]
   paymentSettlements PaymentSettlement[]  @relation("PaymentSettlementInvoice")
   payments           PaymentTransaction[]
+  offlinePaymentProofs OfflinePaymentProof[]
 
   @@index([purchaseOrderId, status])
   @@index([sellerId, status])
@@ -2773,6 +2794,7 @@ model OfflinePaymentProof {
   id                   Int                       @id @default(autoincrement())
   paymentTransactionId Int?
   purchaseOrderId      Int?
+  invoiceId            Int?
   buyerOrgId           Int?
   sellerOrgId          Int?
   amount               Decimal                   @db.Decimal(18, 2)
@@ -2792,16 +2814,92 @@ model OfflinePaymentProof {
   rejectedByUserId     Int?
   rejectedAt           DateTime?
   rejectionReason      String?
+  makerUserId          Int?
+  makerVerifiedAt      DateTime?
+  checkerUserId        Int?
+  checkerApprovedAt    DateTime?
+  integrityHash        String?
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
+
+  invoice              Invoice?                  @relation(fields: [invoiceId], references: [id])
+  purchaseOrder        PurchaseOrder?            @relation(fields: [purchaseOrderId], references: [id])
 
   @@unique([buyerOrgId, transactionReference])
   @@index([paymentTransactionId])
   @@index([purchaseOrderId])
+  @@index([invoiceId])
   @@index([buyerOrgId])
   @@index([sellerOrgId])
   @@index([status, paymentDate])
   @@index([createdAt])
+}
+
+model PerformanceGuarantee {
+  id                   Int                   @id @default(autoincrement())
+  purchaseOrderId      Int                   @unique
+  sellerId             Int
+  buyerId              Int
+  type                 PbgType               @default(BANK_GUARANTEE)
+  amount               Decimal               @db.Decimal(18, 2)
+  percentage           Decimal               @default(3.00) @db.Decimal(5, 2)
+  bankName             String?
+  bgNumber             String?
+  issueDate            DateTime?
+  expiryDate           DateTime?
+  claimExpiryDate      DateTime?             // GFR 171: Expiry + 60 days
+  documentFileId       Int?
+  status               PbgStatus             @default(PENDING_SUBMISSION)
+  submissionDue        DateTime              // PO Date + 15 days
+  submittedById        Int?
+  makerReviewerId      Int?
+  makerRemarks         String?
+  checkerApproverId    Int?
+  checkerApprovedAt    DateTime?
+  checkerRemarks       String?
+  releasedAt           DateTime?
+  invokedAt            DateTime?
+  retentionAccumulated Decimal               @default(0.00) @db.Decimal(18, 2)
+  integrityHash        String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  purchaseOrder        PurchaseOrder         @relation(fields: [purchaseOrderId], references: [id])
+  seller               User                  @relation("SellerPbg", fields: [sellerId], references: [id])
+  buyer                User                  @relation("BuyerPbg", fields: [buyerId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([buyerId, status])
+  @@index([purchaseOrderId])
+}
+
+model ProcurementNegotiation {
+  id                  Int               @id @default(autoincrement())
+  procurementBidId    Int?
+  purchaseOrderId     Int?
+  buyerId             Int
+  sellerId            Int
+  originalAmount      Decimal           @db.Decimal(18, 2)
+  targetAmount        Decimal           @db.Decimal(18, 2)
+  sellerCounterAmount Decimal?          @db.Decimal(18, 2)
+  finalAgreedAmount   Decimal?          @db.Decimal(18, 2)
+  roundNumber         Int               @default(1)
+  status              NegotiationStatus @default(REQUESTED)
+  buyerJustification  String
+  sellerRemarks       String?
+  deadlineAt          DateTime          // 72-hour CVC statutory countdown
+  completedAt         DateTime?
+  integrityHash       String?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  buyer               User              @relation("NegotiationBuyer", fields: [buyerId], references: [id])
+  seller              User              @relation("NegotiationSeller", fields: [sellerId], references: [id])
+  purchaseOrder       PurchaseOrder?    @relation(fields: [purchaseOrderId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([buyerId, status])
+  @@index([purchaseOrderId])
 }
 
 model PaymentWebhookEvent {
@@ -4864,6 +4962,33 @@ enum OfflinePaymentProofStatus {
   UNDER_REVIEW
   VERIFIED
   REJECTED
+}
+
+enum PbgStatus {
+  NOT_REQUIRED
+  PENDING_SUBMISSION
+  SUBMITTED_FOR_VERIFICATION
+  VERIFIED_ACTIVE
+  INVOCATION_REQUESTED
+  INVOKED_DEFAULTED
+  RELEASE_REQUESTED
+  RELEASED_COMPLETED
+}
+
+enum PbgType {
+  BANK_GUARANTEE
+  FDR_PLEDGE
+  RETENTION_DEDUCTION
+  INSURANCE_BOND
+}
+
+enum NegotiationStatus {
+  REQUESTED
+  ACCEPTED_BY_SELLER
+  COUNTERED_BY_SELLER
+  REJECTED_BY_SELLER
+  EXPIRED
+  CANCELLED_BY_BUYER
 }
 
 enum BannerType {
