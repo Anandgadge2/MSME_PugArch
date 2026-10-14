@@ -37,6 +37,8 @@ import consentRoutes from './consent.routes.js';
 import appealRoutes from './appeal.routes.js';
 import noticeCircularRoutes from './notice-circular.routes.js';
 import procurementSubmissionRoutes from './procurement-submission.routes.js';
+import pbgRoutes from '../modules/pbg/pbg.routes.js';
+import negotiationRoutes from '../modules/negotiation/negotiation.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -149,6 +151,8 @@ router.use('/', navigationRoutes);
 router.use('/consent', consentRoutes);
 router.use('/', noticeCircularRoutes);
 router.use('/', procurementSubmissionRoutes);
+router.use('/pbg', pbgRoutes);
+router.use('/negotiations', negotiationRoutes);
 
   return router;
 };

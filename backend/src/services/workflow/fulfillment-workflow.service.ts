@@ -8,6 +8,7 @@ import {
   poStatusEnumFor,
   statusTransitions
 } from './status-transition.service.js';
+import { calculateLiquidatedDamages } from '../../modules/delivery/delivery.service.js';
 
 const assertPOAccess = async (actor: WorkflowActor, purchaseOrderId: number) => {
   const po = await db.purchaseOrder.findUnique({ where: { id: purchaseOrderId }, include: { items: true } });
@@ -366,6 +367,47 @@ export const fulfillmentWorkflow = {
         })
       };
     }
+    // GFR 175: Calculate Liquidated Damages if delivery has been tracked
+    let ldDeduction = 0;
+    try {
+      const delivery = await db.deliveryTracking.findFirst({
+        where: { purchaseOrderId: po.id },
+        include: { dpExtensions: true, purchaseOrder: true }
+      });
+      if (delivery) {
+        const ldResult = calculateLiquidatedDamages(delivery);
+        ldDeduction = Number(ldResult.calculatedLdAmount || 0);
+      }
+    } catch (ldErr) {
+      console.warn('[Invoice] LD calculation fallback:', ldErr);
+    }
+
+    // GFR 172: Deduct Advance mobilization payment if already settled
+    let advanceDeduction = 0;
+    if (po.advancePaid && po.advanceAmount) {
+      advanceDeduction = Number(po.advanceAmount);
+    }
+
+    // GFR 171: 5% Retention Money deduction for MSME mode if selected
+    let retentionDeduction = 0;
+    if (po.pbgType === 'RETENTION_DEDUCTION') {
+      const pbgPct = Number(po.pbgPercentage || 5.0);
+      const poVal = Number(po.amount || po.totalValue || 0);
+      retentionDeduction = Math.round((poVal * pbgPct / 100) * 100) / 100;
+    }
+
+    // GFR / GST Section 51: 2% GST-TDS for Government / PSU buyers
+    let gstTdsAmount = 0;
+    const isGovtBuyer = po.buyer?.buyerProfile?.organizationType === 'GOVERNMENT';
+    if (isGovtBuyer && taxes.taxableAmount) {
+      gstTdsAmount = Math.round(Number(taxes.taxableAmount) * 0.02 * 100) / 100;
+    }
+
+    const netPayableAmount = Math.max(
+      0,
+      Math.round((Number(taxes.grossAmount) - advanceDeduction - ldDeduction - retentionDeduction - Number(taxes.tdsAmount || 0) - gstTdsAmount) * 100) / 100
+    );
+
     const invoice = await db.$transaction(async (tx: any) => {
       const created = await tx.invoice.create({
         data: {
@@ -382,10 +424,22 @@ export const fulfillmentWorkflow = {
           igstAmount: taxes.igstAmount,
           totalTaxAmount: taxes.totalTaxAmount,
           tdsAmount: taxes.tdsAmount,
+          advanceDeduction,
+          ldDeduction,
+          retentionDeduction,
+          gstTdsAmount,
+          netPayableAmount,
           metadata: {
             interstate: isInterstate,
             otherTaxRate: taxes.otherTaxRate,
-            otherTaxAmount: taxes.otherTaxAmount
+            otherTaxAmount: taxes.otherTaxAmount,
+            gfrDeductions: {
+              advanceDeduction,
+              ldDeduction,
+              retentionDeduction,
+              gstTdsAmount,
+              netPayableAmount
+            }
           },
           items: itemsData
         },
