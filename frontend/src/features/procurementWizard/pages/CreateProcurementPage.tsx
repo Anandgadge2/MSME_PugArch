@@ -3081,7 +3081,7 @@ function BasicsStepForm({
           />
         </Field>
 
-        <Field label="Procurement Category" required>
+        <Field label="Procurement Type (Goods / Services / Works)" required>
           <select
             id="procurement-category-select"
             value={draft.basics.procurementCategory || 'GOODS'}
@@ -3096,7 +3096,7 @@ function BasicsStepForm({
               }));
             }}
             className={inputClass}
-            aria-label="Procurement Category"
+            aria-label="Procurement Type"
           >
             {allowedCategories.map(opt => (
               <option key={opt.value} value={opt.value}>
@@ -3124,7 +3124,7 @@ function BasicsStepForm({
                   pricingFormat: val
                 },
                 boqTable: isBoqType && c.boqTable.length === 0
-                  ? [{ srNo: 1, description: '', category: 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
+                  ? [{ srNo: 1, description: '', category: c.basics.category || 'General', quantity: 1, uom: 'Nos', estimatedRate: 0, taxPercent: 18, hsnSacCode: '', attachments: [], fileAssetId: null, fileName: '', fileSize: null, total: 0, remarks: '' }]
                   : !isBoqType
                     ? []
                     : c.boqTable
@@ -3232,14 +3232,21 @@ function BasicsStepForm({
           </div>
         </Field>
 
-        <Field label="Procurement category" required>
+        <Field label="Procurement Category (Industry / Domain)" required>
           <select
             value={
               categoriesList.some(c => c.name === draft.basics.category)
                 ? draft.basics.category
                 : (draft.basics.category ? 'Other' : '')
             }
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, category: e.target.value } }))}
+            onChange={e => {
+              const newCat = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, category: newCat },
+                boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: newCat } : row)
+              }));
+            }}
             className={inputClass}
           >
             <option value="">{loadingCategories ? 'Loading categories...' : '-- Select Procurement Category --'}</option>
@@ -3256,7 +3263,12 @@ function BasicsStepForm({
               value={draft.basics.category === 'Other' ? '' : draft.basics.category}
               onChange={e => {
                 const customVal = e.target.value;
-                updateDraft(c => ({ ...c, basics: { ...c.basics, category: customVal || 'Other' } }));
+                const assigned = customVal || 'Other';
+                updateDraft(c => ({
+                  ...c,
+                  basics: { ...c.basics, category: assigned },
+                  boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: assigned } : row)
+                }));
               }}
               placeholder="Specify category..."
               className={cn(inputClass, 'mt-2')}
@@ -5779,7 +5791,7 @@ function ItemsDetailsForm({
                 parsedBoqRows.push({
                   srNo: idx + 1,
                   description: desc,
-                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : 'General',
+                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : (draft.basics.category || 'General'),
                   quantity: qty,
                   uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'Nos',
                   estimatedRate: rate,
@@ -5830,7 +5842,7 @@ function ItemsDetailsForm({
       const nextTable = [...c.boqTable, {
         srNo: c.boqTable.length + 1,
         description: '',
-        category: 'General',
+        category: c.basics.category || 'General',
         quantity: 1,
         uom: 'Nos',
         estimatedRate: 0,
@@ -6418,6 +6430,7 @@ function ItemsDetailsForm({
           onDuplicateRow={handleBOQDuplicateRow}
           onDeleteRow={handleRemoveBOQRow}
           estimatedTotal={draft.basics.estimatedValue}
+          showCategory={false}
           categories={categoriesList}
           loadingCategories={loadingCategories}
           uomOptions={uomsList}
@@ -9961,7 +9974,7 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
           description: item.remarks || item.description || '',
           specification: item.remarks || item.description || '',
           scopeOfWork: item.remarks || item.description || '',
-          category: item.category || 'General',
+          category: item.category && item.category !== 'General' ? item.category : (draft.basics.category || item.category || 'General'),
           hsn_sac_code: item.hsnSacCode || '',
           hsnCode: item.hsnSacCode || '',
           taxPercent: item.taxPercent !== undefined && item.taxPercent !== null ? Number(item.taxPercent) : 0,
@@ -10244,7 +10257,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
       ...draft.approval,
       workflow: autoWorkflow,
     },
-    boqTable: isBoqBased ? draft.boqTable : [],
+    boqTable: isBoqBased
+      ? draft.boqTable.map(row => ({
+          ...row,
+          category: row.category && row.category !== 'General' ? row.category : (draft.basics.category || row.category || 'General')
+        }))
+      : [],
     boqFileName: isBoqBased ? draft.boqFileName : '',
     boqFileAssetId: isBoqBased ? draft.boqFileAssetId : null,
     schedule: cleanSchedule,

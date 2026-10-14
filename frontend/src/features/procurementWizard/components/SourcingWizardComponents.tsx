@@ -582,6 +582,7 @@ interface BOQTableProps {
   onDuplicateRow: (idx: number) => void;
   onDeleteRow: (idx: number) => void;
   estimatedTotal: number;
+  showCategory?: boolean;
   categories?: Array<{ id: number; name: string } | string>;
   loadingCategories?: boolean;
   uomOptions?: Array<{ value: string; label: string } | string>;
@@ -600,6 +601,7 @@ export function BOQTable({
   onDuplicateRow,
   onDeleteRow,
   estimatedTotal,
+  showCategory = false,
   categories = [],
   loadingCategories = false,
   uomOptions,
@@ -644,12 +646,12 @@ export function BOQTable({
   return (
     <div className="space-y-3">
       <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-xl bg-white shadow-3xs">
-        <table data-ux-wrapped="true" className="w-full min-w-[1100px] border-collapse text-left text-xs">
+        <table data-ux-wrapped="true" className={cn("w-full border-collapse text-left text-xs", showCategory ? "min-w-[1100px]" : "min-w-[960px]")}>
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5 text-center w-12">Sr</th>
               <th className="px-3 py-2.5 min-w-[180px]">Item Description</th>
-              <th className="px-3 py-2.5 w-36">Category</th>
+              {showCategory && <th className="px-3 py-2.5 w-36">Category</th>}
               <th className="px-3 py-2.5 w-28">UOM</th>
               <th className="px-3 py-2.5 w-20 text-center">Qty</th>
               <th className="px-3 py-2.5 w-28 text-right">Est. Rate (₹)</th>
@@ -689,40 +691,42 @@ export function BOQTable({
                     />
                   </td>
 
-                  {/* Category Dropdown (Database + Standard + Custom) */}
-                  <td className="px-3 py-2">
-                    <div className="space-y-1">
-                      <select
-                        value={resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase()) ? rowCat : (rowCat ? 'Other' : '')}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val === 'Other') {
-                            onChange(idx, 'category', 'Other');
-                          } else {
-                            onChange(idx, 'category', val);
-                          }
-                        }}
-                        className={cn(tableInput, 'cursor-pointer')}
-                        aria-label={`Category for row ${row.srNo}`}
-                      >
-                        <option value="">{loadingCategories ? 'Loading...' : '-- Category --'}</option>
-                        {resolvedCategoryNames.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                        <option value="Other">Other / Custom...</option>
-                      </select>
-                      {(rowCat === 'Other' || isCustomCat) && (
-                        <input
-                          type="text"
-                          value={rowCat === 'Other' ? '' : rowCat}
-                          onChange={e => onChange(idx, 'category', e.target.value || 'Other')}
-                          placeholder="Type category..."
-                          className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
-                          aria-label={`Custom category for row ${row.srNo}`}
-                        />
-                      )}
-                    </div>
-                  </td>
+                  {/* Category Dropdown (Database + Standard + Custom) - hidden when showCategory is false */}
+                  {showCategory && (
+                    <td className="px-3 py-2">
+                      <div className="space-y-1">
+                        <select
+                          value={resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase()) ? rowCat : (rowCat ? 'Other' : '')}
+                          onChange={e => {
+                            const val = e.target.value;
+                            if (val === 'Other') {
+                              onChange(idx, 'category', 'Other');
+                            } else {
+                              onChange(idx, 'category', val);
+                            }
+                          }}
+                          className={cn(tableInput, 'cursor-pointer')}
+                          aria-label={`Category for row ${row.srNo}`}
+                        >
+                          <option value="">{loadingCategories ? 'Loading...' : '-- Category --'}</option>
+                          {resolvedCategoryNames.map(cat => (
+                            <option key={cat} value={cat}>{cat}</option>
+                          ))}
+                          <option value="Other">Other / Custom...</option>
+                        </select>
+                        {(rowCat === 'Other' || isCustomCat) && (
+                          <input
+                            type="text"
+                            value={rowCat === 'Other' ? '' : rowCat}
+                            onChange={e => onChange(idx, 'category', e.target.value || 'Other')}
+                            placeholder="Type category..."
+                            className="h-7 w-full rounded border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
+                            aria-label={`Custom category for row ${row.srNo}`}
+                          />
+                        )}
+                      </div>
+                    </td>
+                  )}
 
                   {/* UOM Dropdown (Database + Standard + Custom) */}
                   <td className="px-3 py-2">
