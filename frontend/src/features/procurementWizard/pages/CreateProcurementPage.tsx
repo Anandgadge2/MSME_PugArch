@@ -1975,6 +1975,18 @@ export default function CreateProcurementPage() {
     }
   };
 
+  const scrollToErrorField = (elementId: string) => {
+    setTimeout(() => {
+      const el = document.getElementById(elementId);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof (el as HTMLElement).focus === 'function' && el.tagName !== 'DIV') {
+          (el as HTMLElement).focus({ preventScroll: true });
+        }
+      }
+    }, 60);
+  };
+
   // Validations per Step
   const validateStep = (stepIdx: number): boolean => {
     const d = draft;
@@ -1988,18 +2000,27 @@ export default function CreateProcurementPage() {
       // Step 1 Basics
       if (d.basics.title.trim().length < 3) {
         toast.error('Procurement title is required (min 3 chars).');
+        scrollToErrorField('basics-title');
         return false;
       }
       if (d.basics.estimatedValue <= 0) {
         toast.error('Estimated value must be greater than 0.');
+        scrollToErrorField('basics-estimated-value');
+        return false;
+      }
+      if (!d.basics.category || d.basics.category === 'Other') {
+        toast.error('Procurement category is required.');
+        scrollToErrorField('basics-category');
         return false;
       }
       if (!d.basics.requiredByDate) {
         toast.error('Required by date & time is required.');
+        scrollToErrorField('basics-required-by-datetime');
         return false;
       }
       if (!d.basics.deliveryLocation.trim()) {
         toast.error('Delivery location is required.');
+        scrollToErrorField('basics-delivery-location');
         return false;
       }
       const isLimitedSourcing = d.type === 'LIMITED_TENDER' || (d.type === 'RFQ' && d.rfqType === 'LIMITED');
@@ -2007,6 +2028,7 @@ export default function CreateProcurementPage() {
         const just = (d.limitedTenderJustification || d.basics.justification || '').trim();
         if (just.length < 15) {
           toast.error('Limited Tender / RFQ requires a written justification of at least 15 characters.');
+          scrollToErrorField('basics-limited-justification');
           return false;
         }
       }
@@ -2014,37 +2036,45 @@ export default function CreateProcurementPage() {
       // Step 2 Internal details
       if (!d.internal.orgName.trim()) {
         toast.error('Organization name is required.');
+        scrollToErrorField('internal-org-name');
         return false;
       }
       if (!d.internal.contactPerson.trim()) {
         toast.error('Contact Person Name is required.');
+        scrollToErrorField('internal-contact-person');
         return false;
       }
       if (!d.internal.email.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(d.internal.email.trim())) {
         toast.error('A valid Contact Email Address is required.');
+        scrollToErrorField('internal-email');
         return false;
       }
       if (!d.internal.mobile.trim() || !/^\d{10}$/.test(d.internal.mobile.trim())) {
         toast.error('A valid 10-digit Contact Mobile Number is required (e.g. 9876543210).');
+        scrollToErrorField('internal-mobile');
         return false;
       }
       const auth = (d.internal.approvalAuthority || '').trim();
       if (!auth || auth.length < 3) {
         toast.error('Internal Approval Authority is required (minimum 3 characters).');
+        scrollToErrorField('internal-approval-authority');
         return false;
       }
       if (/^(.)\1{3,}$/i.test(auth) || !/[a-zA-Z]/.test(auth)) {
         toast.error('Please enter a valid title or name for Internal Approval Authority.');
+        scrollToErrorField('internal-approval-authority');
         return false;
       }
 
       const just = (d.internal.justification || '').trim();
       if (!just || just.length < 10) {
         toast.error('Purchase justification & compliance reason is required (minimum 10 characters).');
+        scrollToErrorField('internal-justification');
         return false;
       }
       if (/^(.)\1{4,}$/i.test(just) || /^(faf|asdf|test|xyz|abc|qwer)+$/i.test(just.replace(/\s+/g, ''))) {
         toast.error('Please provide a legitimate business justification or statutory compliance reason.');
+        scrollToErrorField('internal-justification');
         return false;
       }
     } else if (stepIdx === 3) {
@@ -2054,6 +2084,7 @@ export default function CreateProcurementPage() {
         const sowLen = (d.serviceDetails.scopeOfWork || d.basics.justification || d.internal.justification || d.approval.notes || '').trim().length;
         if (!hasSowDoc && sowLen < 10) {
           toast.error('RFP requires a Scope of Work (min 10 chars) or an uploaded SOW / BOQ document.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
       }
@@ -2062,16 +2093,19 @@ export default function CreateProcurementPage() {
       if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) {
           toast.error(d.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.');
+          scrollToErrorField('boq-error-banner');
           return false;
         }
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) {
           toast.error('All BOQ rows must have positive quantities & rates.');
+          scrollToErrorField('boq-error-banner');
           return false;
         }
       } else if (isServiceContract) {
         const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
         if (!effectiveTitle) {
           toast.error('Service Contract Title is required.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
         if (!d.serviceDetails.serviceTitle?.trim()) {
@@ -2080,14 +2114,17 @@ export default function CreateProcurementPage() {
         const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
         if (!hasSowDoc && d.serviceDetails.scopeOfWork.trim().length < 10) {
           toast.error('Scope of Work is required (min 10 chars) or upload an SOW document.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
         if (!hasSowDoc && d.serviceDetails.deliverables.trim().length < 3) {
           toast.error('Service deliverables list is required or upload an SOW document.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
         if (!isRateContractMethod(d.type) && !d.serviceDetails.duration.trim()) {
           toast.error('Service duration is required.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
 
@@ -2118,6 +2155,7 @@ export default function CreateProcurementPage() {
       } else {
         if (d.items.length === 0 || d.items.some(i => !i.name.trim() || i.quantity <= 0)) {
           toast.error('At least one product item with a valid name and quantity is required.');
+          scrollToErrorField('items-error-banner');
           return false;
         }
       }
@@ -2125,35 +2163,42 @@ export default function CreateProcurementPage() {
       // Step 4 Suppliers
       if (d.vendors.selection !== 'Open' && (!d.vendors.invitedSellers || d.vendors.invitedSellers.length === 0)) {
         toast.error('Please invite at least 1 supplier or change sourcing scope to Open.');
+        scrollToErrorField('vendors-error-banner');
         return false;
       }
       if (isReverseAuctionMethod(d.type) && d.vendors.selection !== 'Open' && d.vendors.invitedSellers.length < d.auctionConfig.minimumQualifiedBidders) {
         toast.error(`Reverse auction requires at least ${d.auctionConfig.minimumQualifiedBidders} qualified suppliers.`);
+        scrollToErrorField('vendors-error-banner');
         return false;
       }
       if (isRateContractMethod(d.type) && d.vendors.selection !== 'Open' && d.rateContractConfig.selectedSuppliers.length === 0 && d.vendors.invitedSellers.length === 0) {
         toast.error('Rate Contract requires at least one selected supplier when using targeted invitation strategy.');
+        scrollToErrorField('vendors-error-banner');
         return false;
       }
     } else if (stepIdx === 5) {
       // Step 5 Event timeline
       if (!d.schedule.submissionDate) {
         toast.error('Submission deadline date is required.');
+        scrollToErrorField('submission-end-datetime');
         return false;
       }
       const endTime = new Date(d.schedule.submissionDate).getTime();
       if (endTime <= Date.now()) {
         toast.error('Submission deadline must be set to a future date & time.');
+        scrollToErrorField('submission-end-datetime');
         return false;
       }
       const nowTime = new Date(d.schedule.submissionStartDate).getTime();
       if (endTime <= nowTime) {
         toast.error('Submission closing date must be after submission start date.');
+        scrollToErrorField('submission-end-datetime');
         return false;
       }
       if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
         if (!d.schedule.technicalOpeningDate) {
           toast.error('Technical opening date is required.');
+          scrollToErrorField('technical-opening-datetime');
           return false;
         }
         if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) {
@@ -2164,12 +2209,14 @@ export default function CreateProcurementPage() {
           } else {
             toast.error('Technical opening time must be after submission deadline.');
           }
+          scrollToErrorField('technical-opening-datetime');
           return false;
         }
       }
       if (d.schedule.packetType === 'Two') {
         if (!d.schedule.financialOpeningDate) {
           toast.error('Financial opening date is required for Two Packet flow.');
+          scrollToErrorField('financial-opening-datetime');
           return false;
         }
         if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) {
@@ -2180,6 +2227,7 @@ export default function CreateProcurementPage() {
           } else {
             toast.error('Financial opening time must be after technical envelope opening.');
           }
+          scrollToErrorField('financial-opening-datetime');
           return false;
         }
       }
@@ -2224,6 +2272,7 @@ export default function CreateProcurementPage() {
         }
         if (auction.minimumBidDecrement <= 0) {
           toast.error('Minimum bid decrement must be greater than 0.');
+          scrollToErrorField('auction-min-bid-decrement');
           return false;
         }
         if (auction.autoExtensionEnabled && (
@@ -2238,6 +2287,7 @@ export default function CreateProcurementPage() {
       if (d.basics.isReverseAuctionNeeded) {
         if (d.auctionConfig.minimumBidDecrement <= 0) {
           toast.error('Minimum bid decrement must be greater than 0.');
+          scrollToErrorField('auction-min-bid-decrement');
           return false;
         }
         if (d.auctionConfig.startingBidPrice !== -1 && d.auctionConfig.reservePrice !== null && d.auctionConfig.reservePrice > d.auctionConfig.startingBidPrice) {
@@ -2266,16 +2316,19 @@ export default function CreateProcurementPage() {
       // Step 6 Terms
       if (!d.terms.paymentTerms) {
         toast.error('Payment terms are required.');
+        scrollToErrorField('terms-payment-terms');
         return false;
       }
       if (!d.terms.deliveryTerms) {
         toast.error('Delivery terms are required.');
+        scrollToErrorField('terms-delivery-terms');
         return false;
       }
     } else if (stepIdx === 7) {
       // Step 7 Documents
       if (d.requiredDocs.length === 0) {
         toast.error('Please specify at least 1 required verification document.');
+        scrollToErrorField('documents-error-banner');
         return false;
       }
     } else if (stepIdx === 8) {
@@ -2297,8 +2350,8 @@ export default function CreateProcurementPage() {
   };
 
   const goNext = async () => {
+    setTriedNext(true);
     if (!validateStep(activeStep)) {
-      setTriedNext(true);
       return;
     }
     setTriedNext(false);
@@ -2556,6 +2609,7 @@ export default function CreateProcurementPage() {
                   updateDraft={updateDraft}
                   resolvedAddress={resolvedAddress}
                   resolvedAddressInfo={resolvedAddressInfo}
+                  showErrors={triedNext}
                 />
               </SectionCard>
             )}
@@ -2567,6 +2621,7 @@ export default function CreateProcurementPage() {
                   draft={draft}
                   updateDraft={updateDraft}
                   resolvedOrgName={resolvedOrgName}
+                  showErrors={triedNext}
                 />
               </SectionCard>
             )}
@@ -2581,6 +2636,7 @@ export default function CreateProcurementPage() {
                   setShowItemDrawer={setShowItemDrawer}
                   selectedItemForEdit={selectedItemForEdit}
                   setSelectedItemForEdit={setSelectedItemForEdit}
+                  showErrors={triedNext}
                 />
               </SectionCard>
             )}
@@ -2591,6 +2647,7 @@ export default function CreateProcurementPage() {
                 <VendorsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  showErrors={triedNext}
                 />
               </SectionCard>
             )}
@@ -2623,6 +2680,7 @@ export default function CreateProcurementPage() {
                 <DocumentsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
+                  showErrors={triedNext}
                 />
               </SectionCard>
             )}
@@ -2768,12 +2826,14 @@ function BasicsStepForm({
   draft,
   updateDraft,
   resolvedAddress,
-  resolvedAddressInfo
+  resolvedAddressInfo,
+  showErrors = false,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
   resolvedAddress?: string;
   resolvedAddressInfo?: ResolvedAddressInfo;
+  showErrors?: boolean;
 }) {
   // Delivery address dropdown and modal states
   const [deliveryAddressesList, setDeliveryAddressesList] = useState<DeliveryAddressDto[]>([]);
@@ -3062,15 +3122,22 @@ function BasicsStepForm({
 
         {(draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED')) && (
           <div className="sm:col-span-2">
-            <Field label="Limited Tender / RFQ Justification" required>
+            <Field
+              label="Limited Tender / RFQ Justification"
+              required
+              error={fieldError(showErrors && (draft.limitedTenderJustification || draft.basics.justification || '').trim().length < 15, 'Written justification of at least 15 characters is required for limited sourcing.')}
+            >
               <div className="space-y-1.5">
                 <textarea
+                  id="basics-limited-justification"
                   value={draft.limitedTenderJustification || ''}
                   onChange={e => updateDraft(c => ({ ...c, limitedTenderJustification: e.target.value }))}
                   rows={3}
                   className={cn(
                     textareaClass,
-                    (draft.limitedTenderJustification || '').length > 0 && (draft.limitedTenderJustification || '').trim().length < 15 && 'border-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
+                    showErrors && (draft.limitedTenderJustification || '').trim().length < 15
+                      ? 'border-rose-400 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20'
+                      : (draft.limitedTenderJustification || '').length > 0 && (draft.limitedTenderJustification || '').trim().length < 15 && 'border-amber-400 focus:border-amber-500 focus:ring-amber-500/20'
                   )}
                   placeholder="Explain why this event is restricted to a limited vendor list (minimum 15 characters)..."
                 />
@@ -3113,8 +3180,13 @@ function BasicsStepForm({
           </div>
         )}
 
-        <Field label="Procurement title" required>
+        <Field
+          label="Procurement title"
+          required
+          error={fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required (min 3 characters).')}
+        >
           <input
+            id="basics-title"
             value={draft.basics.title}
             onChange={e => {
               const val = e.target.value;
@@ -3129,7 +3201,7 @@ function BasicsStepForm({
                 }
               }));
             }}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required.'))}
             placeholder="Office computers, AMC maintenance, raw supply..."
           />
         </Field>
@@ -3213,14 +3285,19 @@ function BasicsStepForm({
           </p>
         </Field>
 
-        <Field label="Estimated value (INR)" required>
+        <Field
+          label="Estimated value (INR)"
+          required
+          error={fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.')}
+        >
           <input
+            id="basics-estimated-value"
             type="number"
             min={0}
             value={draft.basics.estimatedValue || ''}
             onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: Number(e.target.value || 0) } }))}
             onWheel={e => (e.target as HTMLElement).blur()}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.'))}
             placeholder="0"
           />
           <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
@@ -3313,8 +3390,13 @@ function BasicsStepForm({
           </div>
         </Field>
 
-        <Field label="Procurement Category (Industry / Domain)" required>
+        <Field
+          label="Procurement Category (Industry / Domain)"
+          required
+          error={fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.')}
+        >
           <select
+            id="basics-category"
             value={
               categoriesList.some(c => c.name === draft.basics.category)
                 ? draft.basics.category
@@ -3328,7 +3410,7 @@ function BasicsStepForm({
                 boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: newCat } : row)
               }));
             }}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.'))}
           >
             <option value="">{loadingCategories ? 'Loading categories...' : '-- Select Procurement Category --'}</option>
             {categoriesList.map(opt => (
@@ -3398,7 +3480,11 @@ function BasicsStepForm({
           </select>
         </Field>
 
-        <Field label="Required by Date & Time" required>
+        <Field
+          label="Required by Date & Time"
+          required
+          error={fieldError(showErrors && !draft.basics.requiredByDate, 'Required by date & time is required.')}
+        >
           <DateTimePicker
             id="basics-required-by-datetime"
             value={
@@ -3410,6 +3496,7 @@ function BasicsStepForm({
             }
             onChange={val => updateDraft(c => ({ ...c, basics: { ...c.basics, requiredByDate: val } }))}
             placeholder="Select required date & time (12-hr AM/PM)"
+            error={fieldError(showErrors && !draft.basics.requiredByDate, 'Required by date & time is required.')}
           />
           <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
             <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
@@ -3507,8 +3594,8 @@ function BasicsStepForm({
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label htmlFor="basics-delivery-location" className="text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider text-slate-500">
-                Delivery location <span className="text-rose-600">*</span>
+              <label htmlFor="basics-delivery-location" className={cn("text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider", showErrors && !draft.basics.deliveryLocation?.trim() ? "text-rose-700" : "text-slate-500")}>
+                Delivery location <span className="text-rose-600 font-bold">*</span>
               </label>
               {resolvedAddress && draft.basics.deliveryLocation?.trim().toLowerCase() !== resolvedAddress.trim().toLowerCase() && (
                 <button
@@ -3526,10 +3613,19 @@ function BasicsStepForm({
               value={draft.basics.deliveryLocation}
               onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, deliveryLocation: e.target.value } }))}
               rows={2}
-              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+              className={cn(
+                "w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15",
+                showErrors && !draft.basics.deliveryLocation?.trim() && "border-rose-400 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20"
+              )}
               placeholder="Warehouse yard, Central office..."
               aria-required="true"
             />
+            {showErrors && !draft.basics.deliveryLocation?.trim() && (
+              <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-600 pt-0.5 animate-fadeIn">
+                <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+                Delivery location is required.
+              </span>
+            )}
             {Boolean(
               draft.basics.deliveryLocation?.trim() &&
               (
@@ -3854,11 +3950,13 @@ function BasicsStepForm({
 function InternalDetailsForm({
   draft,
   updateDraft,
-  resolvedOrgName
+  resolvedOrgName,
+  showErrors = false,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
   resolvedOrgName?: string;
+  showErrors?: boolean;
 }) {
   const updateInternal = (key: keyof Draft['internal'], val: string | boolean) => {
     updateDraft(c => ({ ...c, internal: { ...c.internal, [key]: val } }));
@@ -3875,13 +3973,18 @@ function InternalDetailsForm({
   return (
     <div className="space-y-4 sm:space-y-6">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Organization name" required>
+        <Field
+          label="Organization name"
+          required
+          error={fieldError(showErrors && !draft.internal.orgName?.trim(), 'Organization name is required.')}
+        >
           <div className="space-y-1.5">
             <div className="relative flex items-center">
               <input
+                id="internal-org-name"
                 value={draft.internal.orgName}
                 onChange={e => updateInternal('orgName', e.target.value)}
-                className={inputClass}
+                className={controlClass(fieldError(showErrors && !draft.internal.orgName?.trim(), 'Organization name is required.'))}
                 placeholder="Enter organization title"
               />
               {resolvedOrgName && !isAutoFetched && (
@@ -3904,49 +4007,59 @@ function InternalDetailsForm({
           </div>
         </Field>
 
-        {/* Buying Department field commented out as requested */}
-        {/* <Field label="Buying Department" required>
+        <Field
+          label="Contact Person Name"
+          required
+          error={fieldError(showErrors && !draft.internal.contactPerson?.trim(), 'Contact Person Name is required.')}
+        >
           <input
-            value={draft.internal.department}
-            onChange={e => updateInternal('department', e.target.value)}
-            className={inputClass}
-            placeholder="Sourcing, Procurement, IT Dept..."
-          />
-        </Field> */}
-
-        <Field label="Contact Person Name" required>
-          <input
+            id="internal-contact-person"
             value={draft.internal.contactPerson}
             onChange={e => updateInternal('contactPerson', e.target.value)}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && !draft.internal.contactPerson?.trim(), 'Contact Person Name is required.'))}
             placeholder="John Doe"
           />
         </Field>
 
-        <Field label="Contact Email Address" required>
+        <Field
+          label="Contact Email Address"
+          required
+          error={fieldError(showErrors && (!draft.internal.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.internal.email.trim())), !draft.internal.email?.trim() ? 'Contact email is required.' : 'Enter a valid email address.')}
+        >
           <input
+            id="internal-email"
             type="email"
             value={draft.internal.email}
             onChange={e => updateInternal('email', e.target.value)}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && (!draft.internal.email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.internal.email.trim())), 'Contact email is required.'))}
             placeholder="john.doe@company.com"
           />
         </Field>
 
-        <Field label="Contact Mobile Number" required>
+        <Field
+          label="Contact Mobile Number"
+          required
+          error={fieldError(showErrors && (!draft.internal.mobile?.trim() || !/^\d{10}$/.test(draft.internal.mobile.trim())), !draft.internal.mobile?.trim() ? 'Contact mobile number is required.' : 'Enter a valid 10-digit mobile number.')}
+        >
           <input
+            id="internal-mobile"
             value={draft.internal.mobile}
             onChange={e => updateInternal('mobile', e.target.value)}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && (!draft.internal.mobile?.trim() || !/^\d{10}$/.test(draft.internal.mobile.trim())), 'Contact mobile is required.'))}
             placeholder="9876543210"
           />
         </Field>
 
-        <Field label="Internal Approval Authority" required>
+        <Field
+          label="Internal Approval Authority"
+          required
+          error={fieldError(showErrors && ((draft.internal.approvalAuthority || '').trim().length < 3 || /^(.)\1{3,}$/i.test(draft.internal.approvalAuthority || '') || !/[a-zA-Z]/.test(draft.internal.approvalAuthority || '')), 'Internal Approval Authority is required (min 3 characters).')}
+        >
           <input
+            id="internal-approval-authority"
             value={draft.internal.approvalAuthority}
             onChange={e => updateInternal('approvalAuthority', e.target.value)}
-            className={inputClass}
+            className={controlClass(fieldError(showErrors && ((draft.internal.approvalAuthority || '').trim().length < 3 || /^(.)\1{3,}$/i.test(draft.internal.approvalAuthority || '') || !/[a-zA-Z]/.test(draft.internal.approvalAuthority || '')), 'Internal Approval Authority is required.'))}
             placeholder="Chief Sourcing Officer"
           />
           <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
@@ -3975,43 +4088,23 @@ function InternalDetailsForm({
           </div>
         </Field>
 
-        {/* Government specific fields commented out as requested
-        <Field label="Department File / Case Number" required>
-          <input
-            value={draft.internal.internalFileNumber}
-            onChange={e => updateInternal('internalFileNumber', e.target.value)}
-            className={inputClass}
-            placeholder="DEPT/2026/RFQ/8801"
-          />
-        </Field>
-
-        <Field label="Competent Financial Authority (CFA)" required>
-          <input
-            value={draft.internal.competentAuthority}
-            onChange={e => updateInternal('competentAuthority', e.target.value)}
-            className={inputClass}
-            placeholder="Director of Finance (DF)"
-          />
-        </Field>
-
-        <Field label="Sanction Approval Authority" required>
-          <input
-            value={draft.internal.approvalAuthority}
-            onChange={e => updateInternal('approvalAuthority', e.target.value)}
-            className={inputClass}
-            placeholder="Joint Secretary Sourcing"
-          />
-        </Field>
-        */}
-
-        <Field label="Purchase justification & compliance reason" className="sm:col-span-2" required>
+        <Field
+          label="Purchase justification & compliance reason"
+          className="sm:col-span-2"
+          required
+          error={fieldError(showErrors && ((draft.internal.justification || '').trim().length < 10 || /^(.)\1{4,}$/i.test(draft.internal.justification || '')), 'Purchase justification is required (minimum 10 characters).')}
+        >
           <div className="space-y-1.5">
             <textarea
+              id="internal-justification"
               value={draft.internal.justification}
               onChange={e => updateInternal('justification', e.target.value)}
               rows={4}
               maxLength={1000}
-              className={textareaClass}
+              className={cn(
+                textareaClass,
+                showErrors && ((draft.internal.justification || '').trim().length < 10 || /^(.)\1{4,}$/i.test(draft.internal.justification || '')) && 'border-rose-400 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20'
+              )}
               placeholder="State business justification, urgency reason, or GFR rule compliance justification..."
             />
             <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
@@ -5273,7 +5366,8 @@ function ItemsDetailsForm({
   showItemDrawer,
   setShowItemDrawer,
   selectedItemForEdit,
-  setSelectedItemForEdit
+  setSelectedItemForEdit,
+  showErrors = false,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
@@ -5281,6 +5375,7 @@ function ItemsDetailsForm({
   setShowItemDrawer: (open: boolean) => void;
   selectedItemForEdit: ItemRow | null;
   setSelectedItemForEdit: (item: ItemRow | null) => void;
+  showErrors?: boolean;
 }) {
   const category = draft.basics.procurementCategory || 'GOODS';
   const pricingFormat = draft.basics.pricingFormat || 'SINGLE_ITEM';
@@ -6553,9 +6648,25 @@ function ItemsDetailsForm({
 
   // 1. BOQ Table Mode (for BOQ Sourced, SOR, or Works Contracts)
   if (isBoqMode) {
+    const isBoqInvalid = draft.boqTable.length === 0 || !draft.boqTable.some(r => r.description.trim()) || draft.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0);
+
     return (
       <div className="space-y-4 w-full min-w-0 max-w-full">
         {pricingStructureSwitcher}
+
+        {showErrors && isBoqInvalid && (
+          <div id="boq-error-banner" className="rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 flex items-start gap-2.5 text-xs text-rose-950 shadow-sm animate-fadeIn">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold block text-rose-800">Bill of Quantities (BOQ) Requirements Missing</span>
+              <span className="text-[11px] text-rose-700 leading-relaxed block mt-0.5">
+                {draft.boqTable.length === 0 || !draft.boqTable.some(r => r.description.trim())
+                  ? (draft.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ row must be filled.' : 'At least one Bill of Quantities (BOQ) row must be filled.')
+                  : 'All BOQ rows must have positive quantities and valid rates.'}
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Scope of Work (SOW) Dossier Section for RFP, Works, or BOQ */}
         <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
@@ -7329,6 +7440,22 @@ function ItemsDetailsForm({
           </div>
         )}
 
+        {showErrors && (draft.items.length === 0 || draft.items.some(i => !i.name.trim() || i.quantity <= 0)) && (
+          <div id="items-error-banner" className="rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 flex items-start gap-2.5 text-xs text-rose-950 shadow-sm animate-fadeIn">
+            <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <span className="font-bold block text-rose-800">Mandatory Line Items Missing</span>
+              <span className="text-[11px] text-rose-700 leading-relaxed block mt-0.5">
+                {draft.items.length === 0
+                  ? (isService
+                      ? 'Please click "Initialize SOW Item" or "Add Custom Line Item" to define your service scope.'
+                      : 'At least one line item is required to proceed. Click "Add Product" or import from catalog / Excel template.')
+                  : 'All line items must have a valid item name and quantity greater than 0.'}
+              </span>
+            </div>
+          </div>
+        )}
+
         {/* Action Toolbar: Strictly gated by Procurement Category */}
         {(() => {
           const serviceCartCount = (activeCart?.items || []).filter(i => Boolean(i.service || i.serviceId || (i as any).itemType === 'Service')).length;
@@ -7772,10 +7899,12 @@ function ItemsDetailsForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function VendorsStepForm({
   draft,
-  updateDraft
+  updateDraft,
+  showErrors = false,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  showErrors?: boolean;
 }) {
   const [sellers, setSellers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(false);
@@ -7860,8 +7989,21 @@ function VendorsStepForm({
     }));
   };
 
+  const isVendorSelectionInvalid = draft.vendors.selection !== 'Open' && (!draft.vendors.invitedSellers || draft.vendors.invitedSellers.length === 0);
+
   return (
     <div className="space-y-4 sm:space-y-6">
+      {showErrors && isVendorSelectionInvalid && (
+        <div id="vendors-error-banner" className="rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 flex items-start gap-2.5 text-xs text-rose-950 shadow-sm animate-fadeIn">
+          <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold block text-rose-800">Supplier Invitation Required</span>
+            <span className="text-[11px] text-rose-700 leading-relaxed block mt-0.5">
+              You have selected a targeted vendor sourcing mode ({draft.vendors.selection}). Please invite at least 1 registered supplier from the list below, or switch sourcing mode to "Open Advertised / Public Sourcing".
+            </span>
+          </div>
+        </div>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <Field label="Supplier Sourcing Strategy" required>
           {draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED') ? (
@@ -9354,14 +9496,19 @@ function ScheduleStepForm({
                     </p>
                   </Field>
 
-                  <Field label="Minimum Bid Decrement (₹)" required className="sm:col-span-2">
+                  <Field
+                    label="Minimum Bid Decrement (₹)"
+                    required
+                    className="sm:col-span-2"
+                    error={fieldError(showErrors && draft.auctionConfig.minimumBidDecrement <= 0, 'Minimum bid decrement must be greater than 0.')}
+                  >
                     <input
                       type="number"
                       id="auction-min-bid-decrement"
                       min={1}
                       value={draft.auctionConfig.minimumBidDecrement || ''}
                       onChange={e => updateAuction('minimumBidDecrement', Number(e.target.value || 0))}
-                      className={inputClass}
+                      className={controlClass(fieldError(showErrors && draft.auctionConfig.minimumBidDecrement <= 0, 'Minimum bid decrement must be greater than 0.'))}
                       placeholder="e.g. 5000"
                     />
                     <div className="flex flex-wrap items-center gap-1.5 mt-2">
@@ -9868,6 +10015,7 @@ function CommercialTermsForm({
 
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
             <select
+              id="terms-payment-terms"
               value={draft.terms.paymentTerms === 'ADVANCE_PAYMENT' ? 'ADVANCE_PAYMENT' : 'ON_DELIVERY'}
               onChange={e => {
                 const val = e.target.value;
@@ -9888,6 +10036,7 @@ function CommercialTermsForm({
 
           <Field label="Delivery Terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.')}>
             <select
+              id="terms-delivery-terms"
               value={draft.terms.deliveryTerms}
               onChange={e => updateTerms('deliveryTerms', e.target.value)}
               className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
@@ -10120,10 +10269,12 @@ function CommercialTermsForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function DocumentsStepForm({
   draft,
-  updateDraft
+  updateDraft,
+  showErrors = false,
 }: {
   draft: Draft;
   updateDraft: (updater: (current: Draft) => Draft) => void;
+  showErrors?: boolean;
 }) {
   const handleToggleDocRequired = (id: string) => {
     updateDraft(c => ({
@@ -10190,16 +10341,29 @@ function DocumentsStepForm({
   };
 
   return (
-    <DocumentRequirementBuilder
-      documents={draft.requiredDocs}
-      onToggleRequired={handleToggleDocRequired}
-      onRemove={handleRemoveDoc}
-      onAddCustomDoc={handleAddCustomDoc}
-      onUpdateInstructions={handleUpdateDocInstructions}
-      onUploadFile={handleUploadFile}
-      onRemoveFile={handleRemoveFile}
-      isEmergencyPriority={draft.basics.priority === 'Emergency'}
-    />
+    <div className="space-y-4">
+      {showErrors && draft.requiredDocs.length === 0 && (
+        <div id="documents-error-banner" className="rounded-xl border border-rose-300 bg-rose-50/90 p-3.5 flex items-start gap-2.5 text-xs text-rose-950 shadow-sm animate-fadeIn">
+          <AlertCircle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <span className="font-bold block text-rose-800">Verification Documents Missing</span>
+            <span className="text-[11px] text-rose-700 leading-relaxed block mt-0.5">
+              Please specify at least 1 mandatory verification document required from bidders (e.g., GST Registration, PAN Card, OEM Authorization, or Custom Document).
+            </span>
+          </div>
+        </div>
+      )}
+      <DocumentRequirementBuilder
+        documents={draft.requiredDocs}
+        onToggleRequired={handleToggleDocRequired}
+        onRemove={handleRemoveDoc}
+        onAddCustomDoc={handleAddCustomDoc}
+        onUpdateInstructions={handleUpdateDocInstructions}
+        onUploadFile={handleUploadFile}
+        onRemoveFile={handleRemoveFile}
+        isEmergencyPriority={draft.basics.priority === 'Emergency'}
+      />
+    </div>
   );
 }
 
@@ -10434,18 +10598,33 @@ function PreviewPublishForm({
 // ─────────────────────────────────────────────────────────────────────────────
 function Field({ label, required, className, children, error }: { label: string; required?: boolean; className?: string; children: ReactNode; error?: string }) {
   return (
-    <label className={cn('block space-y-0.5 sm:space-y-1', className)}>
-      <span className={cn('text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider', error ? 'text-rose-700' : 'text-slate-500')}>
-        {label} {required && <span className="text-rose-600">*</span>}
+    <label className={cn('block space-y-1', className)}>
+      <span className={cn('text-[9px] sm:text-[10px] font-bold sm:font-black uppercase tracking-wide sm:tracking-wider flex items-center justify-between gap-2', error ? 'text-rose-700' : 'text-slate-500')}>
+        <span>{label} {required && <span className="text-rose-600 font-bold">*</span>}</span>
+        {error && (
+          <span className="text-[10px] font-bold text-rose-600 normal-case flex items-center gap-1 text-right">
+            <AlertCircle className="h-3 w-3 text-rose-600 shrink-0 inline" />
+            {error}
+          </span>
+        )}
       </span>
-      {children}
-      {error && <span className="block text-[10px] font-bold text-rose-600">{error}</span>}
+      <div className={cn('w-full min-w-0 transition-all', error && '[&_input:not([type=checkbox]):not([type=radio])]:border-rose-400 [&_input:not([type=checkbox]):not([type=radio])]:bg-rose-50/40 [&_input:not([type=checkbox]):not([type=radio])]:focus:border-rose-500 [&_select]:border-rose-400 [&_select]:bg-rose-50/40 [&_select]:focus:border-rose-500 [&_textarea]:border-rose-400 [&_textarea]:bg-rose-50/40 [&_textarea]:focus:border-rose-500')}>
+        {children}
+      </div>
+      {error && (
+        <span className="flex items-center gap-1.5 text-[10.5px] font-bold text-rose-600 pt-0.5 animate-fadeIn">
+          <AlertCircle className="h-3.5 w-3.5 text-rose-500 shrink-0" />
+          {error}
+        </span>
+      )}
     </label>
   );
 }
 
 const inputClass = 'h-[40px] sm:h-11 w-full min-w-0 max-w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2.5 sm:px-3 py-0 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
 const textareaClass = 'min-h-[80px] sm:min-h-[100px] w-full min-w-0 max-w-full rounded-xl sm:rounded-2xl border border-slate-200 bg-white px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-900 shadow-3xs outline-none transition focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15';
+const fieldError = (condition: boolean | undefined | null, message: string): string | undefined => condition ? message : undefined;
+const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50/40 focus:border-rose-500 focus:ring-rose-500/20');
 
 const shouldRetryDraftSaveAsNew = (err: unknown) => {
   const error = err as { status?: number; code?: string; body?: { code?: string }; message?: string };
@@ -10574,17 +10753,23 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     if (!raw) return fallback;
     return raw.startsWith('data:') ? fallback : raw.slice(0, 1000);
   };
-  const mappedDocuments = draft.requiredDocs.map(doc => ({
-    name: doc.name,
-    fileName: cleanDocName(doc.fileName || (doc.name.toLowerCase().includes('boq') && draft.boqFileName 
-      ? draft.boqFileName 
-      : (doc.name.toLowerCase().includes('specification') && draft.items?.[0]?.specificationFileName 
-        ? draft.items[0].specificationFileName 
-        : undefined)), 'attached_doc.pdf'),
-    fileAssetId: doc.fileAssetId || (doc.name.toLowerCase().includes('boq') ? draft.boqFileAssetId : null),
-    required: doc.required,
-    instructions: doc.instructions
-  }));
+  const mappedDocuments = draft.requiredDocs.map(doc => {
+    let resolvedFileName = doc.fileName;
+    if (!resolvedFileName) {
+      if (doc.name.toLowerCase().includes('boq') && draft.boqFileName) {
+        resolvedFileName = draft.boqFileName;
+      } else if (doc.name.toLowerCase().includes('specification') && draft.items?.[0]?.specificationFileName) {
+        resolvedFileName = draft.items[0].specificationFileName;
+      }
+    }
+    return {
+      name: doc.name,
+      fileName: cleanDocName(resolvedFileName, 'attached_doc.pdf'),
+      fileAssetId: doc.fileAssetId || (doc.name.toLowerCase().includes('boq') ? draft.boqFileAssetId : null),
+      required: doc.required,
+      instructions: doc.instructions
+    };
+  });
 
   // Map rules and timelines matching backend validator nested structures
   const isTwoPacket = draft.schedule.packetType === 'Two';
