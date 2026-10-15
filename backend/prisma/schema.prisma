@@ -441,6 +441,8 @@ model Organization {
   users                        User[]
   kycVerifications             UserKycVerification[]
   userRoles                    UserRole[]
+  buyerVendorAliases           BuyerVendorAlias[]                      @relation("BuyerAliases")
+  sellerVendorAliases          BuyerVendorAlias[]                      @relation("SellerAliases")
 
   @@index([organizationName])
   @@index([organizationType])
@@ -455,6 +457,27 @@ model Organization {
   @@index([createdAt])
   @@index([updatedAt])
   @@index([state])
+}
+
+model BuyerVendorAlias {
+  id              Int          @id @default(autoincrement())
+  buyerOrgId      Int
+  sellerOrgId     Int
+  erpSystem       String       @default("SAP")
+  erpVendorCode   String
+  vendorPlantCode String?
+  notes           String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  buyerOrg        Organization @relation("BuyerAliases", fields: [buyerOrgId], references: [id], onDelete: Cascade)
+  sellerOrg       Organization @relation("SellerAliases", fields: [sellerOrgId], references: [id], onDelete: Cascade)
+
+  @@unique([buyerOrgId, erpVendorCode])
+  @@unique([buyerOrgId, sellerOrgId])
+  @@index([buyerOrgId])
+  @@index([erpVendorCode])
+  @@index([sellerOrgId])
 }
 
 model BuyerRequirement {
@@ -2304,6 +2327,11 @@ model PurchaseOrder {
   amendmentHistory  Json?
   pdfFileId         Int?
   externalPoNumber  String?
+  importSource      String?                                 @default("NATIVE")
+  erpVendorCode     String?
+  externalSystem    String?
+  extractionMetadata Json?
+  claimStatus       String?                                 @default("CLAIMED")
   isDraft           Boolean                                 @default(false)
   issuedAt          DateTime?
   amendmentVersion  Int                                     @default(1)

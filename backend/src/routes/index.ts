@@ -39,6 +39,7 @@ import noticeCircularRoutes from './notice-circular.routes.js';
 import procurementSubmissionRoutes from './procurement-submission.routes.js';
 import pbgRoutes from '../modules/pbg/pbg.routes.js';
 import negotiationRoutes from '../modules/negotiation/negotiation.routes.js';
+import externalProcurementRoutes from './external-procurement.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -153,6 +154,7 @@ router.use('/', noticeCircularRoutes);
 router.use('/', procurementSubmissionRoutes);
 router.use('/pbg', pbgRoutes);
 router.use('/negotiations', negotiationRoutes);
+router.use('/', externalProcurementRoutes);
 
   return router;
 };

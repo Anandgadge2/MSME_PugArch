@@ -12,6 +12,8 @@ import { ConfirmOrderSettlementModal } from '../features/purchaseOrders/componen
 import { GrnCreateModal } from '../features/grn/components/GrnCreateModal';
 import { TaxInvoiceRegistryModal } from '../features/invoices/components/TaxInvoiceRegistryModal';
 import { EditPurchaseOrderModal } from '../features/purchaseOrders/components/EditPurchaseOrderModal';
+import { ImportExternalOrderModal } from '../features/purchaseOrders/components/ImportExternalOrderModal';
+import { downloadSapMiroExport } from '../features/purchaseOrders/lib/sapExport';
 
 export const hasApprovedGrn = (order: any): boolean => {
   if (!order) return false;
@@ -693,6 +695,27 @@ const OrderActionDropdown = ({
       </button>
 
       {(() => {
+        const inv = (order as any).invoices?.find(
+          (i: any) => !['cancelled', 'rejected'].includes(String(i.status || i.invoiceStatus || '').toLowerCase())
+        ) || (order as any).invoices?.[0];
+        if (!inv) return null;
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              onClose();
+              downloadSapMiroExport(inv.id);
+            }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-emerald-800 hover:bg-emerald-50 transition-colors text-left cursor-pointer"
+            title="Export to SAP MIRO / MIGO batch CSV"
+          >
+            <FileText className="h-3.5 w-3.5 text-emerald-600" />
+            <span>Export SAP (MIRO)</span>
+          </button>
+        );
+      })()}
+
+      {(() => {
         const isPaid = String(order.status || '').toLowerCase().includes('paid');
         const activeInvoice = (order as any).invoices?.find(
           (inv: any) =>
@@ -836,6 +859,7 @@ export default function PurchaseOrders() {
   const [editPoModalOpen, setEditPoModalOpen] = useState(false);
   const [editPoTarget, setEditPoTarget] = useState<any | null>(null);
   const [editPoMode, setEditPoMode] = useState<'draft' | 'amend'>('draft');
+  const [importExternalModalOpen, setImportExternalModalOpen] = useState(false);
 
   useEffect(() => {
     if (!openKebabId) return;
@@ -1645,9 +1669,16 @@ export default function PurchaseOrders() {
             )}
           </div>
           {(order as any).externalPoNumber && (
-            <p className="mt-0.5 text-[10px] font-mono font-bold text-slate-500 truncate" title={`SAP PO: ${(order as any).externalPoNumber}`}>
-              SAP: {(order as any).externalPoNumber}
-            </p>
+            <div className="mt-1 flex items-center gap-1 flex-wrap">
+              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
+                {String((order as any).externalSystem || (order as any).importSource || 'SAP').toUpperCase()}: {(order as any).externalPoNumber}
+              </span>
+              {(order as any).erpVendorCode && (
+                <span className="text-[9px] font-mono text-slate-500 font-semibold" title={`ERP Vendor Code: ${(order as any).erpVendorCode}`}>
+                  (V: {(order as any).erpVendorCode})
+                </span>
+              )}
+            </div>
           )}
         </div>
       ),
@@ -1739,6 +1770,15 @@ export default function PurchaseOrders() {
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Purchase Orders</h1>
         </div>
         <div className="flex items-center gap-2">
+          {isBuyer && (
+            <Button
+              onClick={() => setImportExternalModalOpen(true)}
+              className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0e2a4f] text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Import External PO (SAP / GeM)</span>
+            </Button>
+          )}
           <Button variant="outline" onClick={refreshPurchaseOrders} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">
             <RefreshCw className={cn("mr-2 h-4 w-4 text-[#12335f]", refreshing && "animate-spin")} />
             Refresh
@@ -3283,6 +3323,19 @@ export default function PurchaseOrders() {
                               </Button>
                             )}
 
+                            {/* Export SAP MIRO Batch */}
+                            {activeInvoice && (
+                              <Button
+                                variant="outline"
+                                onClick={() => downloadSapMiroExport(activeInvoice.id)}
+                                className="h-9 border-emerald-300 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap cursor-pointer shadow-2xs flex items-center gap-1.5"
+                                title="Download SAP MIRO / MIGO compatible batch CSV"
+                              >
+                                <Download className="h-3.5 w-3.5 text-emerald-600" />
+                                <span>Export to SAP (MIRO)</span>
+                              </Button>
+                            )}
+
                             {/* Cancel PO (only if not yet delivered/settled) */}
                             {!['delivered', 'completed', 'settled', 'closed'].includes(viewingStatusLower) && (
                               <Button
@@ -3678,6 +3731,19 @@ export default function PurchaseOrders() {
               } catch {
                 // ignore
               }
+            }
+          }}
+        />
+      )}
+
+      {importExternalModalOpen && (
+        <ImportExternalOrderModal
+          isOpen={importExternalModalOpen}
+          onClose={() => setImportExternalModalOpen(false)}
+          onSuccess={(newOrder) => {
+            refreshPurchaseOrders();
+            if (newOrder && newOrder.id) {
+              setViewingOrder(newOrder);
             }
           }}
         />

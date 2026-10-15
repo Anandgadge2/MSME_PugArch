@@ -169,7 +169,10 @@ const envSchema = z.object({
   DIGILOCKER_SERVICE_NAME: withFallback(['MERIPEHCHAAN_SERVICE_NAME'], z.string().trim().max(50).default('JsgSmile MSME Portal')),
   DIGILOCKER_PURPOSE_ONBOARDING: withFallback(['MERIPEHCHAAN_PURPOSE_ONBOARDING'], z.string().trim().max(50).default('User Onboarding KYC Verification')),
   DIGILOCKER_PURPOSE_PREREG: withFallback(['MERIPEHCHAAN_PURPOSE_PREREG'], z.string().trim().max(50).default('Pre Registration KYC Verification')),
-  AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60)
+  AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+  GEMINI_API_KEY: optionalString(),
+  NVIDIA_NIM_API_KEY: withFallback(['NVIDIA_NIM_API_KEY', 'NVIDIA_API_KEY'], optionalString()),
+  NVIDIA_API_KEY: optionalString()
 });
 const parsed = envSchema.safeParse(process.env);
 
