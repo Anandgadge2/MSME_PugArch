@@ -1116,8 +1116,6 @@ const ALL_STEPS: StepKind[] = ['selection', 'basics', 'internal', 'items', 'vend
 
 const defaultRequiredDocs = (_method?: ProcurementMethodId): DocumentRow[] => {
   const docs: DocumentRow[] = [
-    { id: 'gst', name: 'GST Certificate', required: true, fileType: 'pdf', maxSize: 5, instructions: 'Upload verified GST registration document.' },
-    { id: 'pan', name: 'PAN Card', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Upload official PAN card.' },
     { id: 'bank', name: 'Bank Details', required: true, fileType: 'pdf', maxSize: 2, instructions: 'Cancelled cheque or passbook.' },
     { id: 'tech_compliance', name: 'Technical Compliance Sheet', required: true, fileType: 'pdf,docx', maxSize: 10, instructions: 'Compliance report against specified standards.' },
     { id: 'financial_quote', name: 'Detailed Price Breakup', required: true, fileType: 'pdf,xlsx', maxSize: 5, instructions: 'Itemized cost schedule.' },
