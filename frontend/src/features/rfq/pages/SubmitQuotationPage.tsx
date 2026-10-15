@@ -2429,10 +2429,14 @@ export default function SubmitQuotationPage() {
         }
       }
       if (!rateFirmnessAgreed) {
-        errs.rateFirmness = 'You must accept the Rate Firmness Undertaking for Rate Contracts.';
+        errs.rateFirmness = rateContractConfig?.priceVariationClause === 'INDEX_BASED_VARIATION'
+          ? 'You must accept the Price Variation Clause (PVC) Undertaking for this Rate Contract.'
+          : rateContractConfig?.priceVariationClause === 'MUTUALLY_AGREED_REVISION'
+            ? 'You must accept the Price Revision Undertaking for this Rate Contract.'
+            : 'You must accept the Rate Firmness Undertaking for this Rate Contract.';
       }
-      if (!fallClauseAgreed) {
-        errs.fallClause = 'You must accept the Fall Clause Declaration for Rate Contracts.';
+      if (rateContractConfig?.fallClauseApplicable !== false && !fallClauseAgreed) {
+        errs.fallClause = 'You must accept the Statutory Fall Clause Declaration for Rate Contracts.';
       }
     }
 
@@ -3278,31 +3282,49 @@ export default function SubmitQuotationPage() {
                       className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
                     />
                     <div className="text-xs leading-snug">
-                      <span className="font-bold text-slate-900">Rate Firmness Undertaking: </span>
-                      <span className="text-slate-600">I confirm that all quoted unit rates shall remain firm and valid throughout the entire master agreement period without any price escalation whatsoever.</span>
+                      <span className="font-bold text-slate-900">
+                        {rateContractConfig?.priceVariationClause === 'INDEX_BASED_VARIATION'
+                          ? 'Price Variation Clause (PVC) Undertaking: '
+                          : rateContractConfig?.priceVariationClause === 'MUTUALLY_AGREED_REVISION'
+                            ? 'Price Revision Undertaking: '
+                            : 'Rate Firmness Undertaking: '}
+                      </span>
+                      <span className="text-slate-600">
+                        {rateContractConfig?.priceVariationClause === 'INDEX_BASED_VARIATION'
+                          ? `I confirm that all quoted unit rates are subject to index-linked price variation pegged to ${rateContractConfig.priceIndexBenchmark || 'RBI Wholesale Price Index (WPI)'} capped at ${rateContractConfig.maxPriceVariationCapPercent || 10}%, in accordance with agreement terms.`
+                          : rateContractConfig?.priceVariationClause === 'MUTUALLY_AGREED_REVISION'
+                            ? 'I confirm that quoted unit rates are subject to periodic joint review and mutual written agreement as stipulated in contract terms.'
+                            : 'I confirm that all quoted unit rates shall remain firm and valid throughout the entire master agreement period without any price escalation whatsoever.'}
+                      </span>
                     </div>
                   </label>
                   {fieldError('rateFirmness')}
 
-                  <label className="flex items-start gap-2.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={fallClauseAgreed}
-                      onChange={e => {
-                        setFallClauseAgreed(e.target.checked);
-                        if (e.target.checked) {
-                          setErrors(prev => { const n = { ...prev }; delete n.fallClause; return n; });
-                        }
-                      }}
-                      disabled={isReadOnly}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
-                    />
-                    <div className="text-xs leading-snug">
-                      <span className="font-bold text-slate-900">Fall Clause Declaration: </span>
-                      <span className="text-slate-600">I undertake that if at any time during the agreement duration, identical items are supplied to any other buyer at a rate lower than this contract, the contract rate shall stand proportionately reduced.</span>
-                    </div>
-                  </label>
-                  {fieldError('fallClause')}
+                  {rateContractConfig?.fallClauseApplicable !== false && (
+                    <>
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={fallClauseAgreed}
+                          onChange={e => {
+                            setFallClauseAgreed(e.target.checked);
+                            if (e.target.checked) {
+                              setErrors(prev => { const n = { ...prev }; delete n.fallClause; return n; });
+                            }
+                          }}
+                          disabled={isReadOnly}
+                          className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]"
+                        />
+                        <div className="text-xs leading-snug">
+                          <span className="font-bold text-slate-900">Statutory Fall Clause Declaration: </span>
+                          <span className="text-slate-600">
+                            I undertake that if at any time during the agreement duration, identical items are supplied to any other buyer at a rate lower than this contract, the contract rate shall stand proportionately reduced retrospectively.
+                          </span>
+                        </div>
+                      </label>
+                      {fieldError('fallClause')}
+                    </>
+                  )}
                 </div>
               </div>
             )}

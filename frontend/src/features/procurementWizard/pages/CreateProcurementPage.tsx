@@ -230,7 +230,10 @@ type RateContractConfig = {
   supplierSelectionStrategy: 'SINGLE_SUPPLIER';
   selectedSuppliers: Array<{ supplierId: number; supplierUserId?: number | null; supplierName?: string | null }>;
   itemRateSchedule: RateContractItem[];
-  priceVariationClause: 'FIXED_PRICE';
+  priceVariationClause: 'FIXED_PRICE' | 'INDEX_BASED_VARIATION' | 'MUTUALLY_AGREED_REVISION';
+  fallClauseApplicable: boolean;
+  priceIndexBenchmark?: string;
+  maxPriceVariationCapPercent?: number | null;
   callOffOrderAllowed: boolean;
   maximumOrderQuantityPerCallOff: number;
   minimumOrderQuantity: number;
@@ -715,10 +718,10 @@ const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
   startingBidPrice: 0,
   reservePrice: null,
   minimumBidDecrement: 0,
-  autoExtensionEnabled: false,
-  extensionTriggerMinutes: 5,
+  autoExtensionEnabled: true,
+  extensionTriggerMinutes: 10,
   extensionDurationMinutes: 5,
-  maximumExtensions: 3,
+  maximumExtensions: 10,
   rankVisibility: 'SHOW_RANK_ONLY',
   minimumQualifiedBidders: 2,
   termsDocumentFileId: null,
@@ -786,6 +789,9 @@ const defaultRateContractConfig = (): RateContractConfig => {
   selectedSuppliers: [],
   itemRateSchedule: [],
   priceVariationClause: 'FIXED_PRICE',
+  fallClauseApplicable: true,
+  priceIndexBenchmark: 'RBI Wholesale Price Index (WPI)',
+  maxPriceVariationCapPercent: 10,
   callOffOrderAllowed: true,
   maximumOrderQuantityPerCallOff: 0,
   minimumOrderQuantity: 0,
@@ -3267,6 +3273,18 @@ function BasicsStepForm({
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
             <span>Internal Benchmark — Used for financial validation and CFA approval tier.</span>
           </div>
+
+          {draft.type === 'LIMITED_TENDER' && Number(draft.basics.estimatedValue) > 2500000 && (
+            <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3 flex items-start gap-2.5 text-xs text-amber-950">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <span className="font-bold block">GFR Rule 162 Compliance Advisory (&gt; ₹25 Lakhs)</span>
+                <span className="text-[11px] text-amber-900 leading-relaxed block mt-0.5">
+                  Under General Financial Rules (GFR 2017 Rule 162), Limited Tender Enquiries are normally reserved for procurements up to <strong>₹25 Lakhs</strong>. Limited tendering for values above ₹25 Lakhs requires Competent Financial Authority (CFA) approval documenting urgency, standardized sources, or specialized requirements under GFR 162.
+                </span>
+              </div>
+            </div>
+          )}
 
           <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3 transition-colors hover:bg-slate-50">
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
@@ -8076,6 +8094,34 @@ function VendorsStepForm({
         </div>
       )}
 
+      {draft.type === 'LIMITED_TENDER' && (
+        <div className={`p-4 rounded-xl text-xs font-semibold flex items-start gap-2.5 shadow-2xs border ${
+          draft.vendors.invitedSellers.length < 3
+            ? 'bg-amber-50/70 border-amber-300 text-amber-950'
+            : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+        }`}>
+          <span className="text-sm shrink-0 font-normal">
+            {draft.vendors.invitedSellers.length < 3 ? '⚠️' : '✅'}
+          </span>
+          <div>
+            <span className={`font-black uppercase text-[9px] tracking-wider block ${
+              draft.vendors.invitedSellers.length < 3 ? 'text-amber-900' : 'text-emerald-900'
+            }`}>
+              {draft.vendors.invitedSellers.length < 3
+                ? 'GFR Rule 162 Sourcing Recommendation (< 3 Suppliers)'
+                : 'Limited Tender Sourcing Pool Satisfied'}
+            </span>
+            <p className={`mt-0.5 leading-relaxed font-medium ${
+              draft.vendors.invitedSellers.length < 3 ? 'text-amber-800' : 'text-emerald-800'
+            }`}>
+              {draft.vendors.invitedSellers.length < 3
+                ? `You have currently invited ${draft.vendors.invitedSellers.length} vendor(s). General Financial Rules (GFR 2017 Rule 162) recommend inviting a minimum of 3 empaneled / reliable MSME suppliers to ensure healthy competition and fair price discovery. (Advisory only — you may proceed as per department requirements).`
+                : `You have selected ${draft.vendors.invitedSellers.length} verified suppliers. The GFR 162 multi-supplier competitive threshold (minimum 3) is satisfied.`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {draft.vendors.selection !== 'Open' && (
         <SupplierSelector
           suppliers={sellers}
@@ -9077,6 +9123,28 @@ function ScheduleStepForm({
             </Field>
           );
         })()}
+
+        {draft.type === 'OPEN_TENDER' && (() => {
+          if (!draft.schedule.submissionDate) return null;
+          const startMs = draft.schedule.submissionStartDate
+            ? new Date(draft.schedule.submissionStartDate).getTime()
+            : Date.now();
+          const endMs = new Date(draft.schedule.submissionDate).getTime();
+          if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) return null;
+          const days = Math.round((endMs - startMs) / 86400000);
+          if (days >= 14) return null;
+          return (
+            <div className="sm:col-span-2 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 flex items-start gap-2.5 text-xs text-amber-950">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <span className="font-bold block">GFR 161 Standard Publication Advisory ({days} days tender window)</span>
+                <span className="text-[11px] text-amber-900 leading-relaxed block mt-0.5">
+                  General Financial Rules (GFR 2017 Rule 161) recommend a standard minimum publication window of <strong>14 to 21 days</strong> for competitive open tenders to maximize vendor participation. Because our portal maintains flexible digital workflows, you may proceed with this expedited window, or click a standard preset (+14 Days / +21 Days) above.
+                </span>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ── Live Reverse Auction (e-RA) Configuration ── */}
@@ -9659,12 +9727,153 @@ function CommercialTermsForm({
     }
   }, [draft.terms.penaltyClause, effectivePenaltyClause, updateDraft]);
 
+  const updateRateContract = <K extends keyof RateContractConfig>(key: K, val: RateContractConfig[K]) => {
+    updateDraft(c => ({
+      ...c,
+      rateContractConfig: {
+        ...c.rateContractConfig,
+        [key]: val
+      }
+    }));
+  };
+
   const missing = (value: unknown) => showErrors && !String(value ?? '').trim();
   const fieldError = (condition: boolean, message: string) => condition ? message : undefined;
   const controlClass = (error?: string) => cn(inputClass, error && 'border-rose-400 bg-rose-50 focus:border-rose-500 focus:ring-rose-500/20');
 
   return (
     <div className="space-y-4 sm:space-y-6">
+      {/* Statutory GFR Rule 170 / MSME Privilege EMD Waiver Card */}
+      <div className="rounded-xl border border-emerald-200/90 bg-gradient-to-br from-emerald-50/90 via-white to-emerald-50/50 p-4 shadow-3xs">
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800 border border-emerald-200">
+            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-xs font-black uppercase tracking-wider text-emerald-950">
+                Earnest Money Deposit (EMD / Bid Security): 100% Waived
+              </h4>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 border border-emerald-200 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                <CheckCircle2 className="h-3 w-3 text-emerald-700" />
+                Statutory MSME Exemption Active
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] leading-relaxed text-emerald-900 font-medium">
+              <strong>Statutory Authority: Rule 170(i) of General Financial Rules (GFR), 2017 &amp; Public Procurement Policy for MSEs Order, 2012.</strong> All vendors registered on this portal are pre-verified Udyam MSMEs. Under Government of India directives, 100% of onboarded MSME bidders are statutorily exempt from submitting Bid Security (EMD). A Bid Security Declaration is automatically accepted in lieu of cash/BG EMD upon submission.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {isRateContract && (
+        <div className="border border-indigo-200/90 rounded-xl p-5 space-y-4 bg-gradient-to-br from-indigo-50/40 via-white to-blue-50/30">
+          <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5 mb-2 gap-2 flex-wrap">
+            <div className="flex items-center gap-2">
+              <Scale className="h-4 w-4 text-[#0b2447]" aria-hidden="true" />
+              <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
+                Rate Contract Price Protection &amp; Variation Terms
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200">
+              CVC &amp; GFR 2017 Benchmark
+            </span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            {/* Price Variation Clause (PVC) */}
+            <div className="space-y-3">
+              <Field label="Price Variation Clause (PVC / Indexation)">
+                <select
+                  value={draft.rateContractConfig.priceVariationClause || 'FIXED_PRICE'}
+                  onChange={e => updateRateContract('priceVariationClause', e.target.value as any)}
+                  className={inputClass}
+                >
+                  <option value="FIXED_PRICE">Fixed Firm Price — No Escalation Permitted</option>
+                  <option value="INDEX_BASED_VARIATION">Index-Linked Price Variation (PVC / WPI / CPI)</option>
+                  <option value="MUTUALLY_AGREED_REVISION">Periodic Joint Review / Mutual Agreement</option>
+                </select>
+              </Field>
+
+              {draft.rateContractConfig.priceVariationClause === 'INDEX_BASED_VARIATION' && (
+                <div className="space-y-3 rounded-lg border border-indigo-200 bg-white p-3.5">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Benchmark Price Index">
+                      <input
+                        value={draft.rateContractConfig.priceIndexBenchmark || ''}
+                        onChange={e => updateRateContract('priceIndexBenchmark', e.target.value)}
+                        className={inputClass}
+                        placeholder="e.g. RBI Wholesale Price Index (WPI)"
+                      />
+                    </Field>
+                    <Field label="Maximum Variation Cap (%)">
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={draft.rateContractConfig.maxPriceVariationCapPercent ?? ''}
+                        onChange={e => updateRateContract('maxPriceVariationCapPercent', e.target.value ? Number(e.target.value) : null)}
+                        className={inputClass}
+                        placeholder="e.g. 10 (Max &plusmn;10% escalation)"
+                      />
+                    </Field>
+                  </div>
+                  <p className="text-[10.5px] text-indigo-900/80 font-medium leading-relaxed">
+                    Under GFR Rule 225 &amp; SAP Ariba standard terms, rate variations are calculated against baseline index values published by authorized statistical bodies (e.g., Office of Economic Adviser / RBI), strictly capped by the variation ceiling.
+                  </p>
+                </div>
+              )}
+
+              {draft.rateContractConfig.priceVariationClause === 'FIXED_PRICE' && (
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  Quoted prices remain 100% firm throughout the contract duration. No claim for price escalation on account of raw materials, labor, or exchange rate fluctuations will be entertained.
+                </p>
+              )}
+
+              {draft.rateContractConfig.priceVariationClause === 'MUTUALLY_AGREED_REVISION' && (
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                  Price revisions require mutual written agreement and formal amendment by both buyer and supplier prior to subsequent call-off release orders.
+                </p>
+              )}
+            </div>
+
+            {/* Statutory Fall Clause */}
+            <div className="space-y-3">
+              <div className="rounded-xl border border-slate-200/90 bg-white p-3.5 space-y-2">
+                <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={draft.rateContractConfig.fallClauseApplicable !== false}
+                    onChange={e => updateRateContract('fallClauseApplicable', e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded accent-[#0b2447]"
+                  />
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 block">
+                      Enforce Statutory Fall Clause (Recommended)
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium block mt-0.5">
+                      Statutory protection under GFR / DGS&amp;D rules to ensure buyer receives lowest rates prevailing in the market.
+                    </span>
+                  </div>
+                </label>
+
+                {draft.rateContractConfig.fallClauseApplicable !== false ? (
+                  <div className="rounded-lg bg-blue-50/70 p-2.5 text-[11px] text-blue-950 border border-blue-100 space-y-1">
+                    <span className="font-bold block text-blue-900">How the Fall Clause Operates:</span>
+                    <p className="leading-relaxed opacity-95">
+                      The supplier undertakes that the rate contract price shall not exceed the price charged to any other Central/State Govt dept, PSU, or private buyer for identical items. If the supplier sells at a lower price anywhere in India during the currency of this contract, the Rate Contract price is automatically reduced to that lower rate retrospectively.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="rounded-lg bg-amber-50/70 p-2 text-[11px] text-amber-900 border border-amber-200">
+                    <span className="font-bold">Notice:</span> Fall clause is deactivated. The contract price will not automatically adjust if the vendor offers discounts to other parties.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="grid gap-6 md:grid-cols-2">
         {/* Pricing & Commercial terms card */}
         <div className="border border-slate-200 rounded-xl p-5 space-y-4 bg-white">

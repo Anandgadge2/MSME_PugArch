@@ -138,6 +138,12 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
     initialClosing && new Date(initialClosing).getTime() <= Date.now()
   );
 
+  const hoursUntilClosing = useMemo(() => {
+    if (!initialClosing) return Infinity;
+    const ms = new Date(initialClosing).getTime() - Date.now();
+    return ms > 0 ? ms / (1000 * 60 * 60) : 0;
+  }, [initialClosing]);
+
   // Initialize or reset fields on modal open
   useEffect(() => {
     if (isOpen) {
@@ -529,6 +535,21 @@ export const ExtendScheduleModal: React.FC<ExtendScheduleModalProps> = ({
               )}
             </div>
           </div>
+
+          {/* CVC Corrigendum Extension Advisory Notice */}
+          {!isPastDeadline && hoursUntilClosing > 0 && hoursUntilClosing < 72 && (
+            <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50/80 p-3.5 text-xs flex items-start gap-2.5 text-amber-950">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <span className="font-bold block">
+                  CVC / GFR Corrigendum Advisory ({Math.round(hoursUntilClosing)}h remaining to deadline)
+                </span>
+                <p className="text-[11px] text-amber-900 leading-relaxed mt-0.5">
+                  Under Central Vigilance Commission (CVC) &amp; standard public procurement guidelines, when substantial clarifications, scope amendments, or corrigenda are issued within <strong>72 hours</strong> of tender closing, buyers are recommended to extend the deadline by at least <strong>3 to 7 days</strong> to allow MSME bidders adequate time to modify their technical and financial submissions. (Advisory only &mdash; you may proceed as per administrative discretion).
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Reopening Notification Banner for Closed/Expired Tenders */}
           {isPastDeadline && (

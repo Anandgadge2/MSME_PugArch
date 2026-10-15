@@ -1395,6 +1395,24 @@ function FinancialQuoteStep({
   return (
     <div>
       <StepTitle icon={<IndianRupee className="h-5 w-5" />} title="Financial Quote" subtitle="Upload the commercial quote and save sealed quotation values before final submission." />
+
+      {/* Statutory GFR Rule 170 MSME EMD Exemption Notice */}
+      <div className="mt-4 rounded-xl border border-emerald-200/90 bg-emerald-50/70 p-3.5 flex items-start gap-3">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <ShieldCheck className="h-4 w-4" aria-hidden="true" />
+        </div>
+        <div className="min-w-0 flex-1 text-xs">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-bold text-emerald-950">Statutory Bid Security (EMD) 100% Waived</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-200/80 text-emerald-800">
+              Udyam Verified MSME
+            </span>
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-emerald-900/90 font-medium">
+            As a verified Udyam-registered MSME, you are statutorily exempt from submitting Bid Security (EMD) under <strong>Rule 170(i) of General Financial Rules (GFR), 2017</strong> and Public Procurement Policy for MSEs Order, 2012. An official Bid Security Declaration is automatically registered on your behalf in lieu of cash/bank guarantee EMD.
+          </p>
+        </div>
+      </div>
       
       {isBoq && items.length > 0 ? (
         <div className="mt-4">

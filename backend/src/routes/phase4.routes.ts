@@ -1625,6 +1625,9 @@ const rateContractConfigSchema = z.object({
   })).default([]),
   itemRateSchedule: z.array(rateContractItemSchema).min(1),
   priceVariationClause: z.enum(['FIXED_PRICE', 'INDEX_BASED_VARIATION', 'MUTUALLY_AGREED_REVISION']).optional().default('FIXED_PRICE'),
+  fallClauseApplicable: z.coerce.boolean().optional().default(true),
+  priceIndexBenchmark: z.string().trim().max(200).optional().nullable(),
+  maxPriceVariationCapPercent: z.coerce.number().min(0).max(100).optional().nullable(),
   callOffOrderAllowed: z.coerce.boolean(),
   maximumOrderQuantityPerCallOff: z.coerce.number().positive().optional().nullable(),
   minimumOrderQuantity: z.coerce.number().nonnegative().default(0),
@@ -1684,6 +1687,11 @@ const normalizeRateContractConfigForDraft = (draft: any) => {
     selectedSuppliers,
     itemRateSchedule: items,
     priceVariationClause: raw.priceVariationClause || 'FIXED_PRICE',
+    fallClauseApplicable: raw.fallClauseApplicable !== undefined ? Boolean(raw.fallClauseApplicable) : true,
+    priceIndexBenchmark: raw.priceIndexBenchmark || null,
+    maxPriceVariationCapPercent: raw.maxPriceVariationCapPercent !== undefined && raw.maxPriceVariationCapPercent !== null && raw.maxPriceVariationCapPercent !== ''
+      ? Number(raw.maxPriceVariationCapPercent)
+      : null,
     callOffOrderAllowed: Boolean(raw.callOffOrderAllowed ?? true),
     maximumOrderQuantityPerCallOff: raw.maximumOrderQuantityPerCallOff ?? null,
     minimumOrderQuantity: raw.minimumOrderQuantity ?? 0,
@@ -14957,7 +14965,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
         `Validity: ${contract.startDate?.toISOString?.().slice(0, 10) || '-'} to ${contract.endDate?.toISOString?.().slice(0, 10) || '-'}`,
         `Rate Validity: ${metadata.rateValidityPeriod || '-'}`,
         `Call-off Orders: ${metadata.callOffOrderAllowed ? 'Allowed' : 'Not Allowed'}`,
-        `Price Variation: ${metadata.priceVariationClause || 'FIXED_PRICE'}`
+        `Price Variation: ${metadata.priceVariationClause || 'FIXED_PRICE'}${metadata.priceVariationClause === 'INDEX_BASED_VARIATION' ? ` (Pegged to ${metadata.priceIndexBenchmark || 'WPI'}, Cap: ${metadata.maxPriceVariationCapPercent ?? 10}%)` : ''}`,
+        `Statutory Fall Clause: ${metadata.fallClauseApplicable !== false ? 'Applicable (Strict GFR Protection)' : 'Exempted'}`
       ],
       detailSections: detailSections.length > 0 ? detailSections : undefined,
     });

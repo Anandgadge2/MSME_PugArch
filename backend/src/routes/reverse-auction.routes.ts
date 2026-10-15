@@ -1547,9 +1547,10 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       title: z.string().trim().optional(),
       startPrice: z.coerce.number().positive().optional(),
       minDecrementAmount: z.coerce.number().positive().default(1000),
-      autoExtensionWindowMinutes: z.coerce.number().int().min(1).max(120).default(5),
+      autoExtensionWindowMinutes: z.coerce.number().int().min(1).max(120).default(10),
       autoExtensionByMinutes: z.coerce.number().int().min(1).max(120).default(5),
       maxAutoExtensions: z.coerce.number().int().min(0).max(100).default(10),
+      rankVisibility: z.enum(['SHOW_RANK_ONLY', 'SHOW_LOWEST_PRICE', 'SHOW_ALL_PRICES']).default('SHOW_RANK_ONLY'),
       startTime: z.coerce.date().optional(),
       endTime: z.coerce.date().optional(),
       durationMinutes: z.coerce.number().int().positive().optional(),
@@ -1680,8 +1681,11 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       .filter(q => Number.isFinite(q) && q > 0);
 
     const lowestQuote = validQuotes.length ? Math.min(...validQuotes) : 0;
-    const startPrice = payload.startPrice || lowestQuote || Number(linkedBid?.estimatedValue || linkedReq?.budgetMax || 100000);
-    const currentLowestAmount = lowestQuote > 0 && lowestQuote <= startPrice ? lowestQuote : startPrice;
+    // Strict ceiling: opening reverse auction price cannot start higher than Stage 1 lowest quote
+    const startPrice = lowestQuote > 0
+      ? (payload.startPrice && payload.startPrice <= lowestQuote ? payload.startPrice : lowestQuote)
+      : (payload.startPrice || Number(linkedBid?.estimatedValue || linkedReq?.budgetMax || 100000));
+    const currentLowestAmount = lowestQuote > 0 ? lowestQuote : startPrice;
 
     const startAt = payload.startTime ? new Date(payload.startTime) : new Date();
     const duration = payload.durationMinutes || 60;
@@ -1723,7 +1727,7 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
         autoExtensionByMinutes: payload.autoExtensionByMinutes,
         maxAutoExtensions: payload.maxAutoExtensions,
         currency: 'INR',
-        rankVisibility: 'SHOW_LOWEST_PRICE',
+        rankVisibility: payload.rankVisibility || 'SHOW_RANK_ONLY',
         minimumQualifiedBidders: payload.selectedSellers.length,
         buyerOrgId: req.user?.organizationId || linkedBid?.buyerOrganizationId || null,
         createdByUserId: req.user?.id,

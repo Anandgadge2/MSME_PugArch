@@ -112,9 +112,9 @@ export default function StartReverseAuctionModal({
       : Math.max(500, Math.round(computedLowestQuote * 0.01));
   });
   const [autoExtensionEnabled, setAutoExtensionEnabled] = useState<boolean>(auctionDefaults?.autoExtensionEnabled ?? true);
-  const [extensionWindow, setExtensionWindow] = useState<number>(auctionDefaults?.extensionTriggerMinutes ?? 3);
-  const [extensionMinutes, setExtensionMinutes] = useState<number>(auctionDefaults?.extensionDurationMinutes ?? 3);
-  const [maxExtensions, setMaxExtensions] = useState<number>(auctionDefaults?.maximumExtensions ?? 5);
+  const [extensionWindow, setExtensionWindow] = useState<number>(auctionDefaults?.extensionTriggerMinutes ?? 10);
+  const [extensionMinutes, setExtensionMinutes] = useState<number>(auctionDefaults?.extensionDurationMinutes ?? 5);
+  const [maxExtensions, setMaxExtensions] = useState<number>(auctionDefaults?.maximumExtensions ?? 10);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   React.useEffect(() => {
@@ -176,9 +176,10 @@ export default function StartReverseAuctionModal({
           : `Reverse Auction — ${procurementTitle}`,
         startPrice: computedLowestQuote,
         minDecrementAmount: minDecrement,
-        autoExtensionWindowMinutes: autoExtensionEnabled ? extensionWindow : 3,
-        autoExtensionByMinutes: autoExtensionEnabled ? extensionMinutes : 3,
+        autoExtensionWindowMinutes: autoExtensionEnabled ? extensionWindow : 10,
+        autoExtensionByMinutes: autoExtensionEnabled ? extensionMinutes : 5,
         maxAutoExtensions: autoExtensionEnabled ? maxExtensions : 0,
+        rankVisibility: (auctionDefaults as any)?.rankVisibility || 'SHOW_RANK_ONLY',
         startTime,
         endTime,
         durationMinutes,
