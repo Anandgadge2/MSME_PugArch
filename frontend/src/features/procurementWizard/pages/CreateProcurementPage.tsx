@@ -715,7 +715,7 @@ const defaultAuctionConfig = (method: ProcurementMethodId): AuctionConfig => ({
   startDateTime: nextWeekDateTime,
   endDateTime: nextWeekPlusOneHourDateTime,
   durationMinutes: 60,
-  startingBidPrice: 0,
+  startingBidPrice: -1,
   reservePrice: null,
   minimumBidDecrement: 0,
   autoExtensionEnabled: true,
@@ -765,7 +765,7 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       auctionCategory: base.auctionCategory || draft.basics.category,
       buyerOrganization: base.buyerOrganization || draft.internal.orgName,
       department: base.department || draft.internal.department || draft.basics.department,
-      startingBidPrice: base.startingBidPrice || draft.basics.estimatedValue || 0,
+      startingBidPrice: -1,
       triggerConfiguration: {
         ...base.triggerConfiguration,
         preBidStageRequired: false,
@@ -1747,7 +1747,9 @@ export default function CreateProcurementPage() {
         ? (d.auctionConfig.startingBidPrice > 0 || (d.auctionConfig.startingBidPrice === -1 && d.basics.estimatedValue > 0))
         : (d.auctionConfig.startingBidPrice > 0 || d.auctionConfig.startingBidPrice === -1);
       list.push({
-        label: 'Reverse auction starting opening price must be set (> 0)',
+        label: d.auctionConfig.startingBidPrice === -1
+          ? 'Reverse auction opening price locked to dynamic L1 quote'
+          : 'Reverse auction starting opening price must be set (> 0)',
         ok: isStartingBidValid,
         severity: 'error',
         stepIdx: 8
@@ -2378,7 +2380,7 @@ export default function CreateProcurementPage() {
           setTriedNext(true);
           setTimeout(() => {
             if (lower.includes('starting') || lower.includes('ceiling') || lower.includes('price')) {
-              const el = document.getElementById('auction-starting-bid-price') || document.getElementById('auction-starting-price-mode');
+              const el = document.getElementById('auction-starting-price-display') || document.getElementById('auction-min-bid-decrement');
               el?.focus();
               el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             } else if (lower.includes('decrement')) {
@@ -9185,7 +9187,7 @@ function ScheduleStepForm({
                         procurementMethod: 'BID_WITH_REVERSE_AUCTION',
                         auctionTitle: c.auctionConfig.auctionTitle || c.basics.title || 'Live Reverse Auction',
                         auctionCategory: c.auctionConfig.auctionCategory || c.basics.category,
-                        startingBidPrice: c.auctionConfig.startingBidPrice || c.basics.estimatedValue || 0,
+                        startingBidPrice: -1,
                         minimumBidDecrement: c.auctionConfig.minimumBidDecrement > 0 ? c.auctionConfig.minimumBidDecrement : Math.max(500, Math.round((c.basics.estimatedValue || 100000) * 0.01)),
                         autoExtensionEnabled: true,
                         extensionTriggerMinutes: 5,
@@ -9319,36 +9321,21 @@ function ScheduleStepForm({
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Starting Opening Price (₹ Ceiling)">
-                    <select
-                      id="auction-starting-price-mode"
-                      value={draft.auctionConfig.startingBidPrice === -1 ? 'L1_LOWEST' : 'MANUAL'}
-                      onChange={e => {
-                        if (e.target.value === 'L1_LOWEST') {
-                          updateAuction('startingBidPrice', -1);
-                        } else {
-                          updateAuction('startingBidPrice', draft.basics.estimatedValue || 0);
-                        }
-                      }}
-                      className={inputClass}
+                    <div
+                      id="auction-starting-price-display"
+                      className="flex items-center justify-between rounded-lg border border-emerald-200 bg-emerald-50/70 px-3.5 py-2.5 text-xs text-emerald-950 shadow-sm"
                     >
-                      <option value="MANUAL">Manual Entry (Custom Opening Amount)</option>
-                      <option value="L1_LOWEST">Lowest Initial Bid of Participants (L1)</option>
-                    </select>
-                    {draft.auctionConfig.startingBidPrice !== -1 && (
-                      <input
-                        type="number"
-                        id="auction-starting-bid-price"
-                        min={0}
-                        value={draft.auctionConfig.startingBidPrice || ''}
-                        onChange={e => updateAuction('startingBidPrice', Number(e.target.value || 0))}
-                        className={cn(inputClass, 'mt-2')}
-                        placeholder={`Default: ₹${(draft.basics.estimatedValue || 0).toLocaleString('en-IN')}`}
-                      />
-                    )}
-                    <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                      {draft.auctionConfig.startingBidPrice === -1
-                        ? 'The opening price will automatically lock to the lowest qualified sealed bid (L1) at auction launch.'
-                        : 'Opening ceiling price for the downward reverse auction.'}
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex h-2 w-2 rounded-full bg-emerald-600 animate-pulse" />
+                        <span className="font-bold text-slate-800">Lowest Initial Bid of Participants (L1)</span>
+                      </div>
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800 border border-emerald-300">
+                        <Lock className="h-2.5 w-2.5 text-emerald-700" />
+                        GeM / CVC Standard
+                      </span>
+                    </div>
+                    <p className="text-[10px] text-slate-500 font-medium mt-1.5 leading-relaxed">
+                      Statutory rule: The reverse auction opening ceiling automatically locks to the lowest qualified sealed bid (L1) discovered at financial opening. Manual override is omitted per GeM &amp; CVC public procurement mandates.
                     </p>
                   </Field>
 
