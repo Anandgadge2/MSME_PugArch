@@ -864,8 +864,13 @@ export const procurementBidApi = {
     const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/accept-po`, data, { headers: authHeaders() });
     return readApiBody(res);
   },
-  async declinePO(poId: number | string, reason: string) {
-    const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/decline`, { reason }, { headers: authHeaders() });
+  async declinePO(poId: number | string, reason: string, options?: { reasonCode?: string; evidenceFileId?: number; category?: 'EXCUSED' | 'UNEXCUSED' }) {
+    const res = await api.post(`/api/seller/purchase-orders/${encodeURIComponent(String(poId))}/decline`, {
+      reason,
+      reasonCode: options?.reasonCode,
+      evidenceFileId: options?.evidenceFileId,
+      category: options?.category
+    }, { headers: authHeaders() });
     return readApiBody(res);
   },
   async recordOrderPayment(invoiceId: number | string, data: { paymentReference: string; bankName: string; paymentDate: string; paymentSlipFileId?: number; remarks?: string }) {

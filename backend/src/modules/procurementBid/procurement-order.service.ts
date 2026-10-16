@@ -13,6 +13,7 @@ import { getOrGeneratePurchaseOrderPdfBuffer } from '../../services/invoice-pdf.
 import { formatRefId } from '../../utils/refIdUtils.js';
 import { broadcastToAuction, broadcastToProcurement } from '../../services/websocket.service.js';
 import { invalidateBidCaches } from './procurement-bid.routes.js';
+import { getPoDeclineReasonByCode, PO_DECLINE_REASONS } from './po-decline.constants.js';
 
 const db = prisma as any;
 
@@ -1126,7 +1127,18 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
   return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
 };
 
-export const rejectPO = async (req: AuthRequest, orderId: number, reason: string) => {
+export interface RejectPoOptions {
+  reasonCode?: string;
+  evidenceFileId?: number;
+  category?: 'EXCUSED' | 'UNEXCUSED';
+}
+
+export const rejectPO = async (
+  req: AuthRequest,
+  orderId: number,
+  reason: string,
+  options: RejectPoOptions = {}
+) => {
   const po = await loadProcurementOrder(req.user!, orderId);
   if (!isAdmin(req.user) && po.sellerId !== req.user!.id) {
     const sellerIds = await getSellerUserIdsForActor(req.user!);
@@ -1139,6 +1151,12 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
   if (['accepted', 'in_fulfillment', 'delivered', 'completed', 'paid'].includes(statusLower)) {
     throw new ApiError(400, 'Cannot decline a purchase order that has already been accepted or is in fulfillment.', 'INVALID_STATUS');
   }
+
+  const matchedReason = getPoDeclineReasonByCode(options.reasonCode);
+  const isExcused = matchedReason ? matchedReason.isExcused : options.category === 'EXCUSED';
+  const reasonCode = options.reasonCode || 'OTHER_OPERATIONAL';
+  const reasonLabel = matchedReason?.label || reasonCode;
+  const evidenceFileId = options.evidenceFileId ? Number(options.evidenceFileId) : undefined;
 
   let bidId = po.bidId || (po.metadata as any)?.bidId;
   let awardId = (po.metadata as any)?.awardId || (po.sourceType === 'procurement_bid_award' ? po.sourceId : null);
@@ -1159,9 +1177,30 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
     if (awardRecord?.id) awardId = awardRecord.id;
   }
 
+  // Check if PerformanceGuarantee exists for this PO
+  const existingPbg = await db.performanceGuarantee.findFirst({
+    where: { purchaseOrderId: po.id }
+  }).catch(() => null);
+
   const prevMetadata = (typeof po.metadata === 'object' && po.metadata !== null) ? po.metadata : {};
 
+  // Check past unexcused declines within last 90 days
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const pastUnexcusedCount = !isExcused
+    ? await db.dispute.count({
+        where: {
+          sellerId: po.sellerId,
+          category: 'PO_DECLINED',
+          priority: 'HIGH',
+          createdAt: { gte: ninetyDaysAgo }
+        }
+      }).catch(() => 0)
+    : 0;
+
+  const currentStrike = isExcused ? 0 : pastUnexcusedCount + 1;
+
   const updated = await db.$transaction(async (tx: any) => {
+    // 1. Cancel Purchase Order
     const updatedPO = await tx.purchaseOrder.update({
       where: { id: po.id },
       data: {
@@ -1170,32 +1209,56 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
         metadata: {
           ...prevMetadata,
           declineReason: reason,
-          declinedAt: new Date().toISOString()
+          declineReasonCode: reasonCode,
+          declineReasonLabel: reasonLabel,
+          declineCategory: isExcused ? 'EXCUSED' : 'UNEXCUSED',
+          isExcused,
+          evidenceFileId,
+          declinedAt: new Date().toISOString(),
+          pbgReleased: !!existingPbg,
+          disciplineStrike: currentStrike
         }
       }
     });
 
+    // 2. Cancel Delivery Tracking
     if (po.deliveryTrackings?.[0]?.id) {
       await tx.deliveryTracking.update({
         where: { id: po.deliveryTrackings[0].id },
-        data: { status: 'CANCELLED', remarks: `PO declined by supplier: ${reason}` }
+        data: {
+          status: 'CANCELLED',
+          remarks: `PO declined by supplier: [${reasonCode}] ${reason}`
+        }
       }).catch(() => null);
     }
 
+    // 3. Auto-release Performance Bank Guarantee (GFR 171 compliance)
+    if (existingPbg) {
+      await tx.performanceGuarantee.update({
+        where: { id: existingPbg.id },
+        data: {
+          status: 'RELEASED_COMPLETED',
+          releasedAt: new Date(),
+          makerRemarks: `PBG released automatically under GFR 171 upon PO decline (${reasonCode}: ${reason})`
+        }
+      }).catch(() => undefined);
+    }
+
+    // 4. Update Award Status
     if (awardId && !isNaN(Number(awardId))) {
       await tx.procurementBidAward.update({
         where: { id: Number(awardId) },
         data: {
           awardStatus: 'DECLINED',
           declinedAt: new Date(),
-          declinedReason: reason,
-          remarks: reason
+          declinedReason: `[${reasonCode}] ${reason}`,
+          remarks: `[${reasonCode}] ${reason}`
         }
       }).catch(() => undefined);
     }
 
+    // 5. Update Bid and Participation
     if (bidId && !isNaN(Number(bidId))) {
-      // 1. Mark participation as AWARD_DECLINED (valid enum value in ProcurementFinalStatus)
       await tx.procurementBidParticipation.updateMany({
         where: {
           bidId: Number(bidId),
@@ -1203,11 +1266,11 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
         },
         data: {
           finalStatus: 'AWARD_DECLINED',
-          rejectionReason: reason
+          rejectionReason: `[${reasonCode}] ${reason}`
         }
       });
 
-      // 2. Return bid status to AWARD_RECOMMENDED so buyer can re-award or evaluate alternate bids
+      // Return bid status to AWARD_RECOMMENDED so buyer can re-award or evaluate alternate bids
       await tx.procurementBid.update({
         where: { id: Number(bidId) },
         data: {
@@ -1217,18 +1280,117 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
       });
     }
 
+    // 6. Record Incident in Dispute Module (GeM Incident Management System standard)
+    const disputeNo = formatRefId('INC-PO', po.id);
+    const incident = await tx.dispute.create({
+      data: {
+        disputeNo,
+        purchaseOrderId: po.id,
+        buyerId: po.buyerId,
+        sellerId: po.sellerId,
+        raisedById: req.user!.id,
+        category: 'PO_DECLINED',
+        reason: reasonCode,
+        title: `Purchase Order #${po.poNumber} Declined: ${reasonLabel}`,
+        description: reason,
+        priority: isExcused ? 'LOW' : 'HIGH',
+        status: 'closed',
+        statusEnum: 'RESOLVED',
+        closedAt: new Date(),
+        resolutionSummary: existingPbg
+          ? `PO declined by supplier. PBG was automatically released under GFR 171. Classification: ${isExcused ? 'Contractual / Excused' : 'Commercial Default'}.`
+          : `PO declined by supplier before fulfillment. Classification: ${isExcused ? 'Contractual / Excused' : 'Commercial Default'}.`,
+        linkedEntityType: 'PurchaseOrder',
+        linkedEntityId: po.id
+      }
+    }).catch(() => null);
+
+    if (incident?.id && evidenceFileId) {
+      await tx.disputeEvidence.create({
+        data: {
+          disputeId: incident.id,
+          fileAssetId: evidenceFileId,
+          uploadedById: req.user!.id,
+          description: `Supporting evidence for PO decline: ${reasonLabel}`
+        }
+      }).catch(() => undefined);
+    }
+
+    // 7. Vendor Discipline: Demerit in SupplierRating if unexcused default
+    if (!isExcused) {
+      await tx.supplierRating.create({
+        data: {
+          buyerId: po.buyerId,
+          sellerId: po.sellerId,
+          purchaseOrderId: po.id,
+          rating: Math.max(1, 4 - pastUnexcusedCount), // Strike 1: 3-star demerit, Strike 2: 2-star, Strike 3: 1-star
+          review: `[Vendor Discipline Default Strike ${currentStrike}] PO #${po.poNumber} declined without contractual excuse (${reasonLabel}): ${reason}`
+        }
+      }).catch(() => undefined);
+    }
+
     return updatedPO;
   });
 
-  await procurementOrderAudit(req, 'PO_DECLINED', 'PurchaseOrder', po.id, { reason, bidId, awardId });
+  await procurementOrderAudit(req, 'PO_DECLINED', 'PurchaseOrder', po.id, {
+    reason,
+    reasonCode,
+    isExcused,
+    evidenceFileId,
+    bidId,
+    awardId,
+    pbgReleased: !!existingPbg,
+    disciplineStrike: currentStrike
+  });
 
+  // Notify Buyer
+  const sellerOrgName = await resolveSellerOrgName(po.sellerId || req.user?.id);
   await notificationService.notifyUser(po.buyerId, {
     title: 'Purchase Order Declined by Supplier',
-    message: `Supplier has declined Purchase Order #${po.poNumber}. Reason: ${reason}. You may re-award to an alternate qualified vendor or renegotiate.`,
+    message: `${sellerOrgName} has declined Purchase Order #${po.poNumber}. Reason: ${reasonLabel} - "${reason}". You may re-award to an alternate qualified vendor (L2) or renegotiate.`,
     type: 'purchase_order',
     redirectUrl: bidId ? `/bids/${bidId}` : `/buyer/orders?orderId=${po.id}`
   }).catch(() => undefined);
 
+  // Progressive Discipline Notifications to Seller
+  if (isExcused) {
+    await notificationService.notifyUser(po.sellerId, {
+      title: 'Purchase Order Declined (Contractual / Excused)',
+      message: `Purchase Order #${po.poNumber} has been cancelled. Your reason "${reasonLabel}" is classified as Contractual / Excused. Zero impact on your seller reliability rating. Any PBG has been released.`,
+      type: 'purchase_order',
+      redirectUrl: `/seller/orders?orderId=${po.id}`
+    }).catch(() => undefined);
+  } else {
+    let disciplineMsg = `Notice: 1st commercial default recorded for PO #${po.poNumber}. Repeated declines within 90 days may impact your bidding eligibility.`;
+    if (currentStrike === 2) {
+      disciplineMsg = `Warning: 2nd commercial default recorded within 90 days for PO #${po.poNumber}. A 3rd default will initiate an administrative compliance review.`;
+    } else if (currentStrike >= 3) {
+      disciplineMsg = `Alert: 3rd commercial default recorded within 90 days for PO #${po.poNumber}. Your profile has been flagged for administrative review under platform vendor discipline rules.`;
+      
+      // Notify Master Admin of 3+ strikes
+      const admins = await db.user.findMany({
+        where: { role: { in: ['admin', 'master_admin'] }, status: 'ACTIVE' },
+        select: { id: true }
+      }).catch(() => []);
+      for (const admin of admins) {
+        await notificationService.notifyUser(admin.id, {
+          title: 'Vendor Compliance Alert: 3+ Defaults',
+          message: `Seller "${sellerOrgName}" (ID: ${po.sellerId}) has accumulated ${currentStrike} unexcused PO declines in the past 90 days. Review required.`,
+          type: 'compliance_alert',
+          redirectUrl: `/admin/users?search=${encodeURIComponent(sellerOrgName)}`
+        }).catch(() => undefined);
+      }
+    }
+
+    await notificationService.notifyUser(po.sellerId, {
+      title: currentStrike >= 3 ? 'Vendor Discipline Alert' : 'Vendor Discipline Notice',
+      message: disciplineMsg,
+      type: 'compliance_alert',
+      redirectUrl: `/seller/orders?orderId=${po.id}`
+    }).catch(() => undefined);
+  }
+
+  // Real-time broadcasts
   try {
     if (bidId) {
       invalidateBidCaches(bidId).catch(() => {});
@@ -1248,7 +1410,13 @@ export const rejectPO = async (req: AuthRequest, orderId: number, reason: string
     }
   } catch {}
 
-  return { purchaseOrder: updated, message: 'Purchase Order declined successfully' };
+  return {
+    purchaseOrder: updated,
+    pbgReleased: !!existingPbg,
+    isExcused,
+    strike: currentStrike,
+    message: 'Purchase Order declined successfully'
+  };
 };
 
 export const updateOrderDelivery = async (req: AuthRequest, orderId: number, body: any) => {

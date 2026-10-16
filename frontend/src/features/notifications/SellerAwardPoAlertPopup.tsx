@@ -14,7 +14,12 @@ import {
   Sparkles,
   ExternalLink,
   Receipt,
-  XCircle
+  XCircle,
+  Paperclip,
+  Upload,
+  FileText,
+  ShieldAlert,
+  ShieldCheck
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useQueryClient } from '@tanstack/react-query';
@@ -22,6 +27,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { getApi, postApi } from '../shared/apiClient';
 import { formatCurrency } from '../shared/format';
 import { procurementBidApi } from '../procurementBid/api';
+import { PO_DECLINE_REASONS, getPoDeclineReasonByCode } from '../procurementBid/poDeclineReasons';
 
 interface PendingAward {
   id: number;
@@ -78,7 +84,10 @@ export default function SellerAwardPoAlertPopup() {
 
   // Decline states for Purchase Orders
   const [decliningPoId, setDecliningPoId] = useState<number | null>(null);
+  const [declineReasonCode, setDeclineReasonCode] = useState<string>('BUYER_TERMS_DISCREPANCY');
   const [declineReason, setDeclineReason] = useState('');
+  const [evidenceFile, setEvidenceFile] = useState<{ id: number; name: string } | null>(null);
+  const [isUploadingEvidence, setIsUploadingEvidence] = useState(false);
   const [isDeclining, setIsDeclining] = useState(false);
 
   // Decline states for Awards
@@ -335,21 +344,74 @@ export default function SellerAwardPoAlertPopup() {
     }
   };
 
-  const handleDeclinePO = async (poId: number) => {
-    if (!declineReason.trim() || declineReason.trim().length < 5) {
-      toast.error('Please enter a reason for declining the Purchase Order (minimum 5 characters).');
+  const handleUploadEvidence = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be 10MB or less.');
       return;
     }
+    setIsUploadingEvidence(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('entityType', 'po_decline_evidence');
+
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData
+      });
+
+      if (!res.ok) {
+        throw new Error('Upload failed with status ' + res.status);
+      }
+      const data = await res.json();
+      const fileId = data?.data?.fileId || data?.data?.id || data?.fileId || data?.id;
+      setEvidenceFile({ id: Number(fileId), name: file.name });
+      toast.success('Supporting document uploaded successfully');
+    } catch (err: any) {
+      toast.error('Failed to upload evidence document', {
+        description: err?.message || 'Please try a different file.'
+      });
+    } finally {
+      setIsUploadingEvidence(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleDeclinePO = async (poId: number) => {
+    if (!declineReason.trim() || declineReason.trim().length < 10) {
+      toast.error('Please enter detailed remarks for declining the Purchase Order (minimum 10 characters).');
+      return;
+    }
+
+    const matchedReason = getPoDeclineReasonByCode(declineReasonCode);
+    if (matchedReason?.requiresEvidence && !evidenceFile) {
+      toast.error(`Supporting evidence is mandatory for "${matchedReason.label}". Please upload a file.`);
+      return;
+    }
+
     setIsDeclining(true);
     try {
       await postApi(`/api/seller/purchase-orders/${poId}/decline`, {
-        reason: declineReason.trim()
+        reasonCode: declineReasonCode,
+        reason: declineReason.trim(),
+        evidenceFileId: evidenceFile?.id,
+        category: matchedReason?.category
       });
+
       toast.success('Purchase Order Declined', {
-        description: 'The buyer has been notified and the purchase order has been cancelled.'
+        description: matchedReason?.isExcused
+          ? 'Contractual/Excused reason recorded. Zero penalty applied to your vendor rating. PBG released under GFR 171.'
+          : 'Purchase Order cancelled. Commercial default recorded under Vendor Discipline.'
       });
+
       setDecliningPoId(null);
       setDeclineReason('');
+      setDeclineReasonCode('BUYER_TERMS_DISCREPANCY');
+      setEvidenceFile(null);
       window.dispatchEvent(new CustomEvent('notifications:updated'));
       window.dispatchEvent(new CustomEvent('orders:updated'));
       await checkPendingAwardsAndPOs(true);
@@ -640,27 +702,144 @@ export default function SellerAwardPoAlertPopup() {
 
                     {/* Actions */}
                     {decliningPoId === po.id ? (
-                      <div className="mt-3.5 rounded-xl border border-rose-200 bg-rose-50/80 p-3 animate-in fade-in duration-200">
-                        <label
-                          htmlFor={`decline-po-input-${po.id}`}
-                          className="block text-xs font-bold text-rose-900 mb-1"
-                        >
-                          Reason for Declining PO:
-                        </label>
-                        <textarea
-                          id={`decline-po-input-${po.id}`}
-                          rows={2}
-                          value={declineReason}
-                          onChange={(e) => setDeclineReason(e.target.value)}
-                          placeholder="e.g. Inability to fulfill delivery timeline..."
-                          className="w-full rounded-lg border border-rose-300 p-2 text-xs font-medium text-slate-900 bg-white focus:outline-rose-500 resize-none shadow-inner"
-                        />
-                        <div className="mt-2 flex items-center justify-end gap-2">
+                      <div className="mt-3.5 rounded-xl border border-rose-200 bg-rose-50/90 p-3.5 space-y-3 animate-in fade-in duration-200">
+                        {/* 1. Structured Reason Category Selector */}
+                        <div>
+                          <label
+                            htmlFor={`decline-po-reason-select-${po.id}`}
+                            className="block text-xs font-bold text-slate-800 mb-1"
+                          >
+                            Reason for Declining PO & Category <span className="text-rose-600">*</span>
+                          </label>
+                          <select
+                            id={`decline-po-reason-select-${po.id}`}
+                            value={declineReasonCode}
+                            onChange={(e) => setDeclineReasonCode(e.target.value)}
+                            className="w-full rounded-lg border border-slate-300 p-2 text-xs font-semibold text-slate-900 bg-white focus:outline-rose-500 shadow-sm"
+                          >
+                            <optgroup label="Contractual / Excused Reasons (Zero Vendor Penalty)">
+                              {PO_DECLINE_REASONS.filter((r) => r.isExcused).map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                            <optgroup label="Commercial / Operational Defaults (Recorded under Discipline)">
+                              {PO_DECLINE_REASONS.filter((r) => !r.isExcused).map((r) => (
+                                <option key={r.code} value={r.code}>
+                                  {r.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          </select>
+                        </div>
+
+                        {/* 2. Policy Impact Notice Badge */}
+                        {(() => {
+                          const matchedReason = getPoDeclineReasonByCode(declineReasonCode);
+                          if (matchedReason?.isExcused) {
+                            return (
+                              <div className="flex items-start gap-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-900 text-[11px] leading-relaxed">
+                                <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                                <div>
+                                  <p className="font-bold text-emerald-800">Excused Contractual Reason</p>
+                                  <p className="text-emerald-700">Zero penalty on your vendor reliability rating. Any active Performance Bank Guarantee (PBG) is automatically released under GFR 171.</p>
+                                </div>
+                              </div>
+                            );
+                          }
+                          return (
+                            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 text-[11px] leading-relaxed">
+                              <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                              <div>
+                                <p className="font-bold text-amber-800">Commercial Default Notice</p>
+                                <p className="text-amber-700">This decline will be recorded under Vendor Discipline. 3+ unexcused declines in 90 days trigger administrative review and bidding restrictions.</p>
+                              </div>
+                            </div>
+                          );
+                        })()}
+
+                        {/* 3. Detailed Justification Remarks */}
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label
+                              htmlFor={`decline-po-input-${po.id}`}
+                              className="block text-xs font-bold text-slate-800"
+                            >
+                              Detailed Factual Justification <span className="text-rose-600">*</span>
+                            </label>
+                            <span className="text-[10px] font-bold text-slate-400">
+                              {declineReason.trim().length}/10 chars min
+                            </span>
+                          </div>
+                          <textarea
+                            id={`decline-po-input-${po.id}`}
+                            rows={2}
+                            value={declineReason}
+                            onChange={(e) => setDeclineReason(e.target.value)}
+                            placeholder="Provide specific factual justification for the procurement audit record..."
+                            className="w-full rounded-lg border border-slate-300 p-2 text-xs font-medium text-slate-900 bg-white focus:outline-rose-500 resize-none shadow-inner"
+                          />
+                        </div>
+
+                        {/* 4. Evidence File Attachment */}
+                        <div>
+                          <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                            Supporting Document{' '}
+                            {getPoDeclineReasonByCode(declineReasonCode)?.requiresEvidence ? (
+                              <span className="text-rose-600 font-bold">*(Mandatory for Force Majeure)</span>
+                            ) : (
+                              <span className="text-slate-400 font-normal">(Optional PDF/PNG/JPG up to 10MB)</span>
+                            )}
+                          </label>
+
+                          {evidenceFile ? (
+                            <div className="flex items-center justify-between p-2 rounded-lg bg-white border border-slate-200 shadow-sm">
+                              <div className="flex items-center gap-2 truncate">
+                                <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
+                                <span className="text-xs font-semibold text-slate-800 truncate">{evidenceFile.name}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => setEvidenceFile(null)}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                title="Remove file"
+                              >
+                                <X className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <label className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer transition shadow-sm">
+                              {isUploadingEvidence ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-600" />
+                                  <span>Uploading...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Paperclip className="h-3.5 w-3.5 text-slate-500" />
+                                  <span>Attach Evidence Document</span>
+                                </>
+                              )}
+                              <input
+                                type="file"
+                                accept=".pdf,.png,.jpg,.jpeg"
+                                onChange={handleUploadEvidence}
+                                disabled={isUploadingEvidence || isDeclining}
+                                className="hidden"
+                              />
+                            </label>
+                          )}
+                        </div>
+
+                        {/* 5. Actions */}
+                        <div className="mt-2 flex items-center justify-end gap-2 pt-2 border-t border-rose-200/60">
                           <button
                             type="button"
                             onClick={() => {
                               setDecliningPoId(null);
                               setDeclineReason('');
+                              setEvidenceFile(null);
                             }}
                             disabled={isDeclining}
                             className="rounded-lg px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-200 transition"
@@ -670,7 +849,11 @@ export default function SellerAwardPoAlertPopup() {
                           <button
                             type="button"
                             onClick={() => handleDeclinePO(po.id)}
-                            disabled={isDeclining || !declineReason.trim()}
+                            disabled={
+                              isDeclining ||
+                              declineReason.trim().length < 10 ||
+                              (getPoDeclineReasonByCode(declineReasonCode)?.requiresEvidence && !evidenceFile)
+                            }
                             className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-3.5 py-1.5 text-xs font-black text-white hover:bg-rose-700 disabled:opacity-50 shadow-sm transition"
                           >
                             {isDeclining ? (

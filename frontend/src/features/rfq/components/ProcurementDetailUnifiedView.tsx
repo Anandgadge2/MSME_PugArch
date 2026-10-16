@@ -84,6 +84,7 @@ import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
 import { procurementBidApi } from "../../procurementBid/api";
+import { PO_DECLINE_REASONS, getPoDeclineReasonByCode } from "../../procurementBid/poDeclineReasons";
 import { KpiCard } from "../../shared/KpiCard";
 import ClarificationPanel from "./ClarificationPanel";
 import type { SubmittedVendorItem } from "../../reverseAuctions/components/StartReverseAuctionModal";
@@ -5548,6 +5549,9 @@ export function ProcurementDetailUnifiedView(
     orderId?: string | number;
     type: "price_match" | "award" | "po";
     reason: string;
+    reasonCode?: string;
+    evidenceFile?: { id: number; name: string } | null;
+    isUploadingEvidence?: boolean;
     submitting: boolean;
   }>({
     show: false,
@@ -5555,6 +5559,9 @@ export function ProcurementDetailUnifiedView(
     orderId: "",
     type: "price_match",
     reason: "",
+    reasonCode: "BUYER_TERMS_DISCREPANCY",
+    evidenceFile: null,
+    isUploadingEvidence: false,
     submitting: false,
   });
   const [isAcceptingAction, setIsAcceptingAction] = useState(false);
@@ -6760,11 +6767,51 @@ export function ProcurementDetailUnifiedView(
     }
   };
 
+  const handleDeclineEvidenceUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File size must be 10MB or less.");
+      return;
+    }
+    setDeclineModal((prev) => ({ ...prev, isUploadingEvidence: true }));
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("entityType", "po_decline_evidence");
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") || "" : "";
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Upload failed with status " + res.status);
+      const data = await res.json();
+      const fileId = data?.data?.fileId || data?.data?.id || data?.fileId || data?.id;
+      setDeclineModal((prev) => ({
+        ...prev,
+        evidenceFile: { id: Number(fileId), name: file.name },
+        isUploadingEvidence: false,
+      }));
+      toast.success("Supporting evidence document uploaded");
+    } catch (err: any) {
+      toast.error("Failed to upload document", { description: err?.message });
+      setDeclineModal((prev) => ({ ...prev, isUploadingEvidence: false }));
+    } finally {
+      e.target.value = "";
+    }
+  };
+
   const handleDeclinePOSubmit = async () => {
     const poId = declineModal.orderId || effectiveActiveOrder?.id;
     if (!poId) return;
-    if (!declineModal.reason.trim()) {
-      toast.error("Please provide a reason for declining the Purchase Order.");
+    if (!declineModal.reason.trim() || declineModal.reason.trim().length < 10) {
+      toast.error("Please provide detailed remarks for declining the Purchase Order (minimum 10 characters).");
+      return;
+    }
+    const matchedReason = getPoDeclineReasonByCode(declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY');
+    if (matchedReason?.requiresEvidence && !declineModal.evidenceFile) {
+      toast.error(`Supporting evidence document is mandatory for "${matchedReason.label}". Please attach a file.`);
       return;
     }
     try {
@@ -6772,14 +6819,26 @@ export function ProcurementDetailUnifiedView(
       await procurementBidApi.declinePO(
         poId,
         declineModal.reason.trim(),
+        {
+          reasonCode: declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY',
+          evidenceFileId: declineModal.evidenceFile?.id,
+          category: matchedReason?.category
+        }
       );
-      toast.success("Purchase Order declined. The Buyer has been notified.");
+      toast.success(
+        matchedReason?.isExcused
+          ? "Purchase Order declined. Excused contractual reason recorded (zero rating penalty). PBG released under GFR 171."
+          : "Purchase Order declined. Commercial default recorded under Vendor Discipline."
+      );
       setDeclineModal({
         show: false,
         awardId: "",
         orderId: "",
         type: "po",
         reason: "",
+        reasonCode: "BUYER_TERMS_DISCREPANCY",
+        evidenceFile: null,
+        isUploadingEvidence: false,
         submitting: false,
       });
       await queryClient.invalidateQueries();
@@ -12820,33 +12879,177 @@ export function ProcurementDetailUnifiedView(
                     ? "Please provide a reason for declining this Purchase Order. The buyer will be notified and the order will be cancelled."
                     : "Please provide a reason for declining this contract award. The tender will be returned to the buyer for re-evaluation."}
                 </p>
-                <div className="mt-3">
-                  <label
-                    htmlFor="decline-modal-reason-input"
-                    className="text-xs font-black text-slate-700 block mb-1"
-                  >
-                    Reason for Declining{" "}
-                    <span className="text-rose-500">*</span>
-                  </label>
-                  <textarea
-                    id="decline-modal-reason-input"
-                    rows={3}
-                    value={declineModal.reason}
-                    onChange={(e) =>
-                      setDeclineModal((prev) => ({
-                        ...prev,
-                        reason: e.target.value,
-                      }))
-                    }
-                    placeholder={
-                      declineModal.type === "po"
-                        ? "e.g. Inability to fulfill delivery within requested timeline or specification mismatch..."
-                        : "e.g. Cannot meet target price due to raw material cost escalation..."
-                    }
-                    className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none"
-                    aria-required="true"
-                  />
-                </div>
+                {declineModal.type === "po" ? (
+                  <div className="mt-3 space-y-3">
+                    {/* Reason Category Selector */}
+                    <div>
+                      <label
+                        htmlFor="decline-modal-reason-code"
+                        className="text-xs font-black text-slate-700 block mb-1"
+                      >
+                        Decline Reason & Category <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id="decline-modal-reason-code"
+                        value={declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY'}
+                        onChange={(e) =>
+                          setDeclineModal((prev) => ({
+                            ...prev,
+                            reasonCode: e.target.value,
+                          }))
+                        }
+                        className="w-full rounded-xl border border-slate-300 p-2.5 text-xs font-semibold text-slate-900 bg-white focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none shadow-sm"
+                      >
+                        <optgroup label="Contractual / Excused Reasons (Zero Vendor Penalty)">
+                          {PO_DECLINE_REASONS.filter((r) => r.isExcused).map((r) => (
+                            <option key={r.code} value={r.code}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                        <optgroup label="Commercial / Operational Defaults (Recorded under Discipline)">
+                          {PO_DECLINE_REASONS.filter((r) => !r.isExcused).map((r) => (
+                            <option key={r.code} value={r.code}>
+                              {r.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      </select>
+                    </div>
+
+                    {/* Policy Badge */}
+                    {(() => {
+                      const matched = getPoDeclineReasonByCode(declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY');
+                      if (matched?.isExcused) {
+                        return (
+                          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs leading-relaxed">
+                            <ShieldCheck className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" />
+                            <div>
+                              <p className="font-bold text-emerald-800">Excused Contractual Reason</p>
+                              <p className="text-emerald-700">Zero penalty on your vendor reliability rating. Any active Performance Bank Guarantee (PBG) is automatically released under GFR 171.</p>
+                            </div>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs leading-relaxed">
+                          <ShieldAlert className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-bold text-amber-800">Commercial Default Notice</p>
+                            <p className="text-amber-700">This decline will be recorded under Vendor Discipline. 3+ unexcused declines in 90 days trigger administrative review and bidding restrictions.</p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Justification remarks */}
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label
+                          htmlFor="decline-modal-reason-input"
+                          className="text-xs font-black text-slate-700 block"
+                        >
+                          Detailed Factual Justification <span className="text-rose-500">*</span>
+                        </label>
+                        <span className="text-[10px] font-bold text-slate-400">
+                          {declineModal.reason.trim().length}/10 chars min
+                        </span>
+                      </div>
+                      <textarea
+                        id="decline-modal-reason-input"
+                        rows={3}
+                        value={declineModal.reason}
+                        onChange={(e) =>
+                          setDeclineModal((prev) => ({
+                            ...prev,
+                            reason: e.target.value,
+                          }))
+                        }
+                        placeholder="Provide specific factual justification for the procurement audit record..."
+                        className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none shadow-inner"
+                        aria-required="true"
+                      />
+                    </div>
+
+                    {/* Supporting Evidence File */}
+                    <div>
+                      <label className="block text-xs font-black text-slate-700 mb-1">
+                        Supporting Evidence{' '}
+                        {getPoDeclineReasonByCode(declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY')?.requiresEvidence ? (
+                          <span className="text-rose-600 font-bold">*(Mandatory for Force Majeure)</span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">(Optional PDF/PNG/JPG up to 10MB)</span>
+                        )}
+                      </label>
+
+                      {declineModal.evidenceFile ? (
+                        <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 border border-slate-200 shadow-sm">
+                          <div className="flex items-center gap-2 truncate">
+                            <FileText className="h-4 w-4 text-indigo-600 shrink-0" />
+                            <span className="text-xs font-bold text-slate-800 truncate">{declineModal.evidenceFile.name}</span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setDeclineModal((prev) => ({ ...prev, evidenceFile: null }))}
+                            className="p-1 text-slate-400 hover:text-rose-600 transition"
+                            title="Remove file"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <label className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold cursor-pointer transition shadow-sm">
+                          {declineModal.isUploadingEvidence ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
+                              <span>Uploading evidence...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Paperclip className="h-4 w-4 text-slate-500" />
+                              <span>Attach Evidence Document</span>
+                            </>
+                          )}
+                          <input
+                            type="file"
+                            accept=".pdf,.png,.jpg,.jpeg"
+                            onChange={handleDeclineEvidenceUpload}
+                            disabled={declineModal.isUploadingEvidence || declineModal.submitting}
+                            className="hidden"
+                          />
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-3">
+                    <label
+                      htmlFor="decline-modal-reason-input"
+                      className="text-xs font-black text-slate-700 block mb-1"
+                    >
+                      Reason for Declining{" "}
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    <textarea
+                      id="decline-modal-reason-input"
+                      rows={3}
+                      value={declineModal.reason}
+                      onChange={(e) =>
+                        setDeclineModal((prev) => ({
+                          ...prev,
+                          reason: e.target.value,
+                        }))
+                      }
+                      placeholder={
+                        declineModal.type === "price_match"
+                          ? "e.g. Cannot meet target price due to raw material cost escalation..."
+                          : "e.g. Cannot accept award terms..."
+                      }
+                      className="w-full rounded-xl border border-slate-300 p-3 text-xs font-medium text-slate-900 focus:border-rose-500 focus:ring-1 focus:ring-rose-500 outline-none resize-none"
+                      aria-required="true"
+                    />
+                  </div>
+                )}
                 <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-slate-100">
                   <Button
                     type="button"
@@ -12858,6 +13061,9 @@ export function ProcurementDetailUnifiedView(
                         orderId: "",
                         type: "price_match",
                         reason: "",
+                        reasonCode: "BUYER_TERMS_DISCREPANCY",
+                        evidenceFile: null,
+                        isUploadingEvidence: false,
                         submitting: false,
                       })
                     }
@@ -12868,7 +13074,11 @@ export function ProcurementDetailUnifiedView(
                   <Button
                     type="button"
                     disabled={
-                      declineModal.submitting || !declineModal.reason.trim()
+                      declineModal.submitting ||
+                      (declineModal.type === "po"
+                        ? declineModal.reason.trim().length < 10 ||
+                          (getPoDeclineReasonByCode(declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY')?.requiresEvidence && !declineModal.evidenceFile)
+                        : !declineModal.reason.trim())
                     }
                     onClick={
                       declineModal.type === "price_match"
