@@ -1,4 +1,4 @@
-﻿import assert from 'node:assert/strict';
+import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
@@ -33,7 +33,7 @@ test('3. Backend rejectPO / declinePO route and service exist with validation', 
   const routes = read('src/modules/procurementBid/procurement-bid.routes.ts');
 
   assert.match(orderService, /export const rejectPO = async/);
-  assert.match(orderService, /finalStatus:\s*['"]PO_DECLINED['"]/);
+  assert.match(orderService, /finalStatus:\s*['"](PO_DECLINED|AWARD_DECLINED)['"]/);
   assert.match(orderService, /status:\s*['"]cancelled['"]/);
 
   assert.match(routes, /\/seller\/purchase-orders\/:id\/reject/);

@@ -1500,32 +1500,7 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
                   My Profile
                 </button>
 
-                {/* DUAL ROLE SWITCHER (Only shown if other profile already exists; activation hidden for now) */}
-                {(user?.role === 'buyer' || user?.role === 'seller') && (user?.role === 'seller' ? !!user?.buyerProfile : !!user?.sellerProfile) && (
-                  <>
-                    <div className="h-px bg-slate-100 my-1" />
-                    <button
-                      onClick={() => {
-                        setIsProfileDropdownOpen(false);
-                        handleSwitchRole(user.role === 'seller' ? 'buyer' : 'seller');
-                      }}
-                      disabled={Boolean(roleAction)}
-                      className="w-full text-left px-4 py-2.5 text-xs font-black text-indigo-700 hover:bg-indigo-50 hover:text-indigo-800 transition-colors flex items-center gap-2 cursor-pointer"
-                    >
-                      {user.role === 'seller' ? (
-                        <>
-                          <Building2 className="h-4 w-4 text-indigo-500" />
-                          {roleAction === 'buyer' ? 'Switching to Buyer...' : 'Switch to Buyer View'}
-                        </>
-                      ) : (
-                        <>
-                          <Store className="h-4 w-4 text-indigo-500" />
-                          {roleAction === 'seller' ? 'Switching to Seller...' : 'Switch to Seller View'}
-                        </>
-                      )}
-                    </button>
-                  </>
-                )}
+
 
                 <div className="h-px bg-slate-100 my-1" />
                 <button

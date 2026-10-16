@@ -2015,79 +2015,10 @@ export const authController = {
   },
 
   switchRole: async (req: AuthRequest, res: Response) => {
-    try {
-      const userId = Number(req.user?.id);
-      const { role } = req.body;
-      if (role !== 'buyer' && role !== 'seller') {
-        return res.status(400).json({ message: 'Invalid role request. Must be buyer or seller.' });
-      }
-
-      const user = await prisma.user.findUnique({
-        where: { id: userId },
-        include: {
-          buyerProfile: true,
-          sellerProfile: true,
-          organization: true
-        }
-      });
-      if (!user) return res.status(404).json({ message: 'User not found' });
-
-      if (role === 'buyer' && !user.buyerProfile) {
-        return res.status(400).json({ message: 'Buyer profile is not active yet. Activate buyer profile first.' });
-      }
-      if (role === 'seller' && !user.sellerProfile) {
-        return res.status(400).json({ message: 'Seller profile is not active yet. Activate seller profile first.' });
-      }
-
-      const updatedUser = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          role: role as Role,
-          isDualRole: Boolean(user.buyerProfile && user.sellerProfile),
-          sessionVersion: { increment: 1 }
-        }
-      });
-
-      const safeUser = await buildSafeAuthPayload(userId);
-      const tokens = await issueCookieAuth(req, res, updatedUser);
-      await auditLog({
-        actorUserId: userId,
-        actorRole: user.role,
-        action: 'auth.role_switch',
-        entityType: 'user',
-        entityId: userId,
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent'],
-        metadata: { fromRole: user.role, toRole: role }
-      });
-
-      const switchScope = updatedUser.organizationId
-        ? { scopeType: 'ORGANIZATION' as const, scopeId: String(updatedUser.organizationId) }
-        : { scopeType: 'PLATFORM' as const, scopeId: null };
-      const permissions = isMasterAdmin(updatedUser) ? ['*'] : await getActivePermissionCodes(updatedUser.id, switchScope as any);
-
-      const switchDistrictAssignment = updatedUser.role === 'admin'
-        ? await prisma.userRole.findFirst({
-            where: { userId: updatedUser.id, isActive: true, scopeType: 'DISTRICT', scopeId: { not: null } },
-            select: { scopeId: true },
-            orderBy: { assignedAt: 'desc' },
-          })
-        : null;
-      const switchEnabledFeatures = await resolveEnabledFeatures(switchDistrictAssignment?.scopeId ?? null);
-      res.json({
-        success: true,
-        ...tokens,
-        redirectUrl: roleHome(role),
-        user: toSafeUser({
-          ...(safeUser || updatedUser),
-          permissions,
-          enabledFeatures: switchEnabledFeatures
-        })
-      });
-    } catch (err: any) {
-      handleSecureRouteError(res, err);
-    }
+    return res.status(403).json({ success: false, message: 'Role switching is currently disabled.' });
   },
+
+
 
   activateDualRole: async (req: AuthRequest, res: Response) => {
     try {

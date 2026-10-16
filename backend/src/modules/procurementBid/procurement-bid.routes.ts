@@ -2151,6 +2151,9 @@ router.post(['/seller/awards/:awardId/reject', '/seller/awards/:awardId/decline'
 
 router.post(['/seller/purchase-orders/:id/reject', '/seller/purchase-orders/:id/decline'], authenticate, requireAccountType('seller', 'shg'), validate({ body: z.object({ reason: z.string().trim().min(5, 'Reason must be at least 5 characters').max(2000) }) }), asyncRoute(async (req, res) => {
   const targetId = Number(req.params.id);
+  if (isNaN(targetId) || targetId <= 0) {
+    throw new ApiError(400, 'Invalid purchase order ID', 'INVALID_PARAM');
+  }
   const data = await orderService.rejectPO(req, targetId, req.body.reason);
   const targetBidId = data?.purchaseOrder?.bidId || (data?.purchaseOrder?.metadata as any)?.bidId || req.body?.bidId;
   if (targetBidId) await invalidateBidCaches(targetBidId);
