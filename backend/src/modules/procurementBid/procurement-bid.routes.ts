@@ -131,7 +131,12 @@ const bidBaseSchema = z.object({
   allowBoq: z.boolean().optional(),
   termsAndConditions: z.array(z.string().trim().min(1)).optional(),
   eligibilityCriteria: z.array(z.string().trim().min(1)).optional(),
-  requiredDocuments: z.array(z.string().trim().min(1)).optional()
+  requiredDocuments: z.array(z.string().trim().min(1)).optional(),
+  canonicalMethod: z.string().trim().max(80).optional(),
+  categoryType: z.enum(['GOODS', 'SERVICES', 'WORKS']).optional(),
+  pricingFormat: z.enum(['SINGLE_ITEM', 'BOQ', 'SOR']).optional(),
+  technicalPacket: z.any().optional(),
+  financialPacket: z.any().optional()
 });
 
 const bidBodySchema = bidBaseSchema.refine(data => data.endDate > data.startDate, { message: 'End date must be after start date', path: ['endDate'] });

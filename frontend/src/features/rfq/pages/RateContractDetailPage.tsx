@@ -167,13 +167,21 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
           title: viewProps.subject,
           description: bidData?.description || reqData?.description,
           category: bidData?.category || reqData?.category?.name,
+          categoryType: bidData?.categoryType || (bidData?.technicalPacket as any)?.basics?.procurementCategory,
+          pricingFormat: bidData?.pricingFormat || (bidData?.technicalPacket as any)?.basics?.pricingFormat,
+          canonicalMethod: bidData?.canonicalMethod || 'RATE_CONTRACT',
           quantity: bidData?.quantity,
           unit: bidData?.unit,
           estimatedValue: bidData?.estimatedValue || reqData?.estimatedValue,
           deliveryLocation: bidData?.deliveryLocation,
+          state: bidData?.state,
+          district: bidData?.district,
           pincode: bidData?.pincode,
           endDate: bidData?.endDate,
           termsAndConditions: bidData?.termsAndConditions,
+          technicalPacket: bidData?.technicalPacket,
+          financialPacket: bidData?.financialPacket,
+          items: (bidData?.technicalPacket as any)?.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);

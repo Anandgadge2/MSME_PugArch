@@ -173,13 +173,21 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
           title: viewProps.subject,
           description: mergedBid.description,
           category: mergedBid.category,
+          categoryType: mergedBid.categoryType || (mergedBid.technicalPacket as any)?.basics?.procurementCategory,
+          pricingFormat: mergedBid.pricingFormat || (mergedBid.technicalPacket as any)?.basics?.pricingFormat,
+          canonicalMethod: mergedBid.canonicalMethod || 'OPEN_TENDER',
           quantity: mergedBid.quantity,
           unit: mergedBid.unit,
           estimatedValue: mergedBid.estimatedValue,
           deliveryLocation: mergedBid.deliveryLocation,
+          state: mergedBid.state,
+          district: mergedBid.district,
           pincode: mergedBid.pincode,
           endDate: mergedBid.endDate,
           termsAndConditions: mergedBid.termsAndConditions,
+          technicalPacket: mergedBid.technicalPacket,
+          financialPacket: mergedBid.financialPacket,
+          items: (mergedBid.technicalPacket as any)?.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);

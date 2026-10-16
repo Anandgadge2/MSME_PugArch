@@ -211,13 +211,21 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
           title: viewProps.subject,
           description: rawBid?.description || reqObj?.description,
           category: rawBid?.category || reqObj?.category?.name,
+          categoryType: rawBid?.categoryType || (rawBid?.technicalPacket as any)?.basics?.procurementCategory,
+          pricingFormat: rawBid?.pricingFormat || (rawBid?.technicalPacket as any)?.basics?.pricingFormat,
+          canonicalMethod: rawBid?.canonicalMethod || 'RFQ',
           quantity: rawBid?.quantity,
           unit: rawBid?.unit,
           estimatedValue: rawBid?.estimatedValue || reqObj?.estimatedValue,
           deliveryLocation: rawBid?.deliveryLocation,
+          state: rawBid?.state,
+          district: rawBid?.district,
           pincode: rawBid?.pincode,
           endDate: rawBid?.endDate || reqObj?.requiredBy,
           termsAndConditions: rawBid?.termsAndConditions,
+          technicalPacket: rawBid?.technicalPacket,
+          financialPacket: rawBid?.financialPacket,
+          items: (rawBid?.technicalPacket as any)?.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);

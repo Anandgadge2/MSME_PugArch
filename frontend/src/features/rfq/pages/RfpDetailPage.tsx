@@ -151,13 +151,21 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
           title: viewProps.subject,
           description: bid.description,
           category: bid.category,
+          categoryType: bid.categoryType || (bid.technicalPacket as any)?.basics?.procurementCategory || 'SERVICES',
+          pricingFormat: bid.pricingFormat || (bid.technicalPacket as any)?.basics?.pricingFormat,
+          canonicalMethod: bid.canonicalMethod || 'RFP',
           quantity: bid.quantity,
           unit: bid.unit,
           estimatedValue: bid.estimatedValue,
           deliveryLocation: bid.deliveryLocation,
+          state: bid.state,
+          district: bid.district,
           pincode: bid.pincode,
           endDate: bid.endDate,
           termsAndConditions: bid.termsAndConditions,
+          technicalPacket: bid.technicalPacket,
+          financialPacket: bid.financialPacket,
+          items: (bid.technicalPacket as any)?.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq()]);
