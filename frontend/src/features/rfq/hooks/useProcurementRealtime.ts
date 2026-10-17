@@ -102,7 +102,7 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
         if (data.type === 'CORRIGENDUM_ISSUED') {
           window.dispatchEvent(new CustomEvent('procurement:corrigendum', { detail: data }));
         }
-        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED' || data.type === 'BID_ACCEPTED' || data.type === 'AWARD_ACCEPTED') {
+        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED' || data.type === 'BID_ACCEPTED' || data.type === 'AWARD_ACCEPTED' || data.type === 'BID_REJECTED' || data.type === 'AWARD_DECLINED' || data.status === 'AWARD_DECLINED') {
           window.dispatchEvent(new CustomEvent('procurement:updated', { detail: data }));
           window.dispatchEvent(new CustomEvent('award:accepted', { detail: data }));
           window.dispatchEvent(new CustomEvent('awards:updated', { detail: data }));
@@ -163,6 +163,14 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
             id: `quote-status-${cleanId}-${data.responseId || data.status || ''}`,
             description: `Status changed to ${data.status || 'UPDATED'}.`,
             duration: 4000,
+          });
+        });
+      } else if (data.type === 'BID_REJECTED' || data.type === 'AWARD_DECLINED' || data.status === 'AWARD_DECLINED') {
+        triggerDeduplicatedToast(`award-declined-${cleanId}`, () => {
+          toast.warning('⚠️ Award / Counter-Offer Declined by Supplier', {
+            id: `award-declined-${cleanId}`,
+            description: 'A supplier declined the contract award or price-match counter-offer. Results console updated.',
+            duration: 6000,
           });
         });
       }

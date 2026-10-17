@@ -74,9 +74,11 @@ const uploadFormData = (
 
 const toUiStatus = (status?: string): ProcurementBid['status'] => {
   const upper = String(status || '').toUpperCase().replace(/\s+/g, '_');
-  if (upper === 'AWARDED' || upper.includes('AWARD') || upper === 'COMPLETED' || upper === 'PO_GENERATED' || upper === 'ACCEPTED') return 'Awarded';
+  if (upper === 'AWARD_DECLINED' || upper === 'COUNTER_OFFER_DECLINED') return 'Under Evaluation';
+  if (upper === 'AWARDED' || upper === 'PO_GENERATED' || upper === 'ACCEPTED' || upper === 'AWARD_ACCEPTED' || upper === 'ORDERED' || upper === 'COMPLETED') return 'Awarded';
   if (upper === 'CLOSED' || upper === 'EXPIRED' || upper === 'CANCELLED') return 'Closed';
   if (['TECHNICAL_EVALUATION', 'TECHNICAL_EVALUATION_COMPLETED', 'FINANCIAL_EVALUATION', 'L1_GENERATED', 'AWARD_RECOMMENDED', 'UNDER_EVALUATION', 'UNDER_REVIEW'].includes(upper) || upper.includes('EVALUATION')) return 'Under Evaluation';
+  if (upper.includes('AWARD')) return 'Awarded';
   return 'Open';
 };
 
@@ -258,10 +260,16 @@ export const normalizeBid = (raw: any): ProcurementBid => {
         const isParticipationAwarded =
           p.finalStatus === 'AWARDED' ||
           (Array.isArray(raw.awards) && raw.awards.some((a: any) =>
-            Number(a.participationId) === Number(p.id) ||
-            (a.sellerId && Number(a.sellerId) === Number(p.sellerId))
+            ['OFFERED', 'RECOMMENDED', 'ACCEPTED', 'PENDING', 'AWARDED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+            !['DECLINED', 'EXPIRED', 'REJECTED', 'CANCELLED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+            !['DECLINED', 'EXPIRED', 'REJECTED'].includes(String(a.counterOfferStatus || '').toUpperCase()) &&
+            (
+              Number(a.participationId) === Number(p.id) ||
+              (a.sellerId && Number(a.sellerId) === Number(p.sellerId))
+            )
           ));
         if (isParticipationAwarded) return 'Awarded';
+        if (p.finalStatus === 'AWARD_DECLINED' || p.finalStatus === 'DECLINED') return 'Declined';
         if (p.finalStatus === 'NOT_SELECTED' || p.finalStatus === 'REJECTED') return 'Not Selected';
         return p.rank ? 'Responsive' : 'Under Review';
       })(),

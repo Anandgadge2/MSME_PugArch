@@ -45,7 +45,7 @@ export interface BidResultRow {
   totalPrice: number;
   quotedAmount?: number;
   finalRank: 'L1' | 'L2' | 'L3' | 'L4' | 'NA';
-  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected' | 'Not Selected' | 'Ineligible';
+  resultStatus: 'Awarded' | 'Responsive' | 'Under Review' | 'Rejected' | 'Not Selected' | 'Ineligible' | 'Declined';
   contactPerson?: string;
   details?: Record<string, any>;
   documents?: any[];
@@ -205,6 +205,8 @@ export interface ProcurementBidAward {
   order?: any;
   status?: string;
   remarks?: string;
+  seller?: { id?: number | string; name?: string; email?: string; organization?: { organizationName?: string } };
+  participation?: any;
   createdAt?: string;
 }
 

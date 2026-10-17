@@ -7,7 +7,7 @@ import {
   Download, Trophy, FileText, X, Scale, CheckCircle2,
   LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft, Radio
+  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft, Radio, XCircle
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -247,14 +247,37 @@ export default function BidResultsPage() {
     return false;
   }, [isTwoPacketMode, bid?.status, finOpeningRaw]);
 
+  // Active award is strictly an award that is currently active, pending, or accepted (never declined/cancelled/expired)
   const activeAward = React.useMemo(() => {
-    if (Array.isArray(bid?.awards) && bid.awards.length > 0) return bid.awards[0];
-    return null;
+    if (!Array.isArray(bid?.awards) || bid.awards.length === 0) return null;
+    return bid.awards.find((a: any) => {
+      const aStatus = String(a.awardStatus || '').toUpperCase();
+      const cStatus = String(a.counterOfferStatus || '').toUpperCase();
+      const isDeclined = ['DECLINED', 'CANCELLED', 'REJECTED'].includes(aStatus) || ['DECLINED', 'EXPIRED', 'REJECTED'].includes(cStatus);
+      return !isDeclined;
+    }) || null;
+  }, [bid]);
+
+  // Track the latest declined award or counter-offer to provide clear guidance and next statutory actions
+  const latestDeclinedAward = React.useMemo(() => {
+    if (!Array.isArray(bid?.awards) || bid.awards.length === 0) return null;
+    const declined = bid.awards.filter((a: any) => {
+      const aStatus = String(a.awardStatus || '').toUpperCase();
+      const cStatus = String(a.counterOfferStatus || '').toUpperCase();
+      return aStatus === 'DECLINED' || cStatus === 'DECLINED';
+    });
+    if (declined.length === 0) return null;
+    return [...declined].sort((a: any, b: any) => {
+      const tA = new Date(a.declinedAt || a.updatedAt || a.createdAt || 0).getTime();
+      const tB = new Date(b.declinedAt || b.updatedAt || b.createdAt || 0).getTime();
+      return tB - tA;
+    })[0];
   }, [bid]);
 
   const isPriceMatchPending = activeAward?.counterOfferStatus === 'PENDING';
   const isAwardOfferPending = activeAward && (activeAward.awardStatus === 'OFFERED' || activeAward.awardStatus === 'RECOMMENDED') && !isPriceMatchPending;
   const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
+  const isAwardDeclined = !poIssuedLocally && !activeAward && Boolean(latestDeclinedAward);
   
   const isContractFinalized = React.useMemo(() => {
     if (poIssuedLocally) return true;
@@ -282,8 +305,7 @@ export default function BidResultsPage() {
 
   const isBidAlreadyAwarded = Boolean(
     isContractFinalized ||
-    ['AWARDED', 'AWARD_OFFERED', 'AWARD_RECOMMENDED', 'PO_ISSUED', 'PO_GENERATED'].includes(String(bid?.status || '').toUpperCase()) ||
-    Boolean((bid as any)?.award) ||
+    (['AWARDED', 'PO_ISSUED', 'PO_GENERATED'].includes(String(bid?.status || '').toUpperCase()) && Boolean(activeAward || isContractFinalized)) ||
     Boolean(activeAward)
   );
 
@@ -803,10 +825,16 @@ export default function BidResultsPage() {
               const isItemAwarded =
                 r.finalStatus === 'AWARDED' ||
                 (Array.isArray(data?.awards) && data.awards.some((a: any) =>
-                  Number(a.participationId) === Number(r.id) ||
-                  (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.sellerUserId || r.seller?.id || r.sellerUser?.id))
+                  ['OFFERED', 'RECOMMENDED', 'ACCEPTED', 'PENDING', 'AWARDED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+                  !['DECLINED', 'EXPIRED', 'REJECTED', 'CANCELLED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+                  !['DECLINED', 'EXPIRED', 'REJECTED'].includes(String(a.counterOfferStatus || '').toUpperCase()) &&
+                  (
+                    Number(a.participationId) === Number(r.id) ||
+                    (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.sellerUserId || r.seller?.id || r.sellerUser?.id))
+                  )
                 ));
               if (isItemAwarded) return 'Awarded';
+              if (r.finalStatus === 'AWARD_DECLINED' || r.finalStatus === 'DECLINED') return 'Declined';
               if (r.finalStatus === 'NOT_SELECTED' || r.finalStatus === 'REJECTED') return 'Not Selected';
               return 'Responsive';
             })(),
@@ -1047,8 +1075,25 @@ export default function BidResultsPage() {
           String(r.finalStatus || '').toUpperCase() === 'AWARDED' ||
           String(r.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' ||
           Boolean(data?.awards?.some((a: any) =>
-            Number(a.participationId) === Number(r.participationId || r.id) ||
-            (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.rawParticipation?.sellerId || r.rawParticipation?.sellerUserId))
+            ['OFFERED', 'RECOMMENDED', 'ACCEPTED', 'PENDING', 'AWARDED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+            !['DECLINED', 'EXPIRED', 'REJECTED', 'CANCELLED'].includes(String(a.awardStatus || '').toUpperCase()) &&
+            !['DECLINED', 'EXPIRED', 'REJECTED'].includes(String(a.counterOfferStatus || '').toUpperCase()) &&
+            (
+              Number(a.participationId) === Number(r.participationId || r.id) ||
+              (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.rawParticipation?.sellerId || r.rawParticipation?.sellerUserId))
+            )
+          ));
+
+        const isItemDeclined =
+          r.resultStatus === 'Declined' ||
+          String(r.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+          String(r.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+          Boolean(data?.awards?.some((a: any) =>
+            (String(a.awardStatus || '').toUpperCase() === 'DECLINED' || String(a.counterOfferStatus || '').toUpperCase() === 'DECLINED') &&
+            (
+              Number(a.participationId) === Number(r.participationId || r.id) ||
+              (a.sellerId && Number(a.sellerId) === Number(r.sellerId || r.rawParticipation?.sellerId || r.rawParticipation?.sellerUserId))
+            )
           ));
 
         return {
@@ -1056,9 +1101,11 @@ export default function BidResultsPage() {
           technicalStatus: techStatus,
           resultStatus: isItemAwarded
             ? 'Awarded'
-            : (r.resultStatus && r.resultStatus !== 'Awarded'
-                ? r.resultStatus
-                : (isDisqualified ? 'Ineligible' : 'Responsive')),
+            : isItemDeclined
+              ? 'Declined'
+              : (r.resultStatus && r.resultStatus !== 'Awarded'
+                  ? r.resultStatus
+                  : (isDisqualified ? 'Ineligible' : 'Responsive')),
           rawParticipation: r.rawParticipation || r,
         };
       });
@@ -1083,7 +1130,25 @@ export default function BidResultsPage() {
     const interval = setInterval(() => {
       loadBid(true);
     }, 15000);
-    return () => clearInterval(interval);
+
+    const handleRealtimeSync = () => {
+      loadBid(true);
+    };
+
+    window.addEventListener('procurement:updated', handleRealtimeSync);
+    window.addEventListener('procurement:realtime', handleRealtimeSync);
+    window.addEventListener('awards:updated', handleRealtimeSync);
+    window.addEventListener('award:accepted', handleRealtimeSync);
+    window.addEventListener('orders:updated', handleRealtimeSync);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('procurement:updated', handleRealtimeSync);
+      window.removeEventListener('procurement:realtime', handleRealtimeSync);
+      window.removeEventListener('awards:updated', handleRealtimeSync);
+      window.removeEventListener('award:accepted', handleRealtimeSync);
+      window.removeEventListener('orders:updated', handleRealtimeSync);
+    };
   }, [loadBid]);
 
   const toggleSellerSelection = (participationId: number) => {
@@ -1414,6 +1479,36 @@ export default function BidResultsPage() {
               );
             }
 
+            const isThisRowDeclined = (
+              row.resultStatus === 'Declined' ||
+              String(row.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+              String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+              Boolean(latestDeclinedAward && (
+                (latestDeclinedAward.participationId && Number(latestDeclinedAward.participationId) === rowPartId) ||
+                (latestDeclinedAward.sellerId && Number(latestDeclinedAward.sellerId) === rowSellerId)
+              ) && !isThisRowAwarded)
+            );
+
+            if (isThisRowDeclined) {
+              const reasonText = latestDeclinedAward?.declinedReason || latestDeclinedAward?.remarks || (row.rawParticipation as any)?.rejectionReason;
+              return (
+                <div className="flex flex-col items-end gap-0.5">
+                  <span 
+                    className="inline-flex h-8 items-center gap-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 px-2.5 text-[10px] font-black"
+                    title={reasonText ? `Declined: ${reasonText}` : 'Offer declined by supplier'}
+                  >
+                    <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                    Offer Declined
+                  </span>
+                  {reasonText && (
+                    <span className="text-[9px] font-semibold text-rose-600 truncate max-w-[130px]" title={reasonText}>
+                      "{reasonText}"
+                    </span>
+                  )}
+                </div>
+              );
+            }
+
             if (hasLinkedAuction || isBidAlreadyAwarded) {
               return (
                 <div className="flex items-center gap-1.5 justify-end">
@@ -1436,10 +1531,20 @@ export default function BidResultsPage() {
             if (row.finalRank === 'L1') {
               return (
                 <button
-                  onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
-                  className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer"
+                  type="button"
+                  onClick={() => setAwardModal({ 
+                    show: true, 
+                    row, 
+                    remarks: isAwardDeclined ? 'Contract award offered to L1 after previous offer was declined.' : '', 
+                    justificationReason: isAwardDeclined ? 'Award to compliant L1 lowest bidder following counter-offer decline.' : '', 
+                    submitting: false 
+                  })}
+                  className={`inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer ${
+                    isAwardDeclined ? 'ring-2 ring-emerald-500/40 ring-offset-1' : ''
+                  }`}
+                  title={isAwardDeclined ? "Award contract directly to compliant L1 lowest bidder (Recommended next statutory action)" : "Award L1"}
                 >
-                  <Trophy className="h-3.5 w-3.5" /> Award L1
+                  <Trophy className="h-3.5 w-3.5" /> Award L1 {isAwardDeclined && '(Recommended)'}
                 </button>
               );
             }
@@ -1447,6 +1552,7 @@ export default function BidResultsPage() {
             return (
               <div className="flex items-center gap-1">
                 <button
+                  type="button"
                   onClick={() => setPriceMatchModal({ show: true, row, targetPrice: l1Price || Number(row.totalPrice || 0), deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false })}
                   className="inline-flex h-8 items-center gap-1 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white px-2.5 text-[10px] font-black transition shadow-2xs cursor-pointer"
                   title="Send counter-offer inviting supplier to match L1 lowest price"
@@ -1454,6 +1560,7 @@ export default function BidResultsPage() {
                   <Target className="h-3.5 w-3.5" /> Match L1
                 </button>
                 <button
+                  type="button"
                   onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
                   className="inline-flex h-8 items-center gap-1 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-250 text-slate-700 px-2 text-[10px] font-bold transition shadow-2xs cursor-pointer"
                   title="Award directly at quoted price with required justification"
@@ -1466,7 +1573,7 @@ export default function BidResultsPage() {
         </div>
       )
     }
-  ], [selectedForCompare, bid, isBidAlreadyAwarded, isContractFinalized, isAwardAccepted, isPriceMatchPending, isAwardOfferPending, activeAward, l1Price, checkIsRowAwarded]);
+  ], [selectedForCompare, bid, isBidAlreadyAwarded, isContractFinalized, isAwardAccepted, isPriceMatchPending, isAwardOfferPending, isAwardDeclined, latestDeclinedAward, activeAward, l1Price, checkIsRowAwarded]);
 
   const handleCompareClick = () => {
     if (selectedForCompare.length >= 2) {
@@ -2564,6 +2671,78 @@ export default function BidResultsPage() {
               </div>
             )}
 
+            {isAwardDeclined && latestDeclinedAward && (() => {
+              const declinedPartId = Number(latestDeclinedAward.participationId);
+              const declinedSellerId = Number(latestDeclinedAward.sellerId);
+              const declinedRow = ranking.find(r => 
+                (declinedPartId && Number(r.participationId || r.id) === declinedPartId) ||
+                (declinedSellerId && Number(r.sellerId) === declinedSellerId)
+              );
+              const vendorName = declinedRow?.sellerName || latestDeclinedAward.seller?.organization?.organizationName || latestDeclinedAward.seller?.name || 'Supplier';
+              const vendorRank = declinedRow?.finalRank || 'L2';
+              const declineReason = latestDeclinedAward.declinedReason || latestDeclinedAward.remarks || (declinedRow?.rawParticipation as any)?.rejectionReason || 'Commercial or pricing inability to fulfill at counter-offer target price.';
+              const declinedTime = latestDeclinedAward.declinedAt ? formatDateTime(latestDeclinedAward.declinedAt) : 'Recently';
+              const isCounterOffer = Boolean(latestDeclinedAward.isPriceMatched || latestDeclinedAward.priceMatchTargetPrice || latestDeclinedAward.counterOfferStatus);
+              const targetPriceFormatted = latestDeclinedAward.priceMatchTargetPrice ? money(Number(latestDeclinedAward.priceMatchTargetPrice)) : (l1Price > 0 ? money(l1Price) : 'L1 target price');
+
+              const l1Row = ranking.find(r => r.finalRank === 'L1' && r.technicalStatus === 'Qualified') || ranking.find(r => r.finalRank === 'L1');
+
+              return (
+                <div 
+                  role="alert" 
+                  aria-live="polite"
+                  className="rounded-2xl border border-amber-300 bg-gradient-to-r from-amber-50 via-orange-50/40 to-white p-4 shadow-sm flex flex-col md:flex-row items-start md:items-center justify-between gap-4 animate-in fade-in"
+                >
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-xs mt-0.5">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                          {isCounterOffer ? 'Price-Match Counter-Offer Declined' : 'Award Offer Declined'}
+                        </span>
+                        <span className="text-slate-300 hidden sm:inline">•</span>
+                        <span className="text-xs font-black text-slate-900">
+                          {vendorRank} ({vendorName})
+                        </span>
+                        <span className="text-slate-500 text-[10.5px] font-medium">
+                          Declined on {declinedTime}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-700 font-medium leading-relaxed">
+                        Supplier declined the offer{isCounterOffer ? ` to match ${targetPriceFormatted}` : ''}. 
+                        Reason stated: <strong className="text-slate-900 bg-amber-100/70 px-1.5 py-0.5 rounded text-[11px] font-bold">"{declineReason}"</strong>.
+                      </p>
+                      <p className="text-[11px] text-slate-500 font-medium">
+                        Procurement workflow has automatically reverted to commercial evaluation. In compliance with statutory procurement guidelines (GFR 2017 / MSE Purchase Preference), you can now award 100% to the compliant L1 bidder or invite the next qualified preference vendor.
+                      </p>
+                    </div>
+                  </div>
+
+                  {isBuyer && l1Row && (
+                    <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                      <button
+                        type="button"
+                        onClick={() => setAwardModal({ 
+                          show: true, 
+                          row: l1Row, 
+                          remarks: `Contract award offered to L1 after ${vendorRank} declined price-match counter-offer.`, 
+                          justificationReason: `Award to compliant L1 lowest bidder following ${vendorRank} counter-offer decline.`, 
+                          submitting: false 
+                        })}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 text-xs font-black transition shadow-xs cursor-pointer focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1"
+                        title="Award contract directly to lowest evaluated compliant L1 supplier"
+                      >
+                        <Trophy className="h-4 w-4" />
+                        Award L1 Directly ({l1Row.totalPrice ? money(l1Row.totalPrice) : money(l1Price)})
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             {/* View Mode Rendering */}
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -2802,6 +2981,36 @@ export default function BidResultsPage() {
                             );
                           }
 
+                          const isThisRowDeclined = (
+                            row.resultStatus === 'Declined' ||
+                            String(row.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+                            String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARD_DECLINED' ||
+                            Boolean(latestDeclinedAward && (
+                              (latestDeclinedAward.participationId && Number(latestDeclinedAward.participationId) === rowPartId) ||
+                              (latestDeclinedAward.sellerId && Number(latestDeclinedAward.sellerId) === rowSellerId)
+                            ) && !isThisRowAwarded)
+                          );
+
+                          if (isThisRowDeclined) {
+                            const reasonText = latestDeclinedAward?.declinedReason || latestDeclinedAward?.remarks || (row.rawParticipation as any)?.rejectionReason;
+                            return (
+                              <div className="flex flex-col items-center justify-center gap-0.5 w-full">
+                                <span 
+                                  className="inline-flex h-8 items-center justify-center gap-1 w-full rounded-xl bg-rose-50 border border-rose-200 text-rose-800 px-2.5 text-[10px] font-black"
+                                  title={reasonText ? `Declined: ${reasonText}` : 'Offer declined by supplier'}
+                                >
+                                  <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                                  Offer Declined
+                                </span>
+                                {reasonText && (
+                                  <span className="text-[9px] font-semibold text-rose-600 truncate max-w-[180px]" title={reasonText}>
+                                    "{reasonText}"
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+
                           if (hasLinkedAuction || isBidAlreadyAwarded) {
                             return (
                               <div className="flex items-center gap-1.5 justify-end">
@@ -2825,16 +3034,25 @@ export default function BidResultsPage() {
                             return (
                               <button
                                 type="button"
-                                onClick={() => setAwardModal({ show: true, row, remarks: '', justificationReason: '', submitting: false })}
-                                className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer"
+                                onClick={() => setAwardModal({ 
+                                  show: true, 
+                                  row, 
+                                  remarks: isAwardDeclined ? 'Contract award offered to L1 after previous offer was declined.' : '', 
+                                  justificationReason: isAwardDeclined ? 'Award to compliant L1 lowest bidder following counter-offer decline.' : '', 
+                                  submitting: false 
+                                })}
+                                className={`inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-black transition shadow-xs cursor-pointer w-full ${
+                                  isAwardDeclined ? 'ring-2 ring-emerald-500/40 ring-offset-1' : ''
+                                }`}
+                                title={isAwardDeclined ? "Award contract directly to compliant L1 lowest bidder (Recommended next statutory action)" : "Award L1"}
                               >
-                                <Trophy className="h-3.5 w-3.5" /> Award L1
+                                <Trophy className="h-3.5 w-3.5" /> Award L1 {isAwardDeclined && '(Recommended)'}
                               </button>
                             );
                           }
 
                           return (
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1 w-full">
                               <button
                                 type="button"
                                 onClick={() => setPriceMatchModal({ show: true, row, targetPrice: l1Price || Number(row.totalPrice || 0), deadlineOption: '48', customHours: 48, justificationReason: '', notes: '', submitting: false })}

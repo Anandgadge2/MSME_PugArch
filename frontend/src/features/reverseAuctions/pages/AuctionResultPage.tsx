@@ -37,7 +37,8 @@ import {
   TrendingDown,
   Trophy,
   Users,
-  X
+  X,
+  XCircle
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
@@ -852,6 +853,10 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                           ) : row.isAwardOffered ? (
                             <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-xs">
                               <Clock className="h-3 w-3" /> Offer Awaiting Acceptance
+                            </span>
+                          ) : (row.isAwardDeclined || row.status === 'AWARD_DECLINED' || row.awardStatus === 'DECLINED' || row.counterOfferStatus === 'DECLINED') ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-800 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 shadow-xs" title={row.declinedReason || 'Offer declined by supplier'}>
+                              <XCircle className="h-3 w-3 text-rose-600" /> Offer Declined
                             </span>
                           ) : canOfferAward ? (
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
