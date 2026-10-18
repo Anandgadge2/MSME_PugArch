@@ -152,8 +152,10 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
           categoryType: bid.categoryType || (bid.technicalPacket as any)?.basics?.procurementCategory,
           pricingFormat: bid.pricingFormat || (bid.technicalPacket as any)?.basics?.pricingFormat,
           canonicalMethod: bid.canonicalMethod || 'LIMITED_TENDER',
-          quantity: bid.quantity,
-          unit: bid.unit,
+          quantity: bid.quantity || viewProps.items?.[0]?.quantity,
+          unit: bid.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
+          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (bid.technicalPacket as any)?.basics?.hsnCode,
+          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (bid.technicalPacket as any)?.basics?.makeBrand,
           estimatedValue: bid.estimatedValue,
           deliveryLocation: bid.deliveryLocation,
           state: bid.state,
@@ -163,7 +165,7 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
           termsAndConditions: bid.termsAndConditions,
           technicalPacket: bid.technicalPacket,
           financialPacket: bid.financialPacket,
-          items: (bid.technicalPacket as any)?.items,
+          items: (bid.technicalPacket as any)?.items || bid.items || viewProps.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq()]);

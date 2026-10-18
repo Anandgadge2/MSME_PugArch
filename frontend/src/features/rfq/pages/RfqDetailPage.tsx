@@ -214,8 +214,10 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
           categoryType: rawBid?.categoryType || (rawBid?.technicalPacket as any)?.basics?.procurementCategory,
           pricingFormat: rawBid?.pricingFormat || (rawBid?.technicalPacket as any)?.basics?.pricingFormat,
           canonicalMethod: rawBid?.canonicalMethod || 'RFQ',
-          quantity: rawBid?.quantity,
-          unit: rawBid?.unit,
+          quantity: rawBid?.quantity || viewProps.items?.[0]?.quantity,
+          unit: rawBid?.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
+          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (rawBid?.technicalPacket as any)?.basics?.hsnCode,
+          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (rawBid?.technicalPacket as any)?.basics?.makeBrand,
           estimatedValue: rawBid?.estimatedValue || reqObj?.estimatedValue,
           deliveryLocation: rawBid?.deliveryLocation,
           state: rawBid?.state,
@@ -225,7 +227,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
           termsAndConditions: rawBid?.termsAndConditions,
           technicalPacket: rawBid?.technicalPacket,
           financialPacket: rawBid?.financialPacket,
-          items: (rawBid?.technicalPacket as any)?.items,
+          items: (rawBid?.technicalPacket as any)?.items || rawBid?.items || viewProps.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);

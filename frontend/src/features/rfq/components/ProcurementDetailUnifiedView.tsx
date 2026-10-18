@@ -10027,53 +10027,57 @@ export function ProcurementDetailUnifiedView(
           );
         },
       },
-      {
-        key: "technicalStatus",
-        header: "Technical Evaluation",
-        width: "w-[11%]",
-        cell: (participation) => {
-          if (!isEvaluationReady) {
-            return (
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600 whitespace-nowrap">
-                <Lock className="h-3 w-3 text-slate-400 shrink-0" />
-                Sealed Proposal
-              </span>
-            );
-          }
-          const ts = String(participation.technicalStatus || "").toUpperCase();
-          const isQual = ts === "QUALIFIED";
-          const isDisq =
-            ts === "DISQUALIFIED" ||
-            ts === "NOT_QUALIFIED" ||
-            participation.isDisqualified;
-          return (
-            <div className="whitespace-nowrap">
-              {isQual ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-emerald-800 shadow-2xs">
-                  <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                  Qualified
-                </span>
-              ) : isDisq ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-rose-800 shadow-2xs">
-                  <XCircle className="h-3 w-3 text-rose-600 shrink-0" />
-                  Disqualified
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-amber-800 shadow-2xs">
-                  <Clock className="h-3 w-3 text-amber-600 shrink-0" />
-                  Pending Review
-                </span>
-              )}
-              {participation.score !== undefined &&
-                participation.score !== null && (
-                  <span className="text-[10px] font-bold text-slate-500 block mt-0.5">
-                    Score: {participation.score}/100
-                  </span>
-                )}
-            </div>
-          );
-        },
-      },
+      ...(isTwoPacketMode
+        ? [
+            {
+              key: "technicalStatus",
+              header: "Technical Evaluation",
+              width: "w-[11%]",
+              cell: (participation: any) => {
+                if (!isEvaluationReady) {
+                  return (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-600 whitespace-nowrap">
+                      <Lock className="h-3 w-3 text-slate-400 shrink-0" />
+                      Sealed Proposal
+                    </span>
+                  );
+                }
+                const ts = String(participation.technicalStatus || "").toUpperCase();
+                const isQual = ts === "QUALIFIED";
+                const isDisq =
+                  ts === "DISQUALIFIED" ||
+                  ts === "NOT_QUALIFIED" ||
+                  participation.isDisqualified;
+                return (
+                  <div className="whitespace-nowrap">
+                    {isQual ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-emerald-300 bg-emerald-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-emerald-800 shadow-2xs">
+                        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
+                        Qualified
+                      </span>
+                    ) : isDisq ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-rose-300 bg-rose-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-rose-800 shadow-2xs">
+                        <XCircle className="h-3 w-3 text-rose-600 shrink-0" />
+                        Disqualified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-[9.5px] font-extrabold text-amber-800 shadow-2xs">
+                        <Clock className="h-3 w-3 text-amber-600 shrink-0" />
+                        Pending Review
+                      </span>
+                    )}
+                    {participation.score !== undefined &&
+                      participation.score !== null && (
+                        <span className="text-[10px] font-bold text-slate-500 block mt-0.5">
+                          Score: {participation.score}/100
+                        </span>
+                      )}
+                  </div>
+                );
+              },
+            },
+          ]
+        : []),
       {
         key: "status",
         header: "Lifecycle & Award Status",
@@ -10198,7 +10202,7 @@ export function ProcurementDetailUnifiedView(
 
           return (
             <div className="flex items-center justify-end gap-1.5">
-              {(isBuyerSide || isBuyerOrAdmin) && (
+              {(isBuyerSide || isBuyerOrAdmin) && isTwoPacketMode && (
                 <Button
                   type="button"
                   size="sm"
@@ -13953,7 +13957,11 @@ export function ProcurementDetailUnifiedView(
                 publishedAt={props.publishedAt}
                 createdAt={props.createdAt}
                 postPublishEditCount={props.postPublishEditCount}
-                participantsCount={props.participantsCount}
+                participantsCount={Math.max(
+                  Number(props.participantsCount) || 0,
+                  submittedParticipations.length,
+                  props.participations?.length || 0,
+                )}
                 status={props.status}
                 onEditClick={props.onEditClick || (() => {})}
                 onCancelClick={props.onCancelClick}
@@ -15566,45 +15574,60 @@ export function ProcurementDetailUnifiedView(
                                     <CheckCircle2 className="h-3 w-3" />{" "}
                                     Contract Awarded
                                   </span>
-                                ) : isTechEvalCompleted ||
+                                ) : isTwoPacketMode ? (
+                                  isTechEvalCompleted ||
                                   (techEvaluationStats.pending === 0 &&
                                     techEvaluationStats.qualified > 0) ? (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
+                                      Technical Evaluation Complete
+                                    </span>
+                                  ) : null
+                                ) : (
                                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded">
-                                    Technical Evaluation Complete
+                                    {submittedParticipations.length} Quotation(s) Unsealed
                                   </span>
-                                ) : null}
+                                )}
                               </div>
                               <h4 className="text-xs sm:text-sm font-bold text-slate-900 mt-0.5">
                                 {isBidAwarded
                                   ? "Evaluations Concluded & Contract Finalized"
                                   : isTwoPacketMode
                                     ? "Technical Packet Opening & Seller Qualification"
-                                    : "Quotation Scrutiny & Supplier Qualification"}
+                                    : "Quotation Review & Commercial Comparison"}
                               </h4>
                               <p className="text-[11px] text-slate-500">
                                 {isBidAwarded
                                   ? "Proposal evaluations are concluded and archived. Contract has been awarded."
                                   : isTwoPacketMode
                                     ? "Evaluate supplier technical proposals below. Only technically qualified sellers advance to Stage 2 (Financial Opening / Reverse Auction)."
-                                    : "Review seller quotations and evaluate technical/commercial compliance below. Mark bidders as Qualified or Disqualified before finalizing award on Results page."}
+                                    : "Technical and commercial proposals are opened simultaneously in single-packet workflow. Review submitted quotations, compare commercial rates, and proceed to award or reverse auction."}
                               </p>
                             </div>
                           </div>
 
                           {/* Progress Stats Pills */}
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
-                              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
-                              {techEvaluationStats.qualified} Qualified
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-bold text-rose-800 shadow-2xs">
-                              <XCircle className="h-3.5 w-3.5 text-rose-600" />
-                              {techEvaluationStats.disqualified} Disqualified
-                            </span>
-                            <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 shadow-2xs">
-                              <Clock className="h-3.5 w-3.5 text-amber-600" />
-                              {techEvaluationStats.pending} Pending Review
-                            </span>
+                            {isTwoPacketMode ? (
+                              <>
+                                <span className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 py-1 text-xs font-bold text-emerald-800 shadow-2xs">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                                  {techEvaluationStats.qualified} Qualified
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-lg border border-rose-200 bg-white px-2.5 py-1 text-xs font-bold text-rose-800 shadow-2xs">
+                                  <XCircle className="h-3.5 w-3.5 text-rose-600" />
+                                  {techEvaluationStats.disqualified} Disqualified
+                                </span>
+                                <span className="inline-flex items-center gap-1 rounded-lg border border-amber-200 bg-white px-2.5 py-1 text-xs font-bold text-amber-800 shadow-2xs">
+                                  <Clock className="h-3.5 w-3.5 text-amber-600" />
+                                  {techEvaluationStats.pending} Pending Review
+                                </span>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-lg border border-indigo-200 bg-white px-2.5 py-1 text-xs font-bold text-indigo-800 shadow-2xs">
+                                <FileText className="h-3.5 w-3.5 text-indigo-600" />
+                                {submittedParticipations.length} Quotation(s) Under Evaluation
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -15621,9 +15644,7 @@ export function ProcurementDetailUnifiedView(
                                     : techEvaluationStats.qualified > 0
                                       ? `All sellers evaluated. ${techEvaluationStats.qualified} qualified seller(s) are eligible for Stage 2.`
                                       : `⚠️ At least one seller must be technically qualified to proceed.`
-                                : techEvaluationStats.pending > 0
-                                  ? `⚠️ ${techEvaluationStats.pending} quotation(s) pending review. Evaluate and qualify/disqualify vendors below.`
-                                  : `✅ Evaluation complete. ${techEvaluationStats.qualified} vendor(s) qualified for commercial ranking & award.`}
+                                : `✅ Single-packet unsealed. Review seller quotations and compare commercial offers below.`}
                           </span>
 
                           <div className="flex items-center gap-2">
@@ -16288,7 +16309,7 @@ export function ProcurementDetailUnifiedView(
                   : undefined
               }
               onOpenTechnicalEvaluation={
-                isBuyerSide || isBuyerOrAdmin
+                (isBuyerSide || isBuyerOrAdmin) && isTwoPacketMode
                   ? (p) => {
                       setSelectedQuotationForReview(null);
                       setSelectedForTechnicalEval(p);
@@ -16299,7 +16320,7 @@ export function ProcurementDetailUnifiedView(
           )}
 
           {/* Technical Packet Evaluation Modal Renderer (Global Root Level) */}
-          {selectedForTechnicalEval && (
+          {isTwoPacketMode && selectedForTechnicalEval && (
             <TechnicalEvaluationModal
               isOpen={Boolean(selectedForTechnicalEval)}
               onClose={() => setSelectedForTechnicalEval(null)}
@@ -17572,7 +17593,7 @@ export function SellerQuotationReviewModal({
                 )}
               </div>
               <div className="flex items-center gap-2 shrink-0">
-                {isBuyer && onOpenTechnicalEvaluation && (
+                {isBuyer && isTwoPacketMode && onOpenTechnicalEvaluation && (
                   <Button
                     type="button"
                     onClick={() => {

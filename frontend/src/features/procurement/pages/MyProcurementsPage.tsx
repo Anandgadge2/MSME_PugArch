@@ -405,7 +405,15 @@ export const isProcurementEditable = (p: any): boolean => {
   if (['DRAFT'].includes(s)) return true;
   if (!['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(s)) return false;
   if (Number(p.postPublishEditCount || 0) >= 1) return false;
-  if (Number(p.participantsCount || 0) > 0) return false;
+  const quotationsCount = Math.max(
+    Number(p.participantsCount) || 0,
+    Number(p.responsesCount) || 0,
+    Number(p.quotationsCount) || 0,
+    Number(p.proposalsCount) || 0,
+    Array.isArray(p.participations) ? p.participations.length : 0,
+    Array.isArray(p.responses) ? p.responses.length : 0
+  );
+  if (quotationsCount > 0) return false;
   const publishTimestamp = p.publishedAt ? new Date(p.publishedAt).getTime() : (p.createdAt ? new Date(p.createdAt).getTime() : null);
   if (!publishTimestamp) return false;
   const elapsed = Date.now() - publishTimestamp;

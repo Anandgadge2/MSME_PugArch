@@ -244,7 +244,17 @@ export function adaptProcurementUnifiedProps(
 
     // Participation
     participations: participationsList,
-    participantsCount: bid.participantsCount ?? participationsList.length,
+    participantsCount: Math.max(
+      Number(bid.participantsCount) || 0,
+      Number(bid.responsesCount) || 0,
+      Number(bid.quotationsCount) || 0,
+      Number(bid.proposalsCount) || 0,
+      Number(reqObj.participantsCount) || 0,
+      Number(reqObj.responsesCount) || 0,
+      Number(reqObj.quotationsCount) || 0,
+      Number(reqObj.proposalsCount) || 0,
+      participationsList.length
+    ),
     hasSubmittedProposal,
     ownParticipation,
     ownResponse,

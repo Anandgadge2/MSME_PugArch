@@ -2443,6 +2443,7 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
       : [];
 
     const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const isRankOnly = !isManager && (String(auction.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(auction.rankVisibility || '').toUpperCase() === 'HIDDEN');
     const mappedParticipants = participants.map((p: any, index: number) => {
       const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
                    (req.user?.id && p.sellerUserId === req.user.id);
@@ -2485,6 +2486,8 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
         quotedVal
       );
 
+      const hideAmount = isRankOnly && !isMe;
+
       return {
         ...p,
         sellerOrgName: displayName,
@@ -2493,18 +2496,18 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
         isCurrentViewer: Boolean(isMe),
         makeBrand,
         model,
-        quotedAmount: quotedVal,
-        totalAmount: quotedVal,
-        offeredPrice: quotedVal,
-        initialQuoteAmount: initialVal,
-        initialQuoteTotal: initialVal,
-        lastBidAmount: p.lastBidAmount || quotedVal,
+        quotedAmount: hideAmount ? null : quotedVal,
+        totalAmount: hideAmount ? null : quotedVal,
+        offeredPrice: hideAmount ? null : quotedVal,
+        initialQuoteAmount: hideAmount ? null : initialVal,
+        initialQuoteTotal: hideAmount ? null : initialVal,
+        lastBidAmount: hideAmount ? null : (p.lastBidAmount || quotedVal),
         technicalSpecifications: matchedBp?.offeredItemDescription || ack.technicalSpecifications || ack.lineItems?.[0]?.specifications || null,
         deliveryTimeline: ack.deliveryTimeline || matchedBp?.deliveryTimeline || null,
         paymentTerms: ack.paymentTerms || ack.terms || matchedBp?.paymentTerms || null,
-        lineItems,
+        lineItems: hideAmount ? [] : lineItems,
         acknowledgement: matchedBp?.acknowledgement || null,
-        documents,
+        documents: hideAmount ? [] : documents,
         sellerUser: (showAllNames || isMe) && sellerUserObj ? {
           id: sellerUserObj.id,
           name: sellerUserObj.name,
@@ -3180,6 +3183,7 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
     }
 
     const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const isRankOnly = !isManager && (String(auction.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(auction.rankVisibility || '').toUpperCase() === 'HIDDEN');
     const mappedBids = bids.map((b: any) => {
       const bOrgId = Number(b.sellerOrgId || 0);
       const isMe = (req.user?.organizationId && bOrgId === Number(req.user.organizationId)) ||
@@ -3190,8 +3194,13 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
       const part = bOrgId ? participantByOrg.get(bOrgId) : null;
       const bidderRank = part?.currentRank || b.rankAtSubmission || null;
 
+      const hideAmount = isRankOnly && !isMe;
+
       return {
         ...b,
+        amount: hideAmount ? null : b.amount,
+        totalAmount: hideAmount ? null : b.totalAmount,
+        unitPrice: hideAmount ? null : b.unitPrice,
         sellerOrgName: displayName,
         sellerOrgId: (showAllNames || isMe) ? b.sellerOrgId : null,
         sellerId: (showAllNames || isMe) ? b.sellerId : null,

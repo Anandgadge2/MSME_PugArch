@@ -68,6 +68,9 @@ export interface EditPublishedProcurementModalProps {
     technicalPacket?: Record<string, any> | null;
     financialPacket?: Record<string, any> | null;
     items?: any[];
+    hsnCode?: string;
+    brandPreference?: string;
+    makeBrand?: string;
   } | null;
   onSuccess?: () => void | Promise<void>;
 }
@@ -200,10 +203,68 @@ export function EditPublishedProcurementModal({
       setCategoryName(procurement.category || tp?.basics?.categoryName || 'General Procurement');
 
       // Scalar Quantity and Unit
-      setQuantity(procurement.quantity ? String(procurement.quantity) : (tp?.items?.[0]?.quantity ? String(tp.items[0].quantity) : ''));
-      setUnit(procurement.unit || tp?.items?.[0]?.unitOfMeasure || 'NOS');
-      setHsnCode(tp?.items?.[0]?.hsnCode || tp?.basics?.hsnCode || '');
-      setBrandPreference(tp?.specs?.brand || tp?.basics?.makeBrand || '');
+      const firstItem = (tp?.items && tp.items[0]) || (procurement.items && procurement.items[0]) || (fp?.boqSchedule && fp.boqSchedule[0]) || {};
+
+      // Parse numeric quantity
+      let resolvedQty = '';
+      if (procurement.quantity !== undefined && procurement.quantity !== null && String(procurement.quantity).toLowerCase() !== 'not specified') {
+        const qtyMatch = String(procurement.quantity).match(/[\d.]+/);
+        if (qtyMatch) resolvedQty = qtyMatch[0];
+      }
+      if (!resolvedQty && firstItem?.quantity !== undefined && firstItem?.quantity !== null) {
+        const qtyMatch = String(firstItem.quantity).match(/[\d.]+/);
+        if (qtyMatch) resolvedQty = qtyMatch[0];
+      }
+      if (!resolvedQty && tp?.basics?.quantity) {
+        const qtyMatch = String(tp.basics.quantity).match(/[\d.]+/);
+        if (qtyMatch) resolvedQty = qtyMatch[0];
+      }
+      setQuantity(resolvedQty);
+
+      // Parse unit
+      let resolvedUnit = procurement.unit || firstItem?.unitOfMeasure || firstItem?.unit || tp?.basics?.unit || '';
+      if (!resolvedUnit && procurement.quantity) {
+        const unitMatch = String(procurement.quantity).replace(/^[\d.\s]+/, '').trim();
+        if (unitMatch) resolvedUnit = unitMatch;
+      }
+      const matchedUnitOption = UNIT_OPTIONS.find(opt => 
+        opt.value.toUpperCase() === String(resolvedUnit).toUpperCase() ||
+        opt.label.toUpperCase().startsWith(String(resolvedUnit).toUpperCase()) ||
+        String(resolvedUnit).toUpperCase().startsWith(opt.value.toUpperCase())
+      );
+      setUnit(matchedUnitOption ? matchedUnitOption.value : (resolvedUnit ? String(resolvedUnit).toUpperCase() : 'NOS'));
+
+      // Parse HSN / SAC Code
+      const resolvedHsn = 
+        firstItem?.hsnCode ||
+        firstItem?.hsn ||
+        firstItem?.hsnSac ||
+        firstItem?.sac ||
+        firstItem?.sacCode ||
+        firstItem?.specifications?.hsnCode ||
+        firstItem?.specifications?.hsn ||
+        tp?.basics?.hsnCode ||
+        tp?.basics?.hsn ||
+        (procurement as any)?.hsnCode ||
+        '';
+      setHsnCode(String(resolvedHsn));
+
+      // Parse Make / Brand Preference
+      const resolvedBrand = 
+        firstItem?.brandRequirement ||
+        firstItem?.brand ||
+        firstItem?.make ||
+        firstItem?.brandPreference ||
+        firstItem?.oemBrandName ||
+        firstItem?.specifications?.brand ||
+        firstItem?.specifications?.make ||
+        tp?.specs?.brand ||
+        tp?.basics?.makeBrand ||
+        tp?.basics?.brandPreference ||
+        tp?.basics?.brand ||
+        (procurement as any)?.brandPreference ||
+        '';
+      setBrandPreference(String(resolvedBrand));
 
       // Budget
       setEstimatedValue(procurement.estimatedValue ? String(procurement.estimatedValue) : (fp?.estimatedBudget ? String(fp.estimatedBudget) : ''));
@@ -231,7 +292,7 @@ export function EditPublishedProcurementModal({
           itemCode: it.itemCode || `ITM-${idx + 1}`,
           itemName: it.itemName || it.name || `Item ${idx + 1}`,
           description: it.description || '',
-          hsnCode: it.hsnCode || '',
+          hsnCode: it.hsnCode || it.hsn || it.hsnSac || '',
           quantity: it.quantity || 1,
           unitOfMeasure: it.unitOfMeasure || it.unit || 'NOS',
           estimatedUnitPrice: it.estimatedUnitPrice || it.unitPrice || '',
@@ -243,8 +304,9 @@ export function EditPublishedProcurementModal({
             id: 'line-1',
             itemCode: 'ITM-01',
             itemName: procurement.title || 'Item 1',
-            quantity: procurement.quantity ? Number(procurement.quantity) : 1,
-            unitOfMeasure: procurement.unit || 'NOS',
+            quantity: resolvedQty ? Number(resolvedQty) : 1,
+            unitOfMeasure: matchedUnitOption ? matchedUnitOption.value : (resolvedUnit ? String(resolvedUnit).toUpperCase() : 'NOS'),
+            hsnCode: String(resolvedHsn),
             estimatedUnitPrice: ''
           }
         ]);
@@ -658,10 +720,10 @@ export function EditPublishedProcurementModal({
                     step="any"
                     value={estimatedValue}
                     onChange={e => setEstimatedValue(e.target.value)}
-                    placeholder={computedBoqTotal > 0 ? `Calculated from BOQ: ₹${computedBoqTotal.toLocaleString('en-IN')}` : 'e.g. 500000'}
+                    placeholder={pricingFormat === 'BOQ' && computedBoqTotal > 0 ? `Calculated from BOQ: ₹${computedBoqTotal.toLocaleString('en-IN')}` : 'e.g. 500000'}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100"
                   />
-                  {computedBoqTotal > 0 && (
+                  {pricingFormat === 'BOQ' && computedBoqTotal > 0 && (
                     <p className="text-[11px] text-slate-500">
                       Sum of BOQ unit prices: <span className="font-bold text-emerald-700">₹{computedBoqTotal.toLocaleString('en-IN')}</span>
                     </p>

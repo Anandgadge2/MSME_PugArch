@@ -170,8 +170,10 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
           categoryType: bidData?.categoryType || (bidData?.technicalPacket as any)?.basics?.procurementCategory,
           pricingFormat: bidData?.pricingFormat || (bidData?.technicalPacket as any)?.basics?.pricingFormat,
           canonicalMethod: bidData?.canonicalMethod || 'RATE_CONTRACT',
-          quantity: bidData?.quantity,
-          unit: bidData?.unit,
+          quantity: bidData?.quantity || viewProps.items?.[0]?.quantity,
+          unit: bidData?.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
+          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (bidData?.technicalPacket as any)?.basics?.hsnCode,
+          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (bidData?.technicalPacket as any)?.basics?.makeBrand,
           estimatedValue: bidData?.estimatedValue || reqData?.estimatedValue,
           deliveryLocation: bidData?.deliveryLocation,
           state: bidData?.state,
@@ -181,7 +183,7 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
           termsAndConditions: bidData?.termsAndConditions,
           technicalPacket: bidData?.technicalPacket,
           financialPacket: bidData?.financialPacket,
-          items: (bidData?.technicalPacket as any)?.items,
+          items: (bidData?.technicalPacket as any)?.items || bidData?.items || viewProps.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);

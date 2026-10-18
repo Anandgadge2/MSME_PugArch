@@ -176,8 +176,10 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
           categoryType: mergedBid.categoryType || (mergedBid.technicalPacket as any)?.basics?.procurementCategory,
           pricingFormat: mergedBid.pricingFormat || (mergedBid.technicalPacket as any)?.basics?.pricingFormat,
           canonicalMethod: mergedBid.canonicalMethod || 'OPEN_TENDER',
-          quantity: mergedBid.quantity,
-          unit: mergedBid.unit,
+          quantity: mergedBid.quantity || viewProps.items?.[0]?.quantity,
+          unit: mergedBid.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
+          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (mergedBid.technicalPacket as any)?.basics?.hsnCode,
+          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (mergedBid.technicalPacket as any)?.basics?.makeBrand,
           estimatedValue: mergedBid.estimatedValue,
           deliveryLocation: mergedBid.deliveryLocation,
           state: mergedBid.state,
@@ -187,7 +189,7 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
           termsAndConditions: mergedBid.termsAndConditions,
           technicalPacket: mergedBid.technicalPacket,
           financialPacket: mergedBid.financialPacket,
-          items: (mergedBid.technicalPacket as any)?.items,
+          items: (mergedBid.technicalPacket as any)?.items || mergedBid.items || viewProps.items,
         }}
         onSuccess={async () => {
           await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);

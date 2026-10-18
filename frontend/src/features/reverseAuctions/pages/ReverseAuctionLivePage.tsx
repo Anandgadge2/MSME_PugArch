@@ -250,6 +250,8 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   });
 
   const auction = (summary.data?.auction || liveSummaryCache.get(id)?.auction) as ReverseAuction | undefined;
+  const rankVisibility = String(auction?.rankVisibility || (summary.data?.auction as any)?.rankVisibility || 'SHOW_RANK_ONLY').toUpperCase();
+  const isRankOnly = !isBuyerOrAdmin && (rankVisibility === 'SHOW_RANK_ONLY' || rankVisibility === 'HIDDEN');
   
   const loading = summary.isLoading && !auction;
 
@@ -457,6 +459,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Commercial Bid',
       width: 'w-[20%]',
       cell: (row) => {
+        if (isRankOnly && !row.isMyBid) {
+          return (
+            <span className="font-semibold text-slate-400 text-xs italic tracking-wide">
+              Protected (Hidden)
+            </span>
+          );
+        }
         const amt = getBidAmount(row);
         const isLowest = amt === currentLowest && currentLowest > 0;
         return (
@@ -484,7 +493,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         </span>
       )
     }
-  ], [isBuyerOrAdmin, currentLowest]);
+  ], [isBuyerOrAdmin, currentLowest, isRankOnly]);
 
   // Leaderboard columns for Participant Standings Tab
   const leaderboardColumns = useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
@@ -540,6 +549,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Best Submitted Offer',
       width: 'w-[25%]',
       cell: (part) => {
+        if (isRankOnly && !part.isCurrentViewer) {
+          return (
+            <span className="font-semibold text-slate-400 text-xs italic tracking-wide">
+              Protected (Hidden)
+            </span>
+          );
+        }
         const amt = Number(part.lastBidAmount || 0);
         const isL1 = (part.currentRank || 1) === 1;
         return (
@@ -554,6 +570,9 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Gap to L1',
       width: 'w-[25%]',
       cell: (part) => {
+        if (isRankOnly && !part.isCurrentViewer) {
+          return <span className="text-slate-400 text-xs">—</span>;
+        }
         const amt = Number(part.lastBidAmount || 0);
         if (amt <= 0) return <span className="text-slate-400 text-xs">-</span>;
         if ((part.currentRank || 1) === 1) {
@@ -572,7 +591,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         );
       }
     }
-  ], [isBuyerOrAdmin, currentLowest]);
+  ], [isBuyerOrAdmin, currentLowest, isRankOnly]);
 
   // Process data for the real-time bid chart:
   // For initial baseline bids submitted at the same time, higher quotes come first so downward progression is accurately reflected.
@@ -611,6 +630,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         label: b.isMyBid ? 'Your Bid' : (b.sellerOrgName || `Bidder #${idx + 1}`),
         sellerOrgName: b.sellerOrgName,
         isMyBid: Boolean(b.isMyBid),
+        isRankOnly,
         rank: rankNum,
         isLowest: amt === currentLowest && currentLowest > 0,
         dropFromPrev,
@@ -620,7 +640,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         isFirstBid: idx === 0,
       };
     });
-  }, [sortedBidRows, startPrice, currentLowest]);
+  }, [sortedBidRows, startPrice, currentLowest, isRankOnly]);
 
   // Compute padded Y-Axis domain to ensure curve and dots have vertical breathing room
   const { chartYMin, chartYMax } = useMemo(() => {
@@ -1649,22 +1669,30 @@ function CustomChartTooltip({ active, payload }: any) {
         {/* Commercial Price & Delta */}
         <div>
           <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Commercial Offer</p>
-          <div className="text-lg font-black font-mono text-slate-900 tracking-tight mt-0.5">
-            {formatCurrency(amt)}
-          </div>
-          
-          {/* Price drop pill */}
-          {dropPrev > 0 ? (
-            <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70 mt-1">
-              <TrendingDown className="h-3 w-3 shrink-0" />
-              <span>▼ {formatCurrency(dropPrev)}</span>
-              <span className="font-mono text-[10px] opacity-80">(-{dropPrevPct.toFixed(1)}%)</span>
+          {data.isRankOnly && !data.isMyBid ? (
+            <div className="text-xs font-semibold text-slate-400 italic mt-0.5">
+              Protected (Hidden)
             </div>
-          ) : data.isFirstBid ? (
-            <div className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1">
-              Opening Benchmark Bid
-            </div>
-          ) : null}
+          ) : (
+            <>
+              <div className="text-lg font-black font-mono text-slate-900 tracking-tight mt-0.5">
+                {formatCurrency(amt)}
+              </div>
+              
+              {/* Price drop pill */}
+              {dropPrev > 0 ? (
+                <div className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/70 mt-1">
+                  <TrendingDown className="h-3 w-3 shrink-0" />
+                  <span>▼ {formatCurrency(dropPrev)}</span>
+                  <span className="font-mono text-[10px] opacity-80">(-{dropPrevPct.toFixed(1)}%)</span>
+                </div>
+              ) : data.isFirstBid ? (
+                <div className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md mt-1">
+                  Opening Benchmark Bid
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
 
         {/* Bidder Organization */}
@@ -1683,7 +1711,7 @@ function CustomChartTooltip({ active, payload }: any) {
           </div>
 
           {/* Cumulative Drop vs Start Price */}
-          {dropStart > 0 && (
+          {dropStart > 0 && !(data.isRankOnly && !data.isMyBid) && (
             <div className="flex items-center justify-between text-[10.5px]">
               <span className="text-slate-400 font-medium">Drop vs Start:</span>
               <span className="font-mono font-bold text-emerald-600">
