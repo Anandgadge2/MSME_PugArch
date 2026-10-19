@@ -126,7 +126,7 @@ export default function DirectCheckoutPage() {
   // Automatic System Calculations
   const calculations = useMemo(() => {
     if (!cart || !cart.items || cart.items.length === 0) {
-      return { subtotal: 0, totalGst: 0, deliveryCharge: 0, platformFee: 0, grandTotal: 0, itemGroupedBySeller: {} };
+      return { subtotal: 0, totalGst: 0, grandTotal: 0, sellerCount: 0, itemGroupedBySeller: {} };
     }
 
     let subtotal = 0;
@@ -140,7 +140,7 @@ export default function DirectCheckoutPage() {
       const itemSubtotal = qty * price;
       subtotal += itemSubtotal;
 
-      // Estimate GST rate (default 18% if not specified)
+      // Estimate GST rate (default 18% statutory tax)
       const gstRate = 0.18;
       totalGst += itemSubtotal * gstRate;
 
@@ -149,16 +149,11 @@ export default function DirectCheckoutPage() {
       itemGroupedBySeller[it.sellerId].push(it);
     });
 
-    // Delivery charge calculation (Free for orders over 10,000 or ₹250 flat)
-    const deliveryCharge = subtotal > 10000 ? 0 : sellerSet.size * 250;
-    const platformFee = 0; // ₹0 for direct purchase
-    const grandTotal = Math.round(subtotal + totalGst + deliveryCharge + platformFee);
+    const grandTotal = Math.round(subtotal + totalGst);
 
     return {
       subtotal,
       totalGst,
-      deliveryCharge,
-      platformFee,
       grandTotal,
       sellerCount: sellerSet.size,
       itemGroupedBySeller
@@ -712,22 +707,6 @@ export default function DirectCheckoutPage() {
                   <span className="font-mono font-semibold">{formatCurrency(calculations.totalGst)}</span>
                 </div>
 
-                <div className="flex justify-between text-slate-600 font-medium">
-                  <span>Delivery Charges</span>
-                  <span className="font-mono font-semibold">
-                    {calculations.deliveryCharge === 0 ? (
-                      <span className="text-emerald-700 font-bold uppercase text-[10px]">FREE</span>
-                    ) : (
-                      formatCurrency(calculations.deliveryCharge)
-                    )}
-                  </span>
-                </div>
-
-                <div className="flex justify-between text-slate-600 font-medium">
-                  <span>Platform Fee</span>
-                  <span className="font-mono font-semibold text-emerald-700 font-bold text-[10px] uppercase">₹0 (Waived)</span>
-                </div>
-
                 <div className="border-t border-slate-200 pt-3 flex justify-between items-baseline">
                   <div>
                     <p className="text-sm font-black text-slate-900 uppercase">Grand Total</p>
@@ -742,10 +721,10 @@ export default function DirectCheckoutPage() {
               {/* Notice Banner */}
               <div className="rounded-lg border border-blue-200 bg-blue-50/60 p-3 text-[11px] font-medium text-slate-700 space-y-1">
                 <p className="font-bold text-[#12335f] flex items-center gap-1.5">
-                  <UserCheck className="h-3.5 w-3.5" /> Seller Confirmation Flow
+                  <UserCheck className="h-3.5 w-3.5" /> Direct Purchase Order Issuance
                 </p>
                 <p className="text-slate-600 leading-snug">
-                  Clicking <strong>Place Order</strong> issues Purchase Orders directly to {calculations.sellerCount} seller(s). Sellers will confirm order acceptance before dispatch.
+                  Clicking <strong>Place Order</strong> issues Purchase Orders directly to the verified seller without intermediary markups or platform fees.
                 </p>
               </div>
 
