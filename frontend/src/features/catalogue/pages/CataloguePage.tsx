@@ -31,6 +31,7 @@ import { useDebounce } from '../../../hooks/useDebounce';
 import { CompareToggleButton } from '../../marketplace/components/CompareToggleButton';
 import { CompareTray } from '../../marketplace/components/CompareTray';
 import { resolveMarketplaceImage } from '../../marketplace/utils/marketplaceImages';
+import { setCartConflictState } from '../../marketplace/hooks/useMarketplaceCart';
 import { CatalogueImportModal } from '../components/CatalogueImportModal';
 import type { ImportBatchDto } from '../api';
 
@@ -887,6 +888,25 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
       await postApi('/api/cart/items', payload);
       toast.success(`${item.name} added to cart`);
     } catch (err: any) {
+      if (err?.code === 'DIFFERENT_SELLER_CONFLICT' || err?.body?.code === 'DIFFERENT_SELLER_CONFLICT') {
+        const conflictData = err?.body?.data || err?.body || {};
+        setCartConflictState({
+          isOpen: true,
+          currentSeller: conflictData.currentSeller,
+          newSeller: conflictData.newSeller,
+          pendingItem: {
+            id: item.id,
+            name: item.name,
+            type: item.itemKind,
+            quantity: 1,
+            price: item.price !== undefined ? Number(item.price) : undefined
+          },
+          options: { showToast: true },
+          cartItemCount: conflictData.cartItemCount || 1,
+          isReplacing: false
+        });
+        return;
+      }
       toast.error(err?.message || 'Failed to add to cart');
     } finally {
       setAddingItemKey(null);

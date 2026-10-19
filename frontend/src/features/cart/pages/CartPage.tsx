@@ -31,6 +31,7 @@ import {
     useApproveCart,
     useCartDetail,
     useCartHistory,
+    useClearCart,
     useRejectCart,
     useRemoveCartItem,
     useSubmitCart,
@@ -75,6 +76,7 @@ export default function CartPage() {
 
     const historyQuery = useCartHistory({ enabled: canViewCart });
     const removeMut = useRemoveCartItem();
+    const clearMut = useClearCart();
     const updateMut = useUpdateCartItem();
     const submitMut = useSubmitCart();
     const startChainMut = useStartCartApprovalChain();
@@ -273,6 +275,17 @@ export default function CartPage() {
             onError: (err: any) => {
                 toast.error(err?.message || 'Failed to remove');
             }
+        });
+    };
+
+    const handleClearCart = async () => {
+        if (!window.confirm('Are you sure you want to clear all items from your active cart?')) {
+            return;
+        }
+        await runWithToast(() => clearMut.mutateAsync(undefined), {
+            loading: 'Clearing cart...',
+            success: 'Cart cleared successfully',
+            error: 'Failed to clear cart'
         });
     };
 
@@ -568,7 +581,7 @@ export default function CartPage() {
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                 <KpiCard label="Status" value={(cart?.status || 'ACTIVE').replace(/_/g, ' ')} icon={ShoppingCart} tone="blue" subtext="Current lifecycle state" />
                 <KpiCard label="Line Items" value={totals.lineCount} icon={ShoppingCart} tone="purple" subtext="Unique products/services" />
-                <KpiCard label="Sellers" value={totals.sellerCount} icon={Store} tone="green" subtext="Supplying vendors" />
+                <KpiCard label="Supplier" value={cart?.items?.[0]?.seller?.name || (cart?.items?.length ? '1 Seller' : '0')} icon={Store} tone="green" subtext="Single Seller Direct Buy" />
                 <KpiCard label="Total Value" value={formatCurrency(totals.total)} icon={ShoppingCart} tone="amber" subtext="Estimated total value" />
             </div>
 
@@ -676,6 +689,48 @@ export default function CartPage() {
                 />
             )}
 
+            {/* Single Seller Direct Purchase Notice & Supplier Banner */}
+            {cart && cart.items.length > 0 && (
+                <div className="rounded-xl border border-emerald-200/90 bg-emerald-50/60 p-4 shadow-2xs">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-100 text-emerald-800">
+                                <Store className="h-5 w-5" aria-hidden="true" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-emerald-800 bg-emerald-100/70 border border-emerald-200 px-2 py-0.5 rounded-md">
+                                        Single Verified Supplier
+                                    </span>
+                                    <span className="text-[10px] font-bold text-slate-500">
+                                        Direct Purchase & Offline Payment Policy
+                                    </span>
+                                </div>
+                                <h3 className="mt-1 text-sm font-extrabold text-slate-900">
+                                    {cart.items[0]?.seller?.name || `Seller #${cart.items[0]?.sellerId}`}
+                                </h3>
+                                <p className="text-xs text-slate-600 font-medium">
+                                    All items in this direct purchase are supplied by this vendor. Upon approval, your Purchase Order and offline bank transfer (NEFT/RTGS) instructions will be issued directly to this seller.
+                                </p>
+                            </div>
+                        </div>
+                        {cart.status === 'ACTIVE' && canEditCartItems && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleClearCart}
+                                disabled={clearMut.isPending}
+                                className="h-9 shrink-0 text-xs font-bold text-rose-700 border-rose-200 bg-white hover:bg-rose-50 hover:border-rose-300 transition-colors cursor-pointer"
+                                aria-label="Clear all items from active cart"
+                            >
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5 text-rose-600" />
+                                Clear Cart
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            )}
+
             {/* Cart Items */}
             <Card className="border-slate-200/80 shadow-sm overflow-hidden">
                 <CardContent className="p-0">
@@ -715,11 +770,18 @@ export default function CartPage() {
                             onSort={(field) => handleSort(field as SortField)}
                             rowClassName={(item) => selectedItemIds.has(item.id) ? "bg-indigo-50/20" : ""}
                             footer={
-                                <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
-                                    <td colSpan={6} className="px-3 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">Grand Total</td>
-                                    <td className="px-3 py-3 text-right font-mono text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
-                                    <td colSpan={3} className="px-3 py-3" />
-                                </tr>
+                                <>
+                                    <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
+                                        <td colSpan={6} className="px-3 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">Grand Total</td>
+                                        <td className="px-3 py-3 text-right font-mono text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
+                                        <td colSpan={3} className="px-3 py-3" />
+                                    </tr>
+                                    <tr className="border-t border-slate-200/60 bg-emerald-50/30">
+                                        <td colSpan={10} className="px-4 py-2.5 text-left text-[11px] font-semibold text-emerald-950">
+                                            ✓ Single Seller Direct Purchase Policy: All items are supplied by <strong className="font-bold text-emerald-900">{cart.items[0]?.seller?.name || 'the verified seller'}</strong>. Upon approval, official Purchase Order and offline bank transfer instructions (NEFT/RTGS/Cheque) will be issued directly to this seller.
+                                        </td>
+                                    </tr>
+                                </>
                             }
                         />
                     )}

@@ -140,6 +140,7 @@ const BuyerRequirementListPage = lazy(() => import('./features/marketplace/pages
 
 import Sidebar, { Header } from './components/layout/Navbar';
 import { MarketplaceHeader } from './features/marketplace/components/MarketplaceHeader';
+import { GlobalCartConflictModal } from './features/marketplace/components/GlobalCartConflictModal';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
@@ -1457,6 +1458,7 @@ export default function App({
             <SellerAwardPoAlertPopup />
           </Suspense>
         )}
+        <GlobalCartConflictModal />
         <SubUserActivationGate />
       </div>
     </>

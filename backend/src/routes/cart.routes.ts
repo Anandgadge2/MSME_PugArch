@@ -68,7 +68,8 @@ const ensureOrg = (req: AuthRequest) => {
 const addItemSchema = z.object({
     productId: z.coerce.number().int().positive().optional(),
     serviceId: z.coerce.number().int().positive().optional(),
-    quantity: z.coerce.number().positive().max(1_000_000)
+    quantity: z.coerce.number().positive().max(1_000_000),
+    replaceCart: z.boolean().optional()
 }).refine(d => d.productId || d.serviceId, {
     message: 'Either productId or serviceId is required'
 });
@@ -196,11 +197,20 @@ router.post('/cart/merge-guest', authenticate, requirePermission('cart.add', org
     ];
 
     const cart = await getOrCreateActiveCart(orgId(req), userId(req));
+    const activeCartSellerId = cart.items?.[0]?.sellerId;
+
     for (const guestItem of mergeItems) {
         const product = guestItem.product;
         const service = guestItem.service;
         const sellerIdValue = product?.sellerId || service?.sellerId;
         if (!sellerIdValue) continue;
+
+        // In Direct Purchase, cart only permits a single seller.
+        // If the cart already has items, ignore guest items from other sellers.
+        if (activeCartSellerId && sellerIdValue !== activeCartSellerId) {
+            continue;
+        }
+
         const existing = await prisma.cartItem.findFirst({
             where: { cartId: cart.id, productId: product?.id || null, serviceId: service?.id || null }
         });
@@ -242,11 +252,20 @@ router.post(
         let unitOfMeasure = '';
         let unitPrice = 0;
         let sellerId = 0;
+        let sellerName = '';
 
         if (body.productId) {
             const product = await prisma.product.findUnique({
                 where: { id: body.productId },
-                select: { id: true, name: true, unitOfMeasure: true, price: true, sellerId: true, status: true }
+                select: {
+                    id: true,
+                    name: true,
+                    unitOfMeasure: true,
+                    price: true,
+                    sellerId: true,
+                    status: true,
+                    seller: { select: { id: true, name: true } }
+                }
             });
             if (!product || product.status !== 'ACTIVE') {
                 throw new ApiError(404, 'Product not available', 'PRODUCT_NOT_AVAILABLE');
@@ -255,10 +274,18 @@ router.post(
             unitOfMeasure = product.unitOfMeasure || 'Nos';
             unitPrice = Number(product.price || 0);
             sellerId = product.sellerId;
+            sellerName = product.seller?.name || `Seller #${product.sellerId}`;
         } else if (body.serviceId) {
             const service = await prisma.service.findUnique({
                 where: { id: body.serviceId },
-                select: { id: true, name: true, basePrice: true, sellerId: true, status: true }
+                select: {
+                    id: true,
+                    name: true,
+                    basePrice: true,
+                    sellerId: true,
+                    status: true,
+                    seller: { select: { id: true, name: true } }
+                }
             });
             if (!service || service.status !== 'ACTIVE') {
                 throw new ApiError(404, 'Service not available', 'SERVICE_NOT_AVAILABLE');
@@ -267,11 +294,54 @@ router.post(
             unitOfMeasure = 'Service';
             unitPrice = Number(service.basePrice || 0);
             sellerId = service.sellerId;
+            sellerName = service.seller?.name || `Seller #${service.sellerId}`;
         }
 
         const cart = await getOrCreateActiveCart(orgId(req), userId(req));
         if (cart.status !== 'ACTIVE') {
             throw new ApiError(409, 'Active cart is locked. Submit or reset to add items.', 'CART_LOCKED');
+        }
+
+        // Single-Seller Enforcement for Direct Purchase & Offline Payments:
+        // A Direct Purchase cart can only contain items from a single seller.
+        const existingItems = cart.items || [];
+        const conflictingItem = existingItems.find(item => item.sellerId !== sellerId);
+
+        if (conflictingItem) {
+            if (!body.replaceCart) {
+                const currentSellerName = conflictingItem.seller?.name || `Seller #${conflictingItem.sellerId}`;
+                return res.status(409).json({
+                    success: false,
+                    code: 'DIFFERENT_SELLER_CONFLICT',
+                    message: `Your direct purchase cart already contains items from "${currentSellerName}". Direct purchase with offline bank transfer requires one seller per order.`,
+                    data: {
+                        currentSeller: {
+                            id: conflictingItem.sellerId,
+                            name: currentSellerName
+                        },
+                        newSeller: {
+                            id: sellerId,
+                            name: sellerName
+                        },
+                        cartItemCount: existingItems.length
+                    }
+                });
+            }
+
+            // User approved replacing existing cart items with the new seller's items
+            await prisma.cartItem.deleteMany({
+                where: { cartId: cart.id }
+            });
+
+            await auditLog({
+                actorUserId: userId(req),
+                actorRole: req.user!.role,
+                action: 'cart.items.replaced',
+                entityType: 'cart',
+                entityId: cart.id,
+                ipAddress: req.ip,
+                metadata: { cartId: cart.id, previousSellerId: conflictingItem.sellerId, newSellerId: sellerId }
+            });
         }
 
         // Check if same product/service already in cart — bump quantity
@@ -350,6 +420,39 @@ router.put(
         });
 
         ok(res, updated);
+    })
+);
+
+// ─── DELETE /api/cart/clear — clear all items from active cart ─────────────────
+
+router.delete(
+    '/cart/clear',
+    authenticate,
+    requirePermission('cart.add', orgScope),
+    requireApprovedOrg,
+    asyncRoute(async (req, res) => {
+        ensureOrg(req);
+        const cart = await getOrCreateActiveCart(orgId(req), userId(req));
+        if (cart.status !== 'ACTIVE') {
+            throw new ApiError(409, 'Cart is locked and cannot be cleared', 'CART_LOCKED');
+        }
+
+        const deleteResult = await prisma.cartItem.deleteMany({
+            where: { cartId: cart.id }
+        });
+
+        await auditLog({
+            actorUserId: userId(req),
+            actorRole: req.user!.role,
+            action: 'cart.cleared',
+            entityType: 'cart',
+            entityId: cart.id,
+            ipAddress: req.ip,
+            metadata: { cartId: cart.id, count: deleteResult.count }
+        });
+
+        const refreshed = await prisma.cart.findUnique({ where: { id: cart.id }, include: cartIncludes });
+        ok(res, refreshed || { ...cart, items: [] });
     })
 );
 

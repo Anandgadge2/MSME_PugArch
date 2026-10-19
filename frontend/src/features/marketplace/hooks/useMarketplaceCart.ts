@@ -2,8 +2,8 @@
 
 import React, { useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
-import { useActiveCart, useAddToCart, useUpdateCartItem, useRemoveCartItem } from '../../cart/hooks';
-import { removeCartItem, addItemToCart, fetchActiveCart, type CartDto } from '../../cart/api';
+import { useActiveCart, useAddToCart, useUpdateCartItem, useRemoveCartItem, useClearCart } from '../../cart/hooks';
+import { removeCartItem, addItemToCart, fetchActiveCart, clearActiveCart, type CartDto } from '../../cart/api';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../lib/api';
 import { useGuestCart } from './useGuestCart';
@@ -21,6 +21,43 @@ export interface UnifiedCartItem {
     quantity: number;
     type: 'product' | 'service';
     dbCartItemId?: number; // DB cart item primary key if authenticated
+    sellerId?: number;
+    sellerName?: string;
+}
+
+export interface CartConflictState {
+    isOpen: boolean;
+    currentSeller?: { id: number; name: string };
+    newSeller?: { id: number; name: string };
+    pendingItem?: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'> & { quantity?: number };
+    options?: { source?: string; showToast?: boolean; replaceCart?: boolean };
+    cartItemCount?: number;
+    isReplacing?: boolean;
+}
+
+let _conflictState: CartConflictState = { isOpen: false };
+const conflictListeners = new Set<() => void>();
+
+export function getCartConflictState(): CartConflictState {
+    return _conflictState;
+}
+
+export function setCartConflictState(state: CartConflictState) {
+    _conflictState = state;
+    conflictListeners.forEach(fn => fn());
+}
+
+const DEFAULT_CONFLICT_STATE: CartConflictState = { isOpen: false };
+
+export function useCartConflict(): CartConflictState {
+    return React.useSyncExternalStore(
+        (listener) => {
+            conflictListeners.add(listener);
+            return () => { conflictListeners.delete(listener); };
+        },
+        () => _conflictState,
+        () => DEFAULT_CONFLICT_STATE
+    );
 }
 
 export function useMarketplaceCart() {
@@ -36,6 +73,7 @@ export function useMarketplaceCart() {
     const addToCartMut = useAddToCart();
     const updateCartItemMut = useUpdateCartItem();
     const removeCartItemMut = useRemoveCartItem();
+    const clearCartMut = useClearCart();
     const pendingUpdatesRef = useRef<Map<string, number>>(new Map());
     const debounceUpdateTimerRef = useRef<Map<string, NodeJS.Timeout>>(new Map());
 
@@ -55,7 +93,9 @@ export function useMarketplaceCart() {
                 category: (subItem as any)?.category?.name || (item as any).product?.category?.name || (item as any).service?.category?.name,
                 quantity: Number(item.quantity),
                 type,
-                dbCartItemId: item.id
+                dbCartItemId: item.id,
+                sellerId: item.sellerId,
+                sellerName: item.seller?.name
             };
         });
 
@@ -67,7 +107,7 @@ export function useMarketplaceCart() {
 
         const add = (
             item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'> & { quantity?: number },
-            options?: { source?: string; showToast?: boolean }
+            options?: { source?: string; showToast?: boolean; replaceCart?: boolean }
         ) => {
             const itemKey = `${item.type}-${item.id}`;
             const targetQty = item.quantity && item.quantity > 0 ? item.quantity : 1;
@@ -76,6 +116,7 @@ export function useMarketplaceCart() {
                     productId: item.type === 'product' ? item.id : undefined,
                     serviceId: item.type === 'service' ? item.id : undefined,
                     quantity: targetQty,
+                    replaceCart: options?.replaceCart,
                     itemName: item.name,
                     unitPrice: item.price,
                     unitOfMeasure: item.unit
@@ -83,10 +124,15 @@ export function useMarketplaceCart() {
                 {
                     onSuccess: (createdCart: any) => {
                         api.invalidate('/api/cart');
+                        setCartConflictState({ isOpen: false });
                         const pendingQty = pendingUpdatesRef.current.get(itemKey);
                         pendingUpdatesRef.current.delete(itemKey);
                         if (options?.showToast !== false) {
-                            toast.success(`${item.name} added to cart`);
+                            if (options?.replaceCart) {
+                                toast.success(`Cart updated with ${item.name}`);
+                            } else {
+                                toast.success(`${item.name} added to cart`);
+                            }
                         }
                         if (pendingQty !== undefined) {
                             const dbItem = createdCart?.items?.find((i: any) =>
@@ -104,6 +150,20 @@ export function useMarketplaceCart() {
                     },
                     onError: (err: any) => {
                         pendingUpdatesRef.current.delete(itemKey);
+                        const isConflict = err?.code === 'DIFFERENT_SELLER_CONFLICT' || err?.body?.code === 'DIFFERENT_SELLER_CONFLICT';
+                        if (isConflict) {
+                            const conflictData = err?.body?.data || err?.body || {};
+                            setCartConflictState({
+                                isOpen: true,
+                                currentSeller: conflictData.currentSeller,
+                                newSeller: conflictData.newSeller,
+                                pendingItem: item,
+                                options,
+                                cartItemCount: conflictData.cartItemCount || mappedItems.length || 1,
+                                isReplacing: false
+                            });
+                            return;
+                        }
                         toast.error(err?.message || `Failed to add ${item.name} to cart`);
                     }
                 }
@@ -214,50 +274,50 @@ export function useMarketplaceCart() {
             }
         };
 
+        const resolveConflict = (action: 'keep' | 'replace') => {
+            if (action === 'keep') {
+                setCartConflictState({ isOpen: false });
+                return;
+            }
+            if (!_conflictState.pendingItem) {
+                setCartConflictState({ isOpen: false });
+                return;
+            }
+            const itemToReplace = _conflictState.pendingItem;
+            const itemOptions = _conflictState.options;
+            setCartConflictState({ ..._conflictState, isReplacing: true });
+            add(itemToReplace, { ...itemOptions, replaceCart: true, showToast: true });
+        };
+
         const clear = () => {
-            mappedItems.forEach(item => {
-                if (item.dbCartItemId) {
-                    removeCartItemMut.mutate(item.dbCartItemId);
+            clearCartMut.mutate(undefined, {
+                onSuccess: () => {
+                    api.invalidate('/api/cart');
+                    toast.info('Cart cleared');
+                },
+                onError: () => {
+                    toast.error('Failed to clear cart');
                 }
             });
-            toast.info('Cart cleared');
         };
 
         const buyNow = async (
             item: Omit<UnifiedCartItem, 'quantity' | 'dbCartItemId'>,
             options?: { source?: string; showToast?: boolean }
         ) => {
-            // Cancel active cart queries to prevent concurrent refetches from overriding cache
             await qc.cancelQueries({ queryKey: ['cart'] });
 
-            const otherItems = mappedItems.filter(
-                (cartItem) => !(cartItem.id === item.id && cartItem.type === item.type)
-            );
-
-            // Sequentially remove all other items using raw API to avoid mutation race conditions
-            for (const cartItem of otherItems) {
-                if (cartItem.dbCartItemId) {
-                    try {
-                        await removeCartItem(cartItem.dbCartItemId);
-                    } catch (err) {
-                        console.error(`Failed to remove cart item ${cartItem.dbCartItemId}`, err);
-                    }
-                }
-            }
-
-            const hasTarget = mappedItems.some(
-                (cartItem) => cartItem.id === item.id && cartItem.type === item.type
-            );
-
             let finalCart: CartDto;
-            if (!hasTarget) {
-                // Add the target item using raw API to avoid mutation race conditions
+            try {
+                // In Direct Purchase, buy now atomically replaces cart with target item for instant single-seller checkout
                 finalCart = await addItemToCart({
                     productId: item.type === 'product' ? item.id : undefined,
                     serviceId: item.type === 'service' ? item.id : undefined,
                     quantity: 1,
+                    replaceCart: true
                 });
-            } else {
+            } catch (err: any) {
+                console.error('Failed in buyNow', err);
                 finalCart = await fetchActiveCart();
             }
 
@@ -280,6 +340,11 @@ export function useMarketplaceCart() {
             }
         };
 
+        const currentSeller = mappedItems[0]?.sellerId ? {
+            id: mappedItems[0].sellerId,
+            name: mappedItems[0].sellerName || `Seller #${mappedItems[0].sellerId}`
+        } : undefined;
+
         return {
             items: mappedItems,
             count,
@@ -289,6 +354,8 @@ export function useMarketplaceCart() {
             remove,
             clear,
             buyNow,
+            resolveConflict,
+            currentSeller,
             isLoading: activeCartQuery.isLoading
         };
     }
@@ -392,6 +459,8 @@ export function useMarketplaceCart() {
         remove: guestRemove,
         clear: guestCart.clear,
         buyNow: guestBuyNow,
+        resolveConflict: () => {},
+        currentSeller: undefined,
         isLoading: false
     };
 }

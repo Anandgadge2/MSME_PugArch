@@ -78,8 +78,11 @@ export const fetchCartById = (id: number) => getApi<CartDto>(`/api/cart/${id}`);
 export const fetchPendingApprovals = () => getApi<CartDto[]>('/api/cart/pending-approval');
 export const fetchPendingTechReview = () => getApi<CartItemDto[]>('/api/cart/pending-tech-review');
 
-export const addItemToCart = (data: { productId?: number; serviceId?: number; quantity: number }) =>
+export const addItemToCart = (data: { productId?: number; serviceId?: number; quantity: number; replaceCart?: boolean }) =>
     postApi<CartDto>('/api/cart/items', data);
+
+export const clearActiveCart = () =>
+    deleteApi<CartDto>('/api/cart/clear');
 
 export const updateCartItem = (id: number, quantity: number) =>
     putApi<CartItemDto>(`/api/cart/items/${id}`, { quantity });

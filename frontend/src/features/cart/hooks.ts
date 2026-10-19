@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
     addItemToCart,
     approveCart,
+    clearActiveCart,
     fetchActiveCart,
     fetchCartById,
     fetchCartHistory,
@@ -82,8 +83,8 @@ export const usePendingTechReview = (options?: { enabled?: boolean }) => {
 export const useAddToCart = () => {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (variables: { productId?: number; serviceId?: number; quantity: number; itemName?: string; unitPrice?: number; unitOfMeasure?: string }) =>
-            addItemToCart({ productId: variables.productId, serviceId: variables.serviceId, quantity: variables.quantity }),
+        mutationFn: (variables: { productId?: number; serviceId?: number; quantity: number; replaceCart?: boolean; itemName?: string; unitPrice?: number; unitOfMeasure?: string }) =>
+            addItemToCart({ productId: variables.productId, serviceId: variables.serviceId, quantity: variables.quantity, replaceCart: variables.replaceCart }),
         onMutate: async (newItem) => {
             await qc.cancelQueries({ queryKey: KEY });
             const previousActiveCart = qc.getQueryData<CartDto>([...KEY, 'active']);
@@ -107,7 +108,7 @@ export const useAddToCart = () => {
 
                 qc.setQueryData<CartDto>([...KEY, 'active'], {
                     ...previousActiveCart,
-                    items: [...previousActiveCart.items, optimisticItem]
+                    items: newItem.replaceCart ? [optimisticItem] : [...previousActiveCart.items, optimisticItem]
                 });
             }
 
@@ -252,6 +253,32 @@ export const useRemoveCartItem = () => {
                         qc.setQueryData(queryKey, data);
                     }
                 });
+            }
+        },
+        onSettled: () => {
+            void invalidate(qc);
+        }
+    });
+};
+
+export const useClearCart = () => {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: clearActiveCart,
+        onMutate: async () => {
+            await qc.cancelQueries({ queryKey: KEY });
+            const previousActiveCart = qc.getQueryData<CartDto>([...KEY, 'active']);
+            if (previousActiveCart) {
+                qc.setQueryData<CartDto>([...KEY, 'active'], {
+                    ...previousActiveCart,
+                    items: []
+                });
+            }
+            return { previousActiveCart };
+        },
+        onError: (err, variables, context) => {
+            if (context?.previousActiveCart) {
+                qc.setQueryData([...KEY, 'active'], context.previousActiveCart);
             }
         },
         onSettled: () => {
