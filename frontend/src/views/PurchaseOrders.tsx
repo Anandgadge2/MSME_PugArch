@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { AlertTriangle, AlertCircle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck } from 'lucide-react';
+import { AlertTriangle, AlertCircle, CheckCircle2, Download, FileText, RefreshCw, Search, ShieldCheck, Truck, XCircle, ArrowUp, ArrowDown, ArrowUpDown, Eye, X, Filter, List, LayoutGrid, MoreVertical, Building2, Calendar, MapPin, User, Copy, Package, CreditCard, Clock, Upload, Receipt, Lock, ClipboardCheck, Undo2 } from 'lucide-react';
 import type { DocumentConfig } from '../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../features/payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../features/payments/components/PaymentReceiptViewModal';
@@ -79,7 +79,7 @@ import { DataTable, type ColumnDef } from '../components/ui/data-table';
 import { FocusTrap } from '../components/ui/FocusTrap';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
-const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval'];
+const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval', 'pending_acceptance'];
 const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All') => {
   if (tab === 'Delivered') return 'delivered';
   if (tab === 'Cancelled') return 'cancelled';
@@ -170,6 +170,7 @@ const OrderActionDropdown = ({
   onViewInvoice,
   onEditPoDraft,
   onIssuePo,
+  onRecallPo,
   onAmendPo,
   onAcceptAmendment,
   onDeclineAmendment,
@@ -360,7 +361,7 @@ const OrderActionDropdown = ({
             className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-indigo-700 hover:bg-indigo-50 transition-colors text-left cursor-pointer"
           >
             <FileText className="h-3.5 w-3.5 text-indigo-600" />
-            <span>Edit Draft / SAP Details</span>
+            <span>Edit Purchase Order (Draft)</span>
           </button>
           <button
             type="button"
@@ -374,6 +375,22 @@ const OrderActionDropdown = ({
             <span>Issue PO to Seller</span>
           </button>
         </>
+      )}
+
+      {/* Buyer: Recall Issued / Pending Acceptance PO to Draft & Edit */}
+      {isBuyer && isIssued && !order.isDraft && String(order.status || '').toLowerCase() !== 'draft' && String(order.status || '').toLowerCase() !== 'generated' && (
+        <button
+          type="button"
+          onClick={() => {
+            onClose();
+            onRecallPo?.(order);
+          }}
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-amber-700 hover:bg-amber-50 transition-colors text-left cursor-pointer"
+          title="Recall this unaccepted purchase order back to draft state to make corrections and re-issue"
+        >
+          <Undo2 className="h-3.5 w-3.5 text-amber-600" />
+          <span>Recall to Draft &amp; Edit</span>
+        </button>
       )}
 
       {/* Buyer: Propose V2 Amendment on Accepted PO */}
@@ -845,6 +862,9 @@ export default function PurchaseOrders() {
   const [rejectingOrder, setRejectingOrder] = useState<PurchaseOrderDto | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+  const [recallingOrder, setRecallingOrder] = useState<PurchaseOrderDto | null>(null);
+  const [recallReason, setRecallReason] = useState<string>('');
+  const [isSubmittingRecall, setIsSubmittingRecall] = useState<boolean>(false);
   const [viewingOrder, setViewingOrder] = useState<PurchaseOrderDto | null>(null);
   const [receiptModalOrder, setReceiptModalOrder] = useState<PurchaseOrderDto | null>(null);
   const [uploadProofOrder, setUploadProofOrder] = useState<PurchaseOrderDto | null>(null);
@@ -1236,6 +1256,39 @@ export default function PurchaseOrders() {
     }
   };
 
+  const handleRecallPo = (order: PurchaseOrderDto) => {
+    setRecallingOrder(order);
+    setRecallReason('');
+  };
+
+  const confirmRecallPo = async () => {
+    if (!recallingOrder) return;
+    setIsSubmittingRecall(true);
+    try {
+      const endpoint = `/api/purchase-orders/${recallingOrder.id}/recall`;
+      const updated = await postApi<PurchaseOrderDto>(endpoint, {
+        reason: recallReason.trim() || undefined
+      });
+      toast.success(`Purchase Order ${recallingOrder.poNumber || `PO-${recallingOrder.id}`} recalled to Draft. Opening editor...`);
+      const targetToEdit = { ...recallingOrder, ...updated, status: 'draft', poStatus: 'DRAFT', isDraft: true };
+      setPagedOrders(current => current.map(o => o.id === updated.id ? targetToEdit : o));
+      if (viewingOrder && viewingOrder.id === recallingOrder.id) {
+        setViewingOrder(targetToEdit);
+      }
+      setRecallingOrder(null);
+      setRecallReason('');
+      await refreshPurchaseOrders();
+      // Seamlessly open the Edit Draft Modal so buyer can make corrections immediately
+      setEditPoTarget(targetToEdit);
+      setEditPoMode('draft');
+      setEditPoModalOpen(true);
+    } catch (err: any) {
+      toast.error(err?.message || 'Unable to recall purchase order to draft');
+    } finally {
+      setIsSubmittingRecall(false);
+    }
+  };
+
   const handleOpenDelivery = async (order: PurchaseOrderDto) => {
     // 1. Direct delivery tracking ID if present on PO or activeDelivery
     const dlvId = (order as any).deliveryTrackings?.[0]?.id || 
@@ -1304,7 +1357,9 @@ export default function PurchaseOrders() {
 
   const renderOrderActions = (order: PurchaseOrderDto) => {
     const statusLower = String(order.status || '').toLowerCase();
-    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed' || statusLower === 'pending_approval';
+    const poStatusLower = String(order.poStatus || '').toLowerCase();
+    const effectiveStatus = poStatusLower || statusLower;
+    const isIssued = statusLower === 'issued' || statusLower === 'generated' || statusLower === 'order_placed' || statusLower === 'pending_approval' || statusLower === 'pending_acceptance' || effectiveStatus === 'pending_acceptance' || effectiveStatus === 'issued';
     const isAccepted = statusLower === 'accepted' || statusLower === 'in_fulfillment';
     const isDelivered = statusLower === 'delivered' || statusLower === 'completed';
     const isCancelled = statusLower === 'cancelled' || statusLower === 'rejected';
@@ -1353,6 +1408,7 @@ export default function PurchaseOrders() {
             toast.error(err.message || 'Failed to issue purchase order');
           }
         }}
+        onRecallPo={handleRecallPo}
         onAmendPo={(target: any) => {
           setEditPoTarget(target);
           setEditPoMode('amend');
@@ -2144,6 +2200,100 @@ export default function PurchaseOrders() {
                     <>
                       <XCircle className="h-3.5 w-3.5" />
                       <span>Reject PO</span>
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </FocusTrap>
+        </div>
+      )}
+
+      {recallingOrder && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm animate-in fade-in duration-150"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="recall-po-title"
+          aria-describedby="recall-po-desc"
+        >
+          <FocusTrap onEscape={() => !isSubmittingRecall && setRecallingOrder(null)} className="w-full max-w-md">
+            <div className="w-full rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl animate-in zoom-in-95 duration-150 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50 text-amber-600 border border-amber-100">
+                    <Undo2 className="h-4 w-4" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <h3 id="recall-po-title" className="text-base font-black text-slate-900">
+                      Recall Purchase Order
+                    </h3>
+                    <p id="recall-po-desc" className="text-[11px] font-semibold text-slate-500">
+                      {recallingOrder.poNumber || `PO #${recallingOrder.id}`}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setRecallingOrder(null)}
+                  disabled={isSubmittingRecall}
+                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors"
+                  aria-label="Close dialog"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="rounded-xl bg-amber-50/70 border border-amber-200/80 p-3 text-xs text-amber-900 leading-relaxed space-y-1">
+                <p className="font-bold flex items-center gap-1.5 text-amber-800">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  Retract to Draft for Editing
+                </p>
+                <p className="text-[11px] text-amber-700">
+                  This purchase order is currently pending supplier acceptance. Recalling it will retract it to Draft mode so you can update line items, dates, terms, or PDF attachments, and then re-issue cleanly.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="po-recall-reason" className="block text-xs font-bold text-slate-700">
+                  Reason for Recall <span className="text-slate-400 font-normal">(optional audit note)</span>
+                </label>
+                <textarea
+                  id="po-recall-reason"
+                  rows={2}
+                  value={recallReason}
+                  onChange={(e) => setRecallReason(e.target.value)}
+                  placeholder="e.g. Need to adjust delivery date, clerical error in line items..."
+                  className="w-full rounded-xl border border-slate-200 p-2.5 text-xs text-slate-800 placeholder:text-slate-400 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 outline-none transition-all resize-none"
+                  disabled={isSubmittingRecall}
+                />
+              </div>
+
+              <div className="flex justify-end items-center gap-2.5 pt-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setRecallingOrder(null)}
+                  disabled={isSubmittingRecall}
+                  className="h-9 px-4 text-xs font-bold rounded-xl"
+                >
+                  Keep Issued
+                </Button>
+                <Button
+                  type="button"
+                  onClick={confirmRecallPo}
+                  disabled={isSubmittingRecall}
+                  className="h-9 px-4 text-xs font-black uppercase tracking-wider bg-amber-600 hover:bg-amber-700 text-white rounded-xl shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  {isSubmittingRecall ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Recalling...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Undo2 className="h-3.5 w-3.5" />
+                      <span>Recall &amp; Edit</span>
                     </>
                   )}
                 </Button>
@@ -3071,7 +3221,9 @@ export default function PurchaseOrders() {
                 <div className="flex items-center gap-2 shrink-0">
                   {(() => {
                     const viewingStatusLower = String(viewingOrder.status || '').toLowerCase();
-                    const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval';
+                    const viewingPoStatusLower = String((viewingOrder as any).poStatus || '').toLowerCase();
+                    const effectiveViewingStatus = viewingPoStatusLower || viewingStatusLower;
+                    const isIssuedModal = viewingStatusLower === 'issued' || viewingStatusLower === 'generated' || viewingStatusLower === 'order_placed' || viewingStatusLower === 'pending_approval' || viewingStatusLower === 'pending_acceptance' || effectiveViewingStatus === 'pending_acceptance' || effectiveViewingStatus === 'issued';
                     const isAcceptedModal = viewingStatusLower === 'accepted' || viewingStatusLower === 'in_fulfillment';
                     const isDeliveredModal = viewingStatusLower === 'delivered';
                     const isCancelledModal = viewingStatusLower === 'cancelled' || viewingStatusLower === 'rejected';
@@ -3266,7 +3418,7 @@ export default function PurchaseOrders() {
                                   className="h-9 border-indigo-200 bg-indigo-50/60 hover:bg-indigo-100 text-indigo-800 text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer flex items-center gap-1.5"
                                 >
                                   <FileText className="h-3.5 w-3.5 text-indigo-600" />
-                                  <span>Edit Draft / SAP Details</span>
+                                  <span>Edit Purchase Order (Draft)</span>
                                 </Button>
                                 <Button
                                   onClick={async () => {
@@ -3285,6 +3437,19 @@ export default function PurchaseOrders() {
                                   <span>Issue PO to Seller</span>
                                 </Button>
                               </>
+                            )}
+
+                            {/* Recall unaccepted PO to Draft to make edits */}
+                            {isIssuedModal && !isCancelledModal && !(viewingOrder as any).isDraft && viewingStatusLower !== 'draft' && viewingStatusLower !== 'generated' && (
+                              <Button
+                                variant="outline"
+                                onClick={() => handleRecallPo(viewingOrder)}
+                                className="h-9 border-amber-200 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-black uppercase tracking-wider rounded-lg px-3.5 whitespace-nowrap shadow-2xs cursor-pointer flex items-center gap-1.5"
+                                title="Recall this unaccepted purchase order to draft to make modifications"
+                              >
+                                <Undo2 className="h-3.5 w-3.5 text-amber-600" />
+                                <span>Recall to Draft &amp; Edit</span>
+                              </Button>
                             )}
 
                             {/* Propose V2 Amendment for Buyer on Accepted PO */}

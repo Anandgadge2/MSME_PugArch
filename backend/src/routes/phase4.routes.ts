@@ -9748,6 +9748,37 @@ router.post('/purchase-orders/:id/issue', authenticate, authorize('buyer', 'admi
   ok(res, updated);
 }));
 
+router.post('/purchase-orders/:id/recall', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
+  const { id } = parse(idParams, req.params);
+  const po = await db.purchaseOrder.findUnique({
+    where: { id },
+    include: { buyer: { select: { organizationId: true } } }
+  });
+  if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  const isBuyerOrg = req.user?.organizationId && po.buyer?.organizationId === req.user?.organizationId;
+  if (!isAdmin(req) && po.buyerId !== userId(req) && !isBuyerOrg) throw new ApiError(403, 'Forbidden', 'FORBIDDEN');
+
+  const statusLower = String(po.status || '').toLowerCase();
+  const allowedRecallStatuses = ['issued', 'order_placed', 'pending_approval', 'generated', 'pending_acceptance'];
+  if (!allowedRecallStatuses.includes(statusLower) && !po.isDraft) {
+    throw new ApiError(409, `Cannot recall purchase order with status "${po.status}". Only issued or pending acceptance POs can be recalled to draft.`, 'PO_CANNOT_RECALL');
+  }
+
+  statusTransitions.purchaseOrder(po.status, 'draft');
+  const updated = await db.purchaseOrder.update({
+    where: { id },
+    data: {
+      status: 'draft',
+      poStatus: poStatusEnumFor('draft') as any,
+      isDraft: true
+    },
+    include: { items: true, buyer: true, seller: true }
+  });
+
+  await auditWrite(req, 'purchase_order.recalled_to_draft', 'purchaseOrder', id);
+  ok(res, updated);
+}));
+
 router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admin'), asyncRoute(async (req, res) => {
   const { id } = parse(idParams, req.params);
   const body = parse(z.object({

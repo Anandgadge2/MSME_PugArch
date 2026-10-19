@@ -29,6 +29,7 @@ export type POWorkflowStatus =
   | 'order_placed'
   | 'issued'
   | 'pending_approval'
+  | 'pending_acceptance'
   | 'accepted'
   | 'amendment_pending'
   | 'in_fulfillment'
@@ -98,10 +99,11 @@ const bidTransitions: TransitionMap<BidWorkflowStatus> = {
 
 const poTransitions: TransitionMap<POWorkflowStatus> = {
   draft: ['issued', 'cancelled'],
-  pending_approval: ['issued', 'order_placed', 'accepted', 'rejected', 'cancelled'],
-  generated: ['issued', 'accepted', 'rejected', 'cancelled'],
-  order_placed: ['accepted', 'rejected', 'cancelled'],
-  issued: ['accepted', 'rejected', 'cancelled'],
+  pending_approval: ['issued', 'order_placed', 'accepted', 'rejected', 'cancelled', 'draft'],
+  generated: ['issued', 'accepted', 'rejected', 'cancelled', 'draft'],
+  order_placed: ['accepted', 'rejected', 'cancelled', 'draft'],
+  issued: ['accepted', 'rejected', 'cancelled', 'draft'],
+  pending_acceptance: ['accepted', 'rejected', 'cancelled', 'draft'],
   accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancelled', 'amendment_pending'],
   amendment_pending: ['accepted', 'cancelled'],
   in_fulfillment: ['delivered', 'cancelled'],
@@ -217,6 +219,7 @@ export const poStatusEnumFor = (status: POWorkflowStatus) => {
     generated: 'GENERATED',
     order_placed: 'ORDER_PLACED',
     issued: 'ISSUED',
+    pending_acceptance: 'ISSUED',
     pending_approval: 'GENERATED',
     accepted: 'ACCEPTED',
     amendment_pending: 'AMENDMENT_PENDING',
