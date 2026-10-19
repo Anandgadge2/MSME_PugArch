@@ -8,7 +8,7 @@ import {
   ArrowLeft, Award, Info, CheckCircle2, AlertTriangle, FileText,
   ChevronRight, X, BarChart3, Trophy, Scale, Layers, RotateCcw,
   Phone, Mail, FileSpreadsheet, Printer, ExternalLink,
-  ShieldCheck, Check, Clock, Lock, XCircle, Package, Truck, MapPin
+  ShieldCheck, Check, Clock, Lock, XCircle, Package, MapPin
 } from 'lucide-react';
 import { PageShell, ProcurementLoadingState, ProcurementErrorState } from '../components';
 import { money } from '../data';
@@ -677,7 +677,6 @@ export default function BidComparisonPage() {
       ['Tax Amount (INR)', ...filteredAndSortedItems.map(p => String(p.taxAmount))],
       ['Offered Scope & Quantity', ...filteredAndSortedItems.map(p => p.offeredQty)],
       ['Promised Delivery Timeline', ...filteredAndSortedItems.map(p => p.deliveryTimeline)],
-      ['Delivery Terms & Freight', ...filteredAndSortedItems.map(p => p.deliveryTerms)],
       ['Payment Terms', ...filteredAndSortedItems.map(p => p.paymentTerms)],
       ['Technical Status', ...filteredAndSortedItems.map(p => p.techStatus)],
       ['Compliance Statement', ...filteredAndSortedItems.map(p => {
@@ -1329,25 +1328,6 @@ export default function BidComparisonPage() {
                           <Clock className="h-3.5 w-3.5 text-blue-600" />
                           {p.deliveryTimeline}
                         </span>
-                      </td>
-                    ))}
-                  </tr>
-
-                  {/* 2.3 Delivery Terms & Freight */}
-                  <tr className="hover:bg-slate-50/60 transition-colors">
-                    <td className="p-3.5 pl-4 border-r border-slate-200 font-bold text-slate-700 bg-slate-50/60 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.06)]">
-                      Delivery Location & Freight
-                    </td>
-                    {filteredAndSortedItems.map((p) => (
-                      <td key={p.raw.id} className="p-3.5 border-r border-slate-200 font-semibold text-slate-700">
-                        {p.deliveryTerms && p.deliveryTerms !== '—' ? (
-                          <span className="inline-flex items-center gap-1">
-                            <Truck className="h-3.5 w-3.5 text-slate-400" />
-                            {p.deliveryTerms}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 font-normal italic">—</span>
-                        )}
                       </td>
                     ))}
                   </tr>
