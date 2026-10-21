@@ -52,8 +52,8 @@ const STATUS_TONE: Record<CartStatus, string> = {
 
 export default function CartPage() {
     const { user } = useAuth();
-    const { isApproved, memberCount = 1, hasFinanceOfficer = false, loading: orgLoading } = useOrgRole();
-    const hasApprovalWorkflow = !orgLoading && memberCount > 1 && hasFinanceOfficer;
+    const { isApproved, memberCount = 1, hasFinanceOfficer = false, internalApprovalRequired = false, loading: orgLoading } = useOrgRole();
+    const hasApprovalWorkflow = !orgLoading && internalApprovalRequired && memberCount > 1 && hasFinanceOfficer;
     const { permissions, hasPermission, loading: permissionsLoading } = usePermissions();
     const canViewCart = hasPermission('cart.view') || user?.role === 'buyer' || user?.role === 'admin';
     const canEditCart = hasPermission('cart.add') || user?.role === 'buyer' || user?.role === 'admin';
@@ -115,6 +115,16 @@ export default function CartPage() {
     const techApprovalNeeded = cart?.items.some(i => i.technicalApproved === null) ?? false;
     const allTechApproved = cart?.items.every(i => i.technicalApproved === true) ?? false;
     const isSubmittable = canSubmitCart && cart?.status === 'ACTIVE' && cart.items.length > 0;
+
+    // Display Technical Status column only when:
+    // 1. Organization requires internal multi-stage approvals with an active workflow, OR
+    // 2. The cart has been submitted for approval / approved / rejected, OR
+    // 3. At least one item in the cart has an explicit technical decision (approved/rejected)
+    const showTechStatusColumn = (hasApprovalWorkflow && internalApprovalRequired) ||
+        cart?.status === 'SUBMITTED_FOR_APPROVAL' ||
+        cart?.status === 'APPROVED' ||
+        cart?.status === 'REJECTED' ||
+        Boolean(cart?.items?.some(i => i.technicalApproved !== null));
 
     const sortedItems = useMemo(() => {
         if (!cart?.items) return [];
@@ -298,242 +308,252 @@ export default function CartPage() {
         });
     };
 
-    const cartColumns = useMemo<ColumnDef<CartItemDto>[]>(() => [
-        {
-            key: 'select',
-            header: (
-                <div className="flex items-center justify-center">
-                    <input
-                        type="checkbox"
-                        checked={isAllSelected}
-                        ref={el => {
-                            if (el) el.indeterminate = isSomeSelected;
-                        }}
-                        onChange={toggleSelectAll}
-                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                        title={isAllSelected ? "Deselect all items" : "Select all items"}
-                        aria-label="Select all items"
-                    />
-                </div>
-            ),
-            width: 'w-12',
-            align: 'center',
-            cellClassName: 'text-center',
-            headerClassName: 'text-center',
-            cell: (item) => (
-                <div className="flex items-center justify-center">
-                    <input
-                        type="checkbox"
-                        checked={selectedItemIds.has(item.id)}
-                        onChange={() => toggleSelectItem(item.id)}
-                        className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
-                        aria-label={`Select ${item.itemName}`}
-                    />
-                </div>
-            )
-        },
-        {
-            key: 'item',
-            header: 'Item',
-            sortable: true,
-            sortKey: 'item',
-            width: 'w-[28%] min-w-[220px]',
-            cell: (item) => {
-                const itemHref = item.productId
-                    ? `/marketplace/products/${item.productId}`
-                    : item.serviceId
-                        ? `/marketplace/services/${item.serviceId}`
-                        : null;
+    const cartColumns = useMemo<ColumnDef<CartItemDto>[]>(() => {
+        const cols: ColumnDef<CartItemDto>[] = [
+            {
+                key: 'select',
+                header: (
+                    <div className="flex items-center justify-center">
+                        <input
+                            type="checkbox"
+                            checked={isAllSelected}
+                            ref={el => {
+                                if (el) el.indeterminate = isSomeSelected;
+                            }}
+                            onChange={toggleSelectAll}
+                            className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                            title={isAllSelected ? "Deselect all items" : "Select all items"}
+                            aria-label="Select all items"
+                        />
+                    </div>
+                ),
+                width: 'w-12',
+                align: 'center',
+                cellClassName: 'text-center',
+                headerClassName: 'text-center',
+                cell: (item) => (
+                    <div className="flex items-center justify-center">
+                        <input
+                            type="checkbox"
+                            checked={selectedItemIds.has(item.id)}
+                            onChange={() => toggleSelectItem(item.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-[#12335f] focus:ring-[#12335f]/30 cursor-pointer"
+                            aria-label={`Select ${item.itemName}`}
+                        />
+                    </div>
+                )
+            },
+            {
+                key: 'item',
+                header: 'Item',
+                sortable: true,
+                sortKey: 'item',
+                width: 'w-[28%] min-w-[220px]',
+                cell: (item) => {
+                    const itemHref = item.productId
+                        ? `/marketplace/products/${item.productId}`
+                        : item.serviceId
+                            ? `/marketplace/services/${item.serviceId}`
+                            : null;
 
-                return (
-                    <div className="flex flex-col gap-1 pr-2">
-                        {itemHref ? (
+                    return (
+                        <div className="flex flex-col gap-1 pr-2">
+                            {itemHref ? (
+                                <button
+                                    type="button"
+                                    onClick={() => router.push(itemHref)}
+                                    className="text-left text-xs font-bold text-[#12335f] hover:underline hover:text-blue-800 break-words leading-snug cursor-pointer transition-colors"
+                                    title={`View ${item.itemName} in marketplace`}
+                                >
+                                    {item.itemName}
+                                </button>
+                            ) : (
+                                <p className="text-xs font-bold text-[#12335f] break-words leading-snug">{item.itemName}</p>
+                            )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <EntityIdLink
+                                    label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId || item.id}`}
+                                    id={item.productId || item.serviceId || item.id}
+                                    size="sm"
+                                    onClick={() => {
+                                        if (itemHref) router.push(itemHref);
+                                    }}
+                                />
+                                {item.unitOfMeasure && (
+                                    <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
+                                        {item.unitOfMeasure}
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    );
+                }
+            },
+            {
+                key: 'seller',
+                header: 'Seller',
+                sortable: true,
+                sortKey: 'seller',
+                width: 'w-[18%] min-w-[160px]',
+                cell: (item) => (
+                    <div className="flex flex-col gap-0.5 pr-2">
+                        {item.sellerId ? (
                             <button
                                 type="button"
-                                onClick={() => router.push(itemHref)}
-                                className="text-left text-xs font-bold text-[#12335f] hover:underline hover:text-blue-800 break-words leading-snug cursor-pointer transition-colors"
-                                title={`View ${item.itemName} in marketplace`}
+                                onClick={() => router.push(`/marketplace/sellers/${item.sellerId}`)}
+                                className="text-left text-[11px] font-bold text-slate-900 hover:text-[#12335f] hover:underline break-words leading-tight transition-colors"
+                                title={`View seller: ${item.seller?.name || `Seller #${item.sellerId}`}`}
                             >
-                                {item.itemName}
+                                {item.seller?.name || `Seller #${item.sellerId}`}
                             </button>
                         ) : (
-                            <p className="text-xs font-bold text-[#12335f] break-words leading-snug">{item.itemName}</p>
+                            <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
                         )}
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                            <EntityIdLink
-                                label={`${item.productId ? 'PRD' : 'SVC'}-${item.productId || item.serviceId || item.id}`}
-                                id={item.productId || item.serviceId || item.id}
-                                size="sm"
-                                onClick={() => {
-                                    if (itemHref) router.push(itemHref);
-                                }}
-                            />
-                            {item.unitOfMeasure && (
-                                <span className="inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                                    {item.unitOfMeasure}
-                                </span>
+                        {item.seller?.email && (
+                            <p className="text-[10px] font-medium text-slate-500 break-all leading-tight">{item.seller.email}</p>
+                        )}
+                    </div>
+                )
+            },
+            {
+                key: 'unitPrice',
+                header: 'Unit Price',
+                sortable: true,
+                sortKey: 'unitPrice',
+                align: 'right',
+                width: 'w-28 min-w-[95px]',
+                cellClassName: 'text-right',
+                headerClassName: 'text-right',
+                cell: (item) => <span className="font-mono text-xs font-bold text-slate-800 whitespace-nowrap">{formatCurrency(item.unitPrice)}</span>
+            },
+            {
+                key: 'quantity',
+                header: 'Quantity',
+                sortable: true,
+                sortKey: 'quantity',
+                align: 'center',
+                width: 'w-32 min-w-[115px]',
+                cellClassName: 'text-center',
+                headerClassName: 'text-center',
+                cell: (item) => (
+                    cart?.status === 'ACTIVE' && canEditCartItems ? (
+                        <MarketplaceQuantityControl
+                            quantity={Number(item.quantity)}
+                            itemName={item.itemName}
+                            min={1}
+                            disabled={item.id < 0}
+                            onChange={(qty) => handleUpdate(item.id, qty)}
+                            className="w-28 mx-auto"
+                        />
+                    ) : (
+                        <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 font-mono text-xs font-bold text-slate-900">
+                            {Number(item.quantity)} {item.unitOfMeasure || ''}
+                        </span>
+                    )
+                )
+            },
+            {
+                key: 'total',
+                header: 'Total',
+                sortable: true,
+                sortKey: 'total',
+                align: 'right',
+                width: 'w-28 min-w-[105px]',
+                cellClassName: 'text-right',
+                headerClassName: 'text-right',
+                cell: (item) => {
+                    const lineTotal = Number(item.quantity) * Number(item.unitPrice);
+                    return <span className="font-mono text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(lineTotal)}</span>;
+                }
+            }
+        ];
+
+        if (showTechStatusColumn) {
+            cols.push({
+                key: 'techStatus',
+                header: 'Tech Status',
+                sortable: true,
+                sortKey: 'techStatus',
+                align: 'center',
+                width: 'w-28 min-w-[100px]',
+                cellClassName: 'text-center',
+                headerClassName: 'text-center',
+                cell: (item) => (
+                    item.technicalApproved === null ? (
+                        <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700">Pending</span>
+                    ) : item.technicalApproved ? (
+                        <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">Approved</span>
+                    ) : (
+                        <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-700" title={item.technicalNote || 'Rejected during technical review'}>Rejected</span>
+                    )
+                )
+            });
+        }
+
+        cols.push(
+            {
+                key: 'createdAt',
+                header: 'Date & Time',
+                sortable: true,
+                sortKey: 'createdAt',
+                align: 'center',
+                width: 'w-32 min-w-[125px]',
+                cellClassName: 'text-center',
+                headerClassName: 'text-center',
+                cell: (item) => (
+                    <div className="flex flex-col text-[10px] leading-tight text-slate-500 whitespace-nowrap">
+                        <span className="font-semibold text-slate-700">{formatDateTime(item.createdAt).split(',')[0]}</span>
+                        <span>{formatDateTime(item.createdAt).split(',')[1]?.trim() || ''}</span>
+                    </div>
+                )
+            },
+            {
+                key: 'action',
+                header: 'Action',
+                align: 'right',
+                width: 'w-24 min-w-[95px]',
+                cellClassName: 'text-right',
+                headerClassName: 'text-right',
+                cell: (item) => {
+                    const itemHref = item.productId
+                        ? `/marketplace/products/${item.productId}`
+                        : item.serviceId
+                            ? `/marketplace/services/${item.serviceId}`
+                            : null;
+
+                    return (
+                        <div className="flex items-center justify-end gap-1.5">
+                            {itemHref && (
+                                <button
+                                    type="button"
+                                    onClick={() => router.push(itemHref)}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-[#12335f] cursor-pointer"
+                                    title="View item details"
+                                    aria-label={`View details for ${item.itemName}`}
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                </button>
+                            )}
+                            {cart?.status === 'ACTIVE' && canEditCartItems && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleRemove(item)}
+                                    disabled={removeMut.isPending || item.id < 0}
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50/50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-40 cursor-pointer"
+                                    title="Remove from cart"
+                                    aria-label={`Remove ${item.itemName} from cart`}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                </button>
                             )}
                         </div>
-                    </div>
-                );
+                    );
+                }
             }
-        },
-        {
-            key: 'seller',
-            header: 'Seller',
-            sortable: true,
-            sortKey: 'seller',
-            width: 'w-[18%] min-w-[160px]',
-            cell: (item) => (
-                <div className="flex flex-col gap-0.5 pr-2">
-                    {item.sellerId ? (
-                        <button
-                            type="button"
-                            onClick={() => router.push(`/marketplace/sellers/${item.sellerId}`)}
-                            className="text-left text-[11px] font-bold text-slate-900 hover:text-[#12335f] hover:underline break-words leading-tight transition-colors"
-                            title={`View seller: ${item.seller?.name || `Seller #${item.sellerId}`}`}
-                        >
-                            {item.seller?.name || `Seller #${item.sellerId}`}
-                        </button>
-                    ) : (
-                        <p className="text-[11px] font-bold text-slate-900 break-words leading-tight">{item.seller?.name || `Seller #${item.sellerId}`}</p>
-                    )}
-                    {item.seller?.email && (
-                        <p className="text-[10px] font-medium text-slate-500 break-all leading-tight">{item.seller.email}</p>
-                    )}
-                </div>
-            )
-        },
-        {
-            key: 'unitPrice',
-            header: 'Unit Price',
-            sortable: true,
-            sortKey: 'unitPrice',
-            align: 'right',
-            width: 'w-28 min-w-[95px]',
-            cellClassName: 'text-right',
-            headerClassName: 'text-right',
-            cell: (item) => <span className="font-mono text-xs font-bold text-slate-800 whitespace-nowrap">{formatCurrency(item.unitPrice)}</span>
-        },
-        {
-            key: 'quantity',
-            header: 'Quantity',
-            sortable: true,
-            sortKey: 'quantity',
-            align: 'center',
-            width: 'w-32 min-w-[115px]',
-            cellClassName: 'text-center',
-            headerClassName: 'text-center',
-            cell: (item) => (
-                cart?.status === 'ACTIVE' && canEditCartItems ? (
-                    <MarketplaceQuantityControl
-                        quantity={Number(item.quantity)}
-                        itemName={item.itemName}
-                        min={1}
-                        disabled={item.id < 0}
-                        onChange={(qty) => handleUpdate(item.id, qty)}
-                        className="w-28 mx-auto"
-                    />
-                ) : (
-                    <span className="inline-flex items-center justify-center px-2 py-1 rounded bg-slate-100 font-mono text-xs font-bold text-slate-900">
-                        {Number(item.quantity)} {item.unitOfMeasure || ''}
-                    </span>
-                )
-            )
-        },
-        {
-            key: 'total',
-            header: 'Total',
-            sortable: true,
-            sortKey: 'total',
-            align: 'right',
-            width: 'w-28 min-w-[105px]',
-            cellClassName: 'text-right',
-            headerClassName: 'text-right',
-            cell: (item) => {
-                const lineTotal = Number(item.quantity) * Number(item.unitPrice);
-                return <span className="font-mono text-xs font-black text-slate-950 whitespace-nowrap">{formatCurrency(lineTotal)}</span>;
-            }
-        },
-        {
-            key: 'techStatus',
-            header: 'Tech Status',
-            sortable: true,
-            sortKey: 'techStatus',
-            align: 'center',
-            width: 'w-28 min-w-[100px]',
-            cellClassName: 'text-center',
-            headerClassName: 'text-center',
-            cell: (item) => (
-                item.technicalApproved === null ? (
-                    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-700">Pending</span>
-                ) : item.technicalApproved ? (
-                    <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-700">Approved</span>
-                ) : (
-                    <span className="inline-flex rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-red-700" title={item.technicalNote || 'Rejected during technical review'}>Rejected</span>
-                )
-            )
-        },
-        {
-            key: 'createdAt',
-            header: 'Date & Time',
-            sortable: true,
-            sortKey: 'createdAt',
-            align: 'center',
-            width: 'w-32 min-w-[125px]',
-            cellClassName: 'text-center',
-            headerClassName: 'text-center',
-            cell: (item) => (
-                <div className="flex flex-col text-[10px] leading-tight text-slate-500 whitespace-nowrap">
-                    <span className="font-semibold text-slate-700">{formatDateTime(item.createdAt).split(',')[0]}</span>
-                    <span>{formatDateTime(item.createdAt).split(',')[1]?.trim() || ''}</span>
-                </div>
-            )
-        },
-        {
-            key: 'action',
-            header: 'Action',
-            align: 'right',
-            width: 'w-24 min-w-[95px]',
-            cellClassName: 'text-right',
-            headerClassName: 'text-right',
-            cell: (item) => {
-                const itemHref = item.productId
-                    ? `/marketplace/products/${item.productId}`
-                    : item.serviceId
-                        ? `/marketplace/services/${item.serviceId}`
-                        : null;
+        );
 
-                return (
-                    <div className="flex items-center justify-end gap-1.5">
-                        {itemHref && (
-                            <button
-                                type="button"
-                                onClick={() => router.push(itemHref)}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-[#12335f] cursor-pointer"
-                                title="View item details"
-                                aria-label={`View details for ${item.itemName}`}
-                            >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                            </button>
-                        )}
-                        {cart?.status === 'ACTIVE' && canEditCartItems && (
-                            <button
-                                type="button"
-                                onClick={() => handleRemove(item)}
-                                disabled={removeMut.isPending || item.id < 0}
-                                className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-rose-200 bg-rose-50/50 text-rose-600 hover:bg-rose-100 hover:border-rose-300 hover:text-rose-700 transition shadow-2xs focus-visible:ring-2 focus-visible:ring-rose-500 disabled:opacity-40 cursor-pointer"
-                                title="Remove from cart"
-                                aria-label={`Remove ${item.itemName} from cart`}
-                            >
-                                <Trash2 className="h-3.5 w-3.5" />
-                            </button>
-                        )}
-                    </div>
-                );
-            }
-        }
-    ], [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canEditCartItems, handleUpdate, handleRemove, removeMut.isPending, updateMut.isPending, router]);
+        return cols;
+    }, [isAllSelected, isSomeSelected, toggleSelectAll, selectedItemIds, toggleSelectItem, cart?.status, canEditCartItems, handleUpdate, handleRemove, removeMut.isPending, updateMut.isPending, router, showTechStatusColumn]);
  
     if (permissionsLoading && !canViewCart) {
         return <LoadingState label="Loading cart..." />;
@@ -620,7 +640,7 @@ export default function CartPage() {
                                                 error: 'Failed to approve cart'
                                             });
                                         }}
-                                        disabled={approveCartMut.isPending || techApprovalNeeded}
+                                        disabled={approveCartMut.isPending || (hasApprovalWorkflow && techApprovalNeeded)}
                                         className="bg-emerald-600 text-white hover:bg-emerald-700"
                                     >
                                         {approveCartMut.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
@@ -774,10 +794,10 @@ export default function CartPage() {
                                     <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
                                         <td colSpan={6} className="px-3 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">Grand Total</td>
                                         <td className="px-3 py-3 text-right font-mono text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
-                                        <td colSpan={3} className="px-3 py-3" />
+                                        <td colSpan={showTechStatusColumn ? 3 : 2} className="px-3 py-3" />
                                     </tr>
                                     <tr className="border-t border-slate-200/60 bg-emerald-50/30">
-                                        <td colSpan={10} className="px-4 py-2.5 text-left text-[11px] font-semibold text-emerald-950">
+                                        <td colSpan={showTechStatusColumn ? 10 : 9} className="px-4 py-2.5 text-left text-[11px] font-semibold text-emerald-950">
                                             ✓ Single Seller Direct Purchase Policy: All items are supplied by <strong className="font-bold text-emerald-900">{cart.items[0]?.seller?.name || 'the verified seller'}</strong>. Upon approval, official Purchase Order and offline bank transfer instructions (NEFT/RTGS/Cheque) will be issued directly to this seller.
                                         </td>
                                     </tr>
