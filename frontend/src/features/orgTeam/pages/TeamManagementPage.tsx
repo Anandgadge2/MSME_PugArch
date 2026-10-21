@@ -177,7 +177,7 @@ export default function TeamManagementPage() {
     const [editingMember, setEditingMember] = useState<Member | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [roleFilter, setRoleFilter] = useState('');
-    const [statusFilter, setStatusFilter] = useState('');
+    const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | ''>('active');
     const [sortKey, setSortKey] = useState<MemberSortKey>('joined');
     const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
     const [viewMode, setViewMode] = useResponsiveViewMode('phase7:team-management:view-mode');
@@ -198,6 +198,8 @@ export default function TeamManagementPage() {
         useFeatureQuery<AccessTransfer[]>('/api/org/access-transfer/logs', []);
 
     const members = Array.isArray(membersData) ? membersData : [];
+    const activeMembersCount = useMemo(() => members.filter(m => m.isActive).length, [members]);
+    const inactiveMembersCount = useMemo(() => members.filter(m => !m.isActive).length, [members]);
     const invitations = Array.isArray(invitesData) ? invitesData : [];
     const roles = Array.isArray(rolesData) ? rolesData : [];
     const transfers = Array.isArray(transfersData) ? transfersData : [];
@@ -365,7 +367,7 @@ export default function TeamManagementPage() {
                         <button
                             type="button"
                             onClick={() => handleRemoveMember(member)}
-                            title="Remove member permanently"
+                            title="Remove member from organisation"
                             className="flex h-8 w-8 items-center justify-center rounded-md border border-red-200 bg-white text-red-600 hover:bg-red-50 transition"
                         >
                             <Trash2 className="h-3.5 w-3.5" />
@@ -570,7 +572,7 @@ export default function TeamManagementPage() {
             {/* Navigation Tabs */}
             <div className="flex border-b border-slate-200 gap-2 overflow-x-auto no-scrollbar pt-1">
                 {[
-                    { key: 'members' as TeamTab, label: 'Members', icon: Users, count: members.length },
+                    { key: 'members' as TeamTab, label: 'Members', icon: Users, count: activeMembersCount },
                     { key: 'invitations' as TeamTab, label: 'Invitations', icon: Mail, count: invitations.length },
                     { key: 'roles' as TeamTab, label: 'Roles & Permissions', icon: KeyRound, count: roles.length },
                     { key: 'transfers' as TeamTab, label: 'Access Transfers', icon: History, count: transfers.length }
@@ -603,7 +605,7 @@ export default function TeamManagementPage() {
             {activeTab === 'members' && (
                 <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
                     <ResponsiveFilterBar
-                        activeFilterCount={(searchTerm ? 1 : 0) + (roleFilter ? 1 : 0) + (statusFilter ? 1 : 0)}
+                        activeFilterCount={(searchTerm ? 1 : 0) + (roleFilter ? 1 : 0) + (statusFilter !== 'active' ? 1 : 0)}
                         searchInput={
                             <div className="relative w-full">
                                 <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -627,25 +629,25 @@ export default function TeamManagementPage() {
                                         {roleOptions.map(role => <option key={role.value} value={role.value}>{role.label}</option>)}
                                     </select>
                                 </div>
-                                <div className="w-full sm:w-auto sm:min-w-[140px]">
+                                <div className="w-full sm:w-auto sm:min-w-[170px]">
                                     <select
                                         value={statusFilter}
-                                        onChange={event => { setStatusFilter(event.target.value); setPage(1); }}
+                                        onChange={event => { setStatusFilter(event.target.value as any); setPage(1); }}
                                         className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                                     >
-                                        <option value="">Any status</option>
-                                        <option value="active">Active</option>
-                                        <option value="inactive">Inactive</option>
+                                        <option value="active">Active Members ({activeMembersCount})</option>
+                                        <option value="inactive">Inactive / Removed ({inactiveMembersCount})</option>
+                                        <option value="">All Members ({members.length})</option>
                                     </select>
                                 </div>
-                                {(searchTerm || roleFilter || statusFilter) && (
+                                {(searchTerm || roleFilter || statusFilter !== 'active') && (
                                     <Button
                                         type="button"
                                         variant="outline"
                                         onClick={() => {
                                             setSearchTerm('');
                                             setRoleFilter('');
-                                            setStatusFilter('');
+                                            setStatusFilter('active');
                                             setPage(1);
                                         }}
                                         className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"

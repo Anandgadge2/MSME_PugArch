@@ -1461,13 +1461,26 @@ router.post(
         }
 
         // Check if user already a member
+        const normalizedEmail = body.email.toLowerCase().trim();
         const existingUser = await prisma.user.findUnique({
-            where: { email: body.email },
-            select: { id: true, organizationId: true }
+            where: { email: normalizedEmail },
+            select: { id: true, organizationId: true, name: true, mobile: true }
         });
 
-        if (existingUser?.organizationId === orgId(req)) {
-            throw new ApiError(409, 'This user is already a member of your organisation.', 'ALREADY_MEMBER');
+        if (existingUser) {
+            const existingMembership = await prisma.orgMembership.findUnique({
+                where: { userId_organizationId: { userId: existingUser.id, organizationId: orgId(req) } }
+            });
+
+            // Block only if user is currently an ACTIVE member of this organisation
+            if (existingMembership?.isActive) {
+                throw new ApiError(409, 'This user is already an active member of your organisation.', 'ALREADY_MEMBER');
+            }
+
+            // If user is currently active in another organisation and has no membership here
+            if (existingUser.organizationId && existingUser.organizationId !== orgId(req) && !existingMembership) {
+                throw new ApiError(409, 'This user is already linked to another organisation.', 'OTHER_ORG_MEMBER');
+            }
         }
 
         // Check for existing pending invite
@@ -1546,7 +1559,12 @@ router.post(
             update: {
                 isActive: true,
                 orgRole: fallbackRole,
-                customRoleId: customRole?.id || null
+                customRoleId: customRole?.id || null,
+                deactivatedAt: null,
+                deactivatedByUserId: null,
+                deactivationReason: null,
+                invitedById: userId(req),
+                invitedAt: new Date()
             },
             create: {
                 userId: targetUser.id,
@@ -1557,6 +1575,7 @@ router.post(
                 invitedById: userId(req)
             }
         });
+        void invalidateUserAuthCache(targetUser.id);
 
         const invitation = await prisma.orgInvitation.create({
             data: {
@@ -1905,17 +1924,29 @@ router.post(
             throw new ApiError(403, 'This invitation was sent to a different email address.', 'INVITE_EMAIL_MISMATCH');
         }
 
-        // Check if already a member
+        // Check if already an active member
         const existing = await prisma.orgMembership.findUnique({
             where: { userId_organizationId: { userId: userId(req), organizationId: invite.organizationId } }
         });
-        if (existing) throw new ApiError(409, 'You are already a member of this organisation.', 'ALREADY_MEMBER');
+        if (existing?.isActive) throw new ApiError(409, 'You are already an active member of this organisation.', 'ALREADY_MEMBER');
 
-        // Create membership + update invite + link user to org
+        // Upsert membership + update invite + link user to org
         const now = new Date();
         await prisma.$transaction([
-            prisma.orgMembership.create({
-                data: {
+            prisma.orgMembership.upsert({
+                where: { userId_organizationId: { userId: userId(req), organizationId: invite.organizationId } },
+                update: {
+                    orgRole: invite.orgRole,
+                    customRoleId: invite.customRoleId,
+                    isActive: true,
+                    deactivatedAt: null,
+                    deactivatedByUserId: null,
+                    deactivationReason: null,
+                    invitedById: invite.invitedById,
+                    invitedAt: invite.createdAt,
+                    acceptedAt: now
+                },
+                create: {
                     userId: userId(req),
                     organizationId: invite.organizationId,
                     orgRole: invite.orgRole,
@@ -1935,6 +1966,7 @@ router.post(
                 data: { organizationId: invite.organizationId }
             })
         ]);
+        void invalidateUserAuthCache(userId(req));
 
         // Notify the inviter
         try {
@@ -2311,6 +2343,13 @@ router.delete(
             where: { userId_organizationId: { userId: memberId, organizationId: orgId(req) } },
             data: { isActive: false, deactivatedAt: new Date(), deactivatedByUserId: userId(req), deactivationReason: 'Removed by org admin' }
         });
+
+        await prisma.user.update({
+            where: { id: memberId },
+            data: { sessionVersion: { increment: 1 } }
+        }).catch(() => undefined);
+
+        void invalidateUserAuthCache(memberId);
 
         await auditLog({
             actorUserId: userId(req),
