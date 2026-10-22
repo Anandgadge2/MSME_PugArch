@@ -92,6 +92,11 @@ import LiveAuctionLeaderboard from "../../reverseAuctions/components/LiveAuction
 import SellerLiveAuctionBanner from "../../reverseAuctions/components/SellerLiveAuctionBanner";
 import { reverseAuctionApi } from "../../reverseAuctions/api";
 import { EditProcurementGraceBanner } from "../../procurement/components/EditProcurementGraceBanner";
+import { useInPlaceProcurementEdit } from "../../procurement/hooks/useInPlaceProcurementEdit";
+import { InPlaceProcurementEditBar } from "../../procurement/components/InPlaceProcurementEditBar";
+import { InPlaceOverviewEditCard } from "../../procurement/components/inPlace/InPlaceOverviewEditCard";
+import { InPlaceScopeEditCard } from "../../procurement/components/inPlace/InPlaceScopeEditCard";
+import { InPlaceTermsEditCard } from "../../procurement/components/inPlace/InPlaceTermsEditCard";
 
 const ModalLoadingFallback = () => (
   <div
@@ -5222,6 +5227,30 @@ export function ProcurementDetailUnifiedView(
   const { user } = useAuth();
   const currentUser: any = user;
   const [isIssueCallOffModalOpen, setIsIssueCallOffModalOpen] = useState(false);
+
+  const inPlaceEdit = useInPlaceProcurementEdit({
+    procurement: {
+      id: props.rawBid?.id || props.id,
+      title: props.title || props.subject,
+      description: props.description || (props as any).scopeDescription || props.rawBid?.description || "",
+      category: props.category || props.rawBid?.category,
+      categoryType: (props as any).categoryType || props.rawBid?.categoryType || (props.rawBid?.technicalPacket as any)?.basics?.procurementCategory,
+      pricingFormat: (props as any).pricingFormat || props.rawBid?.pricingFormat || (props.rawBid?.technicalPacket as any)?.basics?.pricingFormat,
+      quantity: props.quantity || props.rawBid?.quantity,
+      unit: props.unit || props.rawBid?.unit,
+      estimatedValue: props.estimatedValue || props.rawBid?.estimatedValue,
+      deliveryLocation: props.deliveryLocation || props.rawBid?.deliveryLocation,
+      state: (props as any).state || props.rawBid?.state,
+      district: (props as any).district || props.rawBid?.district,
+      pincode: (props as any).pincode || props.rawBid?.pincode,
+      endDate: props.deadlineDate || props.closingDate || props.endDate || props.rawBid?.endDate,
+      termsAndConditions: props.termsAndConditions || props.rawBid?.termsAndConditions,
+      technicalPacket: (props as any).technicalPacket || props.rawBid?.technicalPacket || props.payload,
+      financialPacket: (props as any).financialPacket || props.rawBid?.financialPacket,
+      items: props.items || props.rawBid?.items,
+    },
+    onSuccess: props.onRefresh
+  });
 
   const targetId = String(
     props.displayId && props.displayId !== "N/A" && props.displayId !== "—"
@@ -13950,22 +13979,36 @@ export function ProcurementDetailUnifiedView(
             </div>
           </header>
 
-          {/* One-Time Grace Edit Banner (Within 6h, 0 bids, max 1 edit) */}
+          {/* In-Place Grace Edit Bar or One-Time Grace Edit Banner (Within 6h, 0 bids, max 1 edit) */}
           {isBuyerOrAdmin && (
             <div className="mb-4">
-              <EditProcurementGraceBanner
-                publishedAt={props.publishedAt}
-                createdAt={props.createdAt}
-                postPublishEditCount={props.postPublishEditCount}
-                participantsCount={Math.max(
-                  Number(props.participantsCount) || 0,
-                  submittedParticipations.length,
-                  props.participations?.length || 0,
-                )}
-                status={props.status}
-                onEditClick={props.onEditClick || (() => {})}
-                onCancelClick={props.onCancelClick}
-              />
+              {inPlaceEdit.isEditing ? (
+                <InPlaceProcurementEditBar
+                  isEditing={inPlaceEdit.isEditing}
+                  publishedAt={props.publishedAt}
+                  createdAt={props.createdAt}
+                  isSubmitting={inPlaceEdit.isSubmitting}
+                  confirmModalOpen={inPlaceEdit.confirmModalOpen}
+                  setConfirmModalOpen={inPlaceEdit.setConfirmModalOpen}
+                  onCancel={inPlaceEdit.cancelEditing}
+                  onSaveRequest={inPlaceEdit.requestSave}
+                  onConfirmSave={inPlaceEdit.confirmAndSave}
+                />
+              ) : (
+                <EditProcurementGraceBanner
+                  publishedAt={props.publishedAt}
+                  createdAt={props.createdAt}
+                  postPublishEditCount={props.postPublishEditCount}
+                  participantsCount={Math.max(
+                    Number(props.participantsCount) || 0,
+                    submittedParticipations.length,
+                    props.participations?.length || 0,
+                  )}
+                  status={props.status}
+                  onEditClick={inPlaceEdit.startEditing}
+                  onCancelClick={props.onCancelClick}
+                />
+              )}
             </div>
           )}
 
@@ -14108,6 +14151,15 @@ export function ProcurementDetailUnifiedView(
               tabIndex={0}
               className="space-y-3.5 sm:space-y-4 focus:outline-none"
             >
+              {/* In-Place Overview Edit Card */}
+              {inPlaceEdit.isEditing && (
+                <InPlaceOverviewEditCard
+                  draft={inPlaceEdit.draft}
+                  updateDraft={inPlaceEdit.updateDraft}
+                  validationErrors={inPlaceEdit.validationErrors}
+                />
+              )}
+
               {/* Procurement Awarded Banner for Buyer (when awarded and before PO released) */}
               {isBuyerOrAdmin && isBidAwarded && !effectiveActiveOrder && (
                 <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all">
@@ -14694,6 +14746,18 @@ export function ProcurementDetailUnifiedView(
               tabIndex={0}
               className="space-y-5 focus:outline-none"
             >
+              {/* In-Place Scope Edit Card */}
+              {inPlaceEdit.isEditing && (
+                <InPlaceScopeEditCard
+                  draft={inPlaceEdit.draft}
+                  updateDraft={inPlaceEdit.updateDraft}
+                  updateBoqItem={inPlaceEdit.updateBoqItem}
+                  addBoqItem={inPlaceEdit.addBoqItem}
+                  removeBoqItem={inPlaceEdit.removeBoqItem}
+                  validationErrors={inPlaceEdit.validationErrors}
+                />
+              )}
+
               <DataCard
                 title={`${procurementTypeLabel} Scope & Sourcing Summary`}
                 icon={FileText}
@@ -14862,6 +14926,15 @@ export function ProcurementDetailUnifiedView(
               tabIndex={0}
               className="space-y-5 focus:outline-none"
             >
+              {/* In-Place Terms Edit Card */}
+              {inPlaceEdit.isEditing && (
+                <InPlaceTermsEditCard
+                  draft={inPlaceEdit.draft}
+                  updateDraft={inPlaceEdit.updateDraft}
+                  validationErrors={inPlaceEdit.validationErrors}
+                />
+              )}
+
               <DataCard
                 title={`${procurementTypeLabel} Milestones & Schedule`}
                 icon={CalendarDays}

@@ -11,7 +11,6 @@ import { Button } from '../../../components/ui/button';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { useProcurementRealtime } from '../hooks/useProcurementRealtime';
 
@@ -21,7 +20,6 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname();
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
   const [isConvertingInvoice, setIsConvertingInvoice] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
@@ -186,7 +184,6 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId}/results`) : handleSubmitQuotation,
     invoiceStatusData: user?.role === 'seller' && isCurrentSellerAwarded ? {
       exists: Boolean(invoiceStatusData?.exists),
@@ -202,37 +199,6 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
-      <EditPublishedProcurementModal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        procurement={{
-          id: rawBid?.id || reqObj?.id || (!isNaN(Number(activeRfqId)) ? Number(activeRfqId) : 0) || String(activeRfqId),
-          referenceNumber: viewProps.displayId || String(activeRfqId),
-          title: viewProps.subject,
-          description: rawBid?.description || reqObj?.description,
-          category: rawBid?.category || reqObj?.category?.name,
-          categoryType: rawBid?.categoryType || (rawBid?.technicalPacket as any)?.basics?.procurementCategory,
-          pricingFormat: rawBid?.pricingFormat || (rawBid?.technicalPacket as any)?.basics?.pricingFormat,
-          canonicalMethod: rawBid?.canonicalMethod || 'RFQ',
-          quantity: rawBid?.quantity || viewProps.items?.[0]?.quantity,
-          unit: rawBid?.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
-          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (rawBid?.technicalPacket as any)?.basics?.hsnCode,
-          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (rawBid?.technicalPacket as any)?.basics?.makeBrand,
-          estimatedValue: rawBid?.estimatedValue || reqObj?.estimatedValue,
-          deliveryLocation: rawBid?.deliveryLocation,
-          state: rawBid?.state,
-          district: rawBid?.district,
-          pincode: rawBid?.pincode,
-          endDate: rawBid?.endDate || reqObj?.requiredBy,
-          termsAndConditions: rawBid?.termsAndConditions,
-          technicalPacket: rawBid?.technicalPacket,
-          financialPacket: rawBid?.financialPacket,
-          items: (rawBid?.technicalPacket as any)?.items || rawBid?.items || viewProps.items,
-        }}
-        onSuccess={async () => {
-          await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
-        }}
-      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

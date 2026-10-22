@@ -10,7 +10,6 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { toast } from 'sonner';
 
@@ -20,7 +19,6 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -135,44 +133,12 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
   });
 
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
-      <EditPublishedProcurementModal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        procurement={{
-          id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || String(requestId),
-          referenceNumber: viewProps.displayId || String(requestId),
-          title: viewProps.subject,
-          description: bid.description,
-          category: bid.category,
-          categoryType: bid.categoryType || (bid.technicalPacket as any)?.basics?.procurementCategory || 'SERVICES',
-          pricingFormat: bid.pricingFormat || (bid.technicalPacket as any)?.basics?.pricingFormat,
-          canonicalMethod: bid.canonicalMethod || 'RFP',
-          quantity: bid.quantity || viewProps.items?.[0]?.quantity,
-          unit: bid.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
-          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (bid.technicalPacket as any)?.basics?.hsnCode,
-          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (bid.technicalPacket as any)?.basics?.makeBrand,
-          estimatedValue: bid.estimatedValue,
-          deliveryLocation: bid.deliveryLocation,
-          state: bid.state,
-          district: bid.district,
-          pincode: bid.pincode,
-          endDate: bid.endDate,
-          termsAndConditions: bid.termsAndConditions,
-          technicalPacket: bid.technicalPacket,
-          financialPacket: bid.financialPacket,
-          items: (bid.technicalPacket as any)?.items || bid.items || viewProps.items,
-        }}
-        onSuccess={async () => {
-          await Promise.allSettled([refetchBid(), refetchReq()]);
-        }}
-      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

@@ -10,7 +10,6 @@ import { getApi, postApi } from '../../shared/apiClient';
 import { procurementBidApi } from '../../procurementBid/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 import { toast } from 'sonner';
 
@@ -20,7 +19,6 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
   const pathname = usePathname() || '';
   const { user } = useAuth();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
   const explicitReqId = searchParams?.get('requirementId') || '';
   const explicitRequestId = searchParams?.get('requestId') || searchParams?.get('bidId') || '';
@@ -157,44 +155,12 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
   });
 
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
-      <EditPublishedProcurementModal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        procurement={{
-          id: bid.id || reqObj.id || (!isNaN(Number(requestId)) ? Number(requestId) : 0) || String(requestId),
-          referenceNumber: viewProps.displayId || String(requestId),
-          title: viewProps.subject,
-          description: mergedBid.description,
-          category: mergedBid.category,
-          categoryType: mergedBid.categoryType || (mergedBid.technicalPacket as any)?.basics?.procurementCategory,
-          pricingFormat: mergedBid.pricingFormat || (mergedBid.technicalPacket as any)?.basics?.pricingFormat,
-          canonicalMethod: mergedBid.canonicalMethod || 'OPEN_TENDER',
-          quantity: mergedBid.quantity || viewProps.items?.[0]?.quantity,
-          unit: mergedBid.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
-          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (mergedBid.technicalPacket as any)?.basics?.hsnCode,
-          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (mergedBid.technicalPacket as any)?.basics?.makeBrand,
-          estimatedValue: mergedBid.estimatedValue,
-          deliveryLocation: mergedBid.deliveryLocation,
-          state: mergedBid.state,
-          district: mergedBid.district,
-          pincode: mergedBid.pincode,
-          endDate: mergedBid.endDate,
-          termsAndConditions: mergedBid.termsAndConditions,
-          technicalPacket: mergedBid.technicalPacket,
-          financialPacket: mergedBid.financialPacket,
-          items: (mergedBid.technicalPacket as any)?.items || mergedBid.items || viewProps.items,
-        }}
-        onSuccess={async () => {
-          await Promise.allSettled([refetchBid(), refetchReq(), refetchTender()]);
-        }}
-      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}

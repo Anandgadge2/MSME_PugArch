@@ -12,7 +12,6 @@ import { procurementBidApi } from '../../procurementBid/api';
 import { fetchRateContractDetail } from '../../rateContract/api';
 import { ProcurementDetailUnifiedView, ProcurementDetailSkeleton } from '../components/ProcurementDetailUnifiedView';
 import { CancelProcurementModal } from '../../procurement/components/CancelProcurementModal';
-import { EditPublishedProcurementModal } from '../../procurement/components/EditPublishedProcurementModal';
 import { adaptProcurementUnifiedProps } from '../utils/procurementUnifiedAdapter';
 
 function RateContractDetailContent({ initialData }: { initialData?: any }) {
@@ -23,7 +22,6 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
-  const [editModalOpen, setEditModalOpen] = useState(searchParams?.get('edit') === '1');
 
   const pathTokens = (pathname || '').split('/').filter(Boolean);
   const rawPathId = pathTokens.length >= 2 ? pathTokens[pathTokens.length - 1] : '';
@@ -143,7 +141,6 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onEdit: () => setEditModalOpen(true),
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation,
     extraProps: {
       contractId: contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined)),
@@ -158,37 +155,6 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
   return (
     <>
       <ProcurementDetailUnifiedView {...viewProps} />
-      <EditPublishedProcurementModal
-        isOpen={editModalOpen}
-        onClose={() => setEditModalOpen(false)}
-        procurement={{
-          id: bidData?.id || reqData?.id || String(rcData?.id || activeRcId),
-          referenceNumber: viewProps.displayId || String(rcData?.id || activeRcId),
-          title: viewProps.subject,
-          description: bidData?.description || reqData?.description,
-          category: bidData?.category || reqData?.category?.name,
-          categoryType: bidData?.categoryType || (bidData?.technicalPacket as any)?.basics?.procurementCategory,
-          pricingFormat: bidData?.pricingFormat || (bidData?.technicalPacket as any)?.basics?.pricingFormat,
-          canonicalMethod: bidData?.canonicalMethod || 'RATE_CONTRACT',
-          quantity: bidData?.quantity || viewProps.items?.[0]?.quantity,
-          unit: bidData?.unit || viewProps.items?.[0]?.unit || viewProps.items?.[0]?.unitOfMeasure,
-          hsnCode: viewProps.items?.[0]?.hsn || viewProps.items?.[0]?.hsnCode || (bidData?.technicalPacket as any)?.basics?.hsnCode,
-          brandPreference: viewProps.items?.[0]?.brandRequirement || viewProps.items?.[0]?.make || viewProps.items?.[0]?.brand || (bidData?.technicalPacket as any)?.basics?.makeBrand,
-          estimatedValue: bidData?.estimatedValue || reqData?.estimatedValue,
-          deliveryLocation: bidData?.deliveryLocation,
-          state: bidData?.state,
-          district: bidData?.district,
-          pincode: bidData?.pincode,
-          endDate: bidData?.endDate,
-          termsAndConditions: bidData?.termsAndConditions,
-          technicalPacket: bidData?.technicalPacket,
-          financialPacket: bidData?.financialPacket,
-          items: (bidData?.technicalPacket as any)?.items || bidData?.items || viewProps.items,
-        }}
-        onSuccess={async () => {
-          await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);
-        }}
-      />
       {canCancel && (
         <CancelProcurementModal
           isOpen={cancelModalOpen}
