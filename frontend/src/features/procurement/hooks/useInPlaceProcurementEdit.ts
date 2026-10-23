@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { putApi } from '../../shared/apiClient';
 import { toast } from 'sonner';
 
@@ -205,14 +205,42 @@ export function useInPlaceProcurementEdit({ procurement, onSuccess }: UseInPlace
         ? procurement.termsAndConditions.join('\n')
         : (procurement.termsAndConditions || '')
     };
-  }, [procurement]);
+  }, [
+    procurement?.id,
+    procurement?.title,
+    procurement?.subject,
+    procurement?.description,
+    procurement?.scopeDescription,
+    procurement?.category,
+    procurement?.categoryType,
+    procurement?.pricingFormat,
+    procurement?.quantity,
+    procurement?.unit,
+    procurement?.estimatedValue,
+    procurement?.endDate,
+    procurement?.closingDate,
+    procurement?.deadlineDate,
+    procurement?.deliveryLocation,
+    procurement?.state,
+    procurement?.district,
+    procurement?.pincode,
+    procurement?.termsAndConditions,
+    procurement?.technicalPacket,
+    procurement?.financialPacket,
+    procurement?.items
+  ]);
 
   const [draft, setDraft] = useState<InPlaceProcurementDraft>(initialDraft);
+  const lastInitialDraftJsonRef = useRef<string>(JSON.stringify(initialDraft));
 
-  // Sync draft when initialDraft changes while not actively editing
+  // Sync draft only when initialDraft content truly changes while not actively editing
   useEffect(() => {
     if (!isEditing) {
-      setDraft(initialDraft);
+      const currentJson = JSON.stringify(initialDraft);
+      if (lastInitialDraftJsonRef.current !== currentJson) {
+        lastInitialDraftJsonRef.current = currentJson;
+        setDraft(initialDraft);
+      }
     }
   }, [initialDraft, isEditing]);
 

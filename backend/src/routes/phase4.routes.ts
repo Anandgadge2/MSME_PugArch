@@ -6246,11 +6246,11 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
     }
   }
 
-  // Idempotency guard: prevent double-submission race condition (VULN-02)
+  // Grace Period Edit or Idempotency guard: prevent double-submission race condition (VULN-02)
   if (parsed.id) {
     const existingReq = await db.requirement.findFirst({
       where: { id: parsed.id, buyerId: userId(req) },
-      select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true }
+      select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true, createdAt: true }
     });
     if (existingReq && !['DRAFT', 'REJECTED'].includes(String(existingReq.status))) {
       const existingBid = await db.procurementBid.findFirst({
@@ -6260,8 +6260,77 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
             { technicalPacket: { path: ['sourceRequirementId'], equals: existingReq.id } },
             { technicalPacket: { path: ['requirementId'], equals: existingReq.id } }
           ]
+        },
+        include: {
+          participations: { select: { id: true, submissionStatus: true } }
         }
       }).catch(() => null);
+
+      const isGracePeriodEdit = Boolean((parsed as any).isGracePeriodEdit);
+      if (isGracePeriodEdit) {
+        // Enforce 6-hour, 0-bids, 1-edit limit
+        const pubDate = existingBid?.publishedAt || existingReq.createdAt;
+        const elapsed = Date.now() - new Date(pubDate).getTime();
+        const withinWindow = elapsed <= 6 * 60 * 60 * 1000;
+        const activeBids = (existingBid?.participations || []).filter(
+          (p: any) => p.submissionStatus !== 'DRAFT' && !(p as any).isWithdrawn
+        ).length;
+        const editCount = Number(existingBid?.postPublishEditCount || 0);
+
+        if (!withinWindow) {
+          throw new ApiError(409, 'Grace period for editing has expired (6-hour window elapsed)', 'GRACE_PERIOD_EXPIRED');
+        }
+        if (activeBids > 0) {
+          throw new ApiError(409, 'Cannot edit procurement after supplier proposals have been submitted', 'BIDS_ALREADY_RECEIVED');
+        }
+        if (editCount >= 1) {
+          throw new ApiError(409, 'One-time grace edit has already been utilized for this procurement', 'GRACE_EDIT_ALREADY_USED');
+        }
+
+        // Allow update to proceed:
+        const submitted = await saveProcurementDraft(req, parsed, existingReq.status || 'APPROVED');
+        const [procurementBid, auction] = await Promise.all([
+          createProcurementBidForSubmittedRequirement(req, submitted, parsed),
+          createAuctionForSubmittedProcurement(req, submitted, parsed)
+        ]);
+
+        if (procurementBid) {
+          await db.procurementBid.update({
+            where: { id: procurementBid.id },
+            data: {
+              postPublishEditCount: { increment: 1 },
+              version: { increment: 1 }
+            }
+          });
+        }
+
+        await auditWrite(req, 'procurement.grace_edit.published', 'requirement', submitted.id, {
+          editCount: editCount + 1,
+          newVersion: (existingBid?.version || 1) + 1
+        });
+
+        const submitBuyerId = userId(req);
+        const submitOrgId = req.user?.organizationId;
+        await Promise.allSettled([
+          deleteCache(`cache:buyer:procurements:${submitBuyerId}`),
+          invalidateByPattern(`cache:buyer:procurements:${submitBuyerId}*`),
+          deleteCache(redisKeys.cacheDashboardSummary(submitBuyerId)),
+          invalidateByPattern(`cache:dashboard:*:${submitBuyerId}*`),
+          ...(submitOrgId ? [
+            invalidateByPattern(`cache:buyer:procurements:*`),
+            invalidateByPattern(`cache:dashboard:*`),
+          ] : [])
+        ]);
+
+        return ok(res, {
+          procurement: serializeProcurementDraft({ ...submitted, items: (submitted as any).items || [] }),
+          procurementBid,
+          auction,
+          rateContract: null,
+          referenceNumber: formatRequirementNumber(submitted.id, submitted.requirementNumber, submitted.procurementMethod || submitted.canonicalMethod)
+        });
+      }
+
       return ok(res, {
         procurement: serializeProcurementDraft({ ...existingReq, items: [] }),
         procurementBid: existingBid,

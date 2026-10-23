@@ -5228,27 +5228,72 @@ export function ProcurementDetailUnifiedView(
   const currentUser: any = user;
   const [isIssueCallOffModalOpen, setIsIssueCallOffModalOpen] = useState(false);
 
+  const inPlaceProcurementData = useMemo(() => ({
+    id: props.rawBid?.id || props.id,
+    title: props.title || props.subject,
+    description: props.description || (props as any).scopeDescription || props.rawBid?.description || "",
+    category: props.category || props.rawBid?.category,
+    categoryType: (props as any).categoryType || props.rawBid?.categoryType || (props.rawBid?.technicalPacket as any)?.basics?.procurementCategory,
+    pricingFormat: (props as any).pricingFormat || props.rawBid?.pricingFormat || (props.rawBid?.technicalPacket as any)?.basics?.pricingFormat,
+    quantity: props.quantity || props.rawBid?.quantity,
+    unit: props.unit || props.rawBid?.unit,
+    estimatedValue: props.estimatedValue || props.rawBid?.estimatedValue,
+    deliveryLocation: props.deliveryLocation || props.rawBid?.deliveryLocation,
+    state: (props as any).state || props.rawBid?.state,
+    district: (props as any).district || props.rawBid?.district,
+    pincode: (props as any).pincode || props.rawBid?.pincode,
+    endDate: props.deadlineDate || props.closingDate || props.endDate || props.rawBid?.endDate,
+    termsAndConditions: props.termsAndConditions || props.rawBid?.termsAndConditions,
+    technicalPacket: (props as any).technicalPacket || props.rawBid?.technicalPacket || props.payload,
+    financialPacket: (props as any).financialPacket || props.rawBid?.financialPacket,
+    items: props.items || props.rawBid?.items,
+  }), [
+    props.rawBid?.id,
+    props.id,
+    props.title,
+    props.subject,
+    props.description,
+    (props as any).scopeDescription,
+    props.rawBid?.description,
+    props.category,
+    props.rawBid?.category,
+    (props as any).categoryType,
+    props.rawBid?.categoryType,
+    (props.rawBid?.technicalPacket as any)?.basics?.procurementCategory,
+    (props as any).pricingFormat,
+    props.rawBid?.pricingFormat,
+    (props.rawBid?.technicalPacket as any)?.basics?.pricingFormat,
+    props.quantity,
+    props.rawBid?.quantity,
+    props.unit,
+    props.rawBid?.unit,
+    props.estimatedValue,
+    props.rawBid?.estimatedValue,
+    props.deliveryLocation,
+    props.rawBid?.deliveryLocation,
+    (props as any).state,
+    props.rawBid?.state,
+    (props as any).district,
+    props.rawBid?.district,
+    (props as any).pincode,
+    props.rawBid?.pincode,
+    props.deadlineDate,
+    props.closingDate,
+    props.endDate,
+    props.rawBid?.endDate,
+    props.termsAndConditions,
+    props.rawBid?.termsAndConditions,
+    (props as any).technicalPacket,
+    props.rawBid?.technicalPacket,
+    props.payload,
+    (props as any).financialPacket,
+    props.rawBid?.financialPacket,
+    props.items,
+    props.rawBid?.items,
+  ]);
+
   const inPlaceEdit = useInPlaceProcurementEdit({
-    procurement: {
-      id: props.rawBid?.id || props.id,
-      title: props.title || props.subject,
-      description: props.description || (props as any).scopeDescription || props.rawBid?.description || "",
-      category: props.category || props.rawBid?.category,
-      categoryType: (props as any).categoryType || props.rawBid?.categoryType || (props.rawBid?.technicalPacket as any)?.basics?.procurementCategory,
-      pricingFormat: (props as any).pricingFormat || props.rawBid?.pricingFormat || (props.rawBid?.technicalPacket as any)?.basics?.pricingFormat,
-      quantity: props.quantity || props.rawBid?.quantity,
-      unit: props.unit || props.rawBid?.unit,
-      estimatedValue: props.estimatedValue || props.rawBid?.estimatedValue,
-      deliveryLocation: props.deliveryLocation || props.rawBid?.deliveryLocation,
-      state: (props as any).state || props.rawBid?.state,
-      district: (props as any).district || props.rawBid?.district,
-      pincode: (props as any).pincode || props.rawBid?.pincode,
-      endDate: props.deadlineDate || props.closingDate || props.endDate || props.rawBid?.endDate,
-      termsAndConditions: props.termsAndConditions || props.rawBid?.termsAndConditions,
-      technicalPacket: (props as any).technicalPacket || props.rawBid?.technicalPacket || props.payload,
-      financialPacket: (props as any).financialPacket || props.rawBid?.financialPacket,
-      items: props.items || props.rawBid?.items,
-    },
+    procurement: inPlaceProcurementData,
     onSuccess: props.onRefresh
   });
 
@@ -14021,8 +14066,10 @@ export function ProcurementDetailUnifiedView(
                     submittedParticipations.length,
                     props.participations?.length || 0,
                   )}
-                  status={props.status}
-                  onEditClick={inPlaceEdit.startEditing}
+                  onEditClick={() => {
+                    const targetId = props.rawBid?.id || props.id;
+                    router.push(`/buyer/procurement/create?id=${encodeURIComponent(targetId)}&edit=1`);
+                  }}
                   onCancelClick={props.onCancelClick}
                 />
               )}

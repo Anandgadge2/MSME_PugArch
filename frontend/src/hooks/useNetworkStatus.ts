@@ -40,7 +40,7 @@ export function useNetworkStatus(): NetworkStatus {
     if (typeof window === 'undefined') return;
 
     const handleOnline = () => {
-      setStatus((prev) => ({ ...prev, isOnline: true }));
+      setStatus((prev) => (prev.isOnline ? prev : { ...prev, isOnline: true }));
       if (wasOfflineRef.current) {
         wasOfflineRef.current = false;
         toast.success('Connection restored!', {
@@ -53,7 +53,7 @@ export function useNetworkStatus(): NetworkStatus {
 
     const handleOffline = () => {
       wasOfflineRef.current = true;
-      setStatus((prev) => ({ ...prev, isOnline: false }));
+      setStatus((prev) => (!prev.isOnline ? prev : { ...prev, isOnline: false }));
       toast.error('Internet connection lost', {
         id: 'network-status',
         description: 'Operating in offline read mode. Previously loaded data remains accessible.',
@@ -73,13 +73,33 @@ export function useNetworkStatus(): NetworkStatus {
           ['slow-2g', '2g'].includes(conn.effectiveType) ||
           (typeof conn.rtt === 'number' && conn.rtt > 1200);
 
-        setStatus({
-          isOnline: navigator.onLine !== false,
-          isSlowConnection: Boolean(isSlow),
-          effectiveType: conn.effectiveType || 'unknown',
-          rtt: conn.rtt,
-          downlink: conn.downlink,
-          saveData: conn.saveData,
+        setStatus((prev) => {
+          const nextIsOnline = navigator.onLine !== false;
+          const nextIsSlow = Boolean(isSlow);
+          const nextType = conn.effectiveType || 'unknown';
+          const nextRtt = conn.rtt;
+          const nextDownlink = conn.downlink;
+          const nextSaveData = conn.saveData;
+
+          if (
+            prev.isOnline === nextIsOnline &&
+            prev.isSlowConnection === nextIsSlow &&
+            prev.effectiveType === nextType &&
+            prev.rtt === nextRtt &&
+            prev.downlink === nextDownlink &&
+            prev.saveData === nextSaveData
+          ) {
+            return prev;
+          }
+
+          return {
+            isOnline: nextIsOnline,
+            isSlowConnection: nextIsSlow,
+            effectiveType: nextType,
+            rtt: nextRtt,
+            downlink: nextDownlink,
+            saveData: nextSaveData,
+          };
         });
 
         if (isSlow && !warnedSlowRef.current) {

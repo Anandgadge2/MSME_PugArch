@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import React, { Suspense, useState, useMemo, useCallback } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '../../../hooks/useAuth';
 import { useQuery } from '@tanstack/react-query';
@@ -167,12 +167,43 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
   };
 
-  const mergedBid = {
+  const mergedBid = useMemo(() => ({
     ...rawBid,
     participations: buyerResponses.length ? buyerResponses : (rawBid.participations || []),
-  };
+  }), [rawBid, buyerResponses]);
 
-  const viewProps = adaptProcurementUnifiedProps(mergedBid, reqObj, {
+  const handleRefresh = useCallback(async () => {
+    await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
+  }, [refetchBid, refetchReq, refetchResponses]);
+
+  const handleCancelClick = useCallback(() => {
+    setCancelModalOpen(true);
+  }, []);
+
+  const handleSubmitResultOrQuote = useCallback(() => {
+    if (isBuyerOrAdmin) {
+      router.push(`/bids/${effectiveTargetId}/results`);
+    } else {
+      handleSubmitQuotation();
+    }
+  }, [isBuyerOrAdmin, router, effectiveTargetId, handleSubmitQuotation]);
+
+  const invoiceDataPayload = useMemo(() => {
+    if (!(user?.role === 'seller' && isCurrentSellerAwarded)) return null;
+    return {
+      exists: Boolean(invoiceStatusData?.exists),
+      invoiceId: invoiceStatusData?.invoiceId,
+      canConvertToInvoice: Boolean(invoiceStatusData?.canConvertToInvoice),
+      hasAcceptedPO: Boolean(invoiceStatusData?.hasAcceptedPO),
+      loading: invoiceStatusLoading,
+    };
+  }, [user?.role, isCurrentSellerAwarded, invoiceStatusData, invoiceStatusLoading]);
+
+  const handleConvertToInvoiceCallback = useCallback(() => {
+    handleConvertToInvoice();
+  }, [handleConvertToInvoice]);
+
+  const viewProps = useMemo(() => adaptProcurementUnifiedProps(mergedBid, reqObj, {
     user,
     router,
     requestId: activeRfqId,
@@ -180,21 +211,29 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     procurementLabel: 'Request for Quotation',
     backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
     backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rfqs' : undefined,
-    onRefresh: async () => {
-      await Promise.allSettled([refetchBid(), refetchReq(), refetchResponses()]);
-    },
-    onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${effectiveTargetId}/results`) : handleSubmitQuotation,
-    invoiceStatusData: user?.role === 'seller' && isCurrentSellerAwarded ? {
-      exists: Boolean(invoiceStatusData?.exists),
-      invoiceId: invoiceStatusData?.invoiceId,
-      canConvertToInvoice: Boolean(invoiceStatusData?.canConvertToInvoice),
-      hasAcceptedPO: Boolean(invoiceStatusData?.hasAcceptedPO),
-      loading: invoiceStatusLoading,
-    } : null,
+    onRefresh: handleRefresh,
+    onCancel: canCancel ? handleCancelClick : undefined,
+    onSubmitAction: handleSubmitResultOrQuote,
+    invoiceStatusData: invoiceDataPayload,
     isConvertingInvoice,
-    onConvertToInvoice: invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoice : undefined,
-  });
+    onConvertToInvoice: invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoiceCallback : undefined,
+  }), [
+    mergedBid,
+    reqObj,
+    user,
+    router,
+    activeRfqId,
+    isBuyerOrAdmin,
+    isSellerOrShg,
+    handleRefresh,
+    canCancel,
+    handleCancelClick,
+    handleSubmitResultOrQuote,
+    invoiceDataPayload,
+    isConvertingInvoice,
+    invoiceStatusData?.canConvertToInvoice,
+    handleConvertToInvoiceCallback
+  ]);
 
   return (
     <>

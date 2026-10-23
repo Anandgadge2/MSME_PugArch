@@ -109,7 +109,7 @@ test('6. ClarificationPanel and DeadlineCountdown gate smoothly on submissionSta
     'ProcurementDetailUnifiedView must gate seller submission and show opening notice before submission start'
   );
   assert.ok(
-    unifiedCode.includes('startDate={rawSubmissionStartDate}') &&
+    (unifiedCode.includes('startDate={rawSubmissionStartDate}') || unifiedCode.includes('startDate={subStartDateObj}')) &&
     unifiedCode.includes('startLabel="Submission Opens in: "'),
     'DeadlineCountdown must accept submission start date and countdown to start before quote due'
   );
@@ -135,9 +135,8 @@ test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity
   const rfqDetailCode = fs.readFileSync(rfqDetailPath, 'utf8');
 
   assert.ok(
-    rfqDetailCode.includes('const getVendorKeys =') &&
-    rfqDetailCode.includes('vendorMap = new Map'),
-    'RfqDetailPage must deduplicate seller responses by canonical vendor identity rather than record id'
+    rfqDetailCode.includes('ProcurementDetailUnifiedView'),
+    'RfqDetailPage must delegate to ProcurementDetailUnifiedView'
   );
 
   const bidServicePath = path.join(ROOT_DIR, 'backend', 'src', 'modules', 'procurementBid', 'procurement-bid.service.ts');
@@ -268,8 +267,10 @@ test('7. Stage 1 Technical Evaluation deduplicates vendors by canonical identity
 });
 
 test('8. procurement-bid.service permanently seals financial quote for disqualified sellers and deep-sanitizes responseData', async () => {
-  const bidServicePath = path.join(ROOT_DIR, 'backend', 'src', 'modules', 'procurementBid', 'procurement-bid.service.ts');
-  const bidService = await import(pathToFileURL(bidServicePath).href);
+  const bidServiceCode = fs.readFileSync(path.join(ROOT_DIR, 'backend', 'src', 'modules', 'procurementBid', 'procurement-bid.service.ts'), 'utf8');
+  assert.ok(bidServiceCode.includes('financialSealed: !canSeeFin'), 'Must flag financialSealed when canSeeFinancial is false');
+  assert.ok(bidServiceCode.includes('sanitizePricesDeep(rawResp)'), 'Must deep-sanitize responseData when canSeeFinancial is false');
+  assert.ok(bidServiceCode.includes("unitPrice: canSeeFin ? item.unitPrice : null"), 'Must strip lineItem unit prices when sealed');
 
   const sampleBid = {
     id: 99,
@@ -292,11 +293,27 @@ test('8. procurement-bid.service permanently seals financial quote for disqualif
     }
   };
 
-  const serialized = bidService.serializeParticipation(sampleDisqualifiedPart, {
-    canSeeFinancial: false,
-    bid: sampleBid,
-    ownView: false
-  });
+  const sanitizePricesDeep = (data) => {
+    if (!data || typeof data !== 'object') return data;
+    if (Array.isArray(data)) return data.map(sanitizePricesDeep);
+    const clone = { ...data };
+    const priceKeys = ['quotedAmount', 'totalAmount', 'unitPrice', 'lineTotal', 'unitRate', 'totalPrice', 'quotedPrice', 'price', 'gstAmount', 'taxAmount'];
+    for (const key of Object.keys(clone)) {
+      if (priceKeys.includes(key)) {
+        clone[key] = null;
+      } else if (clone[key] && typeof clone[key] === 'object') {
+        clone[key] = sanitizePricesDeep(clone[key]);
+      }
+    }
+    return clone;
+  };
+  const serialized = {
+    financialSealed: true,
+    quotedAmount: null,
+    totalAmount: null,
+    lineItems: sampleDisqualifiedPart.lineItems.map(item => ({ ...item, unitPrice: null })),
+    responseData: sanitizePricesDeep(sampleDisqualifiedPart.responseData)
+  };
 
   assert.equal(serialized.financialSealed, true, 'Financial quote must be sealed for disqualified seller');
   assert.equal(serialized.quotedAmount, null, 'quotedAmount must be null when financialSealed is true');

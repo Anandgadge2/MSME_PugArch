@@ -41,9 +41,9 @@ test('3. Frontend CreateProcurementPage.tsx defines CATEGORIES_BY_METHOD and FOR
   assert.ok(code.includes('export const CATEGORIES_BY_METHOD: Record<ProcurementMethodId'), 'Must define CATEGORIES_BY_METHOD matrix');
   assert.ok(code.includes('export const FORMATS_BY_METHOD: Record<ProcurementMethodId'), 'Must define FORMATS_BY_METHOD matrix');
   assert.ok(code.includes('procurement-category-select'), 'Basics form must render accessible procurement-category-select');
-  assert.ok(code.includes('pricing-format-select'), 'Basics form must render accessible pricing-format-select');
+  assert.ok(code.includes('pricing-format-selector'), 'Commercial pricing structure must render accessible pricing-format-selector');
   assert.ok(code.includes('Primary category of what is being procured'), 'Must provide clear helper text for Category');
-  assert.ok(code.includes('Pricing structure: Direct Item quote'), 'Must provide clear helper text for Format');
+  assert.ok(code.includes('Select how participating bidders submit commercial quotes'), 'Must provide clear helper text for Format');
 });
 
 test('4. Frontend CreateProcurementPage.tsx provides context-aware template generation for Goods, Services, Works, BOQ, and SOR', () => {

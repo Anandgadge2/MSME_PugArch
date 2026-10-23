@@ -233,28 +233,37 @@ export const isActorInvitedToBid = (actor: Actor | null | undefined, bid: any) =
 // Prefers the explicit `visibility` column; falls back to method-name/selection heuristics
 // for rows created before the column existed or where legacy visibility was set to PUBLIC.
 export const isPrivateBid = (bid: any) => {
-  if (bid?.visibility === 'PRIVATE') return true;
   if (isRestrictedBidMethod(bid)) return true;
-  const selection = String(
-    bid?.technicalPacket?.vendors?.selection
-    ?? bid?.technicalPacket?.wizardData?.vendors?.selection
-    ?? ''
-  ).toUpperCase();
-  const rfqType = String(
-    bid?.technicalPacket?.rfqType
-    ?? bid?.technicalPacket?.vendors?.rfqType
-    ?? bid?.technicalPacket?.wizardData?.rfqType
-    ?? ''
-  ).toUpperCase();
-  if (['SELECT', 'SELECTED', 'LIMITED', 'INVITED'].includes(selection) || rfqType === 'LIMITED') return true;
-  const invitedList = extractInvitedSellerIds(bid?.technicalPacket);
-  if (invitedList.length > 0 && selection !== 'OPEN') return true;
-  if (bid?.visibility === 'PUBLIC') return false;
+  if (bid?.visibility === 'PRIVATE') {
+    const pType = String(bid?.procurementType || '').toUpperCase();
+    const bType = String(bid?.bidType || '').toUpperCase();
+    const rfqType = String(
+      bid?.technicalPacket?.vendors?.rfqType ||
+      bid?.technicalPacket?.rfqType ||
+      bid?.technicalPacket?.wizardData?.rfqType ||
+      ''
+    ).toUpperCase();
+    const selection = String(
+      bid?.technicalPacket?.vendors?.selection
+      ?? bid?.technicalPacket?.wizardData?.vendors?.selection
+      ?? ''
+    ).toUpperCase();
+    if (
+      restrictedProcurementMethods.includes(pType) ||
+      restrictedProcurementMethods.includes(bType) ||
+      rfqType === 'LIMITED' ||
+      selection === 'LIMITED' ||
+      pType === 'LIMITED_TENDER' ||
+      bType === 'LIMITED_TENDER'
+    ) {
+      return true;
+    }
+  }
   return false;
 };
 
 // Derive the visibility value to persist at create/publish time from the method + vendor selection.
-export const deriveVisibility = (input: { procurementType?: string | null; bidType?: string | null; technicalPacket?: any; rfqType?: string | null }) => {
+export const deriveVisibility = (input: { procurementType?: string | null; bidType?: string | null; technicalPacket?: any; rfqType?: string | null; visibility?: string | null }) => {
   const pType = String(input?.procurementType || '').toUpperCase();
   const bType = String(input?.bidType || '').toUpperCase();
   const rfqType = String(
@@ -272,12 +281,10 @@ export const deriveVisibility = (input: { procurementType?: string | null; bidTy
   const restricted = restrictedProcurementMethods.includes(pType)
     || restrictedProcurementMethods.includes(bType)
     || rfqType === 'LIMITED'
+    || selection === 'LIMITED'
     || pType === 'LIMITED_TENDER'
     || bType === 'LIMITED_TENDER';
-  const isSelectedMode = ['SELECT', 'SELECTED', 'LIMITED', 'INVITED'].includes(selection);
-  const invitedList = extractInvitedSellerIds(input?.technicalPacket);
-  const hasInvites = invitedList.length > 0 && selection !== 'OPEN';
-  return (restricted || isSelectedMode || hasInvites) ? 'PRIVATE' : 'PUBLIC';
+  return restricted ? 'PRIVATE' : 'PUBLIC';
 };
 
 // Extract invited-seller ids (as numbers) from a technicalPacket blob, tolerant of the
@@ -364,9 +371,18 @@ export const canActorViewBid = (actor: Actor | null | undefined, bid: any) => {
   if (!isPrivateBid(bid)) return true;
   if (!actor) return false;
   if (actor.role === 'admin' || actor.role === 'master_admin') return true;
-  if (actor.role === 'buyer' && bid.buyerId === Number(actor.id)) return true;
-  if (actor.role === 'seller') {
-    const hasParticipation = (bid.participations || []).some((p: any) => p.sellerId === Number(actor.id));
+  if (actor.role === 'buyer') {
+    if (bid.buyerId === Number(actor.id)) return true;
+    if (actor.organizationId && (
+      (bid.buyerOrganizationId && Number(bid.buyerOrganizationId) === Number(actor.organizationId)) ||
+      (bid.buyer?.organizationId && Number(bid.buyer.organizationId) === Number(actor.organizationId))
+    )) return true;
+  }
+  if (actor.role === 'seller' || actor.role === 'shg') {
+    const hasParticipation = (bid.participations || []).some((p: any) => 
+      p.sellerId === Number(actor.id) || 
+      (actor.organizationId && p.seller?.organizationId === Number(actor.organizationId))
+    );
     if (hasParticipation) return true;
     if (isActorInvitedToBid(actor, bid)) return true;
   }
@@ -479,6 +495,7 @@ export const leanBidInclude = {
   },
   buyerOrganization: { select: { id: true, organizationName: true, organizationType: true, verificationStatus: true, city: true, district: true, state: true } },
   documents: true,
+  invitations: true,
   participations: {
     include: {
       seller: { select: { id: true, name: true, email: true, mobile: true, role: true, onboardingStatus: true, organizationId: true, sellerProfile: { select: { mobile: true, businessName: true } }, organization: { select: { id: true, organizationName: true, city: true, district: true, state: true, addressLine1: true, addressLine2: true, pincode: true } } } },

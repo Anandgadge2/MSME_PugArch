@@ -1117,7 +1117,8 @@ export default function App({
     if (pathname === '/buyer/onboarding' && roleOk(user.role, ['buyer'])) return <BuyerOnboarding />;
     if (pathname === '/buyer/profile' && roleOk(user.role, ['buyer'])) return <BuyerProfile />;
     if (pathname === '/buyer/create-bid' && roleOk(user.role, ['buyer'])) {
-      return <Redirect to="/buyer/procurement/create" />;
+      const sp = typeof window !== 'undefined' ? window.location.search : '';
+      return <Redirect to={`/buyer/procurement/create${sp}`} />;
     }
     if (pathname === '/buyer/procurement/create' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><CreateProcurementPage /></PermissionRouteGuard>;
     if (pathname === '/buyer/procurement/drafts' && roleOk(user.role, ['buyer'])) return <PermissionRouteGuard permission="requirement.create"><ProcurementDraftsPage /></PermissionRouteGuard>;

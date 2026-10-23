@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '../lib/api';
 import { COOKIE_SESSION_TOKEN, clearAuthCookie, clearStoredToken, getCookieValue, getStoredToken, getStoredRefreshToken, setStoredToken } from '../lib/auth';
@@ -459,8 +459,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     router.replace(targetUrl);
   }, [router]);
 
+  const authContextValue = useMemo<AuthContextType>(() => ({
+    user,
+    token,
+    loading,
+    isLoggingIn,
+    isLoggingOut,
+    setIsLoggingIn,
+    setIsLoggingOut,
+    login,
+    logout,
+    refreshUser,
+  }), [user, token, loading, isLoggingIn, isLoggingOut, login, logout, refreshUser]);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, isLoggingIn, isLoggingOut, setIsLoggingIn, setIsLoggingOut, login, logout, refreshUser }}>
+    <AuthContext.Provider value={authContextValue}>
       {children}
     </AuthContext.Provider>
   );

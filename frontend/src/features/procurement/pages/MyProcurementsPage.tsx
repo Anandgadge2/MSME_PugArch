@@ -621,23 +621,7 @@ export default function MyProcurementsPage() {
 
   const handleEditProcurement = useCallback((p: NormalizedProcurement, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    const typeLower = String(p.type || '').toLowerCase();
-    if (typeLower === 'bid_draft') {
-      router.push(`/buyer/create-bid?draft=${p.id}`);
-      return;
-    }
-    const targetId = encodeURIComponent(p.referenceNumber || p.id);
-    const methodLower = String(p.method || '').toLowerCase();
-    const consolidated = getConsolidatedType(p);
-    let route = `/bids/${targetId}?edit=1`;
-    if (consolidated === 'OpenTender' || consolidated === 'Limited Tender') {
-      route = `/bids/${targetId}?type=${consolidated === 'Limited Tender' ? 'LIMITED_TENDER' : 'OPEN_TENDER'}&edit=1`;
-    } else if (consolidated === 'RFQ' || methodLower === 'rfq') {
-      route = `/bids/${targetId}?type=RFQ&edit=1`;
-    } else if (consolidated === 'RFP' || methodLower === 'rfp') {
-      route = `/bids/${targetId}?type=RFP&edit=1`;
-    }
-    router.push(route);
+    router.push(`/buyer/procurement/create?id=${encodeURIComponent(p.id)}&edit=1`);
   }, [router]);
 
   const closeDetail = () => {

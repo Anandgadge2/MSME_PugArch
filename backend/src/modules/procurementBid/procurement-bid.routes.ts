@@ -354,7 +354,8 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       await setCache(cacheKey, serialized, 30);
       return apiResponse.success(res, serialized, 200, 'Procurement bid details fetched successfully');
     }
-  } catch {
+  } catch (err: any) {
+    if (err instanceof ApiError) throw err;
     // Fall back to Tender / Rate Contract / Requirement lookup below
   }
 

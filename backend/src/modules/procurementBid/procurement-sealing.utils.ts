@@ -41,20 +41,22 @@ export function isFinancialOrCommercialDocument(doc: any): boolean {
     return true;
   }
 
-  // Filename based heuristic classification
+  // Filename based heuristic classification (normalizing separators)
+  const normNm = nm.replace(/[-_.]+/g, ' ');
   if (
     nm.includes('price') ||
     nm.includes('breakup') ||
     nm.includes('commercial') ||
     nm.includes('financial') ||
-    nm.includes('cost schedule') ||
-    nm.includes('rate schedule') ||
-    nm.includes('price breakup') ||
-    nm.includes('boq rate') ||
     nm.includes('pricing') ||
-    nm.includes('quotation sheet') ||
-    nm.includes('cost_summary') ||
-    nm.includes('commercial_bid')
+    normNm.includes('cost schedule') ||
+    normNm.includes('rate schedule') ||
+    normNm.includes('price breakup') ||
+    normNm.includes('boq rate') ||
+    normNm.includes('quotation sheet') ||
+    normNm.includes('cost summary') ||
+    normNm.includes('commercial bid') ||
+    normNm.includes('financial bid')
   ) {
     return true;
   }

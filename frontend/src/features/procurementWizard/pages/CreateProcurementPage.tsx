@@ -1251,8 +1251,14 @@ export default function CreateProcurementPage() {
   const resolvedAddressInfo = useMemo(() => getResolvedBuyerAddressInfo(user, orgStatus), [user, orgStatus]);
   const { data: activeCart, isLoading: isCartLoading } = useActiveCart({ enabled: true });
   const searchParams = useSearchParams();
-  const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId');
+  const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId') || searchParams?.get('draft');
   const fromCart = searchParams?.get('fromCart') === '1';
+  const isEditMode = searchParams?.get('edit') === '1' || Boolean(draftIdParam);
+  const [loadedProcurementInfo, setLoadedProcurementInfo] = useState<{
+    referenceNumber?: string;
+    isPublished?: boolean;
+    version?: number;
+  } | null>(null);
 
   const userRef = React.useRef(user);
   useEffect(() => {
@@ -1507,7 +1513,7 @@ export default function CreateProcurementPage() {
     }
   }, [activeStep, maxVisitedStep, completedStepIds, draftIdParam]);
 
-  // Load draft
+  // Load draft or existing procurement
   useEffect(() => {
     if (!draftIdParam) return;
     const id = parseInt(draftIdParam, 10);
@@ -1515,10 +1521,42 @@ export default function CreateProcurementPage() {
 
     fetchProcurementDraft(id)
       .then((res) => {
-        const payload = res?.payload;
-        if (!payload) return;
+        if (!res) return;
 
-        const base = defaultDraft(payload.type || 'RFQ');
+        const resMethod = res.canonicalMethod || res.procurementMethod || res.methodSlug || 'RFQ';
+        const normalizedMethod = normalizeProcurementMethod(resMethod, 'RFQ');
+        const rawPayload = (res.payload || {}) as Record<string, any>;
+
+        // Robust reconstruction: ensure authentic top-level database fields populate draft
+        const payload: any = {
+          ...rawPayload,
+          type: rawPayload.type || normalizedMethod,
+          basics: {
+            title: res.title || rawPayload.basics?.title || '',
+            description: res.description || rawPayload.basics?.description || rawPayload.basics?.scopeDescription || '',
+            procurementCategory: res.category?.name || rawPayload.basics?.procurementCategory || 'GOODS',
+            estimatedValue: Number(res.estimatedValue || rawPayload.basics?.estimatedValue || 0),
+            deliveryLocation: res.deliveryLocation || rawPayload.basics?.deliveryLocation || '',
+            ...(rawPayload.basics || {})
+          },
+          items: Array.isArray(rawPayload.items) && rawPayload.items.length > 0
+            ? rawPayload.items
+            : (Array.isArray(res.items) && res.items.length > 0
+                ? res.items.map((it: any, idx: number) => ({
+                    id: String(it.id || idx + 1),
+                    itemCode: (it.specifications as any)?.itemCode || `ITM-${String(idx + 1).padStart(2, '0')}`,
+                    itemName: it.itemName || '',
+                    description: it.description || '',
+                    quantity: Number(it.quantity || 1),
+                    unitOfMeasure: it.unitOfMeasure || 'NOS',
+                    estimatedUnitPrice: Number(it.estimatedUnitPrice || 0),
+                    hsnCode: (it.specifications as any)?.hsnCode || '',
+                    specifications: it.specifications || {}
+                  }))
+                : undefined)
+        };
+
+        const base = defaultDraft(payload.type || normalizedMethod);
 
         const u = userRef.current as any;
         const orgName = resolvedOrgName || u?.organization?.organizationName || u?.buyerProfile?.organizationName || '';
@@ -1530,6 +1568,12 @@ export default function CreateProcurementPage() {
         const internalPayload = payload.internal || {};
 
         draftIdRef.current = res.id;
+        setLoadedProcurementInfo({
+          referenceNumber: res.requirementNumber || res.bidNumber || String(res.id),
+          isPublished: Boolean(res.isPublished),
+          version: Number(res.version || 1)
+        });
+
         setDraft({
           ...base,
           ...payload,
@@ -1568,7 +1612,7 @@ export default function CreateProcurementPage() {
             ...base.schedule,
             ...(payload.schedule || {}),
             submissionStartDate: payload.schedule?.submissionStartDate || base.schedule.submissionStartDate || '',
-            submissionDate: payload.schedule?.submissionDate || base.schedule.submissionDate || '',
+            submissionDate: payload.schedule?.submissionDate || (res.requiredBy ? new Date(res.requiredBy).toISOString().slice(0, 16) : '') || base.schedule.submissionDate || '',
             technicalOpeningDate: payload.schedule?.technicalOpeningDate || '',
             financialOpeningDate: payload.schedule?.financialOpeningDate || '',
           },
@@ -1602,16 +1646,23 @@ export default function CreateProcurementPage() {
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
-        const loadedStep = res.draftStep || 0;
-        const loadedCompletedStepIds = Array.from(new Set([
-          ...(payload.completedStepIds || payload.completedSteps || []),
-          ...ALL_STEPS.slice(0, loadedStep)
-        ]));
-        const loadedMax = Math.max(
-          loadedStep,
-          payload.maxVisitedStep || 0,
-          loadedCompletedStepIds.length > 0 ? ALL_STEPS.indexOf(loadedCompletedStepIds[loadedCompletedStepIds.length - 1]) : 0
-        );
+
+        const isEditingPublishedOrDraft = isEditMode || Boolean(res.isPublished);
+        const loadedStep = isEditingPublishedOrDraft ? 0 : (res.draftStep || 0);
+        const loadedCompletedStepIds = isEditingPublishedOrDraft
+          ? [...ALL_STEPS]
+          : Array.from(new Set([
+              ...(payload.completedStepIds || payload.completedSteps || []),
+              ...ALL_STEPS.slice(0, loadedStep)
+            ]));
+        const loadedMax = isEditingPublishedOrDraft
+          ? ALL_STEPS.length - 1
+          : Math.max(
+              loadedStep,
+              payload.maxVisitedStep || 0,
+              loadedCompletedStepIds.length > 0 ? ALL_STEPS.indexOf(loadedCompletedStepIds[loadedCompletedStepIds.length - 1]) : 0
+            );
+
         setCompletedStepIds(loadedCompletedStepIds);
         setMaxVisitedStep(loadedMax);
         setActiveStep(loadedStep);
@@ -1619,7 +1670,7 @@ export default function CreateProcurementPage() {
       .catch((err) => {
         toast.error('Failed to load draft: ' + err.message);
       });
-  }, [draftIdParam]);
+  }, [draftIdParam, isEditMode]);
 
   const updateDraft = (updater: (current: Draft) => Draft) => {
     setDraft(current => {
@@ -2394,6 +2445,10 @@ export default function CreateProcurementPage() {
         id: effectiveDraftId
       };
       const payload = buildProcurementApiPayload(currentDraftWithId, activeStep);
+      const isRevision = Boolean(isEditMode || searchParams?.get('edit') === '1' || loadedProcurementInfo?.isPublished);
+      if (isRevision) {
+        (payload as any).isGracePeriodEdit = true;
+      }
       console.log('[SubmitProcurement] Sending payload with method:', payload.methodSlug, 'id:', payload.id);
       try {
         await submitProcurementDraft(payload);
@@ -2418,7 +2473,7 @@ export default function CreateProcurementPage() {
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
         queryClient.invalidateQueries({ queryKey: ['procurement-counts'] }),
       ]);
-      toast.success('Procurement request submitted successfully');
+      toast.success(isRevision ? 'Procurement revision published successfully' : 'Procurement request submitted successfully');
       router.push(`/buyer/my-procurements`);
     } catch (err: any) {
       console.error('[SubmitProcurement] Submission failed:', err);
@@ -2464,7 +2519,40 @@ export default function CreateProcurementPage() {
       <div className="h-1.5 w-full bg-[#12335f]" />
 
       <div className="mx-auto max-w-[1560px] px-4 py-6 lg:px-6">
-        
+
+        {/* Active Edit Mode Banner */}
+        {isEditMode && (
+          <div className="mb-6 rounded-2xl border border-blue-200 bg-gradient-to-r from-blue-50/90 via-indigo-50/40 to-white p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white font-bold shrink-0 shadow-xs">
+                <Pencil className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-extrabold text-blue-950">
+                    Editing Procurement {loadedProcurementInfo?.referenceNumber ? `(${loadedProcurementInfo.referenceNumber})` : ''}
+                  </h2>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-0.5 rounded-md">
+                    7-Step Wizard Mode
+                  </span>
+                </div>
+                <p className="text-xs text-blue-700/90 mt-0.5">
+                  Navigate across all 7 steps to review and adjust your requirements, BOQ items, terms, and schedule.
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => router.push('/buyer/my-procurements')}
+              className="h-8 px-3 text-xs font-bold border-blue-300 bg-white text-blue-900 hover:bg-blue-100 active:scale-95 shrink-0 transition"
+            >
+              Cancel &amp; Return
+            </Button>
+          </div>
+        )}
+
         {/* Step Header Row */}
         <div className="mb-6 flex flex-col gap-4 rounded-[24px] bg-white/95 p-4 shadow-[0_12px_36px_rgba(15,23,42,0.07)] ring-1 ring-slate-200/70 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
@@ -2716,6 +2804,7 @@ export default function CreateProcurementPage() {
                 onContinue={goNext}
                 continueText={activeStep === ALL_STEPS.length - 2 ? 'Review & Submit' : 'Next Step'}
                 onSubmit={submitProcurement}
+                submitText={isEditMode ? 'Save & Publish Revision' : 'Submit & Publish'}
                 isSaving={savingDraft}
                 isSubmitting={submittingDraft}
                 disableSubmit={activeStep === ALL_STEPS.length - 1 && !legalComplianceAccepted}
@@ -2871,10 +2960,14 @@ function BasicsStepForm({
     const isCatAllowed = allowedCategories.some(c => c.value === draft.basics.procurementCategory);
     const isFormatAllowed = allowedFormats.some(f => f.value === draft.basics.pricingFormat);
 
-    if (!isCatAllowed || !isFormatAllowed) {
-      const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
-      const nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
-
+    if (!isCatAllowed || !isFormatAllowed) {
+      const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
+      let nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
+
+      if (nextCat === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
+        nextFormat = 'BOQ';
+      }
+
       updateDraft(c => ({
         ...c,
         basics: {
@@ -3180,31 +3273,33 @@ function BasicsStepForm({
           </div>
         )}
 
-        <Field
-          label="Procurement title"
-          required
-          error={fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required (min 3 characters).')}
-        >
-          <input
-            id="basics-title"
-            value={draft.basics.title}
-            onChange={e => {
-              const val = e.target.value;
-              updateDraft(c => ({
-                ...c,
-                basics: { ...c.basics, title: val },
-                serviceDetails: {
-                  ...c.serviceDetails,
-                  serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
-                    ? val
-                    : c.serviceDetails.serviceTitle
-                }
-              }));
-            }}
-            className={controlClass(fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required.'))}
-            placeholder="Office computers, AMC maintenance, raw supply..."
-          />
-        </Field>
+        <div className="sm:col-span-2">
+          <Field
+            label="Procurement title"
+            required
+            error={fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required (min 3 characters).')}
+          >
+            <input
+              id="basics-title"
+              value={draft.basics.title}
+              onChange={e => {
+                const val = e.target.value;
+                updateDraft(c => ({
+                  ...c,
+                  basics: { ...c.basics, title: val },
+                  serviceDetails: {
+                    ...c.serviceDetails,
+                    serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
+                      ? val
+                      : c.serviceDetails.serviceTitle
+                  }
+                }));
+              }}
+              className={controlClass(fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required.'))}
+              placeholder="Office computers, AMC maintenance, raw supply..."
+            />
+          </Field>
+        </div>
 
         <Field label="Procurement Type (Goods / Services / Works)" required>
           <select
@@ -3212,11 +3307,18 @@ function BasicsStepForm({
             value={draft.basics.procurementCategory || 'GOODS'}
             onChange={e => {
               const val = e.target.value as ProcurementCategoryValue;
+              let suggestedFormat = draft.basics.pricingFormat;
+              if (val === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
+                suggestedFormat = 'BOQ';
+              } else if (val === 'SERVICES' && allowedFormats.some(f => f.value === 'SINGLE_ITEM')) {
+                suggestedFormat = 'SINGLE_ITEM';
+              }
               updateDraft(c => ({
                 ...c,
                 basics: {
                   ...c.basics,
-                  procurementCategory: val
+                  procurementCategory: val,
+                  pricingFormat: suggestedFormat
                 }
               }));
             }}
@@ -3231,57 +3333,6 @@ function BasicsStepForm({
           </select>
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
             Primary category of what is being procured (Goods, Services, or Works).
-          </p>
-        </Field>
-
-        <Field label="Sourcing & Pricing Format" required>
-          <select
-            id="pricing-format-select"
-            value={draft.basics.pricingFormat || 'SINGLE_ITEM'}
-            onChange={e => {
-              const val = e.target.value as ProcurementPricingFormatValue;
-              const isBoqType = val === 'BOQ' || val === 'SOR';
-              const isService = (draft.basics.procurementCategory || 'GOODS') === 'SERVICES' || draft.type === 'RFP';
-
-              updateDraft(c => ({
-                ...c,
-                basics: {
-                  ...c.basics,
-                  pricingFormat: val
-                },
-                boqTable: isBoqType && c.boqTable.length === 0
-                  ? [{
-                      srNo: 1,
-                      description: isService ? (c.serviceDetails.serviceTitle || c.basics.title || 'Service Scope as per SOW') : '',
-                      category: c.basics.category || (isService ? 'Service' : 'General'),
-                      quantity: 1,
-                      uom: isService ? 'Job' : 'Nos',
-                      estimatedRate: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0,
-                      taxPercent: 18,
-                      hsnSacCode: isService ? '9983' : '',
-                      attachments: [],
-                      fileAssetId: null,
-                      fileName: '',
-                      fileSize: null,
-                      total: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) * 1.18 : 0,
-                      remarks: ''
-                    }]
-                  : !isBoqType
-                    ? []
-                    : c.boqTable
-              }));
-            }}
-            className={inputClass}
-            aria-label="Sourcing and Pricing Format"
-          >
-            {allowedFormats.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {getPricingFormatLabel(opt.value, draft.basics.procurementCategory, opt.label)}
-              </option>
-            ))}
-          </select>
-          <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Pricing structure: Lump-Sum SOW contract, Multi-line BOQ / Milestones schedule, or Schedule of Rates (SOR).
           </p>
         </Field>
 
@@ -6528,11 +6579,16 @@ function ItemsDetailsForm({
   }, [draft.type]);
 
   const pricingStructureSwitcher = (
-    <div className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-slate-50/40 to-slate-100/50 p-3 sm:p-4 shadow-3xs space-y-3">
+    <div
+      id="pricing-format-selector"
+      role="radiogroup"
+      aria-label="Commercial Pricing Structure"
+      className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-slate-50/40 to-slate-100/50 p-3 sm:p-4 shadow-3xs space-y-3"
+    >
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-slate-100 pb-2.5">
         <div>
           <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#0b2447]" />
+            <Sparkles className="h-4 w-4 text-[#0b2447]" aria-hidden="true" />
             <span className="text-xs font-black uppercase tracking-wider text-slate-900">
               Commercial Pricing Structure
             </span>
@@ -6579,7 +6635,22 @@ function ItemsDetailsForm({
             <button
               key={fmt.value}
               type="button"
+              role="radio"
+              aria-checked={isSelected}
+              tabIndex={isSelected ? 0 : -1}
               onClick={() => {
+                if (fmt.value === draft.basics.pricingFormat) return;
+
+                const hasExistingItems = draft.items.some(i => (i.name || '').trim().length > 0);
+                const hasExistingBoq = draft.boqTable.some(r => (r.description || '').trim().length > 0);
+
+                if ((fmt.value === 'SINGLE_ITEM' && hasExistingBoq) || ((fmt.value === 'BOQ' || fmt.value === 'SOR') && hasExistingItems)) {
+                  const proceed = window.confirm(
+                    `Switching commercial structure to "${title}" will switch the schedule view. Your existing entered rows will remain preserved in draft. Do you want to proceed?`
+                  );
+                  if (!proceed) return;
+                }
+
                 const isBoqType = fmt.value === 'BOQ' || fmt.value === 'SOR';
                 updateDraft(c => ({
                   ...c,
@@ -6606,7 +6677,7 @@ function ItemsDetailsForm({
                 toast.info(`Switched commercial structure to: ${title}`);
               }}
               className={cn(
-                "text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative",
+                "text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0b2447]",
                 isSelected
                   ? "border-[#0b2447] bg-[#0b2447]/5 shadow-sm ring-1 ring-[#0b2447]"
                   : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"

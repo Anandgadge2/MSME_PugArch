@@ -126,22 +126,29 @@ export function usePermissions() {
     });
     const [loading, setLoading] = useState(false);
 
+    const userId = user?.id;
+    const userRole = user?.role;
+    const userPermissionsStr = Array.isArray(user?.permissions) ? user.permissions.join(',') : '';
+
     const load = useCallback(async (force = false) => {
-        if (!user) {
-            setRemotePermissions([]);
+        if (!userId) {
+            setRemotePermissions((prev) => (prev.length === 0 ? prev : []));
             setLoading(false);
             return;
         }
 
-        if (user.role === 'master_admin' || user.role === 'admin') {
-            setRemotePermissions(['*']);
+        if (userRole === 'master_admin' || userRole === 'admin') {
+            setRemotePermissions((prev) => (prev.length === 1 && prev[0] === '*' ? prev : ['*']));
             setLoading(false);
             return;
         }
 
-        const existing = getStoredPermissions() || (Array.isArray(user.permissions) && user.permissions.length > 0 ? user.permissions : null);
+        const existing = getStoredPermissions() || (Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : null);
         if (existing && existing.length > 0 && !force) {
-            setRemotePermissions(existing);
+            setRemotePermissions((prev) => {
+                if (prev.length === existing.length && prev.every((p, i) => p === existing[i])) return prev;
+                return existing;
+            });
         } else if (!existing) {
             setLoading(true);
         }
@@ -157,7 +164,7 @@ export function usePermissions() {
                         }
                         return perms;
                     } catch {
-                        const fallback = Array.isArray(user.permissions) && user.permissions.length > 0
+                        const fallback = Array.isArray(user?.permissions) && user.permissions.length > 0
                             ? user.permissions
                             : (existing || []);
                         return fallback;
@@ -168,19 +175,26 @@ export function usePermissions() {
             }
             const perms = await permissionsFetchPromise;
             if (perms.length > 0) {
-                setRemotePermissions(perms);
+                setRemotePermissions((prev) => {
+                    if (prev.length === perms.length && prev.every((p, i) => p === perms[i])) return prev;
+                    return perms;
+                });
             }
         } finally {
             setLoading(false);
         }
-    }, [user]);
+    }, [userId, userRole, userPermissionsStr, user?.permissions]);
 
     useEffect(() => {
         void load();
     }, [load]);
 
+    const reloadPermissions = useCallback(() => {
+        void load(true);
+    }, [load]);
+
     const permissions = useMemo(() => {
-        const isMasterOrAdmin = user?.role === 'master_admin' || user?.role === 'admin';
+        const isMasterOrAdmin = userRole === 'master_admin' || userRole === 'admin';
         if (isMasterOrAdmin) return ['*'];
 
         const cached = Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : [];
@@ -193,16 +207,16 @@ export function usePermissions() {
 
         // For standard primary users (non-subusers), provide immediate default role permissions
         if (!user?.isSubUser) {
-            if (user?.role === 'buyer') {
+            if (userRole === 'buyer') {
                 return DEFAULT_BUYER_PERMISSIONS;
             }
-            if (user?.role === 'seller' || user?.role === 'shg') {
+            if (userRole === 'seller' || userRole === 'shg') {
                 return DEFAULT_SELLER_PERMISSIONS;
             }
         }
 
         return ['dashboard.view'];
-    }, [remotePermissions, user?.isSubUser, user?.permissions, user?.role]);
+    }, [remotePermissions, user?.isSubUser, user?.permissions, userRole]);
 
     const hasPermission = useCallback((permissionCode: string) => {
         if (!permissionCode) return false;
@@ -215,7 +229,7 @@ export function usePermissions() {
         return false;
     }, [permissions]);
 
-    return { permissions, hasPermission, loading, reload: () => load(true) };
+    return { permissions, hasPermission, loading, reload: reloadPermissions };
 }
 
 export function usePermission(permissionCode: string) {
@@ -230,8 +244,16 @@ export function useOrgRole(): UseOrgRoleReturn {
     const isInitialLoad = useRef(true);
     const permissionState = usePermissions();
 
+    const userId = user?.id;
+    const userOrgId = user?.organizationId;
+    const memberFetchAttemptedRef = useRef(false);
+
+    useEffect(() => {
+        memberFetchAttemptedRef.current = false;
+    }, [userId, userOrgId]);
+
     const load = useCallback(async (skipCache = false) => {
-        if (!token || !user) return;
+        if (!token || !userId) return;
 
         if (isInitialLoad.current) {
             setOrgLoading(true);
@@ -242,14 +264,17 @@ export function useOrgRole(): UseOrgRoleReturn {
                 ? `/api/org/status?_ts=${Date.now()}`
                 : '/api/org/status';
             const data = await getApi<OrgStatus>(endpoint, skipCache);
-            setOrgStatus(data);
+            setOrgStatus((prev) => {
+                if (prev && JSON.stringify(prev) === JSON.stringify(data)) return prev;
+                return data;
+            });
             isInitialLoad.current = false;
         } catch {
-            setOrgStatus(null);
+            setOrgStatus((prev) => (prev === null ? prev : null));
         } finally {
             setOrgLoading(false);
         }
-    }, [token, user]);
+    }, [token, userId]);
 
     useEffect(() => {
         void load();
@@ -257,7 +282,8 @@ export function useOrgRole(): UseOrgRoleReturn {
 
     // Fallback if backend /api/org/status didn't provide memberCount yet
     useEffect(() => {
-        if (!orgStatus || orgStatus.memberCount !== undefined || !token || !user) return;
+        if (!orgStatus || orgStatus.memberCount !== undefined || !token || !userId || memberFetchAttemptedRef.current) return;
+        memberFetchAttemptedRef.current = true;
         getApi<any[]>('/api/org/members').then((members) => {
             if (Array.isArray(members)) {
                 const count = members.filter(m => m.isActive).length;
@@ -274,7 +300,7 @@ export function useOrgRole(): UseOrgRoleReturn {
         }).catch(() => {
             setOrgStatus(prev => prev ? { ...prev, memberCount: 1, hasFinanceOfficer: false } : prev);
         });
-    }, [orgStatus, token, user]);
+    }, [orgStatus?.memberCount, token, userId]);
 
     const hasPermission = permissionState.hasPermission;
     const orgRole = orgStatus?.membership?.orgRole ?? null;
