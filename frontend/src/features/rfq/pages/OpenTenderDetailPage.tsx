@@ -139,8 +139,26 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
       router.push(`/login?redirect=${encodeURIComponent(pathname)}`);
       return;
     }
-    const resolvedId = bid.id || activeOpenId || requestId;
-    router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
+    const resolvedId =
+      bid.bidNumber ||
+      bid.referenceNumber ||
+      reqObj.bidNumber ||
+      reqObj.requirementNumber ||
+      activeOpenId ||
+      requestId ||
+      bid.id;
+    const cleanId = String(resolvedId).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
+    const targetUrl = `/bids/${encodeURIComponent(cleanId)}/participate?type=OPEN_TENDER`;
+    try {
+      router.push(targetUrl);
+    } catch {
+      window.location.assign(targetUrl);
+    }
+    setTimeout(() => {
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/participate')) {
+        window.location.assign(targetUrl);
+      }
+    }, 150);
   };
 
   const viewProps = adaptProcurementUnifiedProps(mergedBid, reqObj, {

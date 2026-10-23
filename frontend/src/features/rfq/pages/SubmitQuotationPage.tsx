@@ -1025,7 +1025,13 @@ export default function SubmitQuotationPage() {
       }
 
       // 2, 3, 4: Targeted Resolution for RFQ / Procurement Bid / Quote Request
-      const isTenderOrBidToken = typeof requirementId === 'string' && /^(TND|TENDER|RFQ|RFP|LTND|RC|RATE|JSG|REQ)-/i.test(requirementId.trim());
+      const queryType = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
+      const isExplicitTenderOrBidType = ['OPEN_TENDER', 'LIMITED_TENDER', 'RFP', 'RATE_CONTRACT', 'RFQ'].includes(queryType);
+      const isBidsRoute = typeof window !== 'undefined' && window.location.pathname.includes('/bids/');
+      const isTenderOrBidToken =
+        (typeof requirementId === 'string' && /^(TND|TENDER|RFQ|RFP|LTND|RC|RATE|JSG|REQ)-/i.test(requirementId.trim())) ||
+        isBidsRoute ||
+        isExplicitTenderOrBidType;
 
       let marketplaceResult: { requirement: any; ownResponse: any } | null = null;
       let bidResult: { requirement: any; ownResponse: any } | null = null;
@@ -1212,9 +1218,15 @@ export default function SubmitQuotationPage() {
       }
 
       if (marketplaceResult || bidResult || quoteRequestResult) {
+        const preferBid = isBidsRoute || isExplicitTenderOrBidType || Boolean(bidResult?.requirement?.items?.length) || !marketplaceResult?.requirement;
+        const chosenReq = preferBid
+          ? (bidResult?.requirement || marketplaceResult?.requirement || quoteRequestResult?.requirement)
+          : (marketplaceResult?.requirement || bidResult?.requirement || quoteRequestResult?.requirement);
         return {
-          requirement: marketplaceResult?.requirement || bidResult?.requirement || quoteRequestResult?.requirement,
-          ownResponse: chooseOwnResponse(marketplaceResult?.ownResponse, chooseOwnResponse(bidResult?.ownResponse, quoteRequestResult?.ownResponse)),
+          requirement: chosenReq,
+          ownResponse: preferBid
+            ? chooseOwnResponse(bidResult?.ownResponse, chooseOwnResponse(marketplaceResult?.ownResponse, quoteRequestResult?.ownResponse))
+            : chooseOwnResponse(marketplaceResult?.ownResponse, chooseOwnResponse(bidResult?.ownResponse, quoteRequestResult?.ownResponse)),
         };
       }
       return null;
@@ -1269,7 +1281,10 @@ export default function SubmitQuotationPage() {
     return true;
   }, [rfqData]);
 
+  const queryTypeParam = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
+  const idTokenUpper = String(extractedPathId || requirementIdParam || '').toUpperCase();
   const rawMethodStr = String(
+    queryTypeParam ||
     rfqData?.procurementType ||
     rfqData?.procurementMethod ||
     rfqData?.bidType ||
@@ -1282,6 +1297,10 @@ export default function SubmitQuotationPage() {
     queryData?.requirement?.procurementMethod ||
     queryData?.requirement?.bidType ||
     queryData?.requirement?.type ||
+    (idTokenUpper.startsWith('LTND-') ? 'LIMITED_TENDER' : '') ||
+    (idTokenUpper.startsWith('TND-') || idTokenUpper.startsWith('TENDER-') ? 'OPEN_TENDER' : '') ||
+    (idTokenUpper.startsWith('RFP-') ? 'RFP' : '') ||
+    (idTokenUpper.startsWith('RC-') || idTokenUpper.startsWith('RATE-') ? 'RATE_CONTRACT' : '') ||
     ''
   ).toUpperCase();
 
@@ -1297,7 +1316,7 @@ export default function SubmitQuotationPage() {
     rawMethodStr.includes('RFP') ||
     rawMethodStr.includes('PROPOSAL') ||
     rfqData?.title?.toLowerCase().includes('rfp') ||
-    (typeof window !== 'undefined' && (window.location.pathname.includes('rfp') || window.location.pathname.includes('participate')) && !rawMethodStr)
+    (typeof window !== 'undefined' && window.location.pathname.includes('rfp') && !rawMethodStr)
   );
 
   const isOpenTender = !isLimitedTender && !isRateContract && !isRfp && (

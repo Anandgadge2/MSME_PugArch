@@ -795,8 +795,8 @@ export default function App({
     if (pathname === '/bids') return <Redirect to="/marketplace" />;
     if (pathname === '/tenders') return <TenderDetailPage />;
     
-    if (/^\/bids\/[^/]+\/participate$/.test(pathname)) {
-      if (user && !['seller', 'shg'].includes(user.role)) {
+    if (/^\/bids\/[^/]+\/participate\/?$/i.test(pathname)) {
+      if (user && !['seller', 'shg'].includes(String(user.role).toLowerCase())) {
         const bidId = pathname.split('/')[2];
         return <Redirect to={`/bids/${bidId}`} />;
       }
@@ -1067,7 +1067,19 @@ export default function App({
         return <Redirect to={`/bids/${encodeURIComponent(rawId)}/participate`} />;
       }
     }
-    if ((pathname === '/seller/rfq/submit-quotation' || pathname === '/seller/rfp/submit-quotation' || pathname === '/seller/rfp/respond' || pathname.startsWith('/shg/rfq/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
+    if ((
+      pathname === '/seller/rfq/submit-quotation' ||
+      pathname === '/seller/rfp/submit-quotation' ||
+      pathname === '/seller/rfp/respond' ||
+      pathname === '/seller/open-tender/submit-quotation' ||
+      pathname === '/seller/open-tender/respond' ||
+      pathname === '/seller/limited-tender/submit-quotation' ||
+      pathname === '/seller/limited-tender/respond' ||
+      pathname.startsWith('/shg/rfq/submit-quotation') ||
+      pathname.startsWith('/shg/rfp/submit-quotation') ||
+      pathname.startsWith('/shg/open-tender/submit-quotation') ||
+      pathname.startsWith('/shg/limited-tender/submit-quotation')
+    ) && roleOk(user.role, ['seller', 'shg'])) return <PermissionRouteGuard permission="bid.submit"><SubmitQuotationPage /></PermissionRouteGuard>;
     if ((pathname === '/seller/rate-contract/submit-quotation' || pathname === '/seller/rate-contracts/submit-quotation' || pathname.startsWith('/shg/rate-contract/submit-quotation')) && roleOk(user.role, ['seller', 'shg'])) {
       const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
       const reqId = sp.get('requestId') || sp.get('requirementId') || sp.get('id') || sp.get('bidId');

@@ -7198,12 +7198,29 @@ export function ProcurementDetailUnifiedView(
     if (props.onSubmitClick) {
       props.onSubmitClick();
     } else {
-      const resolvedTarget = targetId || props.displayId || (props.rawBid as any)?.bidNumber || (props.rawBid as any)?.id;
+      const resolvedTarget =
+        (props.rawBid as any)?.bidNumber ||
+        (props.rawBid as any)?.referenceNumber ||
+        props.displayId ||
+        targetId ||
+        (props.rawBid as any)?.id;
       if (resolvedTarget) {
+        const cleanId = String(resolvedTarget).split(/[\u2022•|]/)[0].trim().replace(/\s+-\s+.*$/, '');
         if (isBuyerOrAdmin) {
-          router.push(`/bids/${encodeURIComponent(String(resolvedTarget))}/results`);
+          router.push(`/bids/${encodeURIComponent(cleanId)}/results`);
         } else {
-          router.push(`/bids/${encodeURIComponent(String(resolvedTarget))}/participate`);
+          const typeParam = props.procurementType ? `?type=${encodeURIComponent(String(props.procurementType))}` : '';
+          const targetUrl = `/bids/${encodeURIComponent(cleanId)}/participate${typeParam}`;
+          try {
+            router.push(targetUrl);
+          } catch {
+            window.location.assign(targetUrl);
+          }
+          setTimeout(() => {
+            if (typeof window !== 'undefined' && !window.location.pathname.includes('/participate')) {
+              window.location.assign(targetUrl);
+            }
+          }, 150);
         }
       }
     }
