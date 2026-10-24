@@ -3385,7 +3385,7 @@ function BasicsStepForm({
               onWheel={e => (e.target as HTMLElement).blur()}
               className={cn(
                 controlClass(fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.')),
-                "pl-8 font-semibold tracking-wide"
+                "pl-9 sm:pl-9 font-semibold tracking-wide"
               )}
               placeholder="0"
             />
@@ -5181,7 +5181,7 @@ function ItemDrawerOrModal({
                           }
                         }
                       }}
-                      className={cn(inputClass, "pl-8 sm:pl-8 font-bold")}
+                      className={cn(inputClass, "pl-9 sm:pl-9 font-bold")}
                       placeholder={isService ? "e.g. 500000 (leave 0 for open bid)" : "0"}
                     />
                   </div>
@@ -10340,7 +10340,7 @@ function CommercialTermsForm({
                     min={0}
                     value={draft.terms.securityDeposit || ''}
                     onChange={e => updateTerms('securityDeposit', Number(e.target.value || 0))}
-                    className={cn(inputClass, 'pl-7')}
+                    className={cn(inputClass, 'pl-9 sm:pl-9')}
                     placeholder="0"
                   />
                 </div>
