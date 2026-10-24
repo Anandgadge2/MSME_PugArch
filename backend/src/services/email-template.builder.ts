@@ -105,7 +105,7 @@ export const formatIstDateTime = (date: Date | string | number = new Date()): st
 };
 
 /**
- * Build a state-of-the-art Government Grade & Enterprise Procurement Email (GeM / SAP Ariba style)
+ * Build a state-of-the-art Government Grade & Enterprise Procurement Email
  */
 export const buildGovernmentGradeEmailHtml = (options: GovernmentGradeEmailOptions): string => {
   const portalName = options.portalName || 'JSG SMILE Procurement Portal';

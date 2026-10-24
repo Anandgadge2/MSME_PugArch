@@ -1832,7 +1832,7 @@ export default function PurchaseOrders() {
               className="h-10 rounded-lg text-xs font-black uppercase bg-[#12335f] hover:bg-[#0e2a4f] text-white shadow-sm flex items-center gap-1.5 cursor-pointer"
             >
               <Upload className="h-4 w-4" />
-              <span>Import External PO (SAP / GeM)</span>
+              <span>Import External PO / ERP</span>
             </Button>
           )}
           <Button variant="outline" onClick={refreshPurchaseOrders} className="h-10 rounded-lg text-xs font-black uppercase bg-white hover:bg-slate-50 border-slate-200 shadow-sm">

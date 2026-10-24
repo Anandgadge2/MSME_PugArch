@@ -207,7 +207,7 @@ export function UploadExternalInvoiceModal({
           invoiceDate: new Date(invoiceDate).toISOString(),
           invoiceFileId: uploadedFileId
         });
-        toast.success('SAP Ariba / External Invoice uploaded successfully!');
+        toast.success('External Invoice uploaded successfully!');
       }
       onSuccess();
       onClose();
@@ -239,7 +239,7 @@ export function UploadExternalInvoiceModal({
                 <h2 id={modalTitleId} className="text-base sm:text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
                   {editInvoice ? 'Edit & Resubmit Invoice' : 'Upload External Invoice'}
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                    SAP Ariba / ERP
+                    Enterprise ERP
                   </span>
                 </h2>
                 <p className="text-xs font-medium text-slate-500">
@@ -318,7 +318,7 @@ export function UploadExternalInvoiceModal({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="text-xs font-bold text-slate-700 block mb-1">
-                    SAP Ariba / ERP PO Number
+                    External ERP / PO Number
                   </label>
                   <div className="relative">
                     <Hash className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />

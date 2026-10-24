@@ -1737,9 +1737,7 @@ export default function CreateProcurementPage() {
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (isServiceContract) {
-      const serviceTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
       const hasSowDoc = Boolean(d.serviceDetails.sowFileAssetId || d.serviceDetails.sowFileName);
-      list.push({ label: 'Service Contract Title is required', ok: serviceTitle.length > 0, severity: 'error', stepIdx: 3 });
       list.push({
         label: hasSowDoc ? 'Service Scope of Work (SOW Document Attached)' : 'Service Contract SOW is required (min 10 chars or upload SOW document)',
         ok: hasSowDoc || d.serviceDetails.scopeOfWork.trim().length >= 10,
@@ -2157,11 +2155,6 @@ export default function CreateProcurementPage() {
         }
       } else if (isServiceContract) {
         const effectiveTitle = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
-        if (!effectiveTitle) {
-          toast.error('Service Contract Title is required.');
-          scrollToErrorField('items-error-banner');
-          return false;
-        }
         if (!d.serviceDetails.serviceTitle?.trim()) {
           d.serviceDetails.serviceTitle = effectiveTitle;
         }
@@ -6637,26 +6630,28 @@ function ItemsDetailsForm({
       id="pricing-format-selector"
       role="radiogroup"
       aria-label="Commercial Pricing Structure"
-      className="rounded-2xl border border-slate-200/90 bg-gradient-to-br from-white via-slate-50/40 to-slate-100/50 p-3 sm:p-4 shadow-3xs space-y-3"
+      className="rounded-2xl border border-slate-200/90 bg-white p-4 sm:p-5 shadow-3xs space-y-3.5"
     >
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 border-b border-slate-100 pb-2.5">
-        <div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-[#0b2447]" aria-hidden="true" />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex h-6 w-6 items-center justify-center rounded-lg bg-[#0b2447]/10 text-[#0b2447]">
+              <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+            </div>
             <span className="text-xs font-black uppercase tracking-wider text-slate-900">
               Commercial Pricing Structure
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200/80 text-slate-800">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
               {draft.type} Commercial Model
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+          <p className="text-[11px] text-slate-500 font-medium">
             Select how participating bidders submit commercial quotes. Switch anytime between Lump-Sum SOW and Itemized Schedules.
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
         {allowedFormats.map(fmt => {
           const isSelected = (draft.basics.pricingFormat || 'SINGLE_ITEM') === fmt.value;
           const isLump = fmt.value === 'SINGLE_ITEM';
@@ -6666,23 +6661,27 @@ function ItemsDetailsForm({
           let title = getPricingFormatLabel(fmt.value, draft.basics.procurementCategory, fmt.label);
           let desc = '';
           let badge = '';
+          let IconComponent = FileText;
 
           if (isLump) {
-            title = isService ? 'Lump-Sum Total Contract (SOW Scope)' : 'Single Item / Direct Quote';
+            title = isService ? 'Lump-Sum Total Contract' : 'Single Item / Direct Quote';
             desc = isService 
               ? 'Bidders quote a single total contract fee + GST covering the attached SOW. No itemized breakdown required.'
               : 'Bidders quote a single unit price for the specified catalog item.';
-            badge = isService ? 'GeM / Ariba Standard' : 'Direct Quote';
+            badge = isService ? 'SOW Scope' : 'Direct Quote';
+            IconComponent = isService ? FileCheck : IndianRupee;
           } else if (isBoq) {
             title = isService ? 'Milestones & Deliverables Schedule' : (isWorks ? 'Works Schedule / BOQ' : 'Multi-line BOQ Schedule');
             desc = isService
               ? 'Itemized schedule of project phases, milestone stages, or deliverable modules.'
               : 'Spreadsheet schedule of materials, quantities, and itemized unit rates.';
             badge = isService ? 'Milestone Quoting' : 'Itemized BOQ';
+            IconComponent = FileSpreadsheet;
           } else if (isSor) {
             title = 'Schedule of Rates (SOR Rate Card)';
             desc = 'Establishes legally binding price ceiling unit rates for call-off releases.';
             badge = 'Rate Agreement';
+            IconComponent = Scale;
           }
 
           return (
@@ -6694,16 +6693,6 @@ function ItemsDetailsForm({
               tabIndex={isSelected ? 0 : -1}
               onClick={() => {
                 if (fmt.value === draft.basics.pricingFormat) return;
-
-                const hasExistingItems = draft.items.some(i => (i.name || '').trim().length > 0);
-                const hasExistingBoq = draft.boqTable.some(r => (r.description || '').trim().length > 0);
-
-                if ((fmt.value === 'SINGLE_ITEM' && hasExistingBoq) || ((fmt.value === 'BOQ' || fmt.value === 'SOR') && hasExistingItems)) {
-                  const proceed = window.confirm(
-                    `Switching commercial structure to "${title}" will switch the schedule view. Your existing entered rows will remain preserved in draft. Do you want to proceed?`
-                  );
-                  if (!proceed) return;
-                }
 
                 const isBoqType = fmt.value === 'BOQ' || fmt.value === 'SOR';
                 updateDraft(c => ({
@@ -6731,35 +6720,74 @@ function ItemsDetailsForm({
                 toast.info(`Switched commercial structure to: ${title}`);
               }}
               className={cn(
-                "text-left p-3 rounded-xl border transition-all cursor-pointer flex flex-col justify-between relative focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0b2447]",
+                "group relative text-left p-3.5 sm:p-4 rounded-xl border transition-all cursor-pointer flex flex-col justify-between focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0b2447]",
                 isSelected
-                  ? "border-[#0b2447] bg-[#0b2447]/5 shadow-sm ring-1 ring-[#0b2447]"
-                  : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/70"
+                  ? "border-[#0b2447] bg-[#0b2447]/[0.03] shadow-xs ring-1.5 ring-[#0b2447]"
+                  : "border-slate-200/90 bg-white hover:border-slate-300 hover:bg-slate-50/70"
               )}
             >
-              <div className="space-y-1">
-                <div className="flex items-center justify-between gap-1">
-                  <span className={cn("text-xs font-black", isSelected ? "text-[#0b2447]" : "text-slate-800")}>
-                    {title}
-                  </span>
-                  <span className={cn(
-                    "text-[9.5px] font-extrabold px-1.5 py-0.5 rounded",
-                    isSelected ? "bg-[#0b2447] text-white" : "bg-slate-100 text-slate-600"
+              <div className="space-y-2.5">
+                {/* Header row: Icon, Title & Badge, and Circular Radio Indicator */}
+                <div className="flex items-start justify-between gap-2.5">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={cn(
+                      "flex h-9 w-9 items-center justify-center rounded-xl transition-all shrink-0",
+                      isSelected
+                        ? "bg-[#0b2447] text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-600 group-hover:bg-slate-200/80 group-hover:text-slate-800"
+                    )}>
+                      <IconComponent className="h-4.5 w-4.5" aria-hidden="true" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className={cn(
+                          "text-xs font-black tracking-tight leading-tight",
+                          isSelected ? "text-[#0b2447]" : "text-slate-900"
+                        )}>
+                          {title}
+                        </span>
+                        <span className={cn(
+                          "text-[9.5px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap",
+                          isSelected
+                            ? "bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20"
+                            : "bg-slate-100 text-slate-600 border border-slate-200/80"
+                        )}>
+                          {badge}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Radio Indicator */}
+                  <div className={cn(
+                    "flex h-5 w-5 items-center justify-center rounded-full border transition-all shrink-0 mt-0.5",
+                    isSelected
+                      ? "border-[#0b2447] bg-[#0b2447] text-white shadow-2xs"
+                      : "border-slate-300 bg-white group-hover:border-slate-400"
                   )}>
-                    {badge}
-                  </span>
+                    {isSelected && <Check className="h-3 w-3 stroke-[3]" aria-hidden="true" />}
+                  </div>
                 </div>
-                <p className="text-[10.5px] text-slate-500 font-medium leading-snug">
+
+                <p className="text-[11px] text-slate-500 font-medium leading-relaxed pl-11">
                   {desc}
                 </p>
               </div>
-              <div className="pt-2 flex items-center gap-1.5 mt-auto">
+
+              {/* Bottom selection state */}
+              <div className="pt-3 mt-1.5 flex items-center justify-between border-t border-slate-100 pl-11">
                 <span className={cn(
-                  "h-2 w-2 rounded-full",
-                  isSelected ? "bg-emerald-500 ring-2 ring-emerald-200" : "bg-slate-300"
-                )} />
-                <span className={cn("text-[10px] font-bold", isSelected ? "text-emerald-700" : "text-slate-400")}>
-                  {isSelected ? "Active Commercial Model" : "Click to select"}
+                  "text-[10px] font-bold flex items-center gap-1.5",
+                  isSelected ? "text-emerald-700" : "text-slate-400 group-hover:text-slate-600"
+                )}>
+                  {isSelected ? (
+                    <>
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200 animate-pulse" />
+                      Active Commercial Model
+                    </>
+                  ) : (
+                    "Click to select"
+                  )}
                 </span>
               </div>
             </button>
@@ -6794,20 +6822,20 @@ function ItemsDetailsForm({
         )}
 
         {/* Scope of Work (SOW) Dossier Section for RFP, Works, or BOQ */}
-        <div className="rounded-xl border border-purple-200 bg-white/90 p-3 sm:p-4 space-y-2.5 shadow-3xs">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="rounded-xl border border-slate-200/90 bg-slate-50/50 p-3 sm:p-3.5 space-y-2.5 shadow-3xs">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2.5">
             <div className="space-y-0.5 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <FileText className="h-4 w-4 text-purple-700 shrink-0" aria-hidden="true" />
+                <FileText className="h-4 w-4 text-[#0b2447] shrink-0" aria-hidden="true" />
                 <span className="text-xs font-black text-slate-800 uppercase tracking-wide">
-                  Scope of Work (SOW) / Project Dossier Document
+                  Scope of Work (SOW) / Technical Specifications
                 </span>
-                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-100 text-purple-800">
+                <span className="text-[9.5px] font-bold px-1.5 py-0.5 rounded bg-purple-50 text-purple-700 border border-purple-200/60">
                   {draft.type === 'RFP' ? 'Mandatory for RFP' : 'Project Dossier'}
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">
-                Upload terms of reference, specifications dossier, or technical drawings (PDF, Word, Excel) to accompany this BOQ schedule.
+                Upload terms of reference, specifications dossier, or technical drawings (PDF, Word, Excel) to accompany this schedule.
               </p>
             </div>
 
@@ -6824,18 +6852,18 @@ function ItemsDetailsForm({
               <label
                 htmlFor="boq-sow-document-upload"
                 className={cn(
-                  "cursor-pointer inline-flex items-center justify-center h-8.5 px-3.5 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-xs font-bold text-purple-900 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-purple-400",
+                  "cursor-pointer inline-flex items-center justify-center h-8 px-3 rounded-lg border border-purple-300 bg-white hover:bg-purple-50 text-xs font-bold text-purple-900 transition-all shadow-3xs shrink-0 whitespace-nowrap focus-within:ring-2 focus-within:ring-purple-400",
                   uploadingSow && "opacity-50 pointer-events-none"
                 )}
               >
                 {uploadingSow ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1.5 text-purple-600" aria-hidden="true" />
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5 text-purple-600" aria-hidden="true" />
                     <span>Uploading SOW...</span>
                   </>
                 ) : (
                   <>
-                    <Upload className="h-4 w-4 mr-1.5 text-purple-600" aria-hidden="true" />
+                    <Upload className="h-3.5 w-3.5 mr-1.5 text-purple-600" aria-hidden="true" />
                     <span>{draft.serviceDetails.sowFileName ? 'Replace SOW File' : 'Upload SOW Document'}</span>
                   </>
                 )}
@@ -6870,16 +6898,13 @@ function ItemsDetailsForm({
             </div>
           )}
 
-          <div className="pt-1">
-            <label className="text-[11px] font-bold text-slate-700 block mb-1">
-              Scope of Work Summary / Technical Specifications (Optional if SOW document attached)
-            </label>
+          <div>
             <textarea
               value={draft.serviceDetails.scopeOfWork}
               onChange={e => updateService('scopeOfWork', e.target.value)}
               rows={2}
-              className={textareaClass}
-              placeholder="Enter summary of work scope, project objectives, and technical expectations..."
+              className="min-h-[52px] h-[52px] w-full rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-800 placeholder-slate-400 outline-none transition focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15"
+              placeholder="Scope summary / technical expectations (optional if SOW document is attached above)..."
             />
           </div>
         </div>
@@ -7088,7 +7113,7 @@ function ItemsDetailsForm({
             <p className="text-[11px] text-slate-600 font-medium">
               {isRateContract
                 ? 'Define service scope, deliverables, operational SLA response targets, and technical boundaries for call-off releases'
-                : 'Define overall SLA, deliverables scope, duration, and penalty terms'}
+                : 'Define overall SLA, deliverables scope, duration, and technical boundaries'}
             </p>
           </div>
         </div>
@@ -7155,7 +7180,7 @@ function ItemsDetailsForm({
         </div>
       )}
 
-      {/* SOW Document Upload Bar (SAP Ariba / GeM fast-track pattern) */}
+      {/* SOW Document Upload Bar */}
       <div className="rounded-xl border border-slate-200 bg-white p-3 sm:p-4 space-y-2.5 shadow-3xs">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="space-y-0.5 min-w-0">
@@ -7233,18 +7258,6 @@ function ItemsDetailsForm({
       </div>
 
       <div className="grid gap-3 sm:gap-4 sm:grid-cols-2">
-        <Field label="Service Contract Title" required className="sm:col-span-2">
-          <div className="space-y-1">
-            <input
-              value={draft.serviceDetails.serviceTitle || draft.basics.title || ''}
-              onChange={e => updateService('serviceTitle', e.target.value)}
-              className={inputClass}
-              placeholder="e.g. Master Service Agreement for Facility Management, Annual Maintenance Contract..."
-            />
-            <p className="text-[10px] text-slate-400 font-medium">Defaults to procurement title. Customize if needed.</p>
-          </div>
-        </Field>
-
         <Field
           label={hasSowDoc ? "Scope of Work (SOW) Executive Summary" : "Scope of Work (SOW)"}
           required={!hasSowDoc}
@@ -7406,75 +7419,22 @@ function ItemsDetailsForm({
           </div>
         </Field>
 
-        {isRateContract ? (
-          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 space-y-2 shadow-3xs flex flex-col justify-between">
-            <div className="flex items-center gap-2">
-              <Scale className="h-4 w-4 text-[#0b2447] shrink-0" aria-hidden="true" />
-              <span className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                Liquidated Damages &amp; Penalties
+        <div className="rounded-xl border border-slate-200/90 bg-slate-50/70 p-3 sm:p-3.5 flex items-center justify-between gap-3 sm:col-span-1 shadow-3xs">
+          <div className="flex items-center gap-2 min-w-0">
+            <Scale className="h-4 w-4 text-[#0b2447] shrink-0" aria-hidden="true" />
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-800 block truncate">
+                Liquidated Damages &amp; SLA Penalties
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0b2447]/10 text-[#0b2447] border border-[#0b2447]/20">
-                Governed in Step 7
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-600 font-medium leading-relaxed">
-              Standard liquidated damages and SLA penalty terms for periodic release call-off orders are configured under <strong>Step 7 (Commercial Terms)</strong>.
-            </p>
-            {draft.terms.penaltyClause ? (
-              <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-900 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
-                <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
-                <span className="truncate max-w-[280px]">Configured: <strong>{draft.terms.penaltyClause}</strong></span>
-              </div>
-            ) : (
-              <p className="text-[10.5px] text-slate-500 font-semibold italic">
-                Centralized penalty clause active.
+              <p className="text-[10.5px] text-slate-500 font-medium truncate">
+                Centralized under Step 7 (Commercial Terms)
               </p>
-            )}
-          </div>
-        ) : (
-          <Field label="Late Delivery / Downtime Penalty Terms">
-            <div className="space-y-1.5">
-              <input
-                value={draft.serviceDetails.penaltyClause}
-                onChange={e => {
-                  const val = e.target.value;
-                  updateService('penaltyClause', val);
-                  updateDraft(c => ({
-                    ...c,
-                    serviceDetails: { ...c.serviceDetails, penaltyClause: val },
-                    terms: { ...c.terms, penaltyClause: c.terms.penaltyClause || val },
-                  }));
-                }}
-                className={inputClass}
-                placeholder="e.g. 0.5% per week of delay up to max 10%"
-              />
-              <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
-                {[
-                  '0.5% per week delay (max 10%)',
-                  '1% per day SLA downtime penalty',
-                  'Standard LD per GCC / PO'
-                ].map(preset => (
-                  <button
-                    key={preset}
-                    type="button"
-                    onClick={() => {
-                      updateService('penaltyClause', preset);
-                      updateDraft(c => ({
-                        ...c,
-                        serviceDetails: { ...c.serviceDetails, penaltyClause: preset },
-                        terms: { ...c.terms, penaltyClause: c.terms.penaltyClause || preset },
-                      }));
-                    }}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-                  >
-                    {preset}
-                  </button>
-                ))}
-              </div>
             </div>
-          </Field>
-        )}
+          </div>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700 shrink-0">
+            Step 7
+          </span>
+        </div>
       </div>
     </div>
   ) : null;
@@ -9598,11 +9558,11 @@ function ScheduleStepForm({
                       </div>
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-800 border border-emerald-300">
                         <Lock className="h-2.5 w-2.5 text-emerald-700" />
-                        GeM / CVC Standard
+                        CVC Standard Guidelines
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-500 font-medium mt-1.5 leading-relaxed">
-                      Statutory rule: The reverse auction opening ceiling automatically locks to the lowest qualified sealed bid (L1) discovered at financial opening. Manual override is omitted per GeM &amp; CVC public procurement mandates.
+                      Statutory rule: The reverse auction opening ceiling automatically locks to the lowest qualified sealed bid (L1) discovered at financial opening. Manual override is omitted per Central Vigilance Commission (CVC) public procurement mandates.
                     </p>
                   </Field>
 
@@ -10076,7 +10036,7 @@ function CommercialTermsForm({
                     </Field>
                   </div>
                   <p className="text-[10.5px] text-indigo-900/80 font-medium leading-relaxed">
-                    Under GFR Rule 225 &amp; SAP Ariba standard terms, rate variations are calculated against baseline index values published by authorized statistical bodies (e.g., Office of Economic Adviser / RBI), strictly capped by the variation ceiling.
+                    Under GFR Rule 225 &amp; standard procurement terms, rate variations are calculated against baseline index values published by authorized statistical bodies (e.g., Office of Economic Adviser / RBI), strictly capped by the variation ceiling.
                   </p>
                 </div>
               )}

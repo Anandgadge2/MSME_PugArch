@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * ProcurementCheckoutPage — GeM-style marketplace/cart procurement checkout.
+ * ProcurementCheckoutPage — Marketplace cart procurement checkout.
  * Canonical checkout for active marketplace cart procurement only.
  */
 import { useRouter } from 'next/navigation';

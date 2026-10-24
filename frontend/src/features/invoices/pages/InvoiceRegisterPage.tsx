@@ -681,7 +681,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
             <EntityIdLink label={invoice.invoiceNumber || `INV-${invoice.id}`} id={invoice.id} size="sm" onClick={() => { setSelectedInvoice(invoice); setInvoiceModalMode('view'); }} />
             {invoice.isExternalUpload && (
               <span className="rounded-md bg-indigo-50 border border-indigo-200 px-1.5 py-0.2 text-[9px] font-black text-indigo-700 font-mono">
-                SAP Ariba
+                External ERP
               </span>
             )}
           </div>
@@ -1851,7 +1851,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
         />
       )}
 
-      {/* Enterprise Upload External Invoice Modal (SAP Ariba / ERP) */}
+      {/* Enterprise Upload External Invoice Modal (ERP) */}
       {(role === 'seller' || user?.role === 'seller') && (
         <UploadExternalInvoiceModal
           open={externalInvoiceModalOpen}

@@ -791,7 +791,7 @@ function HyperlinkPolicyText() {
         2. EXTERNAL LINKS FROM JSG SMILE
       </h3>
       <p>
-        Throughout the Portal, external hyperlinks are provided for user convenience to portals such as Udyam Registration (udyamregistration.gov.in), GST Portal (gst.gov.in), GeM (gem.gov.in), Samadhaan, and State Department portals. The District Administration Jharsuguda does not guarantee continuous availability, data integrity, or privacy policies of external third-party destinations.
+        Throughout the Portal, external hyperlinks are provided for user convenience to portals such as Udyam Registration (udyamregistration.gov.in), GST Portal (gst.gov.in), MSME Samadhaan, and State Department portals. The District Administration Jharsuguda does not guarantee continuous availability, data integrity, or privacy policies of external third-party destinations.
       </p>
     </div>
   );

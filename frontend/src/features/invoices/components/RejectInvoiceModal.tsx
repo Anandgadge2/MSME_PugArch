@@ -20,7 +20,7 @@ const COMMON_REASONS = [
   'Rate / Unit price does not match agreed Purchase Order',
   'Incorrect GSTIN / HSN code or tax calculation error',
   'Damaged / Non-conforming goods rejected during inspection',
-  'External SAP Ariba PO number missing or invalid',
+  'External ERP PO number missing or invalid',
   'Missing supporting documents / delivery challan',
   'Other / Custom discrepancy',
 ];

@@ -512,13 +512,13 @@ export function ImportExternalOrderModal({
               </div>
               <div>
                 <h2 className="text-sm sm:text-base font-black tracking-tight flex items-center gap-2">
-                  Import External Order (SAP Ariba / GeM)
+                  Import External Order (ERP / Procurement)
                   <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-400/30">
                     Dual Sync
                   </span>
                 </h2>
                 <p className="text-[11px] font-medium text-slate-300">
-                  Upload PDF PO or GeM Contract to automatically extract details and synchronize with local MSMEs.
+                  Upload PDF PO or External Contract to automatically extract details and synchronize with local MSMEs.
                 </p>
               </div>
             </div>
@@ -550,7 +550,7 @@ export function ImportExternalOrderModal({
                     <Upload className="h-8 w-8" />
                   </div>
                   <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">
-                    Drop your SAP PO or GeM Contract here
+                    Drop your Purchase Order or Contract PDF here
                   </h3>
                   <p className="text-xs text-slate-500 max-w-md mb-6">
                     Supports official PDF contracts, purchase orders, scanned quotations, or invoice copies (PDF, PNG, JPG up to 25MB).
@@ -559,11 +559,11 @@ export function ImportExternalOrderModal({
                   <div className="flex flex-wrap justify-center gap-2 mb-6">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
                       <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                      SAP Ariba PO (45xxxx)
+                      ERP PO (45xxxx)
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
                       <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />
-                      GeM Contract (GEMC-xxxx)
+                      External Contract (CONT-xxxx)
                     </span>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
                       <ShieldCheck className="h-3.5 w-3.5 text-purple-600" />
@@ -725,8 +725,8 @@ export function ImportExternalOrderModal({
                             onChange={(e) => setExternalSystem(e.target.value as any)}
                             className="w-full h-9 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-800 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]"
                           >
-                            <option value="SAP">SAP Ariba / ERP</option>
-                            <option value="GEM">GeM Portal</option>
+                            <option value="SAP">Enterprise ERP</option>
+                            <option value="GEM">Procurement Portal</option>
                             <option value="TALLY">Tally Prime</option>
                             <option value="CUSTOM">Custom Enterprise</option>
                             <option value="GENERIC">Other / Standard PO</option>
@@ -882,7 +882,7 @@ export function ImportExternalOrderModal({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                         <div>
                           <label className="block text-[11px] font-bold text-slate-700 mb-1">
-                            SAP Vendor Code / GeM Seller ID
+                            Vendor / Supplier ID
                           </label>
                           <input
                             type="text"

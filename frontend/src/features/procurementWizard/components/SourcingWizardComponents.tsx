@@ -623,15 +623,23 @@ export function BOQTable({
     return combined;
   }, [categories]);
 
-  // Resolved dynamic UOMs
+  // Resolved dynamic UOMs (merges standard DEFAULT_BOQ_UOMS with server uomOptions)
   const resolvedUoms = React.useMemo(() => {
-    if (uomOptions && uomOptions.length > 0) {
-      return uomOptions.map(u => {
-        if (typeof u === 'string') return { value: u, label: u };
-        return u;
-      });
+    const fromProps = (uomOptions || []).map(u => (typeof u === 'string' ? { value: u, label: u } : u));
+    const seen = new Set<string>();
+    const combined: Array<{ value: string; label: string }> = [];
+
+    for (const item of [...DEFAULT_BOQ_UOMS, ...fromProps]) {
+      const key = (item.value || '').toUpperCase();
+      if (key && !seen.has(key)) {
+        seen.add(key);
+        combined.push({
+          value: item.value,
+          label: item.label || item.value
+        });
+      }
     }
-    return DEFAULT_BOQ_UOMS;
+    return combined.length > 0 ? combined : DEFAULT_BOQ_UOMS;
   }, [uomOptions]);
 
   // Resolved dynamic Tax slabs
@@ -855,25 +863,16 @@ export function BOQTable({
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        <div className="flex items-center justify-center whitespace-nowrap">
                           <button
                             type="button"
                             onClick={() => onAttachDocument?.(idx, row)}
-                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+                            className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-600 transition-all cursor-pointer whitespace-nowrap shadow-3xs"
                             title="Attach specification, drawing or dossier"
                             aria-label={`Attach specification or drawing for row ${row.srNo}`}
                           >
                             <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
                             <span>Attach</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onAttachDocument?.(idx, row)}
-                            className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
-                            title="Add documents"
-                            aria-label={`Add documents for row ${row.srNo}`}
-                          >
-                            <Plus className="h-3 w-3" aria-hidden="true" />
                           </button>
                         </div>
                       )}

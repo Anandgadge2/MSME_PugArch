@@ -375,7 +375,7 @@ export function EditPurchaseOrderModal({
 
               <div>
                 <label htmlFor="po-edit-external-po" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                  SAP Ariba / ERP PO Number (Optional)
+                  External ERP / PO Number (Optional)
                 </label>
                 <div className="relative">
                   <Hash className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
@@ -580,7 +580,7 @@ export function EditPurchaseOrderModal({
             {/* Official PDF Document Upload */}
             <div>
               <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Official Buyer Purchase Order PDF (SAP Ariba / ERP Document)
+                Official Buyer Purchase Order PDF (External ERP Document)
               </label>
               <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-2xs border border-slate-200">
