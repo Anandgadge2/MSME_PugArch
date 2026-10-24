@@ -1130,7 +1130,7 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     title: '',
     procurementCategory: 'GOODS',
     pricingFormat: 'SINGLE_ITEM',
-    category: 'Office Supplies & Stationery',
+    category: '',
     department: '',
     priority: 'Normal',
     estimatedValue: 0,
@@ -1297,6 +1297,9 @@ export default function CreateProcurementPage() {
             }
             if (saved.basics && !saved.basics.deliveryLocation && cachedAddress) {
               saved.basics.deliveryLocation = cachedAddress;
+            }
+            if (saved.basics && saved.basics.category === 'Office Supplies & Stationery') {
+              saved.basics.category = '';
             }
             if (saved.schedule) {
               saved.schedule = {
@@ -2911,6 +2914,23 @@ function SelectionsStepForm({
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 1 Form components: Sourcing Intent
 // ─────────────────────────────────────────────────────────────────────────────
+function formatIndianCurrencyWords(amount: number): string {
+  if (!amount || isNaN(amount) || amount <= 0) return '';
+  if (amount >= 10000000) {
+    const cr = amount / 10000000;
+    return `₹${cr % 1 === 0 ? cr : cr.toFixed(2)} Cr`;
+  }
+  if (amount >= 100000) {
+    const lk = amount / 100000;
+    return `₹${lk % 1 === 0 ? lk : lk.toFixed(2)} Lakhs`;
+  }
+  if (amount >= 1000) {
+    const th = amount / 1000;
+    return `₹${th % 1 === 0 ? th : th.toFixed(1)} Thousand`;
+  }
+  return `₹${amount.toLocaleString('en-IN')}`;
+}
+
 function BasicsStepForm({
   draft,
   updateDraft,
@@ -2982,6 +3002,16 @@ function BasicsStepForm({
   // Dynamic categories from database
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
   const [loadingCategories, setLoadingCategories] = useState(false);
+  const [isCustomCategory, setIsCustomCategory] = useState(false);
+
+  useEffect(() => {
+    if (draft.basics.category === 'Office Supplies & Stationery') {
+      updateDraft(c => ({
+        ...c,
+        basics: { ...c.basics, category: '' }
+      }));
+    }
+  }, [draft.basics.category, updateDraft]);
 
   // Address form fields state
   const [addressLabel, setAddressLabel] = useState('');
@@ -3273,33 +3303,34 @@ function BasicsStepForm({
           </div>
         )}
 
-        <div className="sm:col-span-2">
-          <Field
-            label="Procurement title"
-            required
-            error={fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required (min 3 characters).')}
-          >
-            <input
-              id="basics-title"
-              value={draft.basics.title}
-              onChange={e => {
-                const val = e.target.value;
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, title: val },
-                  serviceDetails: {
-                    ...c.serviceDetails,
-                    serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
-                      ? val
-                      : c.serviceDetails.serviceTitle
-                  }
-                }));
-              }}
-              className={controlClass(fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required.'))}
-              placeholder="Office computers, AMC maintenance, raw supply..."
-            />
-          </Field>
-        </div>
+        <Field
+          label="Procurement title"
+          required
+          error={fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required (min 3 characters).')}
+        >
+          <input
+            id="basics-title"
+            value={draft.basics.title}
+            onChange={e => {
+              const val = e.target.value;
+              updateDraft(c => ({
+                ...c,
+                basics: { ...c.basics, title: val },
+                serviceDetails: {
+                  ...c.serviceDetails,
+                  serviceTitle: (!c.serviceDetails.serviceTitle || c.serviceDetails.serviceTitle === c.basics.title)
+                    ? val
+                    : c.serviceDetails.serviceTitle
+                }
+              }));
+            }}
+            className={controlClass(fieldError(showErrors && draft.basics.title.trim().length < 3, 'Procurement title is required.'))}
+            placeholder="e.g. Office computers, AMC maintenance, raw supply..."
+          />
+          <p className="text-[10px] text-slate-500 font-medium mt-1">
+            Concise headline describing the requisition or tender purpose.
+          </p>
+        </Field>
 
         <Field label="Procurement Type (Goods / Services / Works)" required>
           <select
@@ -3341,16 +3372,34 @@ function BasicsStepForm({
           required
           error={fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.')}
         >
-          <input
-            id="basics-estimated-value"
-            type="number"
-            min={0}
-            value={draft.basics.estimatedValue || ''}
-            onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: Number(e.target.value || 0) } }))}
-            onWheel={e => (e.target as HTMLElement).blur()}
-            className={controlClass(fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.'))}
-            placeholder="0"
-          />
+          <div className="relative rounded-lg shadow-3xs">
+            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+              <span className="text-slate-400 font-bold text-sm">₹</span>
+            </div>
+            <input
+              id="basics-estimated-value"
+              type="number"
+              min={0}
+              value={draft.basics.estimatedValue || ''}
+              onChange={e => updateDraft(c => ({ ...c, basics: { ...c.basics, estimatedValue: Number(e.target.value || 0) } }))}
+              onWheel={e => (e.target as HTMLElement).blur()}
+              className={cn(
+                controlClass(fieldError(showErrors && draft.basics.estimatedValue <= 0, 'Estimated value must be greater than 0.')),
+                "pl-8 font-semibold tracking-wide"
+              )}
+              placeholder="0"
+            />
+          </div>
+
+          {draft.basics.estimatedValue > 0 && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-blue-900 bg-blue-50/80 border border-blue-200/60 px-2.5 py-1 rounded-md font-medium">
+              <span className="font-bold text-slate-600 text-[11px]">Formatted:</span>
+              <span className="font-mono font-bold text-[#12335f]">₹{draft.basics.estimatedValue.toLocaleString('en-IN')}</span>
+              <span className="text-slate-400">•</span>
+              <span className="font-bold text-indigo-700">{formatIndianCurrencyWords(draft.basics.estimatedValue)}</span>
+            </div>
+          )}
+
           <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
             <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
             {[
@@ -3376,6 +3425,7 @@ function BasicsStepForm({
               </button>
             ))}
           </div>
+
           {draft.items.length > 0 && (() => {
             const itemTotals = computeProcurementTotals(draft.items);
             const grossRounded = Math.round(itemTotals.grossValue);
@@ -3397,6 +3447,7 @@ function BasicsStepForm({
             }
             return null;
           })()}
+
           <div className="mt-1.5 flex items-center gap-1.5 text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-2 py-1 rounded-md">
             <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
             <span>Internal Benchmark — Used for financial validation and CFA approval tier.</span>
@@ -3413,8 +3464,10 @@ function BasicsStepForm({
               </div>
             </div>
           )}
+        </Field>
 
-          <div className="mt-2.5 rounded-xl border border-slate-200 bg-slate-50/80 p-3 transition-colors hover:bg-slate-50">
+        <Field label="Budget Visibility & Disclosure">
+          <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3.5 transition-colors hover:bg-slate-50">
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -3426,12 +3479,12 @@ function BasicsStepForm({
                 <span className="font-bold text-slate-900 flex items-center gap-1.5 flex-wrap">
                   Disclose estimated budget to participating bidders
                   {draft.basics.discloseEstimatedCost ? (
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.2 rounded">Public</span>
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">Public</span>
                   ) : (
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.2 rounded">Confidential (Recommended)</span>
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded">Confidential (Recommended)</span>
                   )}
                 </span>
-                <p className="text-[10.5px] text-slate-500 mt-0.5 font-normal leading-normal">
+                <p className="text-[11px] text-slate-500 mt-1 font-normal leading-relaxed">
                   {draft.basics.discloseEstimatedCost
                     ? "The budget estimate will be visible on the public tender view and opportunities feed."
                     : "Recommended: Keep unchecked to prevent bid anchoring and encourage genuine market competition. Bidders only see item specs, quantity, and delivery timeline."}
@@ -3451,14 +3504,15 @@ function BasicsStepForm({
             value={
               categoriesList.some(c => c.name === draft.basics.category)
                 ? draft.basics.category
-                : (draft.basics.category ? 'Other' : '')
+                : (isCustomCategory || draft.basics.category === 'Other' || (Boolean(draft.basics.category) && !loadingCategories && categoriesList.length > 0) ? 'Other' : '')
             }
             onChange={e => {
               const newCat = e.target.value;
+              setIsCustomCategory(newCat === 'Other');
               updateDraft(c => ({
                 ...c,
-                basics: { ...c.basics, category: newCat },
-                boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: newCat } : row)
+                basics: { ...c.basics, category: newCat === 'Other' ? 'Other' : newCat },
+                boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: newCat === 'Other' ? '' : newCat } : row)
               }));
             }}
             className={controlClass(fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.'))}
@@ -3471,7 +3525,7 @@ function BasicsStepForm({
             ))}
             <option value="Other">Other / Custom Category</option>
           </select>
-          {(draft.basics.category === 'Other' || (draft.basics.category && !categoriesList.some(c => c.name === draft.basics.category))) && (
+          {(isCustomCategory || draft.basics.category === 'Other' || (Boolean(draft.basics.category) && !loadingCategories && categoriesList.length > 0 && !categoriesList.some(c => c.name === draft.basics.category))) && (
             <input
               type="text"
               value={draft.basics.category === 'Other' ? '' : draft.basics.category}
@@ -3484,7 +3538,7 @@ function BasicsStepForm({
                   boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: assigned } : row)
                 }));
               }}
-              placeholder="Specify category..."
+              placeholder="Specify custom category..."
               className={cn(inputClass, 'mt-2')}
               required
             />
