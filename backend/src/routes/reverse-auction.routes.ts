@@ -1096,6 +1096,9 @@ router.get('/reverse-auctions/by-procurement/:procurementId', optionalAuthentica
   }
 });
 
+const isAuctionManagerUser = (req: AuthRequest, auction: any) =>
+  isAdmin(req) || auction.createdByUserId === req.user?.id || (req.user?.organizationId && auction.buyerOrgId === req.user.organizationId);
+
 router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthRequest, res: Response) => {
   try {
     const id = await resolveAuctionId(req.params.id);
@@ -1314,7 +1317,13 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       }).catch(() => {});
     }
 
-    return apiResponse.success(res, maskSensitive({
+    const isManager = Boolean(req.user && isAuctionManagerUser(req, auction));
+    const rankVis = String(auction.rankVisibility || 'SHOW_RANK_ONLY').toUpperCase();
+    const isBlind = !isManager && rankVis === 'HIDDEN';
+    const isRankOnly = !isManager && rankVis === 'SHOW_RANK_ONLY';
+    const maskLowest = isBlind || isRankOnly;
+
+    const safeAuction = {
       ...auction,
       category: (auctionCategory && auctionCategory.toLowerCase() !== 'general procurement') ? auctionCategory : (linkedRequirement?.category || null),
       isPublic,
@@ -1323,8 +1332,18 @@ router.get('/reverse-auctions/:id', optionalAuthenticate, async (req: AuthReques
       linkedRequirement,
       buyerOrganizationName,
       buyerOrganization,
-      myParticipant
-    }));
+      myParticipant: myParticipant ? {
+        ...myParticipant,
+        currentRank: isBlind ? null : myParticipant.currentRank
+      } : null,
+      ...(maskLowest ? {
+        currentLowestBid: null,
+        currentLowestAmount: null,
+        currentBid: null
+      } : {})
+    };
+
+    return apiResponse.success(res, maskSensitive(safeAuction));
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load auction', error.code || 'REVERSE_AUCTION_DETAIL_ERROR');
   }
@@ -1428,31 +1447,47 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
       }
     }
 
+    const isManager = Boolean(req.user && isAuctionManagerUser(req, auction));
+    const rankVis = String(auction.rankVisibility || 'SHOW_RANK_ONLY').toUpperCase();
+    const isBlind = !isManager && rankVis === 'HIDDEN';
+    const isRankOnly = !isManager && rankVis === 'SHOW_RANK_ONLY';
+    const maskLowest = isBlind || isRankOnly;
+
+    const safeAuction = {
+      ...auction,
+      category: (liveCategory && liveCategory.toLowerCase() !== 'general procurement') ? liveCategory : null,
+      isPublic,
+      hasJoined: !!participant,
+      evaluationPending: Boolean(auction.evaluationPending),
+      ...(maskLowest ? {
+        currentLowestBid: null,
+        currentLowestAmount: null,
+        currentBid: null
+      } : {})
+    };
+
+    const safeParticipant = participant ? {
+      ...participant,
+      currentRank: isBlind ? null : participant.currentRank,
+      quotedAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+      totalAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+      offeredPrice: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+      initialQuoteAmount: Number(participant.initialQuoteAmount ?? participant.initialQuoteTotal ?? 0),
+      initialQuoteTotal: Number(participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
+      canBid,
+      disqualificationReason
+    } : null;
+
     return apiResponse.success(res, {
       serverTime: new Date(),
-      auction: maskSensitive({
-        ...auction,
-        category: (liveCategory && liveCategory.toLowerCase() !== 'general procurement') ? liveCategory : null,
-        isPublic,
-        hasJoined: !!participant,
-        evaluationPending: Boolean(auction.evaluationPending)
-      }),
-      participant: maskSensitive(participant ? {
-        ...participant,
-        quotedAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
-        totalAmount: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
-        offeredPrice: Number(myBestBidRecord?.amount ?? myBestBidRecord?.bidAmount ?? participant.lastBidAmount ?? participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
-        initialQuoteAmount: Number(participant.initialQuoteAmount ?? participant.initialQuoteTotal ?? 0),
-        initialQuoteTotal: Number(participant.initialQuoteTotal ?? participant.initialQuoteAmount ?? 0),
-        canBid,
-        disqualificationReason
-      } : null),
+      auction: maskSensitive(safeAuction),
+      participant: maskSensitive(safeParticipant),
       activeParticipantsCount,
       totalParticipantsCount,
       totalBidsCount,
       myBestBid: myBestBidRecord ? toNumber(myBestBidRecord.amount ?? myBestBidRecord.bidAmount) : null,
-      myRank: participant?.currentRank || null,
-      minimumNextBid: Number(calculatedNextBid.toFixed(2))
+      myRank: isBlind ? null : (participant?.currentRank || null),
+      minimumNextBid: maskLowest ? null : Number(calculatedNextBid.toFixed(2))
     });
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to load live summary', error.code || 'REVERSE_AUCTION_SUMMARY_ERROR');
@@ -1551,7 +1586,7 @@ router.post('/reverse-auctions/start-from-bids', requirePermission('reverse_auct
       autoExtensionWindowMinutes: z.coerce.number().int().min(1).max(120).default(10),
       autoExtensionByMinutes: z.coerce.number().int().min(1).max(120).default(5),
       maxAutoExtensions: z.coerce.number().int().min(0).max(100).default(10),
-      rankVisibility: z.enum(['SHOW_RANK_ONLY', 'SHOW_LOWEST_PRICE', 'SHOW_ALL_PRICES']).default('SHOW_RANK_ONLY'),
+      rankVisibility: z.enum(['SHOW_RANK_ONLY', 'SHOW_LOWEST_PRICE', 'HIDDEN']).default('SHOW_RANK_ONLY'),
       startTime: z.coerce.date().optional(),
       endTime: z.coerce.date().optional(),
       durationMinutes: z.coerce.number().int().positive().optional(),
@@ -2455,12 +2490,15 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
       : [];
 
     const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
-    const isRankOnly = !isManager && (String(auction.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(auction.rankVisibility || '').toUpperCase() === 'HIDDEN');
+    const rankVis = String(auction.rankVisibility || '').toUpperCase();
+    const isBlind = !isManager && rankVis === 'HIDDEN';
+    const isRankOnly = !isManager && (rankVis === 'SHOW_RANK_ONLY' || isBlind);
     const mappedParticipants = participants.map((p: any, index: number) => {
       const isMe = (req.user?.organizationId && p.sellerOrgId === req.user.organizationId) ||
                    (req.user?.id && p.sellerUserId === req.user.id);
       const realOrgName = orgMap.get(p.sellerOrgId) || `Organization #${p.sellerOrgId}`;
-      const displayName = (showAllNames || isMe) ? realOrgName : `Bidder ${p.currentRank || index + 1}`;
+      const bidderLabel = isBlind ? `Bidder ${index + 1}` : `Bidder ${p.currentRank || index + 1}`;
+      const displayName = (showAllNames || isMe) ? realOrgName : bidderLabel;
 
       const matchedBp = bidParticipations.find((bp: any) => 
         (p.sellerUserId && bp.sellerId === p.sellerUserId) ||
@@ -2502,6 +2540,7 @@ router.get('/reverse-auctions/:id/participants', requirePermission('reverse_auct
 
       return {
         ...p,
+        currentRank: isBlind ? null : p.currentRank,
         sellerOrgName: displayName,
         sellerOrgId: (showAllNames || isMe) ? p.sellerOrgId : null,
         sellerUserId: (showAllNames || isMe) ? p.sellerUserId : null,
@@ -2551,9 +2590,6 @@ const auctionClarificationAskBody = z.object({
 const auctionClarificationReplyBody = z.object({
   response: z.string().trim().min(1).max(3000)
 });
-
-const isAuctionManagerUser = (req: AuthRequest, auction: any) =>
-  isAdmin(req) || auction.createdByUserId === req.user?.id || (req.user?.organizationId && auction.buyerOrgId === req.user.organizationId);
 
 router.post('/reverse-auctions/:id/clarifications', requirePermission('reverse_auction.view', orgScope), async (req: AuthRequest, res: Response) => {
   try {
@@ -3033,6 +3069,19 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
         const requiredDecrement = Math.max(amountDecrement, percentDecrement);
         const maxAllowed = current - requiredDecrement;
         if (payload.amount > maxAllowed) {
+          const isManager = Boolean(req.user && isAuctionManagerUser(req, auction));
+          const isPrivacyMasked = !isManager && (String(auction.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(auction.rankVisibility || '').toUpperCase() === 'HIDDEN');
+          if (isPrivacyMasked) {
+            throw new ApiError(
+              400,
+              `Bid of ₹${payload.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is too high. Your bid must be at least ₹${requiredDecrement.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lower than the current leading offer to improve your standing.`,
+              'AUCTION_MIN_DECREMENT',
+              {
+                requiredDecrement,
+                submittedAmount: payload.amount
+              }
+            );
+          }
           throw new ApiError(
             400,
             `Bid of ₹${payload.amount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} is too high. Current lowest offer is ₹${current.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}. Your bid must be at least ₹${requiredDecrement.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} lower (maximum permitted: ₹${maxAllowed.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`,
@@ -3103,13 +3152,14 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
       const currentLow = toNumber(payload.amount);
       const reqDec = toNumber((result as any)?.requiredDecrement || 0);
       const nextMax = Math.max(0, currentLow - reqDec);
+      const isBlindOrRankOnly = String(result.auction?.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(result.auction?.rankVisibility || '').toUpperCase() === 'HIDDEN';
       broadcastToAuction(auctionId, {
         type: 'REVERSE_AUCTION_BID',
         auctionId,
         auctionCode: result.auction?.auctionCode,
-        currentLowest: currentLow,
-        minimumNextBid: Number(nextMax.toFixed(2)),
-        sellerOrgId: req.user?.organizationId || null,
+        currentLowest: isBlindOrRankOnly ? null : currentLow,
+        minimumNextBid: isBlindOrRankOnly ? null : Number(nextMax.toFixed(2)),
+        sellerOrgId: null,
         timestamp: new Date().toISOString()
       });
       if (result.auction?.linkedBidId) {
@@ -3192,18 +3242,22 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
     });
     const orgMap = new Map(orgs.map((o: any) => [o.id, o.organizationName]));
 
+    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
+    const rankVis = String(auction.rankVisibility || '').toUpperCase();
+    const isBlind = !isManager && rankVis === 'HIDDEN';
+    const isRankOnly = !isManager && (rankVis === 'SHOW_RANK_ONLY' || isBlind);
+
     // Anonymized competitor label mapping
     const competitorLabelMap = new Map<number, string>();
     let competitorIndex = 1;
     for (const p of participants) {
       const pOrgId = Number(p.sellerOrgId);
       if (pOrgId && !competitorLabelMap.has(pOrgId)) {
-        competitorLabelMap.set(pOrgId, `Bidder ${p.currentRank || competitorIndex++}`);
+        const fallbackLabel = isBlind ? `Bidder ${competitorIndex++}` : `Bidder ${p.currentRank || competitorIndex++}`;
+        competitorLabelMap.set(pOrgId, fallbackLabel);
       }
     }
 
-    const showAllNames = isManager || Boolean(auction.allowCompetitorNames);
-    const isRankOnly = !isManager && (String(auction.rankVisibility || '').toUpperCase() === 'SHOW_RANK_ONLY' || String(auction.rankVisibility || '').toUpperCase() === 'HIDDEN');
     const mappedBids = bids.map((b: any) => {
       const bOrgId = Number(b.sellerOrgId || 0);
       const isMe = (req.user?.organizationId && bOrgId === Number(req.user.organizationId)) ||
@@ -3212,7 +3266,7 @@ router.get('/reverse-auctions/:id/bids', requirePermission('reverse_auction.view
       const fallbackLabel = competitorLabelMap.get(bOrgId) || `Bidder #${bOrgId || '?'}`;
       const displayName = (showAllNames || isMe) ? realOrgName : fallbackLabel;
       const part = bOrgId ? participantByOrg.get(bOrgId) : null;
-      const bidderRank = part?.currentRank || b.rankAtSubmission || null;
+      const bidderRank = isBlind ? null : (part?.currentRank || b.rankAtSubmission || null);
 
       const hideAmount = isRankOnly && !isMe;
 

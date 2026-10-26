@@ -2921,7 +2921,8 @@ export default function PurchaseOrders() {
 
                 {/* Terms & Documents section */}
                 {(() => {
-                  const terms = (viewingOrder.metadata as any)?.termsDocuments || {};
+                  const meta = (viewingOrder.metadata as any) || {};
+                  const terms = meta.termsDocuments || {};
                   const docs = (Array.isArray(terms.documents) ? terms.documents : []) as Array<{
                     documentType: string;
                     fileAssetId: number;
@@ -2929,7 +2930,14 @@ export default function PurchaseOrders() {
                     fileSize: number;
                   }>;
                   
-                  const hasTerms = terms.deliveryTerms || terms.paymentTerms || terms.warrantyTerms || terms.inspectionTerms || terms.delayPenaltyDetails || terms.additionalTerms;
+                  const deliveryTerms = terms.deliveryTerms || meta.deliveryTerms;
+                  const paymentTerms = terms.paymentTerms || meta.paymentTerms || viewingOrder.paymentTerms;
+                  const warrantyTerms = terms.warrantyTerms || meta.warrantyTerms;
+                  const inspectionTerms = terms.inspectionTerms || meta.inspectionTerms;
+                  const delayPenaltyDetails = terms.delayPenaltyDetails || meta.ldTerms || meta.penaltyClause;
+                  const additionalTerms = terms.additionalTerms || meta.additionalTerms;
+
+                  const hasTerms = deliveryTerms || paymentTerms || warrantyTerms || inspectionTerms || delayPenaltyDetails || additionalTerms;
                   const hasDocs = docs.length > 0;
 
                   if (!hasTerms && !hasDocs) return null;
@@ -2945,12 +2953,12 @@ export default function PurchaseOrders() {
                       <div className="grid gap-4 sm:grid-cols-2 text-xs">
                         {hasTerms && (
                           <div className="space-y-2">
-                            {terms.deliveryTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delivery Terms</p><p className="font-semibold text-slate-800">{terms.deliveryTerms}</p></div>}
-                            {terms.paymentTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Payment Terms</p><p className="font-semibold text-slate-800">{terms.paymentTerms}</p></div>}
-                            {terms.warrantyTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Warranty Terms</p><p className="font-semibold text-slate-800">{terms.warrantyTerms}</p></div>}
-                            {terms.inspectionTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Inspection Terms</p><p className="font-semibold text-slate-800">{terms.inspectionTerms}</p></div>}
-                            {terms.delayPenaltyDetails && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delay Penalty Details</p><p className="font-semibold text-slate-800">{terms.delayPenaltyDetails}</p></div>}
-                            {terms.additionalTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Additional Terms</p><p className="font-semibold text-slate-800">{terms.additionalTerms}</p></div>}
+                            {deliveryTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delivery Terms</p><p className="font-semibold text-slate-800">{deliveryTerms}</p></div>}
+                            {paymentTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Payment Terms</p><p className="font-semibold text-slate-800">{paymentTerms}</p></div>}
+                            {warrantyTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Warranty Terms</p><p className="font-semibold text-slate-800">{warrantyTerms}</p></div>}
+                            {inspectionTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Inspection Terms</p><p className="font-semibold text-slate-800">{inspectionTerms}</p></div>}
+                            {delayPenaltyDetails && <div><p className="text-[9px] font-bold uppercase text-slate-500">Delay Penalty (LD)</p><p className="font-semibold text-slate-800">{delayPenaltyDetails}</p></div>}
+                            {additionalTerms && <div><p className="text-[9px] font-bold uppercase text-slate-500">Additional Terms</p><p className="font-semibold text-slate-800">{additionalTerms}</p></div>}
                           </div>
                         )}
                         {hasDocs && (

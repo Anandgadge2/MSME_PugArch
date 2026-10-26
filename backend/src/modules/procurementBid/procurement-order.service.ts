@@ -1,4 +1,5 @@
 import prisma from '../../lib/prisma.js';
+import { parsePenaltyTerms } from '../rateContract/rate-contract.service.js';
 import { ApiError } from '../../utils/ApiError.js';
 import type { AuthRequest, AuthenticatedUser } from '../../middleware/authenticate.js';
 import { uploadFile } from '../../services/storage/storage.service.js';
@@ -454,6 +455,15 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
   const penaltyClause = bidTerms.penaltyClause ||
     rateContractConfig.penaltyClause ||
     '0.5% per week of delay (max 10%)';
+  const penaltyTerms = parsePenaltyTerms({
+    penaltyClause,
+    ratePerWeek: rateContractConfig.penaltyRatePerWeek,
+    gracePeriodDays: rateContractConfig.penaltyGraceDays,
+    maxCapPercent: rateContractConfig.maxPenaltyCapPercentage
+  });
+  const warrantyTerms = bidTerms.warrantyTerms || tenderData.warrantyPeriod || rateContractConfig.warrantyTerms || null;
+  const deliveryTerms = bidTerms.deliveryTerms || tenderData.deliveryTerms || rateContractConfig.deliverySla || null;
+  const paymentTermsStr = bidTerms.paymentTerms || tenderData.paymentTerms || rateContractConfig.paymentTerms || null;
 
   const result = await db.$transaction(async (tx: any) => {
     const po = await tx.purchaseOrder.create({
@@ -504,6 +514,21 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
           pbgExemptReason: isPbgExempt ? 'MSE_STATUTORY_WAIVER' : null,
           ldTerms: penaltyClause,
           penaltyClause,
+          penaltyTerms,
+          penaltyRatePerWeek: penaltyTerms.ratePerWeek,
+          penaltyRatePerDay: penaltyTerms.ratePerDay,
+          penaltyGraceDays: penaltyTerms.gracePeriodDays,
+          maxPenaltyCapPercentage: penaltyTerms.maxCapPercent,
+          warrantyTerms: warrantyTerms || null,
+          deliveryTerms: deliveryTerms || null,
+          paymentTerms: paymentTermsStr || null,
+          termsDocuments: {
+            warrantyTerms: warrantyTerms || null,
+            deliveryTerms: deliveryTerms || null,
+            paymentTerms: paymentTermsStr || null,
+            delayPenaltyDetails: penaltyClause,
+            documents: []
+          },
           deliveryLocation: bid.deliveryLocation || 'India',
           termsAndConditions: Array.isArray(bid.termsAndConditions) ? bid.termsAndConditions : (bid.termsAndConditions ? [String(bid.termsAndConditions)] : []),
           eligibilityCriteria: Array.isArray(bid.eligibilityCriteria) ? bid.eligibilityCriteria : (bid.eligibilityCriteria ? [String(bid.eligibilityCriteria)] : []),

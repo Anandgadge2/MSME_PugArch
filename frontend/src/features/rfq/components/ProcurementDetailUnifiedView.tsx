@@ -10780,7 +10780,9 @@ export function ProcurementDetailUnifiedView(
         const d = String(deliveryTerms || props.deliveryTerms || "").trim();
         const dUpper = d.toUpperCase();
         if (!d || d === "—" || d === "N/A" || d === "Standard") return "Door delivery to site / consignee destination";
-        if (dUpper.includes("DOOR_DELIVERY") || dUpper.includes("DOOR DELIVERY")) return "Door delivery to site / consignee destination";
+        if (dUpper.includes("DOOR_DELIVERY") || dUpper.includes("DOOR DELIVERY")) return "Door delivery to site (FOR Destination)";
+        if (dUpper.includes("BUYER_PICKUP") || dUpper.includes("BUYER PICKUP") || dUpper.includes("EX_WORKS") || dUpper.includes("EX-WORKS")) return "Buyer pickup (Ex-Works / Factory Gate)";
+        if (dUpper.includes("SELLER_DISPATCH") || dUpper.includes("SELLER DISPATCH")) return "Seller dispatch (Transporter / Courier Handover)";
         return d;
       })();
 

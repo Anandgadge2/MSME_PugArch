@@ -1925,7 +1925,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
         (draftBody.payload as any)?.vendors?.selection === 'Open' ||
         !config.qualifiedVendors?.length
       ) ? 'TECHNICALLY_QUALIFIED_ONLY' : 'INVITED_SELLERS_ONLY',
-      allowCompetitorNames: config.rankVisibility === 'SHOW_LOWEST_PRICE',
+      allowCompetitorNames: false,
       remarks: 'Created from guided procurement wizard',
       startTime: config.auctionStartDateTime,
       endTime: config.auctionEndDateTime,

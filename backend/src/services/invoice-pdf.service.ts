@@ -885,15 +885,41 @@ export async function generatePurchaseOrderPdfBuffer(po: any): Promise<Buffer> {
       doc.fillColor('#0f172a').fontSize(8).font('Helvetica-Bold').text('Notes / Terms & Conditions:', pageMargin, currentY);
       currentY += 12;
 
+      const poMetadata = (po?.metadata || {}) as any;
+      const ldClause = poMetadata.ldTerms || poMetadata.penaltyClause || poMetadata.termsDocuments?.delayPenaltyDetails;
+      const warranty = poMetadata.warrantyTerms || poMetadata.termsDocuments?.warrantyTerms;
+      const isPbgReq = po?.pbgRequired ?? poMetadata.pbgRequired;
+      const pbgPct = po?.pbgPercentage ?? poMetadata.pbgPercentage;
+      const pbgAmt = poMetadata.pbgAmount;
+      const pbgExempt = poMetadata.pbgExemptReason || (!isPbgReq ? 'MSE_STATUTORY_WAIVER' : null);
+
       const terms = [
         '1. This document is generated from the JSGSMILE Enterprise Procurement Portal workflow and must be read with linked GRN, invoice and payment records.',
         '2. Supplier must fulfil quantity, quality, delivery schedule, taxes and documentation requirements recorded against the purchase order.',
         '3. Buyer approval, payment release and settlement remain subject to portal approval matrix, delivery confirmation and invoice verification.'
       ];
 
+      if (ldClause) {
+        terms.push(`4. Liquidated Damages (Late Delivery): ${ldClause}`);
+      }
+
+      if (warranty) {
+        terms.push(`5. Warranty Terms & Support Obligation: ${warranty}`);
+      }
+
+      if (isPbgReq && pbgPct > 0) {
+        terms.push(`6. Performance Security (GFR Rule 171): ${pbgPct}%${pbgAmt ? ` (₹${Number(pbgAmt).toLocaleString('en-IN')})` : ''} via e-PBG / FDR or 5% MSME Retention Money Deduction from invoices.`);
+      } else if (pbgExempt) {
+        terms.push(`6. Performance Security (GFR Rule 171): 100% Waived under Public Procurement Policy for MSEs Order, 2012 (Statutory Exemption).`);
+      }
+
       terms.forEach((term) => {
-        doc.fillColor('#475569').fontSize(7).font('Helvetica').text(`• ${term}`, pageMargin, currentY, { width: contentWidth });
-        currentY += 10;
+        if (currentY + 14 > 841.89 - 140) {
+          doc.addPage();
+          currentY = 36;
+        }
+        doc.fillColor('#475569').fontSize(7).font('Helvetica').text(term, pageMargin, currentY, { width: contentWidth });
+        currentY += 11;
       });
 
       currentY += 8;

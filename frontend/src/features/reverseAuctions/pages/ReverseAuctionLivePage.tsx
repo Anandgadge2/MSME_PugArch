@@ -251,7 +251,9 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
   const auction = (summary.data?.auction || liveSummaryCache.get(id)?.auction) as ReverseAuction | undefined;
   const rankVisibility = String(auction?.rankVisibility || (summary.data?.auction as any)?.rankVisibility || 'SHOW_RANK_ONLY').toUpperCase();
-  const isRankOnly = !isBuyerOrAdmin && (rankVisibility === 'SHOW_RANK_ONLY' || rankVisibility === 'HIDDEN');
+  const isBlind = !isBuyerOrAdmin && rankVisibility === 'HIDDEN';
+  const isRankOnly = !isBuyerOrAdmin && (rankVisibility === 'SHOW_RANK_ONLY' || isBlind);
+  const isLowestPriceVisible = isBuyerOrAdmin || rankVisibility === 'SHOW_LOWEST_PRICE';
   
   const loading = summary.isLoading && !auction;
 
@@ -372,11 +374,12 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
   // Compute seller's own rank
   const myRank = useMemo(() => {
+    if (isBlind) return null;
     if (summary.data?.myRank != null) return summary.data.myRank;
     if (participant?.currentRank != null) return participant.currentRank;
     const myP = participantRows.find(p => p.isCurrentViewer);
     return myP?.currentRank || null;
-  }, [summary.data?.myRank, participant?.currentRank, participantRows]);
+  }, [isBlind, summary.data?.myRank, participant?.currentRank, participantRows]);
 
   // Active participants count
   const activeParticipantsCount = useMemo(() => {
@@ -399,6 +402,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Rank',
       width: 'w-[14%]',
       cell: (row) => {
+        if (isBlind) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-200">
+              Sealed
+            </span>
+          );
+        }
         const rankNum = row.bidderRank || row.rankAtSubmission;
         const isL1 = rankNum === 1;
         return (
@@ -493,7 +503,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         </span>
       )
     }
-  ], [isBuyerOrAdmin, currentLowest, isRankOnly]);
+  ], [isBuyerOrAdmin, currentLowest, isRankOnly, isBlind]);
 
   // Leaderboard columns for Participant Standings Tab
   const leaderboardColumns = useMemo<ColumnDef<ReverseAuctionParticipant>[]>(() => [
@@ -502,6 +512,13 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       header: 'Rank',
       width: 'w-[15%]',
       cell: (part, idx) => {
+        if (isBlind) {
+          return (
+            <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold text-slate-400 bg-slate-50 border border-slate-200">
+              Sealed
+            </span>
+          );
+        }
         const rank = part.currentRank || idx + 1;
         const isL1 = rank === 1;
         return (
@@ -591,7 +608,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
         );
       }
     }
-  ], [isBuyerOrAdmin, currentLowest, isRankOnly]);
+  ], [isBuyerOrAdmin, currentLowest, isRankOnly, isBlind]);
 
   // Process data for the real-time bid chart:
   // For initial baseline bids submitted at the same time, higher quotes come first so downward progression is accurately reflected.
@@ -679,7 +696,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       setLocalError('Please enter a valid positive bid amount');
       return;
     }
-    if (minNextBid > 0 && nextAmount > minNextBid) {
+    if (isLowestPriceVisible && minNextBid > 0 && nextAmount > minNextBid) {
       setLocalError(`Bid amount cannot exceed the permitted maximum of ${formatCurrency(minNextBid)}`);
       return;
     }
@@ -904,23 +921,35 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
       {/* KPI Cards Row — Role Differentiated */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {/* Card 1: Current Lowest Bid (L1) */}
-        <StatsCard
-          icon={IndianRupee}
-          label="Current Lowest Bid (L1)"
-          value={currentLowest > 0 ? formatCurrency(currentLowest) : 'No bids yet'}
-          subtitle={startPrice > currentLowest && currentLowest > 0 
-            ? `Price Drop: -${formatCurrency(startPrice - currentLowest)} (-${savingsPercent.toFixed(1)}%)` 
-            : `Starting Price: ${formatCurrency(startPrice)}`}
-          color="emerald"
-        />
+        {isLowestPriceVisible ? (
+          <StatsCard
+            icon={IndianRupee}
+            label="Current Lowest Bid (L1)"
+            value={currentLowest > 0 ? formatCurrency(currentLowest) : 'No bids yet'}
+            subtitle={startPrice > currentLowest && currentLowest > 0 
+              ? `Price Drop: -${formatCurrency(startPrice - currentLowest)} (-${savingsPercent.toFixed(1)}%)` 
+              : `Starting Price: ${formatCurrency(startPrice)}`}
+            color="emerald"
+          />
+        ) : (
+          <StatsCard
+            icon={ShieldCheck}
+            label="Lowest Bid (L1) Status"
+            value={isBlind ? "Sealed (Blind Bidding)" : "Protected (Rank Only)"}
+            subtitle={isBlind ? "Commercial offers and standings are sealed until closing" : "Leader price is masked to prevent price targeting"}
+            color="blue"
+          />
+        )}
 
         {/* Card 2: My Current Rank (Seller) / Event Standing (Buyer) */}
         <StatsCard
           icon={Trophy}
-          label={isBuyerOrAdmin ? "Auction Leader (L1)" : "My Current Rank"}
+          label={isBuyerOrAdmin ? "Auction Leader (L1)" : isBlind ? "Standing (Blind Bidding)" : "My Current Rank"}
           value={
             isBuyerOrAdmin
               ? leaderOrgName
+              : isBlind
+              ? 'Sealed'
               : myRank === 1
               ? '🥇 L1 (Leading)'
               : myRank === 2
@@ -936,13 +965,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
           subtitle={
             isBuyerOrAdmin
               ? (leaderBid ? `Holding L1 at ${formatCurrency(getBidAmount(leaderBid))}` : `${bidRows.length} total bids received`)
+              : isBlind
+              ? 'Standings will be evaluated upon event conclusion'
               : myRank === 1
               ? 'Holding the winning commercial offer'
               : myBestBid > 0
               ? 'Submit lower downward bid to take L1'
               : 'Submit a valid bid to enter leaderboard'
           }
-          color="amber"
+          color={isBlind ? "violet" : "amber"}
         />
 
         {/* Card 3: Active Participants (Verified Real Count) */}
@@ -1098,7 +1129,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   )}
 
                   {/* Current L1 benchmark reference line (rendered when distinct from startPrice) */}
-                  {currentLowest > 0 && !startAndL1Same && (
+                  {isLowestPriceVisible && currentLowest > 0 && !startAndL1Same && (
                     <ReferenceLine 
                       y={currentLowest} 
                       stroke="#10b981" 
@@ -1115,7 +1146,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   )}
 
                   {/* Single unified benchmark line when Start and L1 are identical */}
-                  {startAndL1Same && currentLowest > 0 && (
+                  {isLowestPriceVisible && startAndL1Same && currentLowest > 0 && (
                     <ReferenceLine 
                       y={currentLowest} 
                       stroke="#059669" 
@@ -1220,17 +1251,27 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
             {/* Tab 2: Participant Standings / Leaderboard */}
             {activeLogTab === 'leaderboard' && (
-              <div className="overflow-x-auto">
-                <DataTable<ReverseAuctionParticipant>
-                  columns={leaderboardColumns}
-                  data={participantRows}
-                  keyExtractor={(row) => String(row.id)}
-                  emptyTitle="No participants joined"
-                  emptyDescription="Qualified participants will appear here with their live standing and lowest offers."
-                  minWidth="min-w-[560px]"
-                  rowClassName={(row) => row.isCurrentViewer ? 'bg-blue-50/60 border-l-4 border-l-blue-600' : ''}
-                />
-              </div>
+              isBlind ? (
+                <div className="py-12 text-center space-y-2 border border-dashed border-slate-200 rounded-xl">
+                  <ShieldCheck className="h-8 w-8 text-slate-400 mx-auto" />
+                  <p className="text-sm font-bold text-slate-700">Blind Bidding Mode Active</p>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    Competitor standings and rankings are strictly sealed and will be revealed upon conclusion of the auction.
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <DataTable<ReverseAuctionParticipant>
+                    columns={leaderboardColumns}
+                    data={participantRows}
+                    keyExtractor={(row) => String(row.id)}
+                    emptyTitle="No participants joined"
+                    emptyDescription="Qualified participants will appear here with their live standing and lowest offers."
+                    minWidth="min-w-[560px]"
+                    rowClassName={(row) => row.isCurrentViewer ? 'bg-blue-50/60 border-l-4 border-l-blue-600' : ''}
+                  />
+                </div>
+              )
             )}
           </CardContent>
         </Card>
@@ -1267,7 +1308,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
 
               {/* Bid constraints metadata */}
               <div className="grid grid-cols-2 gap-3">
-                <BidSpec label="Max Permitted Bid" value={minNextBid > 0 ? formatCurrency(minNextBid) : '-'} color="red" />
+                <BidSpec
+                  label="Max Permitted Bid"
+                  value={
+                    isLowestPriceVisible
+                      ? (minNextBid > 0 ? formatCurrency(minNextBid) : '-')
+                      : (myBestBid > 0 && decrement > 0 ? `Below ${formatCurrency(myBestBid)}` : 'Downward Offer')
+                  }
+                  color="red"
+                />
                 <BidSpec label="Min Decrement" value={decrement > 0 ? formatCurrency(decrement) : '-'} />
                 <BidSpec label="Reserve Price" value={isBuyerOrAdmin && auction.reservePrice ? formatCurrency(auction.reservePrice) : 'Protected (Hidden)'} />
                 <BidSpec label="Auto Extensions" value={auction.autoExtensionEnabled ? `${extensionCount}/${maxExtensions}` : 'Disabled'} />
@@ -1378,7 +1427,7 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                 return (
                   <form onSubmit={submit} className="space-y-4">
                     {/* Quick Bid Helper Buttons */}
-                    {live && minNextBid > 0 && (
+                    {live && isLowestPriceVisible && minNextBid > 0 && (
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -1394,6 +1443,26 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                             className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5 text-center text-[10px] font-black text-blue-800 hover:bg-blue-100 transition shadow-xs"
                           >
                             Drop by 2× Min: {formatCurrency(minNextBid - decrement)}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {live && !isLowestPriceVisible && myBestBid > 0 && decrement > 0 && myBestBid - decrement > 0 && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickFill(myBestBid - decrement)}
+                          className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5 text-center text-[10px] font-black text-emerald-800 hover:bg-emerald-100 transition shadow-xs"
+                        >
+                          Drop Own Offer by Step: {formatCurrency(myBestBid - decrement)}
+                        </button>
+                        {myBestBid - 2 * decrement > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => handleQuickFill(myBestBid - 2 * decrement)}
+                            className="rounded-xl border border-blue-200 bg-blue-50/60 p-2.5 text-center text-[10px] font-black text-blue-800 hover:bg-blue-100 transition shadow-xs"
+                          >
+                            Drop Own Offer by 2×: {formatCurrency(myBestBid - 2 * decrement)}
                           </button>
                         )}
                       </div>
@@ -1414,10 +1483,16 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                           name="amount"
                           type="number"
                           min="1"
-                          max={minNextBid > 0 ? minNextBid : undefined}
+                          max={isLowestPriceVisible && minNextBid > 0 ? minNextBid : undefined}
                           step="0.01"
                           required
-                          placeholder={minNextBid > 0 ? `Max permitted: ${minNextBid}` : 'Enter downward amount'}
+                          placeholder={
+                            isLowestPriceVisible && minNextBid > 0
+                              ? `Max permitted: ${minNextBid}`
+                              : myBestBid > 0 && decrement > 0
+                              ? `Must beat your best (₹${myBestBid})`
+                              : 'Enter downward amount'
+                          }
                           className="h-11 w-full rounded-xl border border-slate-200 bg-slate-50 pl-8 pr-3.5 text-sm font-bold font-mono text-slate-900 outline-none transition focus:bg-white focus:border-red-500 focus:ring-2 focus:ring-red-500/20"
                           disabled={!live || bid.isPending}
                           aria-label="Bid amount in Indian Rupees"

@@ -96,6 +96,14 @@ export const useReverseAuctionRealtime = (
               duration: 4000
             });
           });
+        } else {
+          triggerDeduplicatedAuctionToast(`auction-bid-${cleanId}-masked`, () => {
+            toast.info('New Bid Submitted', {
+              id: `auction-bid-${cleanId}`,
+              description: 'A competing commercial bid was submitted. Live standings have been updated.',
+              duration: 3500
+            });
+          });
         }
       } else if (data.type === 'REVERSE_AUCTION_UPDATED' || data.type === 'REVERSE_AUCTION_STATUS_CHANGED') {
         triggerDeduplicatedAuctionToast(`auction-status-${cleanId}`, () => {

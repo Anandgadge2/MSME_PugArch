@@ -16,6 +16,7 @@
  */
 
 import prisma from '../../lib/prisma.js';
+import { parsePenaltyTerms } from '../rateContract/rate-contract.service.js';
 import { ApiError } from '../../utils/ApiError.js';
 import { auditLog } from '../audit/audit.service.js';
 import { notificationService } from '../../services/notification.service.js';
@@ -501,16 +502,30 @@ export const calculateLiquidatedDamages = (delivery: any) => {
   // Extract contractual penalty terms from PO metadata or parent Contract metadata
   const poMeta = (po?.metadata || {}) as any;
   const contractMeta = (po?.contract?.metadata || {}) as any;
-  const penaltyTerms = poMeta?.penaltyTerms || contractMeta?.penaltyTerms;
+  const rawClause = poMeta?.ldTerms || poMeta?.penaltyClause || contractMeta?.ldTerms || contractMeta?.penaltyClause;
+  const existingPenaltyTerms = poMeta?.penaltyTerms || contractMeta?.penaltyTerms;
+  const penaltyTerms = existingPenaltyTerms || (rawClause ? parsePenaltyTerms({ penaltyClause: rawClause }) : null);
 
   const DEFAULT_LIQUIDATED_DAMAGES = { weeklyRate: 0.005, maxCapPercent: 10 };
   let weeklyRate = DEFAULT_LIQUIDATED_DAMAGES.weeklyRate;
-  if (penaltyTerms?.ratePerWeek !== undefined && penaltyTerms?.ratePerWeek !== null) {
+  let dailyRate = weeklyRate / 7;
+  let isDailyBasis = false;
+
+  if (penaltyTerms?.calculationBasis === 'daily') {
+    if (penaltyTerms.ratePerDay !== undefined && penaltyTerms.ratePerDay !== null) {
+      dailyRate = Number(penaltyTerms.ratePerDay) / 100;
+      weeklyRate = dailyRate * 7;
+      isDailyBasis = true;
+    }
+  } else if (penaltyTerms?.ratePerWeek !== undefined && penaltyTerms?.ratePerWeek !== null) {
     weeklyRate = Number(penaltyTerms.ratePerWeek) / 100;
+    dailyRate = weeklyRate / 7;
   } else if (poMeta?.penaltyRatePerWeek !== undefined && poMeta?.penaltyRatePerWeek !== null) {
     weeklyRate = Number(poMeta.penaltyRatePerWeek) / 100;
+    dailyRate = weeklyRate / 7;
   } else if (contractMeta?.penaltyRatePerWeek !== undefined && contractMeta?.penaltyRatePerWeek !== null) {
     weeklyRate = Number(contractMeta.penaltyRatePerWeek) / 100;
+    dailyRate = weeklyRate / 7;
   }
 
   let maxCapPercent = DEFAULT_LIQUIDATED_DAMAGES.maxCapPercent;
@@ -529,6 +544,8 @@ export const calculateLiquidatedDamages = (delivery: any) => {
       delayDays: 0,
       delayedWeeks: 0,
       weeklyRate,
+      dailyRate,
+      calculationBasis: isDailyBasis ? 'daily' : 'weekly',
       maxCapPercent,
       gracePeriodDays,
       calculatedLdAmount: 0,
@@ -549,6 +566,8 @@ export const calculateLiquidatedDamages = (delivery: any) => {
       delayDays: 0,
       delayedWeeks: 0,
       weeklyRate,
+      dailyRate,
+      calculationBasis: isDailyBasis ? 'daily' : 'weekly',
       maxCapPercent,
       gracePeriodDays,
       calculatedLdAmount: 0,
@@ -562,7 +581,9 @@ export const calculateLiquidatedDamages = (delivery: any) => {
   const delayDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
   const delayWeeks = Math.ceil(delayDays / 7);
 
-  const unCappedLd = poValue * (weeklyRate * delayWeeks);
+  const unCappedLd = isDailyBasis
+    ? poValue * (dailyRate * delayDays)
+    : poValue * (weeklyRate * delayWeeks);
   const maxCapAmount = poValue * (maxCapPercent / 100);
   const rawLdAmount = Math.min(unCappedLd, maxCapAmount);
   const calculatedLdAmount = isWaived ? 0 : Math.round(rawLdAmount * 100) / 100;
@@ -571,6 +592,8 @@ export const calculateLiquidatedDamages = (delivery: any) => {
     delayDays,
     delayedWeeks: delayWeeks,
     weeklyRate,
+    dailyRate,
+    calculationBasis: isDailyBasis ? 'daily' : 'weekly',
     maxCapPercent,
     gracePeriodDays,
     calculatedLdAmount,

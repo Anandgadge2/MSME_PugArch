@@ -358,13 +358,49 @@ router.get('/items/template', (async (req, res, next) => {
 router.get('/boq/template', (async (req, res, next) => {
   try {
     const wb = XLSX.utils.book_new();
+
+    // Sheet 1: Structured BOQ Schedule
     const data = [
-      ['Sr No', 'Item Description', 'Category', 'Quantity', 'UOM', 'Estimated Rate (INR)', 'Tax %', 'HSN/SAC Code', 'Remarks'],
-      ['1', 'Sample Item 1', 'General', '10', 'Nos', '500', '18', '8471', 'Sample specification remark 1'],
-      ['2', 'Sample Item 2', 'Electrical Works', '5', 'Set', '1200', '12', '9983', 'Sample specification remark 2']
+      ['Sr No', 'Item Description', 'Category', 'UOM', 'Quantity', 'Estimated Basic Rate (INR)', 'Tax %', 'HSN/SAC Code', 'Basic Amount (INR)', 'GST Amount (INR)', 'Total Gross Amount (INR)', 'Technical Remarks'],
+      ['1', 'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm', 'Civil Works', 'MT', '15', '68500', '18', '7306', '1027500', '184950', '1212450', 'Tata Structura / Jindal or approved equivalent with Mill Test Certificate'],
+      ['2', 'LT XLPE Armoured Aluminium Cable 3.5 Core x 185 sq.mm 1.1kV IS 7098', 'Electrical Works', 'METER', '500', '980', '18', '8544', '490000', '88200', '578200', 'Polycab / Havells conforming to CPWD technical specifications'],
+      ['3', 'Industrial Safety Helmets Type-1 Class C with Adjustable Ratchet', 'Safety & PPE', 'NOS', '120', '350', '18', '6506', '42000', '7560', '49560', 'Karam / 3M certified to IS 2925 with 4-point chin strap'],
+      ['4', 'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)', 'Consumables', 'BAG', '80', '480', '18', '3824', '38400', '6912', '45312', 'Fosroc / Sika for heavy machinery base plate grouting']
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
-    XLSX.utils.book_append_sheet(wb, ws, 'BOQ Template');
+    ws['!cols'] = [
+      { wch: 8 },  // Sr No
+      { wch: 42 }, // Item Description
+      { wch: 20 }, // Category
+      { wch: 14 }, // UOM
+      { wch: 12 }, // Quantity
+      { wch: 24 }, // Estimated Basic Rate
+      { wch: 12 }, // Tax %
+      { wch: 16 }, // HSN/SAC
+      { wch: 22 }, // Basic Amount
+      { wch: 18 }, // GST Amount
+      { wch: 24 }, // Gross Amount
+      { wch: 36 }  // Remarks
+    ];
+    XLSX.utils.book_append_sheet(wb, ws, 'BOQ Schedule');
+
+    // Sheet 2: Instructions & Guidelines
+    const guideData = [
+      ['BOQ Field / Column', 'Standard Guidelines & Format Instructions'],
+      ['Item Description', 'Detailed specifications, grade, IS/ISO standards, model, dimensions, or scope of work.'],
+      ['Category', 'Civil Works, Electrical Works, Mechanical Works, IT Hardware & Networking, Safety & PPE, General, Consumables.'],
+      ['UOM', 'Standard ISO/GeM units: NOS, SET, EA, KG, MT, METER, SQ FT, CU.MTRS, LTR, PKT, BOX, PACK, LOT, LS, JOB, HOUR, DAY, MONTH.'],
+      ['Quantity', 'Numeric value greater than 0.'],
+      ['Estimated Basic Rate (INR)', 'Base unit rate in INR (excl. GST). Can be 0 if rates are to be discovered via supplier bidding.'],
+      ['Tax %', 'Standard GST slab: 0, 5, 12, 18, or 28.'],
+      ['HSN/SAC Code', '4, 6, or 8 digit GST commodity / service classification code.'],
+      ['Calculated Amounts', 'Basic Amount = Qty * Rate; GST Amount = Basic * Tax%; Total Gross Amount = Basic + GST.'],
+      ['Upload Instructions', 'You can upload .xlsx, .xls, or .csv spreadsheets into the Sourcing Wizard at Step 4.']
+    ];
+    const guideWs = XLSX.utils.aoa_to_sheet(guideData);
+    guideWs['!cols'] = [{ wch: 26 }, { wch: 70 }];
+    XLSX.utils.book_append_sheet(wb, guideWs, 'Instructions');
+
     const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
     res.setHeader('Content-Disposition', 'attachment; filename="boq_template.xlsx"');

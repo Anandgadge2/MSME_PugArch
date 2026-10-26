@@ -121,14 +121,11 @@ export const PAYMENT_TERMS = [
   { value: 'ON_DELIVERY', label: 'On Delivery' },
 ] as const;
 
-// ── Delivery Type ───────────────────────────────────────────────────────────
+// ── Delivery Terms / Logistics Handover ─────────────────────────────────────
 export const DELIVERY_TYPES = [
-  { value: 'Door delivery to site', label: 'Door delivery to site' },
-  { value: 'IMMEDIATE_DELIVERY', label: 'Immediate Delivery' },
-  { value: 'SCHEDULED_DELIVERY', label: 'Scheduled Delivery' },
-  { value: 'URGENT_DELIVERY', label: 'Urgent Delivery' },
-  { value: 'PARTIAL_DELIVERY', label: 'Partial Delivery' },
-  { value: 'PROJECT_DELIVERY', label: 'Project Delivery' },
-  { value: 'Buyer pickup', label: 'Buyer pickup' },
-  { value: 'Seller dispatch', label: 'Seller dispatch' },
+  { value: 'Door delivery to site', label: 'Door delivery to site (FOR Destination)' },
+  { value: 'Buyer pickup', label: 'Buyer pickup (Ex-Works / Factory Gate)' },
+  { value: 'Seller dispatch', label: 'Seller dispatch (Transporter / Courier Handover)' },
 ] as const;
+
+export type DeliveryType = typeof DELIVERY_TYPES[number]['value'];

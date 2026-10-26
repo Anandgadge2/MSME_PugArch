@@ -3,6 +3,8 @@ import { ApiError } from '../../utils/ApiError.js';
 
 export interface RateContractPenaltyTerms {
   ratePerWeek: number;
+  ratePerDay?: number;
+  calculationBasis?: 'daily' | 'weekly';
   gracePeriodDays: number;
   maxCapPercent: number;
 }
@@ -48,6 +50,8 @@ export function parseDeliverySlaDays(rawSla: unknown, fallbackDays = 15): number
  */
 export function parsePenaltyTerms(metadata: any): RateContractPenaltyTerms {
   let ratePerWeek = 0.5;
+  let ratePerDay: number | undefined = undefined;
+  let calculationBasis: 'daily' | 'weekly' = 'weekly';
   let gracePeriodDays = 0;
   let maxCapPercent = 10.0;
 
@@ -55,6 +59,12 @@ export function parsePenaltyTerms(metadata: any): RateContractPenaltyTerms {
     if (metadata.penaltyTerms && typeof metadata.penaltyTerms === 'object') {
       if (Number.isFinite(Number(metadata.penaltyTerms.ratePerWeek))) {
         ratePerWeek = Math.max(0, Number(metadata.penaltyTerms.ratePerWeek));
+      }
+      if (Number.isFinite(Number(metadata.penaltyTerms.ratePerDay))) {
+        ratePerDay = Math.max(0, Number(metadata.penaltyTerms.ratePerDay));
+      }
+      if (metadata.penaltyTerms.calculationBasis === 'daily' || metadata.penaltyTerms.calculationBasis === 'weekly') {
+        calculationBasis = metadata.penaltyTerms.calculationBasis;
       }
       if (Number.isFinite(Number(metadata.penaltyTerms.gracePeriodDays))) {
         gracePeriodDays = Math.max(0, Number(metadata.penaltyTerms.gracePeriodDays));
@@ -66,21 +76,54 @@ export function parsePenaltyTerms(metadata: any): RateContractPenaltyTerms {
       if (Number.isFinite(Number(metadata.penaltyRatePerWeek))) {
         ratePerWeek = Math.max(0, Number(metadata.penaltyRatePerWeek));
       }
+      if (Number.isFinite(Number(metadata.penaltyRatePerDay))) {
+        ratePerDay = Math.max(0, Number(metadata.penaltyRatePerDay));
+        calculationBasis = 'daily';
+      }
       if (Number.isFinite(Number(metadata.penaltyGraceDays))) {
         gracePeriodDays = Math.max(0, Number(metadata.penaltyGraceDays));
       }
       if (Number.isFinite(Number(metadata.maxPenaltyCapPercentage))) {
         maxCapPercent = Math.max(0, Number(metadata.maxPenaltyCapPercentage));
-      } else if (typeof metadata.penaltyClause === 'string') {
-        const rateMatch = metadata.penaltyClause.match(/([\d.]+)%\s*per\s*week/i);
-        if (rateMatch && rateMatch[1]) ratePerWeek = parseFloat(rateMatch[1]);
-        const capMatch = metadata.penaltyClause.match(/maximum\s*(?:of)?\s*([\d.]+)%/i) || metadata.penaltyClause.match(/cap(?:ped)?\s*(?:at)?\s*([\d.]+)%/i);
-        if (capMatch && capMatch[1]) maxCapPercent = parseFloat(capMatch[1]);
+      } else if (typeof metadata.penaltyClause === 'string' || typeof metadata.ldTerms === 'string') {
+        const clause = String(metadata.penaltyClause || metadata.ldTerms || '');
+
+        // 1. Daily rate detection (e.g. "1% per day SLA downtime penalty", "0.1% per day of delay")
+        const dailyMatch = clause.match(/([\d.]+)%\s*per\s*day/i);
+        if (dailyMatch && dailyMatch[1]) {
+          ratePerDay = parseFloat(dailyMatch[1]);
+          ratePerWeek = Math.round(ratePerDay * 7 * 100) / 100;
+          calculationBasis = 'daily';
+        } else {
+          // 2. Weekly rate detection (e.g. "0.5% per week delay (max 10%)")
+          const weeklyMatch = clause.match(/([\d.]+)%\s*per\s*week/i);
+          if (weeklyMatch && weeklyMatch[1]) {
+            ratePerWeek = parseFloat(weeklyMatch[1]);
+            ratePerDay = Math.round((ratePerWeek / 7) * 1000) / 1000;
+            calculationBasis = 'weekly';
+          }
+        }
+
+        // 3. Grace period detection
+        const graceMatch = clause.match(/(\d+)\s*days?\s*grace/i) || clause.match(/grace\s*(?:period\s*of)?\s*(\d+)\s*days?/i);
+        if (graceMatch && graceMatch[1]) {
+          gracePeriodDays = parseInt(graceMatch[1], 10);
+        }
+
+        // 4. Maximum cap percentage detection
+        const capMatch = clause.match(/max(?:imum)?\s*(?:of)?\s*([\d.]+)%/i) || clause.match(/cap(?:ped)?\s*(?:at)?\s*([\d.]+)%/i);
+        if (capMatch && capMatch[1]) {
+          maxCapPercent = parseFloat(capMatch[1]);
+        }
       }
     }
   }
 
-  return { ratePerWeek, gracePeriodDays, maxCapPercent };
+  if (ratePerDay === undefined) {
+    ratePerDay = Math.round((ratePerWeek / 7) * 1000) / 1000;
+  }
+
+  return { ratePerWeek, ratePerDay, calculationBasis, gracePeriodDays, maxCapPercent };
 }
 
 /**

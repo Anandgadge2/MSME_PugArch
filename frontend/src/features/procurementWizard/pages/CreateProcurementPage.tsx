@@ -6040,10 +6040,238 @@ function ItemsDetailsForm({
     toast.info('SOW document removed');
   };
 
+  // Executive BOQ Schedule Template Downloader (ExcelJS with CSV Fallback)
+  const handleDownloadBoqTemplate = async () => {
+    const templateHeaders = [
+      'Sr No',
+      'Item Description',
+      'Category',
+      'UOM',
+      'Quantity',
+      'Estimated Basic Rate (INR)',
+      'Tax %',
+      'HSN/SAC Code',
+      'Basic Amount (INR)',
+      'GST Amount (INR)',
+      'Total Gross Amount (INR)',
+      'Technical Remarks'
+    ];
+
+    const sampleRows = [
+      [
+        1,
+        'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm',
+        'Civil Works',
+        'MT',
+        15,
+        68500,
+        18,
+        '7306',
+        1027500,
+        184950,
+        1212450,
+        'Tata Structura / Jindal or approved equivalent with Mill Test Certificate'
+      ],
+      [
+        2,
+        'LT XLPE Armoured Aluminium Cable 3.5 Core x 185 sq.mm 1.1kV IS 7098',
+        'Electrical Works',
+        'METER',
+        500,
+        980,
+        18,
+        '8544',
+        490000,
+        88200,
+        578200,
+        'Polycab / Havells conforming to CPWD technical specifications'
+      ],
+      [
+        3,
+        'Industrial Safety Helmets Type-1 Class C with Adjustable Ratchet',
+        'Safety & PPE',
+        'NOS',
+        120,
+        350,
+        18,
+        '6506',
+        42000,
+        7560,
+        49560,
+        'Karam / 3M certified to IS 2925 with 4-point chin strap'
+      ],
+      [
+        4,
+        'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)',
+        'Consumables',
+        'BAG',
+        80,
+        480,
+        18,
+        '3824',
+        38400,
+        6912,
+        45312,
+        'Fosroc / Sika for heavy machinery base plate grouting'
+      ]
+    ];
+
+    const templateName = 'structured_boq_schedule_template';
+
+    try {
+      const ExcelJS = (await import('exceljs')).default;
+      const workbook = new ExcelJS.Workbook();
+      workbook.creator = 'JSGSMILE Enterprise Procurement Portal';
+      workbook.created = new Date();
+
+      // Sheet 1: Structured BOQ Schedule
+      const sheet = workbook.addWorksheet('BOQ Schedule', {
+        views: [{ state: 'frozen', ySplit: 1, showGridLines: true }]
+      });
+
+      // Headers
+      sheet.addRow(templateHeaders);
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF12335F' } // Deep Navy Blue
+      };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
+      headerRow.height = 28;
+
+      // Add sample rows with calculated formulas
+      sampleRows.forEach((r, idx) => {
+        const rowNum = idx + 2;
+        const row = sheet.addRow([
+          r[0], // Sr No
+          r[1], // Description
+          r[2], // Category
+          r[3], // UOM
+          r[4], // Qty
+          r[5], // Estimated Rate
+          r[6], // Tax %
+          r[7], // HSN/SAC
+          { formula: `E${rowNum}*F${rowNum}`, result: r[8] }, // Basic Amount
+          { formula: `I${rowNum}*(G${rowNum}/100)`, result: r[9] }, // GST Amount
+          { formula: `I${rowNum}+J${rowNum}`, result: r[10] }, // Gross Total
+          r[11] // Remarks
+        ]);
+
+        row.alignment = { vertical: 'middle' };
+        row.getCell(1).alignment = { horizontal: 'center' };
+        row.getCell(4).alignment = { horizontal: 'center' };
+        row.getCell(5).numFmt = '#,##0';
+        row.getCell(6).numFmt = '₹#,##0.00';
+        row.getCell(7).numFmt = '0"%"';
+        row.getCell(7).alignment = { horizontal: 'center' };
+        row.getCell(8).numFmt = '@';
+        row.getCell(8).alignment = { horizontal: 'center' };
+        row.getCell(9).numFmt = '₹#,##0.00';
+        row.getCell(10).numFmt = '₹#,##0.00';
+        row.getCell(11).numFmt = '₹#,##0.00';
+        row.font = { size: 10 };
+      });
+
+      // Total Summary Row
+      const totalRowNum = sampleRows.length + 2;
+      const totalRow = sheet.addRow([
+        '',
+        'TOTAL ESTIMATED SCHEDULE VALUE',
+        '',
+        '',
+        { formula: `SUM(E2:E${totalRowNum - 1})` },
+        '',
+        '',
+        '',
+        { formula: `SUM(I2:I${totalRowNum - 1})` },
+        { formula: `SUM(J2:J${totalRowNum - 1})` },
+        { formula: `SUM(K2:K${totalRowNum - 1})` },
+        'Indicative baseline benchmark total'
+      ]);
+      totalRow.font = { bold: true, size: 10 };
+      totalRow.getCell(2).alignment = { horizontal: 'right' };
+      totalRow.getCell(5).numFmt = '#,##0';
+      totalRow.getCell(9).numFmt = '₹#,##0.00';
+      totalRow.getCell(10).numFmt = '₹#,##0.00';
+      totalRow.getCell(11).numFmt = '₹#,##0.00';
+      totalRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFF1F5F9' }
+      };
+
+      // Set professional column widths
+      sheet.columns = [
+        { width: 8 },  // Sr No
+        { width: 42 }, // Description
+        { width: 20 }, // Category
+        { width: 14 }, // UOM
+        { width: 12 }, // Qty
+        { width: 24 }, // Est Rate
+        { width: 12 }, // Tax %
+        { width: 16 }, // HSN/SAC
+        { width: 22 }, // Basic Amount
+        { width: 18 }, // GST Amount
+        { width: 24 }, // Gross Amount
+        { width: 36 }  // Remarks
+      ];
+
+      // Sheet 2: Instructions & Guidelines
+      const guideSheet = workbook.addWorksheet('Instructions & Guidelines', {
+        views: [{ showGridLines: true }]
+      });
+
+      guideSheet.columns = [{ width: 26 }, { width: 68 }];
+      guideSheet.addRow(['BOQ Preparation Guidelines', 'Instructions for Buyers and Estimators']);
+      const guideTitle = guideSheet.getRow(1);
+      guideTitle.font = { bold: true, size: 12, color: { argb: 'FF12335F' } };
+      guideTitle.height = 24;
+
+      guideSheet.addRow(['Item Description', 'Provide clear, unambiguous specifications including make, grade, IS/ISO standards, or dimensions.']);
+      guideSheet.addRow(['Category', 'Civil Works, Electrical Works, Mechanical Works, IT Hardware & Networking, Safety & PPE, General, Consumables.']);
+      guideSheet.addRow(['UOM (Units)', 'Standard ISO/GeM codes: NOS, SET, EA, KG, MT, METER, SQ FT, CU.MTRS, LTR, PKT, BOX, PACK, LOT, LS, JOB, HOUR, DAY, MONTH.']);
+      guideSheet.addRow(['Quantity', 'Enter positive numerical quantity (minimum 1).']);
+      guideSheet.addRow(['Estimated Rate', 'Base unit rate in INR (excl. GST). Can be 0 if rates are to be discovered competitively via supplier bidding.']);
+      guideSheet.addRow(['Tax / GST %', 'Applicable GST percentage: 0, 5, 12, 18, or 28.']);
+      guideSheet.addRow(['HSN / SAC Code', '4, 6, or 8-digit GST commodity / service classification code (e.g. 7306, 8544, 9954).']);
+      guideSheet.addRow(['Automatic Calculation', 'Columns Basic Amount, GST Amount, and Total Gross Amount calculate automatically using Excel formulas.']);
+      guideSheet.addRow(['File Formats Supported', 'You can upload either .xlsx, .xls, or .csv files back into the Sourcing Wizard.']);
+
+      const buffer = await workbook.xlsx.writeBuffer();
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${templateName}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded Executive BOQ Template: ${templateName}.xlsx`);
+    } catch (err) {
+      console.warn('ExcelJS download failed, falling back to CSV:', err);
+      downloadCsv(`${templateName}.csv`, [
+        templateHeaders,
+        ...sampleRows.map(r => [
+          r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10], r[11]
+        ])
+      ]);
+      toast.success(`Downloaded BOQ Template: ${templateName}.csv`);
+    }
+  };
+
   const handleBOQUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = ''; // Reset input so same file can be re-selected if modified
     if (!file) return;
     setUploadingFile(true);
+
+    let uploadedFileId: number | null = null;
+    let resolvedFileName: string = file.name;
+
+    // Gracefully attempt backend file asset upload (non-blocking for row parsing)
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -6053,10 +6281,17 @@ function ItemsDetailsForm({
         headers: authHeaders(),
         body: formData,
       });
-      const resData = await unwrap<any>(response);
-      const asset = resData.file || resData;
-      const fileId = Number(resData.fileId || asset.id || 0);
+      if (response.ok) {
+        const resData = await unwrap<any>(response);
+        const asset = resData.file || resData;
+        uploadedFileId = Number(resData.fileId || asset.id || 0) || null;
+        resolvedFileName = asset.originalName || file.name;
+      }
+    } catch (uploadErr) {
+      console.warn('Backend file upload deferred/offline, proceeding with client-side BOQ parse:', uploadErr);
+    }
 
+    try {
       // Parse spreadsheet rows if it's an Excel or CSV file
       let parsedBoqRows: BOQRow[] = [];
       try {
@@ -6064,31 +6299,44 @@ function ItemsDetailsForm({
         if (lowerName.endsWith('.xlsx') || lowerName.endsWith('.xls') || lowerName.endsWith('.csv') || lowerName.endsWith('.txt')) {
           const rows = await readSpreadsheetRows(file);
           if (rows.length >= 2) {
-            const [headers, ...dataRows] = rows;
+            // Locate the header row dynamically
+            const headerRowIdx = rows.findIndex(r => {
+              const norm = r.map(normalizeImportHeader);
+              return norm.some(c => c.includes('description') || c.includes('item') || c.includes('particulars') || c.includes('scope'));
+            });
+
+            const effectiveHeaderIdx = headerRowIdx >= 0 ? headerRowIdx : 0;
+            const headers = rows[effectiveHeaderIdx];
+            const dataRows = rows.slice(effectiveHeaderIdx + 1);
+
             const normH = headers.map(normalizeImportHeader);
             const findCol = (...aliases: string[]) => normH.findIndex(h => aliases.includes(h));
-            const descIdx = findCol('itemdescription', 'description', 'descriptionscopeofwork', 'descriptionscope', 'scopeofwork', 'itemname', 'name', 'particulars', 'details');
-            const catIdx = findCol('category', 'itemcategory');
-            const qtyIdx = findCol('quantity', 'qty', 'units');
-            const uomIdx = findCol('uom', 'unit', 'unitofmeasure');
-            const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price');
-            const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent');
+            const descIdx = findCol('itemdescription', 'description', 'descriptionscopeofwork', 'descriptionscope', 'scopeofwork', 'itemname', 'name', 'particulars', 'details', 'itemspecifications');
+            const catIdx = findCol('category', 'itemcategory', 'categorytrade', 'trade', 'tradetype');
+            const qtyIdx = findCol('quantity', 'qty', 'units', 'numberofunits');
+            const uomIdx = findCol('uom', 'unit', 'unitofmeasure', 'measureunit');
+            const rateIdx = findCol('estimatedrateinr', 'estimatedrate', 'rate', 'estimatedunitprice', 'unitprice', 'price', 'basicrate', 'estimatedbasicrateinr', 'estimatedbasicrate');
+            const taxIdx = findCol('tax', 'taxpercent', 'taxpercentage', 'gst', 'gstpercent', 'taxrate', 'gstrate');
             const hsnIdx = findCol('hsnsaccode', 'hsncode', 'saccode', 'hsnsac', 'hsn', 'sac');
-            const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'scopeofwork', 'scope', 'notes');
+            const remIdx = findCol('remarks', 'remark', 'specification', 'specifications', 'technicalremarks', 'notes', 'compliance');
 
             dataRows.forEach((r, idx) => {
               const desc = descIdx >= 0 ? String(r[descIdx] || '').trim() : '';
-              if (desc) {
+              // Skip summary / empty rows
+              if (desc && !desc.toUpperCase().startsWith('TOTAL')) {
                 const qty = Math.max(1, Number(qtyIdx >= 0 ? r[qtyIdx] : 1) || 1);
                 const rate = Math.max(0, Number(rateIdx >= 0 ? r[rateIdx] : 0) || 0);
                 const tax = Number(taxIdx >= 0 ? r[taxIdx] : 18) || 18;
                 const hsn = hsnIdx >= 0 && r[hsnIdx] ? String(r[hsnIdx]).trim() : '';
+                const rawUom = uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'NOS';
+                const cleanUom = rawUom.toUpperCase();
+
                 parsedBoqRows.push({
                   srNo: idx + 1,
                   description: desc,
                   category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : (draft.basics.category || 'General'),
                   quantity: qty,
-                  uom: uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'Nos',
+                  uom: cleanUom || 'NOS',
                   estimatedRate: rate,
                   taxPercent: tax,
                   hsnSacCode: hsn,
@@ -6096,7 +6344,7 @@ function ItemsDetailsForm({
                   fileAssetId: null,
                   fileName: '',
                   fileSize: null,
-                  total: qty * rate * (1 + tax / 100),
+                  total: Math.round(qty * rate * (1 + tax / 100) * 100) / 100,
                   remarks: remIdx >= 0 && r[remIdx] ? String(r[remIdx]).trim() : '',
                 });
               }
@@ -6112,8 +6360,8 @@ function ItemsDetailsForm({
         const totalSum = nextTable.reduce((acc, row) => acc + (Number(row.total) || (Number(row.quantity || 0) * Number(row.estimatedRate || 0))), 0);
         return {
           ...c,
-          boqFileAssetId: fileId,
-          boqFileName: asset.originalName || file.name,
+          boqFileAssetId: uploadedFileId || c.boqFileAssetId,
+          boqFileName: resolvedFileName,
           boqTable: nextTable,
           basics: {
             ...c.basics,
@@ -6121,11 +6369,14 @@ function ItemsDetailsForm({
           }
         };
       });
-      toast.success(parsedBoqRows.length > 0
-        ? `BOQ file uploaded & ${parsedBoqRows.length} item row${parsedBoqRows.length === 1 ? '' : 's'} imported`
-        : 'BOQ file uploaded successfully');
+
+      if (parsedBoqRows.length > 0) {
+        toast.success(`BOQ schedule uploaded & ${parsedBoqRows.length} item row${parsedBoqRows.length === 1 ? '' : 's'} imported successfully!`);
+      } else {
+        toast.info('BOQ file uploaded. Enter or adjust items in the schedule below.');
+      }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to upload BOQ');
+      toast.error(err.message || 'Failed to process BOQ file');
     } finally {
       setUploadingFile(false);
     }
@@ -6980,11 +7231,9 @@ function ItemsDetailsForm({
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => {
-                toast.info('Downloading BOQ Excel Template...');
-                window.open(`${BASE_URL}/api/buyer-showcase/boq/template`, '_blank');
-              }}
+              onClick={handleDownloadBoqTemplate}
               className="h-8.5 text-xs font-bold text-slate-700 shrink-0 whitespace-nowrap"
+              title="Download structured BOQ Excel template (.xlsx)"
             >
               <Download className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" /> Template
             </Button>
@@ -9834,6 +10083,9 @@ function ScheduleStepForm({
                 <Field label="Supplier Rank & Competitor Visibility" required>
                   <select
                     id="auction-rank-visibility"
+                    name="rankVisibility"
+                    aria-required="true"
+                    aria-label="Supplier Rank & Competitor Visibility"
                     value={draft.auctionConfig.rankVisibility}
                     onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])}
                     className={inputClass}
@@ -9843,7 +10095,9 @@ function ScheduleStepForm({
                     <option value="HIDDEN">Hidden (Blind Bidding)</option>
                   </select>
                   <p className="text-[10px] text-slate-500 font-semibold mt-1">
-                    Protects bidder privacy and prevents collusion or price-fixing cartels during live bidding.
+                    {draft.auctionConfig.rankVisibility === 'SHOW_RANK_ONLY' && 'Suppliers only see their own rank (L1, L2, etc.). Competitor identities and commercial prices remain strictly confidential.'}
+                    {draft.auctionConfig.rankVisibility === 'SHOW_LOWEST_PRICE' && 'Suppliers see the current lowest commercial offer (L1) and their own rank. Competitor company names remain anonymized.'}
+                    {draft.auctionConfig.rankVisibility === 'HIDDEN' && 'Blind bidding mode. Competitor prices, rankings, and standings are completely sealed until the auction is concluded.'}
                   </p>
                 </Field>
               </div>
@@ -10324,11 +10578,31 @@ function CommercialTermsForm({
             <select
               id="terms-delivery-terms"
               value={draft.terms.deliveryTerms}
-              onChange={e => updateTerms('deliveryTerms', e.target.value)}
+              onChange={e => {
+                const val = e.target.value;
+                updateDraft(c => ({
+                  ...c,
+                  terms: {
+                    ...c.terms,
+                    deliveryTerms: val,
+                    ...(val === 'Buyer pickup' ? { freightIncluded: false } : {})
+                  }
+                }));
+              }}
               className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
             >
               {DELIVERY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              {draft.terms.deliveryTerms && !DELIVERY_TYPES.some((t: any) => t.value === draft.terms.deliveryTerms) && (
+                <option value={draft.terms.deliveryTerms}>{draft.terms.deliveryTerms}</option>
+              )}
             </select>
+            <span className="block text-[11px] font-medium text-slate-500 pt-0.5">
+              {draft.terms.deliveryTerms === 'Buyer pickup'
+                ? 'Ex-Works: Buyer arranges transport and bears transit risk from seller facility.'
+                : draft.terms.deliveryTerms === 'Seller dispatch'
+                ? 'Carrier Handover: Seller books consignment via commercial transporter or courier to buyer destination.'
+                : 'FOR Destination: Seller is responsible for door delivery to buyer site, including transit and unloading.'}
+            </span>
           </Field>
 
           <Field label="Warranty Terms & Support Obligation">
