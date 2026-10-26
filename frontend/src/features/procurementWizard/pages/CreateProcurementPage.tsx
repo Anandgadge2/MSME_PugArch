@@ -6067,6 +6067,14 @@ function ItemsDetailsForm({
 
   // Executive BOQ Schedule Template Downloader (ExcelJS with CSV Fallback)
   const handleDownloadBoqTemplate = async () => {
+    const isService = draft.basics.procurementCategory === 'SERVICES';
+    const isWorks = draft.basics.procurementCategory === 'WORKS';
+
+    // Synchronize the template category across all items to match the tender's category
+    const targetCategory =
+      (draft.basics.category || '').trim() ||
+      (isService ? 'Services & Solutions' : isWorks ? 'Works & Construction' : 'Goods / Products');
+
     const templateHeaders = [
       'Sr No',
       'Item Description',
@@ -6082,66 +6090,190 @@ function ItemsDetailsForm({
       'Technical Remarks'
     ];
 
-    const sampleRows = [
-      [
-        1,
-        'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm',
-        'Civil Works',
-        'MT',
-        15,
-        68500,
-        18,
-        '7306',
-        1027500,
-        184950,
-        1212450,
-        'Tata Structura / Jindal or approved equivalent with Mill Test Certificate'
-      ],
-      [
-        2,
-        'LT XLPE Armoured Aluminium Cable 3.5 Core x 185 sq.mm 1.1kV IS 7098',
-        'Electrical Works',
-        'METER',
-        500,
-        980,
-        18,
-        '8544',
-        490000,
-        88200,
-        578200,
-        'Polycab / Havells conforming to CPWD technical specifications'
-      ],
-      [
-        3,
-        'Industrial Safety Helmets Type-1 Class C with Adjustable Ratchet',
-        'Safety & PPE',
-        'NOS',
-        120,
-        350,
-        18,
-        '6506',
-        42000,
-        7560,
-        49560,
-        'Karam / 3M certified to IS 2925 with 4-point chin strap'
-      ],
-      [
-        4,
-        'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)',
-        'Consumables',
-        'BAG',
-        80,
-        480,
-        18,
-        '3824',
-        38400,
-        6912,
-        45312,
-        'Fosroc / Sika for heavy machinery base plate grouting'
-      ]
-    ];
+    let sampleRows: any[][];
+    let templateName: string;
 
-    const templateName = 'structured_boq_schedule_template';
+    if (isService) {
+      templateName = 'procurement_services_boq_template';
+      sampleRows = [
+        [
+          1,
+          'Milestone 1: Project Kick-off, Scope Baseline & Technical Architecture Sign-off',
+          targetCategory,
+          'LOT',
+          1,
+          150000,
+          18,
+          '9983',
+          150000,
+          27000,
+          177000,
+          'SRS document, architecture diagrams, and baseline sign-off'
+        ],
+        [
+          2,
+          'Milestone 2: Core Engineering, Solution Implementation & Module Deliverables',
+          targetCategory,
+          'LOT',
+          1,
+          350000,
+          18,
+          '9983',
+          350000,
+          63000,
+          413000,
+          'Delivery of intermediate milestone modules as per SOW'
+        ],
+        [
+          3,
+          'Milestone 3: Quality Assurance, Security Audit & User Acceptance Testing (UAT)',
+          targetCategory,
+          'LOT',
+          1,
+          150000,
+          18,
+          '9983',
+          150000,
+          27000,
+          177000,
+          'UAT sign-off certificate and security audit clearance'
+        ],
+        [
+          4,
+          'Milestone 4: Production Go-Live, Operational Training & Handover Dossier',
+          targetCategory,
+          'LOT',
+          1,
+          100000,
+          18,
+          '9983',
+          100000,
+          18000,
+          118000,
+          'Final handover, admin training, and 1-year warranty support'
+        ]
+      ];
+    } else if (isWorks) {
+      templateName = 'procurement_works_boq_template';
+      sampleRows = [
+        [
+          1,
+          'Reinforced Cement Concrete M25 Grade for Substructure & Foundations',
+          targetCategory,
+          'CU.MTRS',
+          150,
+          4800,
+          18,
+          '3824',
+          720000,
+          129600,
+          849600,
+          'Design mix RCC conforming to IS 456 with mechanical batching'
+        ],
+        [
+          2,
+          'Structural Steel Framing Fabrication & Erection IS 2062 Grade E250',
+          targetCategory,
+          'MT',
+          25,
+          65000,
+          18,
+          '7208',
+          1625000,
+          292500,
+          1917500,
+          'Supply, fabrication and erection including 2 coats of zinc chromate primer'
+        ],
+        [
+          3,
+          'Autoclaved Aerated Concrete (AAC) Block Masonry 200mm thick in CM 1:4',
+          targetCategory,
+          'CU.MTRS',
+          80,
+          3200,
+          18,
+          '6810',
+          256000,
+          46080,
+          302080,
+          'IS 2185 certified blocks with polymer thin bed mortar'
+        ],
+        [
+          4,
+          'Internal Wall Plastering 12mm thickness with Cement Mortar 1:4',
+          targetCategory,
+          'SQ FT',
+          2500,
+          35,
+          18,
+          '2523',
+          87500,
+          15750,
+          103250,
+          'Smooth finish with scaffolding and 7-day water curing'
+        ]
+      ];
+    } else {
+      templateName = 'structured_boq_schedule_template';
+      sampleRows = [
+        [
+          1,
+          'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm',
+          targetCategory,
+          'MT',
+          15,
+          68500,
+          18,
+          '7306',
+          1027500,
+          184950,
+          1212450,
+          'Tata Structura / Jindal with Mill Test Certificate'
+        ],
+        [
+          2,
+          'Galvanized Iron Heavy Duty Pipes 50mm Class B IS 1239',
+          targetCategory,
+          'METER',
+          500,
+          980,
+          18,
+          '7306',
+          490000,
+          88200,
+          578200,
+          'Hot dipped galvanized steel conforming to IS 1239 standard'
+        ],
+        [
+          3,
+          'High Tensile Hex Head Fasteners Grade 8.8 with Zinc Plating',
+          targetCategory,
+          'KG',
+          120,
+          350,
+          18,
+          '7318',
+          42000,
+          7560,
+          49560,
+          'ISO 898 certified with test reports'
+        ],
+        [
+          4,
+          'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)',
+          targetCategory,
+          'BAG',
+          80,
+          480,
+          18,
+          '3824',
+          38400,
+          6912,
+          45312,
+          'Fosroc / Sika for heavy machinery base plate grouting'
+        ]
+      ];
+    }
 
     try {
       const ExcelJS = (await import('exceljs')).default;
@@ -6255,7 +6387,7 @@ function ItemsDetailsForm({
       guideTitle.height = 24;
 
       guideSheet.addRow(['Item Description', 'Provide clear, unambiguous specifications including make, grade, IS/ISO standards, or dimensions.']);
-      guideSheet.addRow(['Category', 'Civil Works, Electrical Works, Mechanical Works, IT Hardware & Networking, Safety & PPE, General, Consumables.']);
+      guideSheet.addRow(['Category', `Uniform schedule category: "${targetCategory}". All line items in this schedule must share this same category.`]);
       guideSheet.addRow(['UOM (Units)', 'Standard ISO/GeM codes: NOS, SET, EA, KG, MT, METER, SQ FT, CU.MTRS, LTR, PKT, BOX, PACK, LOT, LS, JOB, HOUR, DAY, MONTH.']);
       guideSheet.addRow(['Quantity', 'Enter positive numerical quantity (minimum 1).']);
       guideSheet.addRow(['Estimated Rate', 'Base unit rate in INR (excl. GST). Can be 0 if rates are to be discovered competitively via supplier bidding.']);

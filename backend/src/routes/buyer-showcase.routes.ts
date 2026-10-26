@@ -359,13 +359,17 @@ router.get('/boq/template', (async (req, res, next) => {
   try {
     const wb = XLSX.utils.book_new();
 
-    // Sheet 1: Structured BOQ Schedule
+    const category = typeof req.query.category === 'string' && req.query.category.trim()
+      ? req.query.category.trim()
+      : 'Civil Works';
+
+    // Sheet 1: Structured BOQ Schedule (All items share the exact same category)
     const data = [
       ['Sr No', 'Item Description', 'Category', 'UOM', 'Quantity', 'Estimated Basic Rate (INR)', 'Tax %', 'HSN/SAC Code', 'Basic Amount (INR)', 'GST Amount (INR)', 'Total Gross Amount (INR)', 'Technical Remarks'],
-      ['1', 'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm', 'Civil Works', 'MT', '15', '68500', '18', '7306', '1027500', '184950', '1212450', 'Tata Structura / Jindal or approved equivalent with Mill Test Certificate'],
-      ['2', 'LT XLPE Armoured Aluminium Cable 3.5 Core x 185 sq.mm 1.1kV IS 7098', 'Electrical Works', 'METER', '500', '980', '18', '8544', '490000', '88200', '578200', 'Polycab / Havells conforming to CPWD technical specifications'],
-      ['3', 'Industrial Safety Helmets Type-1 Class C with Adjustable Ratchet', 'Safety & PPE', 'NOS', '120', '350', '18', '6506', '42000', '7560', '49560', 'Karam / 3M certified to IS 2925 with 4-point chin strap'],
-      ['4', 'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)', 'Consumables', 'BAG', '80', '480', '18', '3824', '38400', '6912', '45312', 'Fosroc / Sika for heavy machinery base plate grouting']
+      ['1', 'Structural Steel Tubular Sections IS 4923 Grade YSt 310 - 100x50x4.0mm', category, 'MT', '15', '68500', '18', '7306', '1027500', '184950', '1212450', 'Tata Structura / Jindal or approved equivalent with Mill Test Certificate'],
+      ['2', 'Reinforced Cement Concrete M25 Grade for Substructure Foundations', category, 'CU.MTRS', '150', '4800', '18', '3824', '720000', '129600', '849600', 'Design mix RCC with approved aggregates conforming to IS 456'],
+      ['3', 'Structural Steel Framing Fabrication & Erection IS 2062 Grade E250', category, 'MT', '25', '65000', '18', '7208', '1625000', '292500', '1917500', 'Ultrasonic weld tested steel framework with anti-corrosive primer'],
+      ['4', 'Non-Shrink High Strength Cementitious Grout Grade GP-2 (25kg Bag)', category, 'BAG', '80', '480', '18', '3824', '38400', '6912', '45312', 'Fosroc / Sika for heavy machinery base plate grouting']
     ];
     const ws = XLSX.utils.aoa_to_sheet(data);
     ws['!cols'] = [
@@ -388,7 +392,7 @@ router.get('/boq/template', (async (req, res, next) => {
     const guideData = [
       ['BOQ Field / Column', 'Standard Guidelines & Format Instructions'],
       ['Item Description', 'Detailed specifications, grade, IS/ISO standards, model, dimensions, or scope of work.'],
-      ['Category', 'Civil Works, Electrical Works, Mechanical Works, IT Hardware & Networking, Safety & PPE, General, Consumables.'],
+      ['Category', `Uniform schedule category: "${category}". All line items within this schedule must share this same category.`],
       ['UOM', 'Standard ISO/GeM units: NOS, SET, EA, KG, MT, METER, SQ FT, CU.MTRS, LTR, PKT, BOX, PACK, LOT, LS, JOB, HOUR, DAY, MONTH.'],
       ['Quantity', 'Numeric value greater than 0.'],
       ['Estimated Basic Rate (INR)', 'Base unit rate in INR (excl. GST). Can be 0 if rates are to be discovered via supplier bidding.'],

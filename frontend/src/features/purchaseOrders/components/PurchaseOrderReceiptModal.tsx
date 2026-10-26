@@ -157,6 +157,32 @@ const formatNumber = (val?: number | string | null) => {
 
 
 
+const getStatusBadgeStyles = (status?: string) => {
+  const s = String(status || '').toLowerCase().trim();
+  if (['pending', 'pending_acceptance', 'pending_dispatch', 'awaiting_dispatch', 'requested'].includes(s)) {
+    return {
+      badge: 'border-amber-400/50 bg-amber-500/20 text-amber-300',
+      dot: 'bg-amber-400',
+    };
+  }
+  if (['accepted', 'approved', 'in_transit', 'dispatched', 'delivered', 'completed', 'grn_approved', 'paid', 'fulfilled'].includes(s)) {
+    return {
+      badge: 'border-emerald-400/50 bg-emerald-500/20 text-emerald-300',
+      dot: 'bg-emerald-400',
+    };
+  }
+  if (['rejected', 'cancelled', 'disputed', 'declined'].includes(s)) {
+    return {
+      badge: 'border-rose-400/50 bg-rose-500/20 text-rose-300',
+      dot: 'bg-rose-400',
+    };
+  }
+  return {
+    badge: 'border-sky-400/50 bg-sky-500/20 text-sky-300',
+    dot: 'bg-sky-400',
+  };
+};
+
 // Neutral Minimal Theme (Clean, official monochrome enterprise receipt format)
 export const NEUTRAL_MINIMAL_THEME = {
   headerBg: 'bg-slate-200',
@@ -857,7 +883,7 @@ export function PurchaseOrderReceiptModal({
       }} />
 
       {/* Main Container Card */}
-      <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-5xl")}>
+      <FocusTrap onEscape={onClose} className={cn("w-full flex justify-center", isFullscreen ? "h-full" : "h-[92vh] max-h-[95vh] max-w-5xl lg:max-w-6xl xl:max-w-7xl")}>
         <div
           className={cn(
             'flex flex-col bg-white overflow-hidden shadow-2xl transition-all duration-150 transform-gpu will-change-[transform,opacity] w-full',
@@ -867,9 +893,9 @@ export function PurchaseOrderReceiptModal({
           )}
         >
         {/* Top Control Header Bar (Hidden in Print) */}
-        <header className="no-print bg-[#0b1f3a] text-white px-3 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-2">
-          {/* Left: Navigation, PO info */}
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink min-w-0">
+        <header className="no-print bg-[#0b1f3a] text-white px-3 sm:px-4 py-2 sm:py-2.5 shrink-0 flex items-center justify-between border-b border-white/10 shadow-md gap-2 sm:gap-4">
+          {/* Left: Navigation, PO info, and Status Badge */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             <Button
               type="button"
               variant="ghost"
@@ -903,14 +929,23 @@ export function PurchaseOrderReceiptModal({
               </button>
             </div>
 
-            <span className="hidden lg:inline-flex items-center gap-1.5 rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-emerald-300 shrink-0">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              {readableStatus(order.status)}
-            </span>
+            {/* Status Badge: always visible, clearly styled with status semantics without overlapping */}
+            {(() => {
+              const statusStyles = getStatusBadgeStyles(order.status);
+              return (
+                <span className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full border px-2 sm:px-2.5 py-0.5 text-[10px] sm:text-[11px] font-black uppercase tracking-wider shrink-0 transition-colors",
+                  statusStyles.badge
+                )}>
+                  <span className={cn("h-1.5 w-1.5 rounded-full animate-pulse", statusStyles.dot)} />
+                  <span>{readableStatus(order.status)}</span>
+                </span>
+              );
+            })()}
           </div>
 
-          {/* Center: View Mode Toggle */}
-          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 justify-center">
+          {/* Center: View Mode Toggle Tabs */}
+          <div className="flex items-center justify-center shrink-0">
             <div className="flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 shrink-0">
               <button
                 type="button"
@@ -936,8 +971,8 @@ export function PurchaseOrderReceiptModal({
                 )}
               >
                 <Clock className="h-3.5 w-3.5" aria-hidden="true" />
-                <span className="hidden sm:inline">Audit & Tracking</span>
-                <span className="sm:hidden">Audit</span>
+                <span className="hidden md:inline">Audit & Tracking</span>
+                <span className="md:hidden">Audit</span>
               </button>
               <button
                 type="button"
@@ -950,14 +985,17 @@ export function PurchaseOrderReceiptModal({
                 )}
               >
                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />
-                <span className="hidden sm:inline">GFR Compliance (PBG &amp; LD)</span>
+                <span className="hidden xl:inline">GFR Compliance (PBG &amp; LD)</span>
+                <span className="hidden sm:inline xl:hidden">GFR Compliance</span>
                 <span className="sm:hidden">GFR</span>
               </button>
             </div>
+          </div>
 
-            {/* Zoom / Page Fit Switcher when in Receipt tab */}
+          {/* Right: Zoom controls (when in Receipt tab) + Fullscreen + Close */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto">
             {activeTab === 'receipt' && (
-              <div className="hidden sm:flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 gap-0.5 shrink-0">
+              <div className="hidden lg:flex items-center bg-white/10 p-0.5 rounded-xl border border-white/15 gap-0.5 shrink-0">
                 <button
                   type="button"
                   onClick={() => {
@@ -1013,10 +1051,9 @@ export function PurchaseOrderReceiptModal({
                 </button>
               </div>
             )}
-          </div>
 
-          {/* Right: Actions */}
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto pl-1">
+            {activeTab === 'receipt' && <div className="hidden lg:block h-4 w-px bg-white/20 shrink-0" />}
+
             <Button
               type="button"
               variant="ghost"
