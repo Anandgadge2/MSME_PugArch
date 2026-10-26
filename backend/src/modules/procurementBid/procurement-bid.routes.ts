@@ -726,8 +726,8 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
           terms: {
             paymentTerms: meta.paymentTerms || srcPayload?.terms?.paymentTerms || '',
             deliveryTerms: meta.deliverySla || srcPayload?.terms?.deliveryTerms || '',
-            freightIncluded: srcPayload?.terms?.freightIncluded ?? false,
-            gstIncluded: srcPayload?.terms?.gstIncluded ?? false,
+            freightIncluded: srcPayload?.terms?.freightIncluded ?? srcPayload?.tender?.freightIncluded ?? srcPayload?.freightIncluded ?? true,
+            gstIncluded: srcPayload?.terms?.gstIncluded ?? srcPayload?.tender?.gstIncluded ?? srcPayload?.gstIncluded ?? false,
             warrantyTerms: srcPayload?.terms?.warrantyTerms || '',
             penaltyClause: meta.penaltyClause || srcPayload?.terms?.penaltyClause || '',
           },

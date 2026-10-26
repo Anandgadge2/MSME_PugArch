@@ -1034,8 +1034,8 @@ export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: Procu
     { value: 'BOQ', label: 'Multi-line BOQ Total Auction' }
   ],
   RATE_CONTRACT: [
-    { value: 'SOR', label: 'Schedule of Rates (SOR Rate Card)' },
-    { value: 'BOQ', label: 'Multi-item Rate Schedule (BOQ)' }
+    { value: 'SINGLE_ITEM', label: 'Single-Item Rate Contract' },
+    { value: 'SOR', label: 'Multi-Item Schedule of Rates (SOR)' }
   ],
   REPEAT_ORDER: [
     { value: 'SINGLE_ITEM', label: 'Single Item' },
@@ -1047,8 +1047,21 @@ export const FORMATS_BY_METHOD: Record<ProcurementMethodId, Array<{ value: Procu
 export const getPricingFormatLabel = (
   format: ProcurementPricingFormatValue,
   category: ProcurementCategoryValue = 'GOODS',
-  baseLabel?: string
+  baseLabel?: string,
+  method?: ProcurementMethodId
 ): string => {
+  if (method === 'RATE_CONTRACT') {
+    if (format === 'SINGLE_ITEM') {
+      return category === 'SERVICES'
+        ? 'Single Service Rate Card (SOR)'
+        : 'Single-Item Rate Contract';
+    }
+    if (format === 'SOR' || format === 'BOQ') {
+      return category === 'SERVICES'
+        ? 'Multi-Service Schedule of Rates (SOR)'
+        : 'Multi-Item Schedule of Rates (SOR Rate Card)';
+    }
+  }
   if (format === 'SINGLE_ITEM') {
     if (category === 'SERVICES') return 'Lump-Sum Contract (Single SOW / Turnkey Scope)';
     if (category === 'WORKS') return 'Lump-Sum EPC / Turnkey Works';
@@ -1090,6 +1103,9 @@ const applyMethodDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
   }
 
   let nextFormat = updated.basics.pricingFormat || 'SINGLE_ITEM';
+  if (method === 'RATE_CONTRACT' && nextFormat === 'BOQ') {
+    nextFormat = 'SOR';
+  }
   if (!allowedFormats.some(f => f.value === nextFormat)) {
     nextFormat = allowedFormats[0].value;
   }
@@ -2988,18 +3004,20 @@ function BasicsStepForm({
   }, [draft.type]);
 
   useEffect(() => {
+    let currentFormat = draft.basics.pricingFormat;
+    if (draft.type === 'RATE_CONTRACT' && currentFormat === 'BOQ') {
+      currentFormat = 'SOR';
+    }
     const isCatAllowed = allowedCategories.some(c => c.value === draft.basics.procurementCategory);
-    const isFormatAllowed = allowedFormats.some(f => f.value === draft.basics.pricingFormat);
+    const isFormatAllowed = allowedFormats.some(f => f.value === currentFormat);
 
-    if (!isCatAllowed || !isFormatAllowed) {
+    if (!isCatAllowed || !isFormatAllowed || currentFormat !== draft.basics.pricingFormat) {
       const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
-      let nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
+      let nextFormat = isFormatAllowed ? (currentFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
 
       if (nextCat === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
         nextFormat = 'BOQ';
       }
-
-
 
       updateDraft(c => ({
         ...c,
@@ -3010,7 +3028,7 @@ function BasicsStepForm({
         }
       }));
     }
-  }, [allowedCategories, allowedFormats, draft.basics.procurementCategory, draft.basics.pricingFormat, updateDraft]);
+  }, [allowedCategories, allowedFormats, draft.basics.procurementCategory, draft.basics.pricingFormat, draft.type, updateDraft]);
 
   // Dynamic categories from database
   const [categoriesList, setCategoriesList] = useState<Array<{ id: number; name: string }>>([]);
@@ -4693,6 +4711,7 @@ function ItemDrawerOrModal({
   onPreviewDocument,
   categoriesList = [],
   defaultCategory = '',
+  isRateContract = false,
 }: {
   isOpen: boolean;
   item: ItemRow | null;
@@ -4703,6 +4722,7 @@ function ItemDrawerOrModal({
   onPreviewDocument?: (doc: any, label?: string) => void;
   categoriesList?: Array<{ id: number; name: string }>;
   defaultCategory?: string;
+  isRateContract?: boolean;
 }) {
   const [formData, setFormData] = useState<ItemModalFormData | null>(() => {
     if (!item) return null;
@@ -4872,7 +4892,11 @@ function ItemDrawerOrModal({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-base font-black text-slate-900 tracking-tight">
-                  {formData.name ? `Edit: ${formData.name}` : (isService ? 'Add Service Line Item' : 'Add Product Line Item')}
+                  {formData.name
+                    ? `Edit: ${formData.name}`
+                    : (isRateContract
+                        ? (isService ? 'Configure Service Rate Card Item (SOR)' : 'Configure Single-Item Rate Contract')
+                        : (isService ? 'Add Service Line Item' : 'Add Product Line Item'))}
                 </h3>
                 <span className={cn(
                   "rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-wider",
@@ -4882,7 +4906,9 @@ function ItemDrawerOrModal({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 font-medium">
-                {isService ? 'Configure service scope, rates, deliverables, and SOW attachments' : 'Configure technical specs, quantity, commercial pricing, and drawings'}
+                {isRateContract
+                  ? 'Configure unit rate ceiling, UOM, and estimated annual consumption for call-off releases'
+                  : (isService ? 'Configure service scope, rates, deliverables, and SOW attachments' : 'Configure technical specs, quantity, commercial pricing, and drawings')}
               </p>
             </div>
           </div>
@@ -5082,7 +5108,7 @@ function ItemDrawerOrModal({
             {/* Row 4: Commercials (Qty, UOM, Rate, GST) */}
             <div className="pt-2 border-t border-slate-100">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <Field label="Quantity" required>
+                <Field label={isRateContract ? "Est. Annual Qty" : "Quantity"} required>
                   <div className="relative flex items-center">
                     <button
                       type="button"
@@ -5159,7 +5185,7 @@ function ItemDrawerOrModal({
                   )}
                 </Field>
 
-                <Field label={isService ? "Est. Service Fee / Benchmark Budget (₹)" : "Est. Unit Rate (₹)"}>
+                <Field label={isRateContract ? "Ceiling Rate (₹)" : (isService ? "Est. Service Fee / Benchmark Budget (₹)" : "Est. Unit Rate (₹)")}>
                   <div className="relative flex items-center">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <span className="text-xs sm:text-sm font-bold text-slate-400 select-none">
@@ -6936,12 +6962,26 @@ function ItemsDetailsForm({
           const isBoq = fmt.value === 'BOQ';
           const isSor = fmt.value === 'SOR';
 
-          let title = getPricingFormatLabel(fmt.value, draft.basics.procurementCategory, fmt.label);
+          let title = getPricingFormatLabel(fmt.value, draft.basics.procurementCategory, fmt.label, draft.type);
           let desc = '';
           let badge = '';
           let IconComponent = FileText;
 
-          if (isLump) {
+          if (isRateContract) {
+            if (isLump) {
+              title = isService ? 'Single Service Rate Card (SOR)' : 'Single-Item Rate Contract';
+              desc = isService
+                ? 'Bidders quote a legally binding unit or periodic rate ceiling + GST for call-offs against a single service scope.'
+                : 'Bidders quote a legally binding unit rate ceiling for recurring call-offs of a single defined product.';
+              badge = 'Unit Rate Ceiling';
+              IconComponent = Scale;
+            } else {
+              title = isService ? 'Multi-Service Schedule of Rates (SOR)' : 'Multi-Item Schedule of Rates (SOR Rate Card)';
+              desc = 'Spreadsheet schedule of rates establishing unit price ceilings for multiple items across call-off releases.';
+              badge = 'SOR Rate Card';
+              IconComponent = FileSpreadsheet;
+            }
+          } else if (isLump) {
             title = isService ? 'Lump-Sum Total Contract' : 'Single Item / Direct Quote';
             desc = isService 
               ? 'Bidders quote a single total contract fee + GST covering the attached SOW. No itemized breakdown required.'
@@ -6973,28 +7013,66 @@ function ItemsDetailsForm({
                 if (fmt.value === draft.basics.pricingFormat) return;
 
                 const isBoqType = fmt.value === 'BOQ' || fmt.value === 'SOR';
-                updateDraft(c => ({
-                  ...c,
-                  basics: { ...c.basics, pricingFormat: fmt.value },
-                  boqTable: isBoqType && c.boqTable.length === 0
-                    ? [{
-                        srNo: 1,
-                        description: isService ? (c.serviceDetails.serviceTitle || c.basics.title || 'Service Scope as per SOW') : '',
-                        category: c.basics.category || (isService ? 'Service' : 'General'),
-                        quantity: 1,
-                        uom: isService ? 'JOB' : 'Nos',
-                        estimatedRate: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0,
-                        taxPercent: 18,
-                        hsnSacCode: isService ? '9983' : '',
-                        attachments: [],
-                        fileAssetId: null,
-                        fileName: '',
-                        fileSize: null,
-                        total: isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) * 1.18 : 0,
-                        remarks: ''
-                      }]
-                    : c.boqTable
-                }));
+                updateDraft(c => {
+                  let updatedBoq = c.boqTable;
+                  let updatedItems = c.items;
+
+                  if (isBoqType && updatedBoq.length === 0) {
+                    const firstItem = updatedItems[0];
+                    updatedBoq = [{
+                      srNo: 1,
+                      description: firstItem?.name || (isService ? (c.serviceDetails.serviceTitle || c.basics.title || 'Service Scope as per SOW') : ''),
+                      category: firstItem?.category || c.basics.category || (isService ? 'Service' : 'General'),
+                      quantity: Number(firstItem?.quantity || 1),
+                      uom: firstItem?.unit || (isService ? 'JOB' : 'Nos'),
+                      estimatedRate: Number(firstItem?.unitPrice || (isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0)),
+                      taxPercent: Number(firstItem?.gst ?? 18),
+                      hsnSacCode: firstItem?.hsn_sac_code || (isService ? '9983' : ''),
+                      attachments: firstItem?.attachments || [],
+                      fileAssetId: firstItem?.fileAssetId || null,
+                      fileName: firstItem?.specificationFileName || '',
+                      fileSize: null,
+                      total: Number(firstItem?.unitPrice || (isService && Number(c.basics.estimatedValue) > 0 ? Number(c.basics.estimatedValue) : 0)) * (1 + (Number(firstItem?.gst ?? 18) / 100)) * Number(firstItem?.quantity || 1),
+                      remarks: firstItem?.specification || ''
+                    }];
+                  } else if (!isBoqType && updatedItems.length === 0 && updatedBoq.length > 0 && updatedBoq[0].description) {
+                    const firstRow = updatedBoq[0];
+                    updatedItems = [{
+                      id: makeId(),
+                      itemType: isService ? 'Service' : 'Product',
+                      name: firstRow.description,
+                      specification: firstRow.remarks || firstRow.description,
+                      quantity: Number(firstRow.quantity || 1),
+                      unit: firstRow.uom || (isService ? 'Job' : 'Nos'),
+                      unitPrice: Number(firstRow.estimatedRate || 0),
+                      gst: Number(firstRow.taxPercent ?? 18),
+                      deliveryDate: nextFortnight,
+                      brandPolicy: 'Equivalent allowed',
+                      technicalSpecification: '',
+                      specificationFileName: firstRow.fileName || '',
+                      hsn_sac_code: firstRow.hsnSacCode || '',
+                      brand_preference: '',
+                      brand_flexible: 'Yes',
+                      fileAssetId: firstRow.fileAssetId || null,
+                      attachments: (firstRow.attachments || []).map((att: any, aIdx: number) => ({
+                        id: String(att.id || makeId()),
+                        name: String(att.name || att.fileName || `Attachment ${aIdx + 1}`),
+                        fileAssetId: Number(att.fileAssetId || 0),
+                        fileName: String(att.fileName || att.name || 'document'),
+                        fileSize: att.fileSize ? Number(att.fileSize) : undefined,
+                        mimeType: att.mimeType,
+                        uploadedAt: att.uploadedAt,
+                      })),
+                    }];
+                  }
+
+                  return {
+                    ...c,
+                    basics: { ...c.basics, pricingFormat: fmt.value },
+                    boqTable: updatedBoq,
+                    items: updatedItems,
+                  };
+                });
                 toast.info(`Switched commercial structure to: ${title}`);
               }}
               className={cn(
@@ -7190,11 +7268,17 @@ function ItemsDetailsForm({
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-slate-100 pb-2.5 gap-2.5">
           <div>
             <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">
-              {isWorks ? 'Works Schedule / Bill of Quantities (BOQ)' : (isService ? 'Milestones & Deliverables Schedule (BOQ)' : 'Structured Bill of Quantities (BOQ)')}
+              {isWorks
+                ? 'Works Schedule / Bill of Quantities (BOQ)'
+                : isRateContract
+                ? 'Multi-Item Schedule of Rates (SOR Rate Card)'
+                : (isService ? 'Milestones & Deliverables Schedule (BOQ)' : 'Structured Bill of Quantities (BOQ)')}
             </h3>
             <p className="text-[10px] text-slate-500 font-semibold mt-0.5">
               {isWorks
                 ? 'Itemized schedule of construction, fabrication, or execution trades'
+                : isRateContract
+                ? 'Itemized schedule establishing binding unit price ceilings for call-off releases (quantities are indicative annual demand)'
                 : isService
                 ? 'Itemized schedule of service milestones, deliverables, or payment stages'
                 : 'Invite quotes using an itemized spreadsheet schedule'}
@@ -7232,9 +7316,9 @@ function ItemsDetailsForm({
               size="sm"
               onClick={handleDownloadBoqTemplate}
               className="h-8.5 text-xs font-bold text-slate-700 shrink-0 whitespace-nowrap"
-              title="Download structured BOQ Excel template (.xlsx)"
+              title={isRateContract ? "Download structured Schedule of Rates Excel template (.xlsx)" : "Download structured BOQ Excel template (.xlsx)"}
             >
-              <Download className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" /> Template
+              <Download className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" /> {isRateContract ? 'SOR Template' : 'Template'}
             </Button>
             
             <div className="relative shrink-0">
@@ -7245,7 +7329,7 @@ function ItemsDetailsForm({
                 onChange={handleBOQUpload}
                 className="sr-only"
                 disabled={uploadingFile}
-                aria-label="Upload BOQ File"
+                aria-label={isRateContract ? "Upload Schedule of Rates File" : "Upload BOQ File"}
               />
               <label
                 htmlFor="boq-upload"
@@ -7262,7 +7346,7 @@ function ItemsDetailsForm({
                 ) : (
                   <>
                     <Upload className="h-4 w-4 mr-1 text-slate-500" aria-hidden="true" />
-                    <span>Upload BOQ File</span>
+                    <span>{isRateContract ? 'Upload SOR File' : 'Upload BOQ File'}</span>
                   </>
                 )}
               </label>
@@ -7273,7 +7357,7 @@ function ItemsDetailsForm({
         {draft.boqFileName && (
           <div className="flex items-center gap-2 text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl max-w-md animate-fadeIn">
             <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
-            <span className="truncate">Uploaded BOQ: <strong>{draft.boqFileName}</strong></span>
+            <span className="truncate">Uploaded {isRateContract ? 'SOR' : 'BOQ'}: <strong>{draft.boqFileName}</strong></span>
             <button
               type="button"
               onClick={() => updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }))}
@@ -7321,8 +7405,9 @@ function ItemsDetailsForm({
               ...c,
               basics: { ...c.basics, estimatedValue: newTotal }
             }));
-            toast.success('Tender estimated budget synced with BOQ Schedule Total!');
+            toast.success(isRateContract ? 'Tender estimated budget synced with SOR Schedule Annual Ceiling!' : 'Tender estimated budget synced with BOQ Schedule Total!');
           }}
+          isRateContract={isRateContract}
         />
 
         {/* Quick Document Manager Modal for BOQ Rows */}
@@ -7725,7 +7810,7 @@ function ItemsDetailsForm({
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
-                {isRateContract ? 'Schedule of Rates (SOR) & Item Specifications' : 'Procurement Schedule & Specifications'}
+                {isRateContract ? 'Single-Item Rate Contract & Specifications' : 'Procurement Schedule & Specifications'}
               </h3>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-700">
                 {draft.items.length} line{draft.items.length === 1 ? '' : 's'}
@@ -7738,7 +7823,7 @@ function ItemsDetailsForm({
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-0.5">
               {isRateContract
-                ? 'Establish unit rates and indicative consumption volumes. Rates are locked for all future call-off purchase orders.'
+                ? 'Establish unit rate ceiling and indicative annual demand for a single recurring commodity/service. Unit rates are locked for all future call-off releases.'
                 : 'Add product/service items, configure pricing and GST, and attach technical specifications & drawings.'}
             </p>
           </div>
@@ -7972,6 +8057,22 @@ function ItemsDetailsForm({
         )}
       </div>
 
+      {isRateContract && (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3 sm:p-3.5 text-xs text-indigo-950 font-medium shadow-3xs">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-black uppercase tracking-wide text-indigo-900 text-xs">
+              Single-Item Rate Contract (Call-Off Agreement)
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-indigo-100 text-indigo-800 border border-indigo-200">
+              Unit Rate Ceiling
+            </span>
+          </div>
+          <p className="text-[11px] text-indigo-900/90">
+            Define your single recurring product or service item specifications and unit ceiling rate below. The unit price entered establishes your binding price ceiling for all periodic call-off purchase orders during the contract validity period. Annual quantity is indicative.
+          </p>
+        </div>
+      )}
+
       {/* Modern Schedule Table */}
       <DataTable
         data={draft.items}
@@ -7981,13 +8082,15 @@ function ItemsDetailsForm({
         minWidth={isService ? 'min-w-[1100px]' : 'min-w-[1240px]'}
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
-        emptyTitle={isService ? "No service contract lines added yet" : "No product items added yet"}
+        emptyTitle={isService ? (isRateContract ? "No service rate lines added yet" : "No service contract lines added yet") : (isRateContract ? "No rate contract product items added yet" : "No product items added yet")}
         emptyDescription={
           isService
             ? (isRateContract
                 ? "Click 'Add SOR Service Line' or use the 1-click Initialize button above to configure your Schedule of Rates baseline."
                 : "Click 'Add Service Line' or use the 1-click Initialize button above to configure your lump-sum contract item.")
-            : "Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart."
+            : (isRateContract
+                ? "Click 'Add Product Line' to configure your single recurring item specifications, UOM, and estimated annual consumption."
+                : "Add line items individually, upload an Excel/CSV schedule, or import from your marketplace cart.")
         }
         footer={
           <div className="border-t border-slate-100 bg-slate-50/70 p-3 flex items-center justify-between gap-3 overflow-x-auto no-scrollbar flex-nowrap">
@@ -8031,7 +8134,9 @@ function ItemsDetailsForm({
           <div className="space-y-3">
             <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  {isRateContract ? 'Total Lines & Annual Qty' : 'Total Items & Qty'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-900">{draft.items.length} Lines</span>
                   <span className="text-xs font-bold text-slate-500">{totalQty.toLocaleString('en-IN')} Units</span>
@@ -8040,7 +8145,7 @@ function ItemsDetailsForm({
 
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
-                  {isService ? 'Base Service Fee' : 'Base Value (Excl. GST)'}
+                  {isRateContract ? 'Base Annual Ceiling' : (isService ? 'Base Service Fee' : 'Base Value (Excl. GST)')}
                 </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-800">
@@ -8066,7 +8171,7 @@ function ItemsDetailsForm({
 
               <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
                 <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">
-                  {isService ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)'}
+                  {isRateContract ? 'Indicative Annual Ceiling' : (isService ? 'Contract Ceiling (Gross)' : 'Total Est. Value (Gross)')}
                 </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-base font-black text-[#0b2447]">
@@ -8182,6 +8287,7 @@ function ItemsDetailsForm({
         onPreviewDocument={handlePreviewDoc}
         categoriesList={categoriesList}
         defaultCategory={draft.basics.category}
+        isRateContract={isRateContract}
       />
 
       {/* Cart Category Alignment Review Modal */}
@@ -11331,6 +11437,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     scopeOfWork: draft.serviceDetails.scopeOfWork || (draft.serviceDetails.sowFileName ? `Refer to attached SOW document: ${draft.serviceDetails.sowFileName}` : '') || (draft.boqFileName ? `Refer to attached BOQ schedule: ${draft.boqFileName}` : '') || draft.basics.justification || draft.internal.justification || draft.approval.notes || '',
     deliveryLocation,
     deliveryAddress: deliveryLocation,
+    freightIncluded: draft.terms.freightIncluded,
+    gstIncluded: draft.terms.gstIncluded,
+    isGstIncluded: draft.terms.gstIncluded,
   };
 
   if (isTechnicalNeeded) {
@@ -11355,6 +11464,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     requiredByDate: draft.basics.requiredByDate,
     priority: draft.basics.priority,
     urgency: draft.basics.priority,
+    freightIncluded: draft.terms.freightIncluded,
+    gstIncluded: draft.terms.gstIncluded,
+    isGstIncluded: draft.terms.gstIncluded,
   };
 
   const hasReverseAuction = isReverseAuctionMethod(draft.type) || Boolean(draft.basics.isReverseAuctionNeeded);
@@ -11457,6 +11569,9 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
     allowReverseAuction: hasReverseAuction,
     urgency: draft.basics.priority,
     priority: draft.basics.priority,
+    freightIncluded: draft.terms.freightIncluded,
+    gstIncluded: draft.terms.gstIncluded,
+    isGstIncluded: draft.terms.gstIncluded,
   };
 
   // Run suggestion engine to capture recommendation result
@@ -11504,6 +11619,12 @@ const buildProcurementApiPayload = (draft: Draft, draftStep = 0) => {
 
   const payloadJson = {
     ...draft,
+    terms: {
+      ...draft.terms,
+      freightIncluded: draft.terms.freightIncluded,
+      gstIncluded: draft.terms.gstIncluded,
+      isGstIncluded: draft.terms.gstIncluded,
+    },
     approval: {
       ...draft.approval,
       workflow: autoWorkflow,

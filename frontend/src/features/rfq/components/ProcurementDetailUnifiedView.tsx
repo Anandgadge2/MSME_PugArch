@@ -9243,11 +9243,19 @@ export function ProcurementDetailUnifiedView(
 
   const gstBudgetTreatment = useMemo(() => {
     const raw = firstPresent(
+      terms.gstIncluded,
       terms.isGstIncluded,
+      basics.gstIncluded,
       basics.isGstIncluded,
+      payload.terms?.gstIncluded,
       payload.terms?.isGstIncluded,
+      payload.basics?.gstIncluded,
       payload.basics?.isGstIncluded,
+      tender.gstIncluded,
+      tender.isGstIncluded,
+      (props.rawBid as any)?.gstIncluded,
       (props.rawBid as any)?.isGstIncluded,
+      (props.rawBid?.technicalPacket as any)?.terms?.gstIncluded,
       (props.rawBid?.technicalPacket as any)?.terms?.isGstIncluded,
     );
     if (raw === true || raw === "true" || raw === 1 || raw === "Yes") {
@@ -9256,8 +9264,8 @@ export function ProcurementDetailUnifiedView(
     if (raw === false || raw === "false" || raw === 0 || raw === "No") {
       return "GST Excluded (Net Base Value - GST Extra)";
     }
-    return "GST Included in Budget (Gross Estimated Value)";
-  }, [terms, basics, payload, props.rawBid]);
+    return "GST Excluded (Net Base Value - GST Extra)";
+  }, [terms, basics, tender, payload, props.rawBid]);
 
 
   // isBuyerOrAdmin already defined at top level of component
@@ -11145,6 +11153,8 @@ export function ProcurementDetailUnifiedView(
   const rawFreightVal = firstPresent(
     props.freightIncluded,
     terms.freightIncluded,
+    payload.terms?.freightIncluded,
+    tender.freightIncluded,
     payload.freightIncluded,
     rules.freightIncluded,
     true,
@@ -16723,7 +16733,7 @@ export function extractQuotationDetails(
   if (lineItems.length > 0) {
     baseAmount = lineItems.reduce((acc, it) => {
       const p = Number(
-        it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
+        it.baseUnitPrice ?? it.unitPrice ?? it.unitRate ?? it.rate ?? it.price ?? 0,
       );
       const q = Number(it.quantity ?? it.qty ?? 1);
       return acc + p * q;

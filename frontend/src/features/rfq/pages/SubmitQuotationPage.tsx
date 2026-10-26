@@ -28,6 +28,7 @@ import {
   AlertCircle,
   Circle,
   Truck,
+  Receipt,
   ExternalLink,
   Check,
   Download,
@@ -380,6 +381,7 @@ function LineItemSpecsAndDocsPanel({
   idx,
   itemsList,
   isReadOnly,
+  isGstIncluded = false,
   updateLineQuote,
   onUploadAttachment,
   onRemoveAttachment,
@@ -390,6 +392,7 @@ function LineItemSpecsAndDocsPanel({
   idx: number;
   itemsList: any[];
   isReadOnly: boolean;
+  isGstIncluded?: boolean;
   updateLineQuote: (idx: number, patch: Partial<LineQuote>) => void;
   onUploadAttachment: (lineIdx: number, file: File, docType: string, customNote?: string) => Promise<void>;
   onRemoveAttachment: (lineIdx: number, attachmentId: string) => void;
@@ -408,7 +411,7 @@ function LineItemSpecsAndDocsPanel({
   const qty = Number(line.quantity) || 1;
   const unitRate = Number(line.unitPrice) || 0;
   const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
-  const computedTotal = unitRate * qty * (1 + gstPercent / 100);
+  const computedTotal = isGstIncluded ? unitRate * qty : unitRate * qty * (1 + gstPercent / 100);
 
   const attachments = Array.isArray(line.attachments) ? line.attachments : [];
 
@@ -637,7 +640,7 @@ function LineItemSpecsAndDocsPanel({
               Unit Rate: <span className="text-slate-900">₹{unitRate.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
             </span>
             <span className="text-slate-700">
-              GST: <span className="text-slate-900">{gstPercent}%</span>
+              GST: <span className="text-slate-900">{gstPercent}% {isGstIncluded ? "(Included)" : "(Added extra)"}</span>
             </span>
             <span className="text-slate-900 font-extrabold bg-white px-2.5 py-1 rounded-lg border border-slate-200 shadow-2xs">
               Line Total: ₹{computedTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -1274,11 +1277,30 @@ export default function SubmitQuotationPage() {
 
   const isFreightIncluded = React.useMemo(() => {
     const raw = rfqData?.payload?.terms?.freightIncluded ??
+      rfqData?.payload?.tender?.freightIncluded ??
       rfqData?.payload?.freightIncluded ??
       rfqData?.technicalPacket?.terms?.freightIncluded ??
-      rfqData?.terms?.freightIncluded;
+      rfqData?.terms?.freightIncluded ??
+      rfqData?.tender?.freightIncluded;
     if (raw === false || raw === 'false' || raw === 'No' || raw === 0) return false;
     return true;
+  }, [rfqData]);
+
+  const isGstIncluded = React.useMemo(() => {
+    const raw = rfqData?.payload?.terms?.gstIncluded ??
+      rfqData?.payload?.terms?.isGstIncluded ??
+      rfqData?.payload?.tender?.gstIncluded ??
+      rfqData?.payload?.tender?.isGstIncluded ??
+      rfqData?.payload?.basics?.gstIncluded ??
+      rfqData?.payload?.basics?.isGstIncluded ??
+      rfqData?.payload?.gstIncluded ??
+      rfqData?.payload?.isGstIncluded ??
+      rfqData?.technicalPacket?.terms?.gstIncluded ??
+      rfqData?.technicalPacket?.terms?.isGstIncluded ??
+      rfqData?.terms?.gstIncluded ??
+      rfqData?.terms?.isGstIncluded;
+    if (raw === true || raw === 'true' || raw === 'Yes' || raw === 1) return true;
+    return false;
   }, [rfqData]);
 
   const queryTypeParam = String(searchParams?.get('type') || searchParams?.get('method') || '').toUpperCase();
@@ -2091,12 +2113,15 @@ export default function SubmitQuotationPage() {
       if (line.unitPrice !== '' && Number.isFinite(price) && price >= 0) {
         priced += 1;
         const gst = Number(line.gstPercent) || 0;
-        total += price * lineQty * (1 + gst / 100);
+        const lineTotal = isGstIncluded
+          ? price * lineQty
+          : price * lineQty * (1 + gst / 100);
+        total += lineTotal;
         qty += lineQty;
       }
     });
     return { total: Math.round(total * 100) / 100, qty: Math.round(qty * 100) / 100, priced };
-  }, [lineQuotes]);
+  }, [lineQuotes, isGstIncluded]);
 
   const hasLineItems = itemsList.length > 0 || lineQuotes.length > 0;
 
@@ -2148,14 +2173,21 @@ export default function SubmitQuotationPage() {
         const qty = Number(line.quantity) || 1;
         const unitPrice = Number(line.unitPrice);
         const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
-        const lineTotal = unitPrice * qty * (1 + gstPercent / 100);
+        const lineTotal = isGstIncluded
+          ? unitPrice * qty
+          : unitPrice * qty * (1 + gstPercent / 100);
+        const baseUnitPrice = isGstIncluded && gstPercent > 0
+          ? Math.round((unitPrice / (1 + gstPercent / 100)) * 100) / 100
+          : unitPrice;
         return {
           itemName: line.itemName,
           quantity: qty,
           unitOfMeasure: line.unitOfMeasure || 'Nos',
           unitPrice,
           unitRate: unitPrice,
+          baseUnitPrice,
           gstPercent,
+          isGstIncluded,
           makeBrand: line.makeBrand.trim() || null,
           model: (line.model || '').trim() || null,
           specifications: (line.specifications || '').trim() || null,
@@ -2174,6 +2206,8 @@ export default function SubmitQuotationPage() {
     return {
       documents: docs,
       lineItems: lines,
+      isGstIncluded,
+      isFreightIncluded,
       makeBrand: (offeredMakeBrand.trim() || primaryLine?.makeBrand || undefined),
       model: (offeredModel.trim() || primaryLine?.model || undefined),
       technicalSpecifications: (technicalSpecifications.trim() || primaryLine?.specifications || undefined),
@@ -3140,13 +3174,23 @@ export default function SubmitQuotationPage() {
                   </div>
                 </div>
                 {fieldError('offeredPrice')}
-                <div className="mt-1 flex items-center gap-1.5 text-[11px] font-medium text-slate-500">
-                  <Truck className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
-                  <span>
-                    {isFreightIncluded
-                      ? 'Freight Included: Quoted price must encompass all transit, insurance & door delivery charges.'
-                      : 'Freight Excluded: Delivery charges are payable separately as per actuals.'}
-                  </span>
+                <div className="mt-1.5 space-y-1 text-[11px] font-medium text-slate-500">
+                  <div className="flex items-center gap-1.5">
+                    <Truck className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                    <span>
+                      {isFreightIncluded
+                        ? 'Freight Included: Quoted price must encompass all transit, insurance & door delivery charges.'
+                        : 'Freight Excluded: Delivery charges are payable separately as per actuals.'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5 text-[#12335f] shrink-0" />
+                    <span>
+                      {isGstIncluded
+                        ? 'GST Included in Budget: Quoted price must include all statutory taxes & GST (Gross Quote).'
+                        : 'GST Excluded from Base: Quoted price is Net Base Cost; statutory GST is evaluated on top.'}
+                    </span>
+                  </div>
                 </div>
                 {lineTotals.total > 0 && (
                   <div className="mt-1.5 flex items-center justify-between gap-2 text-[11px]">
@@ -3769,7 +3813,9 @@ export default function SubmitQuotationPage() {
                         {isRateContract ? 'EST. ANNUAL OFFTAKE' : 'QTY / UNIT'}
                       </th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-36">
-                        {isRateContract ? 'LOCKED UNIT RATE (₹)' : 'UNIT PRICE (₹)'}
+                        {isRateContract
+                          ? (isGstIncluded ? 'LOCKED GROSS RATE (₹)' : 'LOCKED UNIT RATE (₹)')
+                          : (isGstIncluded ? 'UNIT PRICE (INCL. GST ₹)' : 'UNIT PRICE (₹)')}
                       </th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider text-right w-24">GST %</th>
                       <th scope="col" className="px-4 py-3 text-[10px] font-bold uppercase text-slate-500 tracking-wider w-36">MAKE / BRAND</th>
@@ -3782,7 +3828,11 @@ export default function SubmitQuotationPage() {
                     {lineQuotes.map((line, idx) => {
                       const price = Number(line.unitPrice);
                       const hasPrice = line.unitPrice !== '' && Number.isFinite(price) && price >= 0;
-                      const lineTotal = hasPrice ? price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100) : 0;
+                      const lineTotal = hasPrice
+                        ? (isGstIncluded
+                            ? price * (Number(line.quantity) || 0)
+                            : price * (Number(line.quantity) || 0) * (1 + (Number(line.gstPercent) || 0) / 100))
+                        : 0;
                       const cleanUom = sanitizeUom(line.unitOfMeasure);
                       return (
                         <React.Fragment key={idx}>
@@ -4000,6 +4050,7 @@ export default function SubmitQuotationPage() {
                                   idx={idx}
                                   itemsList={itemsList}
                                   isReadOnly={isReadOnly}
+                                  isGstIncluded={isGstIncluded}
                                   updateLineQuote={updateLineQuote}
                                   onUploadAttachment={handleUploadItemAttachment}
                                   onRemoveAttachment={handleRemoveItemAttachment}
@@ -4017,7 +4068,7 @@ export default function SubmitQuotationPage() {
                     <tfoot className="bg-slate-50 border-t-2 border-slate-200 font-medium">
                       <tr>
                         <td colSpan={6} className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-slate-700 text-right">
-                          Total ({lineTotals.priced} of {lineQuotes.length} items priced, incl. GST):
+                          Total ({lineTotals.priced} of {lineQuotes.length} items priced, {isGstIncluded ? "Gross Total" : "incl. GST"}):
                         </td>
                         <td className="px-4 py-3 text-sm font-black text-[#12335f] text-right tabular-nums">
                           ₹{lineTotals.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

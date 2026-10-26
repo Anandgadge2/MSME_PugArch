@@ -812,6 +812,7 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
     const schedule = payload?.schedule;
     const rules = payload?.rules;
     const tender = payload?.tender;
+    const terms = (payload?.terms || {}) as Record<string, any>;
     const approvalConf = payload?.approval;
     const payloadItems = payload?.items as Array<Record<string, any>> | undefined;
     const payloadConsignees = payload?.consigneeDetails as Array<Record<string, any>> | undefined;
@@ -997,7 +998,8 @@ function ProcurementDetailModal({ approval, summary, onClose }: {
                                         <InfoCell label="Currency" value={tender.currency} />
                                         <InfoCell label="Price Type" value={tender.priceType} />
                                         <InfoCell label="Tax Type" value={tender.taxType} />
-                                        <InfoCell label="GST Included" value={tender.gstIncluded} />
+                                        <InfoCell label="Freight Terms" value={(terms?.freightIncluded ?? tender?.freightIncluded) ? "Included (Door Delivery)" : "Excluded (Extra)"} />
+                                        <InfoCell label="GST Treatment" value={(terms?.gstIncluded ?? tender?.gstIncluded ?? tender?.isGstIncluded) ? "Included in Budget (Gross)" : "Excluded (Net + Tax)"} />
                                         <InfoCell label="GST Rate" value={tender.gstRate} />
                                         <InfoCell label="Payment Terms" value={tender.paymentTerms} />
                                     </div>

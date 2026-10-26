@@ -594,6 +594,7 @@ interface BOQTableProps {
   onRemoveRowDocument?: (idx: number, attachmentId?: string) => void;
   onPreviewDocument?: (attachment: { fileAssetId?: number; url?: string; fileName?: string; name?: string }) => void;
   onSyncEstimatedTotal?: (newTotal: number) => void;
+  isRateContract?: boolean;
 }
 
 export function BOQTable({
@@ -613,6 +614,7 @@ export function BOQTable({
   onRemoveRowDocument: _onRemoveRowDocument,
   onPreviewDocument,
   onSyncEstimatedTotal,
+  isRateContract = false,
 }: BOQTableProps) {
   const tableInput = 'h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 transition-all';
 
@@ -660,15 +662,21 @@ export function BOQTable({
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5 text-center w-12">Sr</th>
-              <th className="px-3 py-2.5 min-w-[180px]">Item Description</th>
+              <th className="px-3 py-2.5 min-w-[180px]">{isRateContract ? 'Item Description / Scope' : 'Item Description'}</th>
               {showCategory && <th className="px-3 py-2.5 w-36">Category</th>}
               <th className="px-3 py-2.5 w-28">UOM</th>
-              <th className="px-3 py-2.5 w-20 text-center">Qty</th>
-              <th className="px-3 py-2.5 w-28 text-right">Est. Rate (₹)</th>
+              <th className="px-3 py-2.5 w-24 text-center" title={isRateContract ? 'Indicative Annual Consumption Volume' : 'Total Quantity'}>
+                {isRateContract ? 'Est. Annual Qty' : 'Qty'}
+              </th>
+              <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Legally binding ceiling unit rate for call-offs' : 'Estimated Unit Rate'}>
+                {isRateContract ? 'Ceiling Rate (₹)' : 'Est. Rate (₹)'}
+              </th>
               <th className="px-3 py-2.5 w-20 text-center">Tax %</th>
               <th className="px-3 py-2.5 w-28 text-center">HSN/SAC</th>
               <th className="px-3 py-2.5 w-36 text-center">Docs (Opt.)</th>
-              <th className="px-3 py-2.5 w-28 text-right">Total (Gross)</th>
+              <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Estimated Annual Ceiling Expenditure' : 'Total Gross Value'}>
+                {isRateContract ? 'Est. Annual (₹)' : 'Total (Gross)'}
+              </th>
               <th className="px-3 py-2.5 w-20 text-right">Actions</th>
             </tr>
           </thead>
@@ -921,7 +929,7 @@ export function BOQTable({
           onClick={onAddRow}
           className="h-8.5 px-3.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-50 border-slate-200 shadow-3xs cursor-pointer"
         >
-          <Plus className="h-3.5 w-3.5 mr-1" /> Add BOQ Row
+          <Plus className="h-3.5 w-3.5 mr-1" /> {isRateContract ? 'Add SOR Line' : 'Add BOQ Row'}
         </Button>
       </div>
 
@@ -938,7 +946,9 @@ export function BOQTable({
             {/* 4 Summary Metric Cards matching Image 1 */}
             <div className="grid gap-2.5 sm:gap-3 grid-cols-2 lg:grid-cols-4">
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Total Items & Qty</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  {isRateContract ? 'Total Lines & Annual Qty' : 'Total Items & Qty'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-900">{rows.length} Lines</span>
                   <span className="text-xs font-bold text-slate-500">{totalQty.toLocaleString('en-IN')} Units</span>
@@ -946,7 +956,9 @@ export function BOQTable({
               </div>
 
               <div className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-3.5 text-xs font-bold text-slate-700 shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Base Value (Excl. GST)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">
+                  {isRateContract ? 'Base Annual Ceiling' : 'Base Value (Excl. GST)'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-sm font-black text-slate-800">
                     {baseTotal > 0
@@ -970,7 +982,9 @@ export function BOQTable({
               </div>
 
               <div className="flex flex-col justify-between rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/90 to-white p-3.5 text-xs font-bold shadow-3xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">Total Est. Value (Gross)</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#0b2447]">
+                  {isRateContract ? 'Indicative Annual Ceiling' : 'Total Est. Value (Gross)'}
+                </span>
                 <div className="mt-1 flex items-baseline justify-between gap-1">
                   <span className="text-base font-black text-[#0b2447]">
                     {grossTotal > 0
@@ -998,7 +1012,7 @@ export function BOQTable({
                   <div className="flex items-center gap-2 text-amber-900 font-semibold">
                     <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
                     <span>
-                      Step 2 initial budget is <strong>{formatCurrency(estimatedTotal)}</strong>, but BOQ Schedule total (incl. GST) is <strong>{formatCurrency(grossTotal)}</strong>.
+                      Step 2 initial budget is <strong>{formatCurrency(estimatedTotal)}</strong>, but {isRateContract ? 'SOR Schedule Annual Ceiling' : 'BOQ Schedule total'} (incl. GST) is <strong>{formatCurrency(grossTotal)}</strong>.
                     </span>
                   </div>
                   {onSyncEstimatedTotal && (
@@ -1008,7 +1022,7 @@ export function BOQTable({
                       onClick={() => onSyncEstimatedTotal(Math.round(grossTotal))}
                       className="h-7.5 px-3 text-xs font-black bg-[#0b2447] text-white hover:bg-[#12335f] shrink-0 whitespace-nowrap shadow-3xs cursor-pointer"
                     >
-                      <RefreshCw className="h-3.5 w-3.5 mr-1" /> Sync Tender Budget with BOQ
+                      <RefreshCw className="h-3.5 w-3.5 mr-1" /> {isRateContract ? 'Sync Budget with SOR Total' : 'Sync Tender Budget with BOQ'}
                     </Button>
                   )}
                 </div>
