@@ -56,6 +56,7 @@ import {
   RefreshCw,
   IndianRupee,
   Calendar,
+  Globe,
 } from 'lucide-react';
 
 import { Button } from '../../../components/ui/button';
@@ -324,6 +325,8 @@ type Draft = {
     selectedSellerName: string;
     selectedSellerCode: string;
     invitedSellers: number[];
+    autoNotifyCategoryVendors?: boolean;
+    enableCourtesyInvites?: boolean;
   };
   schedule: {
     packetType: 'Single' | 'Two';
@@ -1192,6 +1195,8 @@ const defaultDraft = (type: ProcurementMethodId = 'RFQ'): Draft => ({
     selectedSellerName: '',
     selectedSellerCode: '',
     invitedSellers: [],
+    autoNotifyCategoryVendors: true,
+    enableCourtesyInvites: false,
   },
   schedule: {
     packetType: 'Single',
@@ -2727,7 +2732,11 @@ export default function CreateProcurementPage() {
 
             {/* Step 4 Sellers Selection */}
             {currentStepKind === 'vendors' && (
-              <SectionCard title="Supplier Reach & Invites" description="Configure bidding scopes and invite registered verified companies" icon={stepLibrary.vendors.icon}>
+              <SectionCard
+                title={draft.type === 'OPEN_TENDER' ? 'Supplier Reach & Notification Outreach' : 'Supplier Reach & Invites'}
+                description={draft.type === 'OPEN_TENDER' ? 'Configure public portal publication, automated vendor notifications, and courtesy invites' : 'Configure bidding scopes and invite registered verified companies'}
+                icon={stepLibrary.vendors.icon}
+              >
                 <VendorsStepForm
                   draft={draft}
                   updateDraft={updateDraft}
@@ -2973,14 +2982,16 @@ function BasicsStepForm({
     const isCatAllowed = allowedCategories.some(c => c.value === draft.basics.procurementCategory);
     const isFormatAllowed = allowedFormats.some(f => f.value === draft.basics.pricingFormat);
 
-    if (!isCatAllowed || !isFormatAllowed) {
-      const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
-      let nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
-
-      if (nextCat === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
-        nextFormat = 'BOQ';
-      }
-
+    if (!isCatAllowed || !isFormatAllowed) {
+      const nextCat = isCatAllowed ? (draft.basics.procurementCategory || 'GOODS') : allowedCategories[0].value;
+      let nextFormat = isFormatAllowed ? (draft.basics.pricingFormat || 'SINGLE_ITEM') : allowedFormats[0].value;
+
+      if (nextCat === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
+        nextFormat = 'BOQ';
+      }
+
+
+
       updateDraft(c => ({
         ...c,
         basics: {
@@ -8002,6 +8013,8 @@ function VendorsStepForm({
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState('');
   const [msmeOnly, setMsmeOnly] = useState(false);
+  const isOpenTender = draft.type === 'OPEN_TENDER';
+  const [enableCourtesyInvites, setEnableCourtesyInvites] = useState(() => (draft.vendors.invitedSellers && draft.vendors.invitedSellers.length > 0) || Boolean(draft.vendors.enableCourtesyInvites));
 
   const effectiveCategory = draft.basics.category || draft.rateContractConfig?.contractCategory || draft.auctionConfig?.auctionCategory || '';
 
@@ -8066,13 +8079,26 @@ function VendorsStepForm({
   };
 
   useEffect(() => {
+    if (draft.type === 'OPEN_TENDER') {
+      if (draft.vendors.selection !== 'Open') {
+        queueMicrotask(() => {
+          updateDraft(c => ({ ...c, vendors: { ...c.vendors, selection: 'Open' } }));
+        });
+      }
+      if (draft.schedule.minimumBidders === undefined || draft.schedule.minimumBidders === null || draft.schedule.minimumBidders === '' || draft.schedule.minimumBidders === 0) {
+        queueMicrotask(() => {
+          updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
+        });
+      }
+      return;
+    }
     const isLimited = draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED');
     if (isLimited && draft.vendors.selection !== 'Selected') {
       queueMicrotask(() => {
         updateDraft(c => ({ ...c, vendors: { ...c.vendors, selection: 'Selected' } }));
       });
     }
-  }, [draft.type, draft.rfqType, draft.vendors.selection]);
+  }, [draft.type, draft.rfqType, draft.vendors.selection, draft.schedule.minimumBidders]);
 
   const handleSelectionModeChange = (mode: 'Open' | 'Selected' | 'Category' | 'Past') => {
     updateDraft(c => ({
@@ -8097,8 +8123,23 @@ function VendorsStepForm({
         </div>
       )}
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Supplier Sourcing Strategy" required>
-          {draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED') ? (
+        <Field label={isOpenTender ? "Tender Sourcing Governance Scope" : "Supplier Sourcing Strategy"} required>
+          {isOpenTender ? (
+            <div className="space-y-1.5">
+              <div className="h-11 w-full rounded-lg border border-emerald-300 bg-emerald-50/80 px-3 flex items-center justify-between text-sm font-semibold text-emerald-950 shadow-2xs">
+                <span className="flex items-center gap-2">
+                  <Lock className="h-4 w-4 text-emerald-700 shrink-0" aria-hidden="true" />
+                  <span>Public / Open Advertised Competition</span>
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-200/80 text-emerald-900 px-2 py-0.5 rounded border border-emerald-300">
+                  GFR 161 (Mandatory)
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 leading-normal">
+                By statutory public procurement mandate (GFR Rule 161), an Open Tender cannot be restricted to an invite-only pool. Participation is unconditionally open to all qualified bidders.
+              </p>
+            </div>
+          ) : draft.type === 'LIMITED_TENDER' || (draft.type === 'RFQ' && draft.rfqType === 'LIMITED') ? (
             <div className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 px-3 flex items-center text-sm font-semibold text-slate-700 select-none">
               Invite selected verified suppliers pool (Locked for Limited methods)
             </div>
@@ -8149,12 +8190,19 @@ function VendorsStepForm({
           />
           <div className="flex flex-wrap items-center gap-1.5 pt-2">
             <span className="text-[10px] font-bold text-slate-500 mr-0.5">Recommended Presets:</span>
-            {[
-              { label: '1 Bid (Proprietary / Monopoly)', val: 1 },
-              { label: '2 Bids (Expedited / Urgent)', val: 2 },
-              { label: '3 Bids (GFR 173 Standard)', val: 3 },
-              { label: '5 Bids (High Competition)', val: 5 },
-            ].map(p => (
+            {(isOpenTender
+              ? [
+                  { label: '3 Bids (GFR 173 Standard)', val: 3 },
+                  { label: '4 Bids (Competitive)', val: 4 },
+                  { label: '5 Bids (High Competition)', val: 5 },
+                ]
+              : [
+                  { label: '1 Bid (Proprietary / Monopoly)', val: 1 },
+                  { label: '2 Bids (Expedited / Urgent)', val: 2 },
+                  { label: '3 Bids (GFR 173 Standard)', val: 3 },
+                  { label: '5 Bids (High Competition)', val: 5 },
+                ]
+            ).map(p => (
               <button
                 key={p.val}
                 type="button"
@@ -8179,8 +8227,13 @@ function VendorsStepForm({
             <p className="text-[11px] leading-relaxed text-slate-600">
               Specifies the minimum number of technically qualified supplier quotations required before financial bids can be unsealed automatically.
             </p>
-            <div id="min-bids-guidance" className="pt-1 text-[11px] font-medium">
-              {Number(draft.schedule.minimumBidders) === 1 ? (
+            <div id="min-bids-guidance" className="pt-1 text-[11px] font-medium" aria-live="polite">
+              {isOpenTender && Number(draft.schedule.minimumBidders) < 3 ? (
+                <div className="flex items-start gap-1.5 text-amber-900 bg-amber-50/90 border border-amber-300 rounded p-2">
+                  <span className="font-bold text-amber-800">⚠️ GFR 173 Compliance Note:</span>
+                  <span>Open Advertised Tenders require a minimum of 3 qualified bids. If fewer than 3 bids arrive at deadline, public procurement rules require recorded CFAC approval or a deadline extension.</span>
+                </div>
+              ) : Number(draft.schedule.minimumBidders) === 1 ? (
                 <div className="flex items-start gap-1.5 text-amber-800 bg-amber-50/80 border border-amber-200 rounded p-1.5">
                   <span className="font-bold">⚠️ Single-Bid Policy:</span>
                   <span>Minimum set to 1. If only 1 quotation is submitted, the system halts with a Single-Bidder Advisory requiring explicit buyer administrative price confirmation before financial opening.</span>
@@ -8192,7 +8245,7 @@ function VendorsStepForm({
                 </div>
               ) : (
                 <div className="flex items-start gap-1.5 text-slate-700 bg-slate-50 border border-slate-200 rounded p-1.5">
-                  <span className="font-bold">✓ Standard Competitive Rule:</span>
+                  <span className="font-bold">✓ Standard Competitive Rule (GFR 173):</span>
                   <span>Requires at least {draft.schedule.minimumBidders || 3} qualified bids. If fewer bids arrive at opening, the system prompts for administrative confirmation or a deadline extension.</span>
                 </div>
               )}
@@ -8200,6 +8253,84 @@ function VendorsStepForm({
           </div>
         </Field>
       </div>
+
+      {isOpenTender && (
+        <div className="border border-blue-200 rounded-xl p-4 bg-gradient-to-r from-blue-50/60 to-indigo-50/30 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Globe className="h-4 w-4 text-[#0b2447]" aria-hidden="true" />
+              <h3 className="text-xs font-black text-slate-900 uppercase tracking-wide">
+                Automated Outreach & Notification Channels
+              </h3>
+            </div>
+            <span className="text-[10px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-200">
+              Proactive Outreach
+            </span>
+          </div>
+          <p className="text-[11px] text-slate-600 leading-relaxed">
+            Configure how registered suppliers are alerted about this public tender. Alerts maximize verified MSME turnout without compromising open competition.
+          </p>
+
+          <div className="grid gap-3 sm:grid-cols-3 pt-1">
+            <div className="flex items-start gap-2.5 p-3 rounded-lg border border-emerald-200 bg-white shadow-2xs">
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0 mt-0.5" aria-hidden="true" />
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">Public Portal Publication</span>
+                <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                  Gazetted to public discovery portal. Any eligible supplier can bid. (Mandatory)
+                </span>
+              </div>
+            </div>
+
+            <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-white shadow-2xs cursor-pointer hover:border-slate-300 transition-colors">
+              <input
+                type="checkbox"
+                checked={draft.vendors.autoNotifyCategoryVendors ?? true}
+                onChange={e => updateDraft(c => ({
+                  ...c,
+                  vendors: {
+                    ...c.vendors,
+                    autoNotifyCategoryVendors: e.target.checked
+                  }
+                }))}
+                className="h-4 w-4 rounded accent-[#0b2447] mt-0.5 shrink-0"
+              />
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">Auto-Broadcast Category</span>
+                <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                  Broadcast notification alerts to all verified vendors in {effectiveCategory || 'the matched category'}.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2.5 p-3 rounded-lg border border-slate-200 bg-white shadow-2xs cursor-pointer hover:border-slate-300 transition-colors">
+              <input
+                type="checkbox"
+                checked={enableCourtesyInvites}
+                onChange={e => {
+                  const checked = e.target.checked;
+                  setEnableCourtesyInvites(checked);
+                  updateDraft(c => ({
+                    ...c,
+                    vendors: {
+                      ...c.vendors,
+                      enableCourtesyInvites: checked,
+                      ...(!checked ? { invitedSellers: [], inviteCount: 0 } : {})
+                    }
+                  }));
+                }}
+                className="h-4 w-4 rounded accent-[#0b2447] mt-0.5 shrink-0"
+              />
+              <div>
+                <span className="text-xs font-bold text-slate-900 block">Direct Courtesy Alerts</span>
+                <span className="text-[10px] text-slate-500 block leading-tight mt-0.5">
+                  Directly notify specific empanelled suppliers via email to encourage participation.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
 
       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
         <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">MSME & Preference Parameters</h3>
@@ -8356,7 +8487,8 @@ function VendorsStepForm({
         </div>
       )}
 
-      {draft.vendors.selection !== 'Open' && (
+      {/* For Non-Open methods, render SupplierSelector when selection is not Open */}
+      {!isOpenTender && draft.vendors.selection !== 'Open' && (
         <SupplierSelector
           suppliers={sellers}
           invitedIds={draft.vendors.invitedSellers}
@@ -8367,6 +8499,35 @@ function VendorsStepForm({
           msmeOnly={msmeOnly}
           onMsmeOnlyChange={setMsmeOnly}
         />
+      )}
+
+      {/* For Open Tender: render SupplierSelector when courtesy direct alerts are enabled */}
+      {isOpenTender && enableCourtesyInvites && (
+        <div className="space-y-3 border border-slate-200 rounded-xl p-4 bg-slate-50/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1">
+            <div>
+              <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <span>Select Suppliers for Courtesy Direct Notifications</span>
+                <span className="text-[10px] font-bold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded-full border border-blue-200">
+                  {draft.vendors.invitedSellers.length} Selected
+                </span>
+              </span>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                Selected vendors receive priority invitations to submit proposals. This does not restrict any other eligible bidder on the public portal.
+              </p>
+            </div>
+          </div>
+          <SupplierSelector
+            suppliers={sellers}
+            invitedIds={draft.vendors.invitedSellers}
+            onToggleInvite={toggleInviteSeller}
+            isLoading={loading}
+            searchQuery={search}
+            onSearchChange={setSearch}
+            msmeOnly={msmeOnly}
+            onMsmeOnlyChange={setMsmeOnly}
+          />
+        </div>
       )}
     </div>
   );

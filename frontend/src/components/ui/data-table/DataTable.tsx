@@ -1,4 +1,4 @@
-import React, { isValidElement, useMemo } from 'react';
+import React, { Fragment, isValidElement, useMemo } from 'react';
 import { SortableHeader, type SortDirection } from '../../../features/shared/SortableHeader';
 export type { SortDirection };
 import { Pagination } from '../../../features/shared/Pagination';
@@ -164,18 +164,32 @@ export function DataTable<T>({
   // HTML strictly requires direct children of <tfoot> to be <tr> elements.
   const isTableRowFooter = useMemo(() => {
     if (!footer) return false;
-    if (isValidElement(footer)) {
-      const type = footer.type;
-      if (typeof type === 'string' && (type.toLowerCase() === 'tr' || type.toLowerCase() === 'tfoot')) {
-        return true;
-      }
-    }
-    if (Array.isArray(footer) && footer.length > 0) {
-      return footer.every(
-        (child) => isValidElement(child) && typeof child.type === 'string' && child.type.toLowerCase() === 'tr'
-      );
-    }
-    return false;
+
+    const checkIsRowLike = (node: React.ReactNode): boolean => {
+      if (!node) return false;
+      const elements = React.Children.toArray(node);
+      if (elements.length === 0) return false;
+
+      return elements.every((child) => {
+        if (!isValidElement(child)) return false;
+        const type = child.type;
+        if (typeof type === 'string') {
+          const t = type.toLowerCase();
+          return t === 'tr' || t === 'tfoot';
+        }
+        if (
+          type === Fragment ||
+          type === React.Fragment ||
+          (typeof type === 'symbol' && String(type).includes('react.fragment'))
+        ) {
+          const innerChildren = (child.props as { children?: React.ReactNode })?.children;
+          return checkIsRowLike(innerChildren);
+        }
+        return false;
+      });
+    };
+
+    return checkIsRowLike(footer);
   }, [footer]);
 
   if (isLoading) {

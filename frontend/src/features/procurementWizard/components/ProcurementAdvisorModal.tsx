@@ -55,7 +55,7 @@ export function ProcurementAdvisorModal({
     if (itemType === 'recurring') {
       return {
         methodId: 'RATE_CONTRACT',
-        name: 'Annual Rate Contract (दर अनुबंध)',
+        name: 'Annual Rate Contract',
         badge: 'Best for Recurring Purchases',
         whyFit: 'Since your organization needs repeated batches over an extended timeframe, a Rate Contract fixes unit prices upfront and eliminates the need to float new tenders for every order.',
         hindiSummary: 'तय समय के लिए निश्चित दर अनुबंध। जरूरत पड़ने पर कभी भी ऑर्डर दिया जा सकता है।',
@@ -68,7 +68,7 @@ export function ProcurementAdvisorModal({
     if (strategy === 'live_auction' || (budgetTier === 'major' && strategy === 'fast_price')) {
       return {
         methodId: 'REVERSE_AUCTION',
-        name: 'Dynamic Reverse Auction (रिवर्स नीलामी)',
+        name: 'Dynamic Reverse Auction',
         badge: 'Maximum Cost Savings',
         whyFit: 'For high-value or competitive goods, a Reverse Auction allows verified sellers to iteratively lower quotes in a live countdown floor, yielding the lowest true market price.',
         hindiSummary: 'लाइव नीलामी जहां विक्रेता समय सीमा के भीतर अपना रेट कम करके जीतते हैं।',
@@ -81,7 +81,7 @@ export function ProcurementAdvisorModal({
     if (itemType === 'complex_services' || strategy === 'two_stage') {
       return {
         methodId: 'RFP',
-        name: 'Request for Proposal — Two-Packet (तकनीकी प्रस्ताव)',
+        name: 'Request for Proposal — Two-Packet',
         badge: 'Quality & Governance Assured',
         whyFit: 'For complex services, software, or specialized solutions, technical credentials must be scored first. Only technically compliant bidders have their financial price packet opened.',
         hindiSummary: 'पहले तकनीकी योग्यता जांची जाती है, फिर पात्र विक्रेताओं का रेट खोला जाता है।',
@@ -94,7 +94,7 @@ export function ProcurementAdvisorModal({
     if (strategy === 'limited') {
       return {
         methodId: 'LIMITED_TENDER',
-        name: 'Limited Sourcing (सीमित निविदा)',
+        name: 'Limited Sourcing',
         badge: 'Targeted & Confidential',
         whyFit: 'Best when only specific verified vendors are authorized or possess the required proprietary manufacturing capability.',
         hindiSummary: 'केवल चुने हुए या आमंत्रित विक्रेताओं के लिए निविदा।',
@@ -107,7 +107,7 @@ export function ProcurementAdvisorModal({
     if (budgetTier === 'major') {
       return {
         methodId: 'OPEN_TENDER',
-        name: 'Public Open Tender (खुली निविदा)',
+        name: 'Public Open Tender',
         badge: 'Statutory Public Compliance',
         whyFit: 'For high-value procurement, public open tendering invites nationwide MSME participation, satisfying public procurement mandates and transparency audit compliance.',
         hindiSummary: 'सार्वजनिक निविदा जिसमें कोई भी पंजीकृत और पात्र विक्रेता भाग ले सकता है।',
@@ -119,7 +119,7 @@ export function ProcurementAdvisorModal({
     // 6. Default: Direct RFQ (Single Packet)
     return {
       methodId: 'RFQ',
-      name: 'Request for Quotation — Single Packet (मूल्य उद्धरण)',
+      name: 'Request for Quotation — Single Packet',
       badge: 'Fastest & Simplest',
       whyFit: 'Ideal for standard products and services with clear commercial parameters. Bidders submit quotes directly, and the L1 (lowest compliant bidder) is determined immediately without complex evaluations.',
       hindiSummary: 'मानक सामान के लिए सीधे दाम मांगना। सबसे कम रेट वाले को तुरंत ऑर्डर मिलता है।',

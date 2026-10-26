@@ -791,12 +791,12 @@ export default function CartPage() {
                             rowClassName={(item) => selectedItemIds.has(item.id) ? "bg-indigo-50/20" : ""}
                             footer={
                                 <>
-                                    <tr className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
+                                    <tr key="cart-grand-total-row" className="border-t-2 border-slate-200 bg-slate-50/90 font-bold">
                                         <td colSpan={6} className="px-3 py-3 text-right text-xs font-black uppercase tracking-wider text-slate-600">Grand Total</td>
                                         <td className="px-3 py-3 text-right font-mono text-sm font-black text-slate-950 whitespace-nowrap">{formatCurrency(totals.total)}</td>
                                         <td colSpan={showTechStatusColumn ? 3 : 2} className="px-3 py-3" />
                                     </tr>
-                                    <tr className="border-t border-slate-200/60 bg-emerald-50/30">
+                                    <tr key="cart-seller-policy-row" className="border-t border-slate-200/60 bg-emerald-50/30">
                                         <td colSpan={showTechStatusColumn ? 10 : 9} className="px-4 py-2.5 text-left text-[11px] font-semibold text-emerald-950">
                                             ✓ Single Seller Direct Purchase Policy: All items are supplied by <strong className="font-bold text-emerald-900">{cart.items[0]?.seller?.name || 'the verified seller'}</strong>. Upon approval, official Purchase Order and offline bank transfer instructions (NEFT/RTGS/Cheque) will be issued directly to this seller.
                                         </td>
