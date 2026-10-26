@@ -1939,7 +1939,8 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
       auctionId: auction.id,
       sellerOrgId: Number(vendor.sellerOrgId),
       sellerUserId: vendor.sellerUserId ? Number(vendor.sellerUserId) : null,
-      status: config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICALLY_QUALIFIED' : 'INVITED'
+      status: 'TECHNICALLY_QUALIFIED',
+      qualificationStatus: 'QUALIFIED'
     })),
     skipDuplicates: true
   });

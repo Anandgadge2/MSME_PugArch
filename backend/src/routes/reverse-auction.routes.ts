@@ -1401,7 +1401,7 @@ router.get('/reverse-auctions/:id/live-summary', optionalAuthenticate, async (re
 
     const canBid = Boolean(
       participant &&
-      ['TECHNICALLY_QUALIFIED', 'ACCEPTED'].includes(participant.status) &&
+      (['TECHNICALLY_QUALIFIED', 'ACCEPTED'].includes(participant.status) || (auction.procurementMethod === 'REVERSE_AUCTION' && participant.status === 'INVITED')) &&
       !auction.evaluationPending
     );
     const disqualificationReason = participant?.disqualificationReason || participant?.rejectionReason || participant?.qualificationRemarks || null;
@@ -1528,7 +1528,8 @@ router.post('/reverse-auctions', requirePermission('reverse_auction.create', org
           auctionId: auction.id,
           sellerOrgId: seller.sellerOrgId,
           sellerUserId: seller.sellerUserId || null,
-          status: payload.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? 'TECHNICALLY_QUALIFIED' : 'INVITED'
+          status: 'TECHNICALLY_QUALIFIED',
+          qualificationStatus: 'QUALIFIED'
         })),
         skipDuplicates: true
       });
@@ -2275,12 +2276,23 @@ router.post('/reverse-auctions/:id/invite-sellers', requirePermission('reverse_a
     if (!auction) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     assertAuctionManager(req, auction);
     const payload = inviteSchema.parse(req.body);
+    const isDirectRA = auction.procurementMethod === 'REVERSE_AUCTION';
     const rows = [];
     for (const seller of payload.sellers) {
       rows.push(await db.auctionParticipant.upsert({
         where: { auctionId_sellerOrgId: { auctionId: id, sellerOrgId: seller.sellerOrgId } },
-        update: { sellerUserId: seller.sellerUserId || undefined, status: 'INVITED' },
-        create: { auctionId: id, sellerOrgId: seller.sellerOrgId, sellerUserId: seller.sellerUserId || null, status: 'INVITED' }
+        update: {
+          sellerUserId: seller.sellerUserId || undefined,
+          status: isDirectRA ? 'TECHNICALLY_QUALIFIED' : 'INVITED',
+          qualificationStatus: isDirectRA ? 'QUALIFIED' : undefined
+        },
+        create: {
+          auctionId: id,
+          sellerOrgId: seller.sellerOrgId,
+          sellerUserId: seller.sellerUserId || null,
+          status: isDirectRA ? 'TECHNICALLY_QUALIFIED' : 'INVITED',
+          qualificationStatus: isDirectRA ? 'QUALIFIED' : 'PENDING'
+        }
       }));
     }
     await writeAuctionEvent(req, id, 'sellers_invited', 'Sellers invited to reverse auction', { count: rows.length });
@@ -2720,15 +2732,22 @@ router.get('/reverse-auctions/:id/clarifications', optionalAuthenticate, async (
     if (!(await isAuctionPublic(auction))) {
       throw new ApiError(403, 'This auction is invite-only. Please wait for the buyer to invite your organization.', 'AUCTION_INVITE_ONLY');
     }
-    // Every reverse auction now runs a pre-bid qualification stage: joining only
-    // creates the participant in INVITED / PENDING qualification. The seller must
-    // upload the mandatory documents (plus an initial quote for the hybrid method)
-    // and be promoted to TECHNICALLY_QUALIFIED by the buyer before bidding opens.
+    const isDirectRA = auction.procurementMethod === 'REVERSE_AUCTION';
     const participant = await db.auctionParticipant.create({
-      data: { auctionId: id, sellerOrgId, sellerUserId: req.user.id || null, status: 'INVITED', qualificationStatus: 'PENDING' }
+      data: {
+        auctionId: id,
+        sellerOrgId,
+        sellerUserId: req.user.id || null,
+        status: isDirectRA ? 'TECHNICALLY_QUALIFIED' : 'INVITED',
+        qualificationStatus: isDirectRA ? 'QUALIFIED' : 'PENDING'
+      }
     });
     await writeAuctionEvent(req, id, 'seller_joined', 'Seller joined public reverse auction', { sellerOrgId });
-    return apiResponse.created(res, { participant: maskSensitive(participant), requiresQualification: true }, 'Joined auction — complete qualification to bid');
+    return apiResponse.created(
+      res,
+      { participant: maskSensitive(participant), requiresQualification: !isDirectRA },
+      isDirectRA ? 'Joined auction — ready to bid' : 'Joined auction — complete qualification to bid'
+    );
   } catch (error: any) {
     return apiResponse.error(res, error.statusCode || 500, error.message || 'Unable to join auction', error.code || 'REVERSE_AUCTION_JOIN_ERROR');
   }
@@ -2851,8 +2870,9 @@ router.post('/reverse-auctions/:id/qualification/submit', requirePermission('rev
     const participant = await getOwnParticipant(req, auctionId);
     assertQualificationEditable(participant);
 
+    const isDirectRA = auction.procurementMethod === 'REVERSE_AUCTION';
     const docCount = await db.auctionQualificationDocument.count({ where: { participantId: participant.id } });
-    if (!docCount) throw new ApiError(400, 'Upload at least one mandatory document before submitting.', 'AUCTION_QUALIFICATION_NO_DOCUMENTS');
+    if (!isDirectRA && !docCount) throw new ApiError(400, 'Upload at least one mandatory document before submitting.', 'AUCTION_QUALIFICATION_NO_DOCUMENTS');
     if (requiresInitialQuote(auction) && participant.initialQuoteAmount == null) {
       throw new ApiError(400, 'An initial commercial quote is required to qualify for this auction.', 'AUCTION_QUALIFICATION_QUOTE_REQUIRED');
     }
@@ -2998,7 +3018,7 @@ router.post('/reverse-auctions/:id/bids', requirePermission('reverse_auction.bid
               ...(req.user?.organizationId ? [{ sellerOrgId: req.user.organizationId }] : []),
               ...(req.user?.id ? [{ sellerUserId: req.user.id }] : [])
             ],
-            status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED'] }
+            status: { in: ['TECHNICALLY_QUALIFIED', 'ACCEPTED', ...(auction.procurementMethod === 'REVERSE_AUCTION' ? ['INVITED'] : [])] }
           }
         });
         if (!participant) throw new ApiError(403, 'Only technically qualified sellers can bid. Complete the qualification stage first.', 'AUCTION_SELLER_NOT_QUALIFIED');

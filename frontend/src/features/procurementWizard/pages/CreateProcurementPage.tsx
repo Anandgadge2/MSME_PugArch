@@ -753,11 +753,13 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
     basics: {
       ...draft.basics,
       isReverseAuctionNeeded: true,
-      isTechnicalEvaluationNeeded: draft.basics.isTechnicalEvaluationNeeded,
+      isTechnicalEvaluationNeeded: false,
     },
     schedule: {
       ...draft.schedule,
-      packetType: draft.schedule.packetType,
+      packetType: 'Single',
+      technicalOpeningDate: '',
+      financialOpeningDate: '',
       minimumBidders: Math.max(Number(draft.schedule.minimumBidders || 0), base.minimumQualifiedBidders || 2),
     },
     auctionConfig: {
@@ -1785,13 +1787,13 @@ export default function CreateProcurementPage() {
     if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
       list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
     }
-    if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+    if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
       list.push({ label: 'Technical opening date is required', ok: Boolean(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
       if (d.schedule.technicalOpeningDate && d.schedule.submissionDate) {
         list.push({ label: 'Technical opening date must be after submission deadline', ok: new Date(d.schedule.technicalOpeningDate) > new Date(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
       }
     }
-    if (d.schedule.packetType === 'Two') {
+    if (!isReverseAuctionMethod(d.type) && d.schedule.packetType === 'Two') {
       list.push({ label: 'Financial opening date is required for two packet flows', ok: Boolean(d.schedule.financialOpeningDate), severity: 'error', stepIdx: 5 });
       if (d.schedule.financialOpeningDate && d.schedule.technicalOpeningDate) {
         list.push({ label: 'Financial opening date must be after technical envelope opening', ok: new Date(d.schedule.financialOpeningDate) > new Date(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
@@ -1928,11 +1930,11 @@ export default function CreateProcurementPage() {
       const endTime = new Date(d.schedule.submissionDate).getTime();
       if (endTime <= Date.now()) return false;
       if (endTime <= nowTime) return false;
-      if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+      if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
         if (!d.schedule.technicalOpeningDate) return false;
         if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) return false;
       }
-      if (d.schedule.packetType === 'Two') {
+      if (!isReverseAuctionMethod(d.type) && d.schedule.packetType === 'Two') {
         if (!d.schedule.financialOpeningDate) return false;
         if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) return false;
       }
@@ -2247,7 +2249,7 @@ export default function CreateProcurementPage() {
         scrollToErrorField('submission-end-datetime');
         return false;
       }
-      if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+      if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
         if (!d.schedule.technicalOpeningDate) {
           toast.error('Technical opening date is required.');
           scrollToErrorField('technical-opening-datetime');
@@ -2265,7 +2267,7 @@ export default function CreateProcurementPage() {
           return false;
         }
       }
-      if (d.schedule.packetType === 'Two') {
+      if (!isReverseAuctionMethod(d.type) && d.schedule.packetType === 'Two') {
         if (!d.schedule.financialOpeningDate) {
           toast.error('Financial opening date is required for Two Packet flow.');
           scrollToErrorField('financial-opening-datetime');
@@ -8157,96 +8159,97 @@ function VendorsStepForm({
           )}
         </Field>
 
-        <Field label="Minimum Sourcing bids required">
-          <input
-            type="text"
-            inputMode="numeric"
-            pattern="[0-9]*"
-            id="minimum-sourcing-bids-input"
-            aria-label="Minimum Sourcing bids required"
-            aria-describedby="min-bids-instructions min-bids-guidance"
-            value={draft.schedule.minimumBidders ?? ''}
-            onChange={e => {
-              let val = e.target.value.replace(/[^0-9]/g, '');
-              if (val.length > 1 && val.startsWith('0')) {
-                val = val.replace(/^0+/, '');
-              }
-              updateDraft(c => ({
-                ...c,
-                schedule: {
-                  ...c.schedule,
-                  minimumBidders: val === '' ? '' : parseInt(val, 10),
-                }
-              }));
-            }}
-            onBlur={() => {
-              const current = parseInt(String(draft.schedule.minimumBidders), 10);
-              if (isNaN(current) || current < 1) {
-                updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
-              }
-            }}
-            className={inputClass}
-            placeholder="3"
-          />
-          <div className="flex flex-wrap items-center gap-1.5 pt-2">
-            <span className="text-[10px] font-bold text-slate-500 mr-0.5">Recommended Presets:</span>
-            {(isOpenTender
-              ? [
-                  { label: '3 Bids (GFR 173 Standard)', val: 3 },
-                  { label: '4 Bids (Competitive)', val: 4 },
-                  { label: '5 Bids (High Competition)', val: 5 },
-                ]
-              : [
-                  { label: '1 Bid (Proprietary / Monopoly)', val: 1 },
-                  { label: '2 Bids (Expedited / Urgent)', val: 2 },
-                  { label: '3 Bids (GFR 173 Standard)', val: 3 },
-                  { label: '5 Bids (High Competition)', val: 5 },
-                ]
-            ).map(p => (
-              <button
-                key={p.val}
-                type="button"
-                onClick={() => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: p.val } }))}
-                className={cn(
-                  "text-[10px] font-bold px-2.5 py-1 rounded-md border transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]",
-                  Number(draft.schedule.minimumBidders) === p.val
-                    ? "border-[#0b2447] bg-[#0b2447] text-white shadow-xs"
-                    : "border-slate-300 bg-white hover:bg-slate-100 text-slate-700"
-                )}
-                aria-pressed={Number(draft.schedule.minimumBidders) === p.val}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+        <Field label="Minimum Sourcing Bids Required">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <div className="relative w-28 shrink-0">
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  id="minimum-sourcing-bids-input"
+                  aria-label="Minimum Sourcing bids required"
+                  aria-describedby="min-bids-guidance"
+                  value={draft.schedule.minimumBidders ?? ''}
+                  onChange={e => {
+                    let val = e.target.value.replace(/[^0-9]/g, '');
+                    if (val.length > 1 && val.startsWith('0')) {
+                      val = val.replace(/^0+/, '');
+                    }
+                    updateDraft(c => ({
+                      ...c,
+                      schedule: {
+                        ...c.schedule,
+                        minimumBidders: val === '' ? '' : parseInt(val, 10),
+                      }
+                    }));
+                  }}
+                  onBlur={() => {
+                    const current = parseInt(String(draft.schedule.minimumBidders), 10);
+                    if (isNaN(current) || current < 1) {
+                      updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: 3 } }));
+                    }
+                  }}
+                  className="h-11 w-full pl-3 pr-10 text-sm font-bold text-slate-800 rounded-lg border border-slate-300 bg-white focus:outline-none focus:ring-2 focus:ring-[#0b2447] focus:border-transparent transition-all"
+                  placeholder="3"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400 uppercase select-none pointer-events-none">
+                  Bids
+                </span>
+              </div>
 
-          <div id="min-bids-instructions" className="mt-2 text-xs rounded-lg p-2.5 bg-slate-100/80 border border-slate-200 text-slate-700 space-y-1">
-            <p className="font-semibold text-slate-800">
-              How Minimum Sourcing Bids Work:
-            </p>
-            <p className="text-[11px] leading-relaxed text-slate-600">
-              Specifies the minimum number of technically qualified supplier quotations required before financial bids can be unsealed automatically.
-            </p>
-            <div id="min-bids-guidance" className="pt-1 text-[11px] font-medium" aria-live="polite">
+              <div className="flex items-center gap-1.5 flex-wrap flex-1" role="group" aria-label="Preset bid thresholds">
+                {(isOpenTender
+                  ? [
+                      { label: '3 (GFR 173)', val: 3 },
+                      { label: '4 Bids', val: 4 },
+                      { label: '5+ Bids', val: 5 },
+                    ]
+                  : [
+                      { label: '1 (Single)', val: 1 },
+                      { label: '2 Bids', val: 2 },
+                      { label: '3 (GFR 173)', val: 3 },
+                      { label: '5+ Bids', val: 5 },
+                    ]
+                ).map(p => (
+                  <button
+                    key={p.val}
+                    type="button"
+                    onClick={() => updateDraft(c => ({ ...c, schedule: { ...c.schedule, minimumBidders: p.val } }))}
+                    className={cn(
+                      "h-11 px-3 text-xs font-bold rounded-lg border transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-[#0b2447]",
+                      Number(draft.schedule.minimumBidders) === p.val
+                        ? "border-[#0b2447] bg-[#0b2447] text-white shadow-xs"
+                        : "border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700"
+                    )}
+                    aria-pressed={Number(draft.schedule.minimumBidders) === p.val}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div id="min-bids-guidance" className="text-[11px] leading-normal" aria-live="polite">
               {isOpenTender && Number(draft.schedule.minimumBidders) < 3 ? (
-                <div className="flex items-start gap-1.5 text-amber-900 bg-amber-50/90 border border-amber-300 rounded p-2">
-                  <span className="font-bold text-amber-800">⚠️ GFR 173 Compliance Note:</span>
-                  <span>Open Advertised Tenders require a minimum of 3 qualified bids. If fewer than 3 bids arrive at deadline, public procurement rules require recorded CFAC approval or a deadline extension.</span>
+                <div className="flex items-center gap-1.5 text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" aria-hidden="true" />
+                  <span><strong>GFR 173 Advisory:</strong> Open tenders standardly require ≥ 3 bids. Fewer bids require recorded CFAC approval or extension.</span>
                 </div>
               ) : Number(draft.schedule.minimumBidders) === 1 ? (
-                <div className="flex items-start gap-1.5 text-amber-800 bg-amber-50/80 border border-amber-200 rounded p-1.5">
-                  <span className="font-bold">⚠️ Single-Bid Policy:</span>
-                  <span>Minimum set to 1. If only 1 quotation is submitted, the system halts with a Single-Bidder Advisory requiring explicit buyer administrative price confirmation before financial opening.</span>
+                <div className="flex items-center gap-1.5 text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-600 shrink-0" aria-hidden="true" />
+                  <span><strong>Single-Bid Policy:</strong> Explicit buyer price confirmation required before unsealing.</span>
                 </div>
               ) : Number(draft.schedule.minimumBidders) >= 5 ? (
-                <div className="flex items-start gap-1.5 text-blue-900 bg-blue-50/80 border border-blue-200 rounded p-1.5">
-                  <span className="font-bold">ℹ️ High Competition:</span>
-                  <span>Targeting {draft.schedule.minimumBidders} bids. If fewer than {draft.schedule.minimumBidders} qualified bids are received at deadline, the system will raise an Insufficient Bids Warning, prompting a deadline extension or buyer justification.</span>
+                <div className="flex items-center gap-1.5 text-blue-900 bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1.5">
+                  <Info className="h-3.5 w-3.5 text-blue-600 shrink-0" aria-hidden="true" />
+                  <span><strong>High Competition:</strong> Targets {draft.schedule.minimumBidders} qualified bids before auto-unsealing.</span>
                 </div>
               ) : (
-                <div className="flex items-start gap-1.5 text-slate-700 bg-slate-50 border border-slate-200 rounded p-1.5">
-                  <span className="font-bold">✓ Standard Competitive Rule (GFR 173):</span>
-                  <span>Requires at least {draft.schedule.minimumBidders || 3} qualified bids. If fewer bids arrive at opening, the system prompts for administrative confirmation or a deadline extension.</span>
+                <div className="flex items-center gap-1.5 text-slate-600 bg-slate-50 border border-slate-200 rounded-md px-2.5 py-1.5">
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" aria-hidden="true" />
+                  <span><strong>GFR 173 Standard:</strong> Minimum {draft.schedule.minimumBidders || 3} qualified bids required to auto-unseal financial envelopes.</span>
                 </div>
               )}
             </div>
@@ -8664,7 +8667,13 @@ function ScheduleStepForm({
           nextConfig.endDateTime = getEndDateTime(nextConfig.startDateTime, dur);
         }
       }
-      return { ...c, auctionConfig: nextConfig };
+      const nextSchedule = isReverseAuctionMethod(c.type) ? {
+        ...c.schedule,
+        packetType: 'Single' as const,
+        submissionStartDate: nextConfig.startDateTime || c.schedule.submissionStartDate,
+        submissionDate: nextConfig.endDateTime || c.schedule.submissionDate,
+      } : c.schedule;
+      return { ...c, auctionConfig: nextConfig, schedule: nextSchedule };
     });
   };
   const updateTrigger = <K extends keyof AuctionConfig['triggerConfiguration']>(
@@ -9300,19 +9309,31 @@ function ScheduleStepForm({
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Packet envelope configuration" required>
-          <select
-            value={draft.schedule.packetType}
-            onChange={e => updateSchedule('packetType', e.target.value as any)}
-            className={inputClass}
-          >
-            <option value="Single">Single Packet Envelope (Commercial Only)</option>
-            <option value="Two">Two Packet Envelope (Technical + Commercial Separated)</option>
-          </select>
-          <p className="text-[10px] text-slate-500 font-semibold mt-1">
-            Single packet evaluates technical/commercial together. Two packet evaluates technical first, then opens commercial quotes for qualified bidders.
-          </p>
-        </Field>
+        {isReverseAuctionMethod(draft.type) ? (
+          <div className="sm:col-span-2 rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 flex items-start gap-2.5 text-xs text-purple-950">
+            <Gavel className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" aria-hidden="true" />
+            <div>
+              <span className="font-bold block">Direct Reverse Auction: Single-Stage Live Floor</span>
+              <span className="text-[11px] text-purple-900 leading-relaxed block mt-0.5">
+                In a Direct Reverse Auction (Option A), all invited and eligible sellers enter the dynamic bidding floor directly at the scheduled start time. There is no separate technical envelope opening or sealed financial tender unsealing.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <Field label="Packet envelope configuration" required>
+            <select
+              value={draft.schedule.packetType}
+              onChange={e => updateSchedule('packetType', e.target.value as any)}
+              className={inputClass}
+            >
+              <option value="Single">Single Packet Envelope (Commercial Only)</option>
+              <option value="Two">Two Packet Envelope (Technical + Commercial Separated)</option>
+            </select>
+            <p className="text-[10px] text-slate-500 font-semibold mt-1">
+              Single packet evaluates technical/commercial together. Two packet evaluates technical first, then opens commercial quotes for qualified bidders.
+            </p>
+          </Field>
+        )}
 
         <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
           <DateTimePicker
@@ -9413,7 +9434,7 @@ function ScheduleStepForm({
           </div>
         </Field>
 
-        {(draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (() => {
+        {!isReverseAuctionMethod(draft.type) && (draft.basics.isTechnicalEvaluationNeeded || isTwoPacket) && (() => {
           const isTechInvalid = Boolean(
             !draft.schedule.technicalOpeningDate ||
             (draft.schedule.submissionDate && new Date(draft.schedule.technicalOpeningDate).getTime() <= new Date(draft.schedule.submissionDate).getTime())
@@ -9466,7 +9487,7 @@ function ScheduleStepForm({
           );
         })()}
 
-        {isTwoPacket && (() => {
+        {!isReverseAuctionMethod(draft.type) && isTwoPacket && (() => {
           const isFinInvalid = Boolean(
             !draft.schedule.financialOpeningDate ||
             (draft.schedule.technicalOpeningDate && new Date(draft.schedule.financialOpeningDate).getTime() <= new Date(draft.schedule.technicalOpeningDate).getTime())

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BACKEND_DIR = process.cwd();
+const BACKEND_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
 const ROOT_DIR = path.resolve(BACKEND_DIR, '..');
 
 test('1. Prisma schema declares ProcurementCategoryType and ProcurementPricingFormat enums', () => {
