@@ -19,7 +19,6 @@ import {
   CalendarClock,
   FileText,
   Upload,
-  Gavel,
   BarChart3,
   BadgeCheck,
   ArrowRight,
@@ -9566,17 +9565,7 @@ function ScheduleStepForm({
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {isReverseAuctionMethod(draft.type) ? (
-          <div className="sm:col-span-2 rounded-xl border border-purple-200 bg-purple-50/70 p-3.5 flex items-start gap-2.5 text-xs text-purple-950">
-            <Gavel className="h-4 w-4 text-purple-700 shrink-0 mt-0.5" aria-hidden="true" />
-            <div>
-              <span className="font-bold block">Direct Reverse Auction: Single-Stage Live Floor</span>
-              <span className="text-[11px] text-purple-900 leading-relaxed block mt-0.5">
-                In a Direct Reverse Auction (Option A), all invited and eligible sellers enter the dynamic bidding floor directly at the scheduled start time. There is no separate technical envelope opening or sealed financial tender unsealing.
-              </span>
-            </div>
-          </div>
-        ) : (
+        {!isReverseAuctionMethod(draft.type) && (
           <Field label="Packet envelope configuration" required>
             <select
               value={draft.schedule.packetType}

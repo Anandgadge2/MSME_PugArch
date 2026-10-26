@@ -14,9 +14,8 @@ test('1. Direct Reverse Auction (Option A) locks packet configuration to Single 
   assert.ok(code.includes("packetType: 'Single'"), 'syncAuctionDefaults must force packetType to Single for Direct RA');
   assert.ok(code.includes("isTechnicalEvaluationNeeded: false"), 'syncAuctionDefaults must set isTechnicalEvaluationNeeded to false for Direct RA');
 
-  // Verify Direct RA banner replaces the packet selector
-  assert.ok(code.includes('Direct Reverse Auction: Single-Stage Live Floor'), 'Must render Direct Reverse Auction banner');
-  assert.ok(code.includes('isReverseAuctionMethod(draft.type) ?'), 'Must branch on isReverseAuctionMethod for packet selector');
+  // Verify packet selector is hidden for Direct RA
+  assert.ok(code.includes('!isReverseAuctionMethod(draft.type) && (\n          <Field label="Packet envelope configuration"'), 'Must hide packet selector for Direct RA');
 });
 
 test('2. Direct Reverse Auction does not require technicalOpeningDate or financialOpeningDate', () => {
