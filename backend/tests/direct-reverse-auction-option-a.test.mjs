@@ -78,3 +78,48 @@ test('6. Frontend ReverseAuctionLivePage and DetailPage authorize sellers and di
   assert.ok(detailCode.includes('Direct Reverse Auction (Invited Suppliers Only)'), 'DetailPage must display Direct Reverse Auction title for non-joined observers');
   assert.ok(detailCode.includes('Dynamic bidding in this reverse auction is restricted to invited participating suppliers.'), 'DetailPage must display accurate observer body for Direct RA');
 });
+
+test('7. Step 6 hides generic Submission Start and End dates for Direct Reverse Auction', () => {
+  const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
+  const wizardCode = fs.readFileSync(wizardPath, 'utf8');
+
+  assert.ok(
+    wizardCode.includes("{!isReverseAuctionMethod(draft.type) && (\n          <>\n            <Field label=\"Submission Start Date\""),
+    'CreateProcurementPage must hide generic Submission Start Date for Direct Reverse Auction'
+  );
+  assert.ok(
+    wizardCode.includes("id=\"submission-end-datetime\""),
+    'Submission End Date field exists'
+  );
+  assert.ok(
+    wizardCode.includes("if (!isReverseAuctionMethod(d.type)) {\n      list.push({ label: 'Submission deadline date is required'"),
+    'Validation must not require generic submission deadline when isReverseAuctionMethod is true'
+  );
+});
+
+test('8. Seller Action Engine and Unified View direct sellers to Live Auction Room instead of quotation packet form', () => {
+  const actionEnginePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'procurementActionEngine.ts');
+  const engineCode = fs.readFileSync(actionEnginePath, 'utf8');
+
+  assert.ok(engineCode.includes("'SELLER_JOIN_AUCTION'"), 'Must declare SELLER_JOIN_AUCTION action type');
+  assert.ok(engineCode.includes("'SELLER_ENTER_AUCTION'"), 'Must declare SELLER_ENTER_AUCTION action type');
+  assert.ok(engineCode.includes("label: 'Enter Live Bidding Floor →'"), 'Must provide live floor button for participated seller in reverse auction');
+  assert.ok(engineCode.includes("label: 'Enter Live Reverse Auction →'"), 'Must provide live reverse auction button for active reverse auction');
+
+  const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
+  const unifiedCode = fs.readFileSync(unifiedViewPath, 'utf8');
+
+  assert.ok(
+    unifiedCode.includes("if (isDirectReverseAuction || isReverseAuctionType || linkedAuction) {\n            const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || cleanId;\n            router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}`);"),
+    'ProcurementDetailUnifiedView handleActionSubmit must route reverse auctions to reverse auction room instead of /participate packet form'
+  );
+  assert.ok(
+    unifiedCode.includes("primaryHighwayAction.type === 'SELLER_ENTER_AUCTION'"),
+    'ProcurementDetailUnifiedView must handle SELLER_ENTER_AUCTION highway button'
+  );
+  assert.ok(
+    unifiedCode.includes("primaryHighwayAction.type === 'SELLER_JOIN_AUCTION'"),
+    'ProcurementDetailUnifiedView must handle SELLER_JOIN_AUCTION highway button'
+  );
+});
+

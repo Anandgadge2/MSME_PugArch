@@ -7254,6 +7254,12 @@ export function ProcurementDetailUnifiedView(
         if (isBuyerOrAdmin) {
           router.push(`/bids/${encodeURIComponent(cleanId)}/results`);
         } else {
+          // If Direct Reverse Auction or linked auction exists, direct to reverse auction room
+          if (isDirectReverseAuction || isReverseAuctionType || linkedAuction) {
+            const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || cleanId;
+            router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}`);
+            return;
+          }
           const typeParam = props.procurementType ? `?type=${encodeURIComponent(String(props.procurementType))}` : '';
           const targetUrl = `/bids/${encodeURIComponent(cleanId)}/participate${typeParam}`;
           try {
@@ -14022,6 +14028,16 @@ export function ProcurementDetailUnifiedView(
                       }
                       if (primaryHighwayAction.type === 'SELLER_VIEW_SUBMITTED') {
                         handleOpenMyQuotationModal();
+                        return;
+                      }
+                      if (primaryHighwayAction.type === 'SELLER_ENTER_AUCTION') {
+                        const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || targetId;
+                        router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/live`);
+                        return;
+                      }
+                      if (primaryHighwayAction.type === 'SELLER_JOIN_AUCTION') {
+                        const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || targetId;
+                        router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}`);
                         return;
                       }
                       handleActionSubmit();

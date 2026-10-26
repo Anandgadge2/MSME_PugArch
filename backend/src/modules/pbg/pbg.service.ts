@@ -48,7 +48,9 @@ export class PbgService {
         poNumber: po.poNumber,
         amount: Number(po.amount || po.totalValue || 0),
         pbgRequired: po.pbgRequired,
-        pbgPercentage: Number(po.pbgPercentage || 3),
+        pbgPercentage: Number(po.pbgPercentage || (po.pbgRequired ? 3 : 0)),
+        pbgExemptReason: (po.metadata as any)?.pbgExemptReason || (!po.pbgRequired ? 'MSE_STATUTORY_WAIVER' : null),
+        ldTerms: (po.metadata as any)?.ldTerms || (po.metadata as any)?.penaltyClause || '0.5% per week of delay (max 10%)',
         pbgType: po.pbgType
       },
       performanceGuarantee: po.performanceGuarantee || null

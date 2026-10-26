@@ -388,12 +388,22 @@ export const fulfillmentWorkflow = {
       advanceDeduction = Number(po.advanceAmount);
     }
 
-    // GFR 171: 5% Retention Money deduction for MSME mode if selected
+    // GFR 171: MSME Retention Money deduction with milestone capping
     let retentionDeduction = 0;
-    if (po.pbgType === 'RETENTION_DEDUCTION') {
-      const pbgPct = Number(po.pbgPercentage || 5.0);
+    if (po.pbgRequired && po.pbgType === 'RETENTION_DEDUCTION') {
+      const pbgPct = Number(po.pbgPercentage || 3.0);
       const poVal = Number(po.amount || po.totalValue || 0);
-      retentionDeduction = Math.round((poVal * pbgPct / 100) * 100) / 100;
+      const targetRetention = Math.round((poVal * pbgPct / 100) * 100) / 100;
+
+      const existingGuarantee = await db.performanceGuarantee.findUnique({
+        where: { purchaseOrderId: po.id }
+      });
+      const alreadyDeducted = Number(existingGuarantee?.retentionAccumulated || 0);
+      const remainingCap = Math.max(0, targetRetention - alreadyDeducted);
+
+      const baseForRetention = Number(taxes.taxableAmount || taxes.grossAmount || 0);
+      const idealInvoiceDeduction = Math.round((baseForRetention * (pbgPct / 100)) * 100) / 100;
+      retentionDeduction = Math.min(idealInvoiceDeduction, remainingCap);
     }
 
     // GFR / GST Section 51: 2% GST-TDS for Government / PSU buyers
@@ -445,6 +455,14 @@ export const fulfillmentWorkflow = {
         },
         include: { items: true }
       });
+      if (retentionDeduction > 0) {
+        await tx.performanceGuarantee.updateMany({
+          where: { purchaseOrderId: po.id },
+          data: {
+            retentionAccumulated: { increment: retentionDeduction }
+          }
+        });
+      }
       await tx.purchaseOrder.update({ where: { id: po.id }, data: { status: 'invoice_submitted', version: { increment: 1 } } });
       return created;
     });

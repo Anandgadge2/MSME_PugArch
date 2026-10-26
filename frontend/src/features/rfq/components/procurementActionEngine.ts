@@ -10,6 +10,8 @@ export type ProcurementActionType =
   | 'SELLER_SUBMIT_QUOTE'
   | 'SELLER_VIEW_SUBMITTED'
   | 'SELLER_WINDOW_CLOSED'
+  | 'SELLER_JOIN_AUCTION'
+  | 'SELLER_ENTER_AUCTION'
   | 'BUYER_SEALED_AWAITING_CLOSING'
   | 'BUYER_EVALUATE_PROPOSALS'
   | 'BUYER_ISSUE_CALL_OFF'
@@ -165,7 +167,7 @@ export function deriveProcurementPrimaryAction(
   // SELLER / VENDOR ACTION WORKFLOW
   // ==========================================
 
-  // 3.1 Seller already submitted quote
+  // 3.1 Seller already submitted quote / participated
   if (isSellerParticipated || hasSubmittedProposal) {
     if (params.isDisqualified) {
       return {
@@ -175,6 +177,16 @@ export function deriveProcurementPrimaryAction(
         isExecutable: true,
         isSealedLock: false,
         badgeTone: 'rose'
+      };
+    }
+    if (isReverseAuction) {
+      return {
+        type: 'SELLER_ENTER_AUCTION',
+        label: 'Enter Live Bidding Floor →',
+        subtext: 'You are registered for this reverse auction. Place decremental bids in real time.',
+        isExecutable: true,
+        isSealedLock: false,
+        badgeTone: 'emerald'
       };
     }
     return {
@@ -191,6 +203,17 @@ export function deriveProcurementPrimaryAction(
 
   // 3.2 Bidding start date is in the future
   if (isBeforeSubmissionStart) {
+    if (isReverseAuction) {
+      return {
+        type: 'SELLER_AWAITING_WINDOW',
+        label: submissionStartDateFormatted ? `Auction Starts ${submissionStartDateFormatted}` : 'Auction Starts Soon',
+        subtext: 'Dynamic bidding floor will unlock when the scheduled auction start time arrives',
+        isExecutable: false,
+        isSealedLock: true,
+        unlocksAt: params.submissionStartDateFormatted,
+        badgeTone: 'sky'
+      };
+    }
     return {
       type: 'SELLER_AWAITING_WINDOW',
       label: submissionStartDateFormatted ? `Submission Opens ${submissionStartDateFormatted}` : 'Submission Opens Soon',
@@ -204,6 +227,16 @@ export function deriveProcurementPrimaryAction(
 
   // 3.3 Bidding closed or deadline passed without participating
   if (isBiddingClosed || isDeadlinePassed) {
+    if (isReverseAuction) {
+      return {
+        type: 'SELLER_WINDOW_CLOSED',
+        label: 'Auction Window Concluded',
+        subtext: `The bidding window elapsed on ${closingDateFormatted || 'schedule'}. Dynamic bidding is closed.`,
+        isExecutable: false,
+        isSealedLock: false,
+        badgeTone: 'slate'
+      };
+    }
     return {
       type: 'SELLER_WINDOW_CLOSED',
       label: 'Submission Window Closed',
@@ -214,7 +247,18 @@ export function deriveProcurementPrimaryAction(
     };
   }
 
-  // 3.4 Actively open for quotation submission
+  // 3.4 Actively open for quotation submission / live reverse auction
+  if (isReverseAuction) {
+    return {
+      type: 'SELLER_JOIN_AUCTION',
+      label: 'Enter Live Reverse Auction →',
+      subtext: `Direct Reverse Auction active. Closes at ${closingDateFormatted || 'scheduled end'}`,
+      isExecutable: true,
+      isSealedLock: false,
+      badgeTone: 'emerald'
+    };
+  }
+
   return {
     type: 'SELLER_SUBMIT_QUOTE',
     label: isRateContract ? 'Submit Rate Quotation →' : 'Submit Quotation →',

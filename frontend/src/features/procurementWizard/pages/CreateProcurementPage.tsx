@@ -760,6 +760,8 @@ const syncAuctionDefaults = (draft: Draft, method: ProcurementMethodId): Draft =
       packetType: 'Single',
       technicalOpeningDate: '',
       financialOpeningDate: '',
+      submissionStartDate: base.startDateTime || draft.schedule.submissionStartDate,
+      submissionDate: base.endDateTime || draft.schedule.submissionDate,
       minimumBidders: Math.max(Number(draft.schedule.minimumBidders || 0), base.minimumQualifiedBidders || 2),
     },
     auctionConfig: {
@@ -1775,17 +1777,19 @@ export default function CreateProcurementPage() {
     }
 
     // Step 5 Event timeline - Errors
-    list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
-    if (d.schedule.submissionDate) {
-      list.push({
-        label: 'Submission deadline must be set in the future',
-        ok: new Date(d.schedule.submissionDate).getTime() > Date.now(),
-        severity: 'error',
-        stepIdx: 5
-      });
-    }
-    if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
-      list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
+    if (!isReverseAuctionMethod(d.type)) {
+      list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
+      if (d.schedule.submissionDate) {
+        list.push({
+          label: 'Submission deadline must be set in the future',
+          ok: new Date(d.schedule.submissionDate).getTime() > Date.now(),
+          severity: 'error',
+          stepIdx: 5
+        });
+      }
+      if (d.schedule.submissionDate && d.schedule.submissionStartDate) {
+        list.push({ label: 'Submission deadline must be after submission start date', ok: new Date(d.schedule.submissionDate) > new Date(d.schedule.submissionStartDate), severity: 'error', stepIdx: 5 });
+      }
     }
     if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
       list.push({ label: 'Technical opening date is required', ok: Boolean(d.schedule.technicalOpeningDate), severity: 'error', stepIdx: 5 });
@@ -1925,18 +1929,20 @@ export default function CreateProcurementPage() {
       if (isReverseAuctionMethod(d.type) && d.vendors.selection !== 'Open' && d.vendors.invitedSellers.length < d.auctionConfig.minimumQualifiedBidders) return false;
       if (isRateContractMethod(d.type) && d.vendors.selection !== 'Open' && d.rateContractConfig.selectedSuppliers.length === 0 && d.vendors.invitedSellers.length === 0) return false;
     } else if (stepIdx === 5) {
-      if (!d.schedule.submissionDate) return false;
-      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
-      const endTime = new Date(d.schedule.submissionDate).getTime();
-      if (endTime <= Date.now()) return false;
-      if (endTime <= nowTime) return false;
-      if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
-        if (!d.schedule.technicalOpeningDate) return false;
-        if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) return false;
-      }
-      if (!isReverseAuctionMethod(d.type) && d.schedule.packetType === 'Two') {
-        if (!d.schedule.financialOpeningDate) return false;
-        if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) return false;
+      if (!isReverseAuctionMethod(d.type)) {
+        if (!d.schedule.submissionDate) return false;
+        const nowTime = new Date(d.schedule.submissionStartDate).getTime();
+        const endTime = new Date(d.schedule.submissionDate).getTime();
+        if (endTime <= Date.now()) return false;
+        if (endTime <= nowTime) return false;
+        if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+          if (!d.schedule.technicalOpeningDate) return false;
+          if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) return false;
+        }
+        if (d.schedule.packetType === 'Two') {
+          if (!d.schedule.financialOpeningDate) return false;
+          if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) return false;
+        }
       }
       if (isReverseAuctionMethod(d.type)) {
         const auction = d.auctionConfig;
@@ -2232,57 +2238,59 @@ export default function CreateProcurementPage() {
       }
     } else if (stepIdx === 5) {
       // Step 5 Event timeline
-      if (!d.schedule.submissionDate) {
-        toast.error('Submission deadline date is required.');
-        scrollToErrorField('submission-end-datetime');
-        return false;
-      }
-      const endTime = new Date(d.schedule.submissionDate).getTime();
-      if (endTime <= Date.now()) {
-        toast.error('Submission deadline must be set to a future date & time.');
-        scrollToErrorField('submission-end-datetime');
-        return false;
-      }
-      const nowTime = new Date(d.schedule.submissionStartDate).getTime();
-      if (endTime <= nowTime) {
-        toast.error('Submission closing date must be after submission start date.');
-        scrollToErrorField('submission-end-datetime');
-        return false;
-      }
-      if (!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')) {
-        if (!d.schedule.technicalOpeningDate) {
-          toast.error('Technical opening date is required.');
-          scrollToErrorField('technical-opening-datetime');
+      if (!isReverseAuctionMethod(d.type)) {
+        if (!d.schedule.submissionDate) {
+          toast.error('Submission deadline date is required.');
+          scrollToErrorField('submission-end-datetime');
           return false;
         }
-        if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) {
-          const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
-          const subDateOnly = d.schedule.submissionDate.split('T')[0];
-          if (techDateOnly < subDateOnly) {
-            toast.error(`Technical opening date (${techDateOnly}) is earlier than submission deadline (${subDateOnly}).`);
-          } else {
-            toast.error('Technical opening time must be after submission deadline.');
+        const endTime = new Date(d.schedule.submissionDate).getTime();
+        if (endTime <= Date.now()) {
+          toast.error('Submission deadline must be set to a future date & time.');
+          scrollToErrorField('submission-end-datetime');
+          return false;
+        }
+        const nowTime = new Date(d.schedule.submissionStartDate).getTime();
+        if (endTime <= nowTime) {
+          toast.error('Submission closing date must be after submission start date.');
+          scrollToErrorField('submission-end-datetime');
+          return false;
+        }
+        if (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two') {
+          if (!d.schedule.technicalOpeningDate) {
+            toast.error('Technical opening date is required.');
+            scrollToErrorField('technical-opening-datetime');
+            return false;
           }
-          scrollToErrorField('technical-opening-datetime');
-          return false;
-        }
-      }
-      if (!isReverseAuctionMethod(d.type) && d.schedule.packetType === 'Two') {
-        if (!d.schedule.financialOpeningDate) {
-          toast.error('Financial opening date is required for Two Packet flow.');
-          scrollToErrorField('financial-opening-datetime');
-          return false;
-        }
-        if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) {
-          const finDateOnly = d.schedule.financialOpeningDate.split('T')[0];
-          const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
-          if (finDateOnly < techDateOnly) {
-            toast.error(`Financial opening date (${finDateOnly}) is earlier than technical opening date (${techDateOnly}).`);
-          } else {
-            toast.error('Financial opening time must be after technical envelope opening.');
+          if (new Date(d.schedule.technicalOpeningDate) <= new Date(d.schedule.submissionDate)) {
+            const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
+            const subDateOnly = d.schedule.submissionDate.split('T')[0];
+            if (techDateOnly < subDateOnly) {
+              toast.error(`Technical opening date (${techDateOnly}) is earlier than submission deadline (${subDateOnly}).`);
+            } else {
+              toast.error('Technical opening time must be after submission deadline.');
+            }
+            scrollToErrorField('technical-opening-datetime');
+            return false;
           }
-          scrollToErrorField('financial-opening-datetime');
-          return false;
+        }
+        if (d.schedule.packetType === 'Two') {
+          if (!d.schedule.financialOpeningDate) {
+            toast.error('Financial opening date is required for Two Packet flow.');
+            scrollToErrorField('financial-opening-datetime');
+            return false;
+          }
+          if (new Date(d.schedule.financialOpeningDate) <= new Date(d.schedule.technicalOpeningDate)) {
+            const finDateOnly = d.schedule.financialOpeningDate.split('T')[0];
+            const techDateOnly = d.schedule.technicalOpeningDate.split('T')[0];
+            if (finDateOnly < techDateOnly) {
+              toast.error(`Financial opening date (${finDateOnly}) is earlier than technical opening date (${techDateOnly}).`);
+            } else {
+              toast.error('Financial opening time must be after technical envelope opening.');
+            }
+            scrollToErrorField('financial-opening-datetime');
+            return false;
+          }
         }
       }
       if (isReverseAuctionMethod(d.type)) {
@@ -9335,55 +9343,59 @@ function ScheduleStepForm({
           </Field>
         )}
 
-        <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
-          <DateTimePicker
-            id="submission-start-datetime"
-            min={todayDateTime}
-            value={draft.schedule.submissionStartDate || ''}
-            onChange={val => updateSchedule('submissionStartDate', val)}
-            error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}
-            placeholder="Select submission start date & time"
-          />
-        </Field>
+        {!isReverseAuctionMethod(draft.type) && (
+          <>
+            <Field label="Submission Start Date" required error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}>
+              <DateTimePicker
+                id="submission-start-datetime"
+                min={todayDateTime}
+                value={draft.schedule.submissionStartDate || ''}
+                onChange={val => updateSchedule('submissionStartDate', val)}
+                error={fieldError(showErrors && !draft.schedule.submissionStartDate, 'Submission start date is required.')}
+                placeholder="Select submission start date & time"
+              />
+            </Field>
 
-        <Field label="Submission End Date (Deadline)" required error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}>
-          <DateTimePicker
-            id="submission-end-datetime"
-            min={draft.schedule.submissionStartDate || todayDateTime}
-            value={draft.schedule.submissionDate || ''}
-            onChange={val => updateSchedule('submissionDate', val)}
-            error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
-            placeholder="Select submission deadline date & time"
-          />
-          <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-            <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
-            {[
-              { label: '+7 Days (Urgent)', days: 7 },
-              { label: '+14 Days (Standard)', days: 14 },
-              { label: '+21 Days (GFR Open)', days: 21 },
-              { label: '+30 Days (Global)', days: 30 },
-            ].map(p => {
-              const baseTime = draft.schedule.submissionStartDate
-                ? new Date(draft.schedule.submissionStartDate).getTime()
-                : Date.now();
-              const target = new Date(baseTime + p.days * 86400000);
-              const year = target.getFullYear();
-              const month = String(target.getMonth() + 1).padStart(2, '0');
-              const day = String(target.getDate()).padStart(2, '0');
-              const isoVal = `${year}-${month}-${day}T17:00`;
-              return (
-                <button
-                  key={p.days}
-                  type="button"
-                  onClick={() => updateSchedule('submissionDate', isoVal)}
-                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
-                >
-                  {p.label}
-                </button>
-              );
-            })}
-          </div>
-        </Field>
+            <Field label="Submission End Date (Deadline)" required error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}>
+              <DateTimePicker
+                id="submission-end-datetime"
+                min={draft.schedule.submissionStartDate || todayDateTime}
+                value={draft.schedule.submissionDate || ''}
+                onChange={val => updateSchedule('submissionDate', val)}
+                error={fieldError(Boolean(showErrors && (!draft.schedule.submissionDate || new Date(draft.schedule.submissionDate).getTime() <= Date.now() || Boolean(draft.schedule.submissionStartDate && new Date(draft.schedule.submissionDate) <= new Date(draft.schedule.submissionStartDate)))), !draft.schedule.submissionDate ? 'Submission deadline is required.' : new Date(draft.schedule.submissionDate).getTime() <= Date.now() ? 'Submission deadline must be in the future.' : 'Submission deadline must be after start date.')}
+                placeholder="Select submission deadline date & time"
+              />
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                <span className="text-[10px] font-bold text-slate-400 mr-0.5">Presets:</span>
+                {[
+                  { label: '+7 Days (Urgent)', days: 7 },
+                  { label: '+14 Days (Standard)', days: 14 },
+                  { label: '+21 Days (GFR Open)', days: 21 },
+                  { label: '+30 Days (Global)', days: 30 },
+                ].map(p => {
+                  const baseTime = draft.schedule.submissionStartDate
+                    ? new Date(draft.schedule.submissionStartDate).getTime()
+                    : Date.now();
+                  const target = new Date(baseTime + p.days * 86400000);
+                  const year = target.getFullYear();
+                  const month = String(target.getMonth() + 1).padStart(2, '0');
+                  const day = String(target.getDate()).padStart(2, '0');
+                  const isoVal = `${year}-${month}-${day}T17:00`;
+                  return (
+                    <button
+                      key={p.days}
+                      type="button"
+                      onClick={() => updateSchedule('submissionDate', isoVal)}
+                      className="text-[10px] font-bold px-2 py-0.5 rounded-full border border-slate-200 bg-white hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer"
+                    >
+                      {p.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </Field>
+          </>
+        )}
 
         <Field label="Bid Validity Period (Days)">
           <input

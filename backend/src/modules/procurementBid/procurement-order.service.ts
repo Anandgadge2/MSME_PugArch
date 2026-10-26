@@ -421,6 +421,40 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
   const firstItem = (bidItems && bidItems[0]) || {};
   const extractedHsn = ackHsn || firstItem.hsn || firstItem.hsnCode || firstItem.hsn_sac_code || firstItem.hsnSacCode || firstItem.sac || bid.hsnCode || bid.hsn || null;
 
+  // Resolve GFR 171 Performance Security & LD terms from bid packet
+  const bidPacket = (bid?.technicalPacket && typeof bid.technicalPacket === 'object') ? (bid.technicalPacket as any) : {};
+  const bidTerms = bidPacket.terms || {};
+  const tenderData = bidPacket.tender || {};
+  const rateContractConfig = bidPacket.rateContractConfig || {};
+
+  const rawSecDeposit = Number(
+    bidTerms.securityDeposit ??
+    bidTerms.securityDepositAmount ??
+    tenderData.performanceSecurityAmount ??
+    rateContractConfig.securityDepositAmount ??
+    0
+  );
+  const isPbgExplicitlyRequired = Boolean(
+    bidTerms.securityDepositRequired ??
+    rateContractConfig.securityDepositRequired ??
+    (rawSecDeposit > 0)
+  );
+  const isPbgExempt = !isPbgExplicitlyRequired || rawSecDeposit === 0;
+
+  const resolvedPbgRequired = !isPbgExempt;
+  const resolvedPbgPercentage = resolvedPbgRequired
+    ? (awardedAmount > 0 && rawSecDeposit > 0
+        ? Math.round((rawSecDeposit / awardedAmount) * 100 * 100) / 100
+        : 3.0)
+    : 0.0;
+  const resolvedPbgAmount = resolvedPbgRequired
+    ? (rawSecDeposit > 0 ? rawSecDeposit : Math.round((awardedAmount * (resolvedPbgPercentage / 100)) * 100) / 100)
+    : 0.0;
+
+  const penaltyClause = bidTerms.penaltyClause ||
+    rateContractConfig.penaltyClause ||
+    '0.5% per week of delay (max 10%)';
+
   const result = await db.$transaction(async (tx: any) => {
     const po = await tx.purchaseOrder.create({
       data: {
@@ -441,6 +475,8 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
           ? (bid.termsAndConditions.find((term: string) => typeof term === 'string' && term.toLowerCase().includes('payment')) || null)
           : (typeof bid.termsAndConditions === 'string' ? bid.termsAndConditions : null),
         deliveryType: bid.bidType || 'Product',
+        pbgRequired: resolvedPbgRequired,
+        pbgPercentage: resolvedPbgPercentage,
         metadata: {
           source: 'procurement_bid_award',
           bidId: bid.id,
@@ -462,6 +498,12 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
           gstRate,
           gstAmount,
           totalAmount: awardedAmount,
+          pbgRequired: resolvedPbgRequired,
+          pbgPercentage: resolvedPbgPercentage,
+          pbgAmount: resolvedPbgAmount,
+          pbgExemptReason: isPbgExempt ? 'MSE_STATUTORY_WAIVER' : null,
+          ldTerms: penaltyClause,
+          penaltyClause,
           deliveryLocation: bid.deliveryLocation || 'India',
           termsAndConditions: Array.isArray(bid.termsAndConditions) ? bid.termsAndConditions : (bid.termsAndConditions ? [String(bid.termsAndConditions)] : []),
           eligibilityCriteria: Array.isArray(bid.eligibilityCriteria) ? bid.eligibilityCriteria : (bid.eligibilityCriteria ? [String(bid.eligibilityCriteria)] : []),
