@@ -65,8 +65,11 @@ export function PbgManagementCard({
     }
   }, [purchaseOrderId]);
 
+  const poInfo = pbgData?.purchaseOrder;
+  const isPbgExempt = Boolean(!poInfo?.pbgRequired || Number(poInfo?.pbgPercentage || 0) === 0);
+  const poPbgPercentage = Number(poInfo?.pbgPercentage ?? 3.0);
   const pbg = pbgData?.performanceGuarantee;
-  const pbgAmount = pbg?.amount || Math.round((poAmount * 0.03) * 100) / 100;
+  const pbgAmount = pbg?.amount || Math.round((poAmount * (poPbgPercentage / 100)) * 100) / 100;
 
   const handleSellerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,7 +77,7 @@ export function PbgManagementCard({
       setSubmitting(true);
       await postApi(`/pbg/purchase-orders/${purchaseOrderId}/submit`, {
         type: selectedType,
-        percentage: selectedType === 'RETENTION_DEDUCTION' ? 5.0 : 3.0,
+        percentage: poPbgPercentage,
         bankName: selectedType === 'RETENTION_DEDUCTION' ? 'District Escrow (Retention Holdback)' : bankName,
         bgNumber: selectedType === 'RETENTION_DEDUCTION' ? undefined : bgNumber,
         expiryDate: selectedType === 'RETENTION_DEDUCTION' ? undefined : expiryDate
@@ -82,7 +85,7 @@ export function PbgManagementCard({
 
       toast.success(
         selectedType === 'RETENTION_DEDUCTION'
-          ? '5% MSME Retention Money deduction mode activated successfully.'
+          ? `${poPbgPercentage}% MSME Retention Money deduction mode activated successfully.`
           : 'Performance Bank Guarantee submitted for Maker-Checker verification.'
       );
       fetchPbg();
@@ -167,30 +170,39 @@ export function PbgManagementCard({
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-900">Performance Security & PBG (GFR 2017 Rule 171)</h3>
-            <p className="text-xs text-slate-500">Statutory 3%–5% contract performance assurance for orders &gt; ₹5,00,000</p>
+            <p className="text-xs text-slate-500">
+              {isPbgExempt
+                ? 'Statutory MSME Waiver Active (Rule 171 Exemption)'
+                : 'Statutory 3%–5% contract performance assurance for orders > ₹5,00,000'}
+            </p>
           </div>
         </div>
 
         <div>
-          {pbg?.status === 'VERIFIED_ACTIVE' && (
+          {isPbgExempt ? (
+            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+              <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
+              100% Waived (0% MSE)
+            </span>
+          ) : pbg?.status === 'VERIFIED_ACTIVE' ? (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
               <CheckCircle2 className="w-3.5 h-3.5 mr-1" />
               Verified & Active
             </span>
-          )}
-          {pbg?.status === 'SUBMITTED_FOR_VERIFICATION' && (
+          ) : null}
+          {!isPbgExempt && pbg?.status === 'SUBMITTED_FOR_VERIFICATION' && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
               <AlertCircle className="w-3.5 h-3.5 mr-1" />
               Maker-Checker Verification
             </span>
           )}
-          {(!pbg || pbg?.status === 'PENDING_SUBMISSION') && (
+          {!isPbgExempt && (!pbg || pbg?.status === 'PENDING_SUBMISSION') && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-red-100 text-red-800 border border-red-300">
               <ShieldAlert className="w-3.5 h-3.5 mr-1" />
               Pending Submission
             </span>
           )}
-          {pbg?.status === 'RELEASED_COMPLETED' && (
+          {!isPbgExempt && pbg?.status === 'RELEASED_COMPLETED' && (
             <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-300">
               <Lock className="w-3.5 h-3.5 mr-1" />
               Discharged & Released
@@ -200,15 +212,29 @@ export function PbgManagementCard({
       </div>
 
       <div className="p-5 space-y-5">
-        {/* Active PBG Display */}
-        {pbg ? (
+        {/* Exempt Status Banner */}
+        {isPbgExempt ? (
+          <div className="bg-emerald-50 rounded-xl p-5 border border-emerald-200 flex items-start gap-3.5">
+            <div className="p-2 bg-emerald-100 text-emerald-700 rounded-lg shrink-0 mt-0.5">
+              <ShieldCheck className="w-5 h-5" aria-hidden="true" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-emerald-950">
+                Statutory MSME Exemption Active: 0% Performance Security
+              </h4>
+              <p className="text-xs text-emerald-800 leading-relaxed">
+                Performance security is 100% waived for this contract in accordance with the Public Procurement Policy for MSEs Order, 2012 and GFR Rule 171 statutory relaxations. No bank guarantee, FDR deposit, or invoice retention deduction is required from the seller.
+              </p>
+            </div>
+          </div>
+        ) : pbg ? (
           <div className="bg-slate-50 rounded-lg p-4 border border-slate-200 space-y-3">
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-xs">
               <div>
                 <span className="text-slate-500 font-medium">Security Mode:</span>
                 <p className="font-bold text-slate-800 mt-0.5">
                   {pbg.type === 'RETENTION_DEDUCTION'
-                    ? '5% MSME Retention Money'
+                    ? `${Number(pbg.percentage || poPbgPercentage)}% MSME Retention Money`
                     : pbg.type === 'FDR_PLEDGE'
                     ? 'FDR Pledged to DIC'
                     : 'Bank Guarantee (e-PBG)'}
@@ -299,7 +325,7 @@ export function PbgManagementCard({
                       : 'border-slate-200 hover:border-slate-300'
                   }`}
                 >
-                  <p className="text-xs font-bold text-slate-900">Option 2: 5% MSME Retention Money</p>
+                  <p className="text-xs font-bold text-slate-900">Option 2: {poPbgPercentage}% MSME Retention Money</p>
                   <p className="text-[11px] text-slate-500 mt-1">Recommended for rural SHGs & Micro-units. Auto-deducted from invoice escrow.</p>
                 </button>
               </div>
@@ -354,7 +380,7 @@ export function PbgManagementCard({
                   </>
                 ) : (
                   <>
-                    Submit Performance Security ({formatCurrency(selectedType === 'RETENTION_DEDUCTION' ? poAmount * 0.05 : pbgAmount)})
+                    Submit Performance Security ({formatCurrency(pbgAmount)})
                     <ArrowRight className="w-4 h-4 ml-1.5" />
                   </>
                 )}

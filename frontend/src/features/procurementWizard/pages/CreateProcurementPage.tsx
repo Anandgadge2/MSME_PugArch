@@ -966,8 +966,8 @@ const syncRateContractDefaults = (draft: Draft): Draft => {
       rateValidityPeriod: defaultValidity,
       deliverySla: base.deliverySla || draft.terms.deliveryTerms,
       penaltyClause: unifiedPenalty,
-      securityDepositRequired: false,
-      securityDepositAmount: 0,
+      securityDepositRequired: Boolean(Number(draft.terms.securityDeposit || 0) > 0),
+      securityDepositAmount: Number(draft.terms.securityDeposit || 0),
       approvalWorkflow: base.approvalWorkflow || draft.approval.workflow || 'Finance + Procurement',
     },
   };
