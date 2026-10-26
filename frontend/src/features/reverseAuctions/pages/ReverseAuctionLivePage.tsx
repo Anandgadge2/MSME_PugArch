@@ -1293,12 +1293,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                   Boolean((participant as any)?.isDisqualified);
                 const disqualReason = (participant as any)?.disqualificationReason || (participant as any)?.rejectionReason || '';
                 const evalPending = (auction as any)?.evaluationPending;
+                const isDirectRA = String((auction as any)?.procurementMethod || '').toUpperCase() === 'REVERSE_AUCTION';
                 const isEnrolledParticipant = Boolean(participant);
                 const isTechnicallyQualified =
                   pStatus === 'TECHNICALLY_QUALIFIED' ||
                   pStatus === 'ACCEPTED' ||
+                  pStatus === 'QUALIFIED' ||
+                  (isDirectRA && pStatus === 'INVITED') ||
                   (participant as any)?.canBid === true;
-                const canBid = isEnrolledParticipant && isTechnicallyQualified && !isDisqualified && !evalPending;
+                const canBid = isEnrolledParticipant && isTechnicallyQualified && !isDisqualified && (!evalPending || isDirectRA);
 
                 // Non-participant seller (Observer access only)
                 if (!isEnrolledParticipant) {
@@ -1309,7 +1312,9 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
                         <div>
                           <p className="text-xs font-black text-slate-800">Observer Mode (Non-Participant)</p>
                           <p className="mt-1 text-[11px] font-semibold leading-relaxed text-slate-600">
-                            Your organization did not submit an initial Stage 1 quotation for this requisition. Dynamic counter-bidding is restricted to qualified participating suppliers.
+                            {isDirectRA
+                              ? 'This is a private/invited reverse auction. Dynamic counter-bidding is restricted to invited participating suppliers.'
+                              : 'Your organization did not submit an initial Stage 1 quotation for this requisition. Dynamic counter-bidding is restricted to qualified participating suppliers.'}
                           </p>
                         </div>
                       </div>

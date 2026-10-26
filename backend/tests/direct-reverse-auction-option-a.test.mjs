@@ -63,3 +63,18 @@ test('5. Backend phase4.routes.ts sets TECHNICALLY_QUALIFIED status on Direct RA
 
   assert.ok(code.includes("status: 'TECHNICALLY_QUALIFIED',\n      qualificationStatus: 'QUALIFIED'"), 'phase4 submission must assign TECHNICALLY_QUALIFIED to qualifiedVendors');
 });
+
+test('6. Frontend ReverseAuctionLivePage and DetailPage authorize sellers and display proper Direct RA notices', () => {
+  const livePagePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'reverseAuctions', 'pages', 'ReverseAuctionLivePage.tsx');
+  const liveCode = fs.readFileSync(livePagePath, 'utf8');
+
+  assert.ok(liveCode.includes("(isDirectRA && pStatus === 'INVITED')"), 'LivePage must authorize invited participants for Direct RA');
+  assert.ok(liveCode.includes("(!evalPending || isDirectRA)"), 'LivePage must not block bidding on pending eval for Direct RA');
+  assert.ok(liveCode.includes('This is a private/invited reverse auction. Dynamic counter-bidding is restricted to invited participating suppliers.'), 'LivePage must render accurate observer notice for Direct RA');
+
+  const detailPagePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'reverseAuctions', 'pages', 'ReverseAuctionDetailPage.tsx');
+  const detailCode = fs.readFileSync(detailPagePath, 'utf8');
+
+  assert.ok(detailCode.includes('Direct Reverse Auction (Invited Suppliers Only)'), 'DetailPage must display Direct Reverse Auction title for non-joined observers');
+  assert.ok(detailCode.includes('Dynamic bidding in this reverse auction is restricted to invited participating suppliers.'), 'DetailPage must display accurate observer body for Direct RA');
+});

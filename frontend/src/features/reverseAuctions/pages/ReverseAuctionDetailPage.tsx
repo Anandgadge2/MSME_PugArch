@@ -829,10 +829,12 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           </div>
           <div className="min-w-0 flex-1">
             <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-              Stage 2 Reverse Auction (Qualified Bidders Only)
+              {String(auctionData?.procurementMethod || '').toUpperCase() === 'REVERSE_AUCTION' ? 'Direct Reverse Auction (Invited Suppliers Only)' : 'Stage 2 Reverse Auction (Qualified Bidders Only)'}
             </h4>
             <p className="mt-0.5 text-xs font-medium text-slate-600 leading-relaxed">
-              Your organization did not submit an initial Stage 1 quotation for this procurement. Reverse auction dynamic bidding is restricted to qualified participating bidders.
+              {String(auctionData?.procurementMethod || '').toUpperCase() === 'REVERSE_AUCTION'
+                ? 'Dynamic bidding in this reverse auction is restricted to invited participating suppliers.'
+                : 'Your organization did not submit an initial Stage 1 quotation for this procurement. Reverse auction dynamic bidding is restricted to qualified participating bidders.'}
             </p>
           </div>
         </div>
