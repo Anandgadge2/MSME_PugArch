@@ -6651,7 +6651,14 @@ function ItemsDetailsForm({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+      <div
+        className={cn(
+          "grid gap-3.5 w-full",
+          allowedFormats.length === 1 && "grid-cols-1",
+          allowedFormats.length === 2 && "grid-cols-1 sm:grid-cols-2",
+          allowedFormats.length >= 3 && "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+        )}
+      >
         {allowedFormats.map(fmt => {
           const isSelected = (draft.basics.pricingFormat || 'SINGLE_ITEM') === fmt.value;
           const isLump = fmt.value === 'SINGLE_ITEM';
