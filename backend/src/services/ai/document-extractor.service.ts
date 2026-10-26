@@ -129,8 +129,12 @@ Rules:
 1. For Indian GST numbers (15-alphanumeric), extract accurately. If PAN is present in GSTIN (chars 3-12), populate PAN as well.
 2. For GeM contracts, the GeM Contract Number (GEMC-...) should be placed in poNumber, and systemDetected must be "GEM".
 3. For SAP Ariba or SAP S/4HANA POs, look for 10-digit PO numbers (typically starting with 45 or 42) and Vendor Code (LIFNR).
-4. Numbers must be numeric floats/integers, not formatted strings (e.g. 125000.50, not "1,25,000.50").
-5. Return ONLY valid JSON, without Markdown backticks or commentary.
+4. Always extract the complete PO / Order Reference Number into "poNumber".
+5. For line items, "totalAmount" must strictly represent the line total inclusive of taxes: (quantity * unitPrice) * (1 + taxRate/100). If the PDF table only lists pre-tax subtotal in that column, calculate and output the tax-inclusive line total.
+6. Extract the 4-digit to 8-digit HSN or SAC code for each line item whenever available (e.g. 4819 for corrugated boxes).
+7. For deliveryAddress, extract the complete consignee/plant address, do not truncate company suffixes like LIMITED or LTD.
+8. Numbers must be numeric floats/integers, not formatted strings (e.g. 125000.50, not "1,25,000.50").
+9. Return ONLY valid JSON, without Markdown backticks or commentary.
 `;
 
 /**
@@ -143,13 +147,15 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
 
   const gemRegex = /GEMC-[0-9]{8,15}/i;
   const sapPoRegex = /\b(45[0-9]{8}|42[0-9]{8}|PO[-_/]?[0-9]{4,12})\b/i;
+  const generalPoRegex = /(?:Purchase\s*Order\s*(?:No|Number|#)|PO\s*(?:No|Number|#)|Order\s*(?:No|Number|#))[\s:.]*([A-Za-z0-9\/-]{4,30})/i;
   const vendorCodeRegex = /(?:Vendor\s*(?:Code|No|ID|#)|LIFNR)[\s:]*([A-Z0-9-]{4,12})/i;
 
   const gemMatch = text.match(gemRegex);
   const sapMatch = text.match(sapPoRegex);
+  const generalPoMatch = text.match(generalPoRegex);
   const vendorMatch = text.match(vendorCodeRegex);
 
-  const poNumber = gemMatch ? gemMatch[0] : (sapMatch ? sapMatch[0] : undefined);
+  const poNumber = gemMatch ? gemMatch[0] : (sapMatch ? sapMatch[0] : (generalPoMatch ? generalPoMatch[1].trim() : undefined));
   const systemDetected = gemMatch ? 'GEM' : (sapMatch ? 'SAP' : 'GENERIC');
   const erpVendorCode = vendorMatch ? vendorMatch[1].trim() : undefined;
 
@@ -201,7 +207,7 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
         description: 'Details extracted from uploaded purchase document',
         quantity: 1,
         uom: 'NOS',
-        unitPrice: total > 0 ? total : 0,
+        unitPrice: total > 0 ? Math.round((total / 1.18) * 100) / 100 : 0,
         taxRate: 18,
         totalAmount: total > 0 ? total : 0
       }
@@ -255,7 +261,8 @@ async function callGeminiExtractor(buffer: Buffer, mimeType: string, apiKey: str
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(5000)
       });
 
       if (!response.ok) {
@@ -325,7 +332,8 @@ async function callNvidiaNimExtractor(buffer: Buffer, mimeType: string, apiKey: 
       'Accept': 'application/json',
       Authorization: `Bearer ${apiKey}`
     },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(5000)
   });
 
   if (!response.ok) {
@@ -343,6 +351,59 @@ async function callNvidiaNimExtractor(buffer: Buffer, mimeType: string, apiKey: 
   const cleaned = rawText.replace(/```json\s*|\s*```/g, '').trim();
   const parsed: ExtractedDocumentData = JSON.parse(cleaned);
   return parsed;
+}
+
+/**
+ * Normalizes and verifies mathematical consistency of extracted procurement documents.
+ */
+function normalizeExtractedData(data: ExtractedDocumentData): ExtractedDocumentData {
+  // 1. Sanitize delivery address (fix common OCR typos like LIMITI -> LIMITED)
+  if (data.deliveryTerms?.deliveryAddress) {
+    data.deliveryTerms.deliveryAddress = data.deliveryTerms.deliveryAddress
+      .replace(/\bLIMITI\b/gi, 'LIMITED')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  // 2. Normalize and verify line items mathematically
+  if (Array.isArray(data.lineItems) && data.lineItems.length > 0) {
+    data.lineItems = data.lineItems.map(item => {
+      const qty = Number(item.quantity) || 1;
+      const price = Number(item.unitPrice) || 0;
+      const taxRate = Number(item.taxRate) || 0;
+      const subtotal = Math.round(qty * price * 100) / 100;
+      const taxAmt = Math.round(((subtotal * taxRate) / 100) * 100) / 100;
+      const calculatedTotal = Math.round((subtotal + taxAmt) * 100) / 100;
+
+      const rawTotal = Number(item.totalAmount) || 0;
+      // If extracted totalAmount is approximately equal to the pre-tax subtotal and taxRate > 0,
+      // and NOT already equal to the tax-inclusive total, adjust to inclusive total.
+      const finalTotal = (Math.abs(rawTotal - subtotal) < 0.05 && taxRate > 0 && Math.abs(rawTotal - calculatedTotal) > 0.5)
+        ? calculatedTotal
+        : (rawTotal > 0 ? rawTotal : calculatedTotal);
+
+      return {
+        ...item,
+        quantity: qty,
+        unitPrice: price,
+        taxRate,
+        totalAmount: finalTotal
+      };
+    });
+
+    // 3. Re-harmonize financials with line items
+    const sub = data.lineItems.reduce((acc, it) => acc + (it.quantity * it.unitPrice), 0);
+    const tot = data.lineItems.reduce((acc, it) => acc + it.totalAmount, 0);
+    const tax = Math.max(0, tot - sub);
+    data.financials = {
+      subtotal: Math.round(sub * 100) / 100,
+      totalTax: Math.round(tax * 100) / 100,
+      grandTotal: Math.round(tot * 100) / 100,
+      currency: data.financials?.currency || 'INR'
+    };
+  }
+
+  return data;
 }
 
 /**
@@ -367,15 +428,17 @@ export async function extractProcurementDocument(
       logger.info(`[DocumentExtractor] Processing document via primary engine: ${filename || 'upload'}`);
       const aiData = await callGeminiExtractor(buffer, mimeType, geminiKey);
       
+      const combined = normalizeExtractedData({
+        ...heuristics,
+        ...aiData,
+        confidenceScore: aiData.confidenceScore || 0.95
+      });
+
       return {
         success: true,
         extractionMode: 'AI_MODEL',
         statusBanner: 'Extracted via AI Model',
-        data: {
-          ...heuristics,
-          ...aiData,
-          confidenceScore: aiData.confidenceScore || 0.95
-        }
+        data: combined
       };
     } catch (primaryErr: any) {
       logger.warn(`[DocumentExtractor] Gemini key attempt failed (${primaryErr.message}). Trying next candidate...`);
@@ -396,15 +459,17 @@ export async function extractProcurementDocument(
       logger.info(`[DocumentExtractor] Processing document via secondary failover: ${filename || 'upload'}`);
       const nimData = await callNvidiaNimExtractor(buffer, mimeType, nvidiaKey);
 
+      const combined = normalizeExtractedData({
+        ...heuristics,
+        ...nimData,
+        confidenceScore: nimData.confidenceScore || 0.88
+      });
+
       return {
         success: true,
         extractionMode: 'AI_MODEL',
         statusBanner: 'Extracted via AI Model',
-        data: {
-          ...heuristics,
-          ...nimData,
-          confidenceScore: nimData.confidenceScore || 0.88
-        }
+        data: combined
       };
     } catch (secondaryErr: any) {
       logger.warn(`[DocumentExtractor] Nvidia NIM key attempt failed (${secondaryErr.message}). Trying next candidate...`);
@@ -418,7 +483,7 @@ export async function extractProcurementDocument(
     success: true,
     extractionMode: 'GRACEFUL_FALLBACK',
     statusBanner: 'Manual Review Mode Active',
-    data: heuristics,
+    data: normalizeExtractedData(heuristics),
     warnings: [
       'Document parsed in manual review mode. Please verify order details and line items against the original document.'
     ]

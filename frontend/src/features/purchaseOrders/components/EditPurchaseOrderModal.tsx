@@ -42,6 +42,22 @@ export interface EditPurchaseOrderModalProps {
   onSuccess: () => void;
 }
 
+const formatPaymentTerms = (terms?: string) => {
+  if (!terms) return 'Net 30 Days';
+  const clean = String(terms).trim();
+  const map: Record<string, string> = {
+    'PAY_ON_INVOICE': 'Pay on Invoice',
+    'STANDARD_NET_30': 'Net 30 Days',
+    'NET_30': 'Net 30 Days',
+    'NET_60': 'Net 60 Days',
+    'NET_90': 'Net 90 Days',
+    'ADVANCE': '100% Advance Payment',
+    'PAY_ON_DELIVERY': 'Pay on Delivery (COD/POD)',
+    'IMMEDIATE': 'Immediate Payment'
+  };
+  return map[clean] || (clean.includes('_') ? clean.replace(/_/g, ' ') : clean);
+};
+
 export function EditPurchaseOrderModal({
   isOpen,
   onClose,
@@ -60,6 +76,7 @@ export function EditPurchaseOrderModal({
   const [items, setItems] = useState<EditableLineItem[]>([]);
 
   const [uploadingPdf, setUploadingPdf] = useState(false);
+  const [extractingPdf, setExtractingPdf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -77,21 +94,33 @@ export function EditPurchaseOrderModal({
       } else {
         setExpectedDelivery('');
       }
-      setDeliveryAddress(typeof order.deliveryAddress === 'string' ? order.deliveryAddress : '');
-      setPaymentTerms(order.paymentTerms || 'Net 30 Days');
+
+      let cleanAddress = typeof order.deliveryAddress === 'string' ? order.deliveryAddress : '';
+      cleanAddress = cleanAddress.replace(/\bLIMITI\b/gi, 'LIMITED');
+      setDeliveryAddress(cleanAddress);
+
+      setPaymentTerms(formatPaymentTerms(order.paymentTerms));
       setAmendmentReason('');
       setPdfFileId(order.externalPdfFileId || null);
       setPdfFileName(order.externalPdfFile?.originalName || (order.externalPdfFileId ? 'Attached PO Document' : ''));
       setError(null);
 
-      // Populate line items
+      // Populate line items with strict tax mathematical integrity
       const existingItems = Array.isArray(order.items) && order.items.length > 0
         ? order.items.map((it: any) => {
             const qty = Number(it.quantity) || 1;
             const price = Number(it.unitPrice) || 0;
             const tax = Number(it.taxRate ?? 18);
             const subtotal = qty * price;
-            const total = Number(it.totalAmount) || Math.round((subtotal + (subtotal * tax) / 100) * 100) / 100;
+            const taxAmt = (subtotal * tax) / 100;
+            const calculatedTotal = Math.round((subtotal + taxAmt) * 100) / 100;
+            const incomingTotal = Number(it.totalAmount) || 0;
+
+            // If incoming total is pre-tax subtotal and tax > 0, enforce tax-inclusive line total
+            const total = (Math.abs(incomingTotal - subtotal) < 0.05 && tax > 0)
+              ? calculatedTotal
+              : (incomingTotal > 0 ? incomingTotal : calculatedTotal);
+
             return {
               id: it.id,
               itemName: it.itemName || 'Item',
@@ -110,7 +139,7 @@ export function EditPurchaseOrderModal({
             unitOfMeasure: 'units',
             unitPrice: Number(order.totalValue || order.amount || 0),
             taxRate: 18,
-            totalAmount: Number(order.totalValue || order.amount || 0)
+            totalAmount: Math.round((Number(order.totalValue || order.amount || 0) * 1.18) * 100) / 100
           }];
       setItems(existingItems);
     }
@@ -143,7 +172,8 @@ export function EditPurchaseOrderModal({
       const price = Number(field === 'unitPrice' ? value : item.unitPrice) || 0;
       const taxRate = Number(field === 'taxRate' ? value : item.taxRate) || 0;
       const sub = qty * price;
-      item.totalAmount = Math.round((sub + (sub * taxRate) / 100) * 100) / 100;
+      const taxAmt = (sub * taxRate) / 100;
+      item.totalAmount = Math.round((sub + taxAmt) * 100) / 100;
       copy[index] = item;
       return copy;
     });
@@ -170,6 +200,62 @@ export function EditPurchaseOrderModal({
       return;
     }
     setItems((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleExtractFromPdf = async (fileToExtract: File) => {
+    setError(null);
+    setExtractingPdf(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileToExtract);
+
+      const res = await fetch('/api/documents/extract', {
+        method: 'POST',
+        body: formData,
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.message || 'Extraction failed');
+      const data = json?.data?.data || json?.data || {};
+
+      if (data.poNumber) {
+        setExternalPoNumber(data.poNumber);
+      }
+      if (data.deliveryTerms?.deliveryAddress) {
+        let addr = data.deliveryTerms.deliveryAddress.replace(/\bLIMITI\b/gi, 'LIMITED');
+        setDeliveryAddress(addr);
+      }
+      if (data.deliveryTerms?.expectedDeliveryDate) {
+        setExpectedDelivery(data.deliveryTerms.expectedDeliveryDate);
+      }
+      if (data.deliveryTerms?.paymentTerms) {
+        setPaymentTerms(formatPaymentTerms(data.deliveryTerms.paymentTerms));
+      }
+      if (Array.isArray(data.lineItems) && data.lineItems.length > 0) {
+        const extractedItems = data.lineItems.map((li: any) => {
+          const qty = Number(li.quantity || 1);
+          const price = Number(li.unitPrice || 0);
+          const tax = Number(li.taxRate ?? 18);
+          const sub = qty * price;
+          const taxAmt = (sub * tax) / 100;
+          const calculatedTotal = Math.round((sub + taxAmt) * 100) / 100;
+          return {
+            itemName: li.itemName || 'Item',
+            description: li.description || (li.hsnCode ? `HSN: ${li.hsnCode}` : ''),
+            quantity: qty,
+            unitOfMeasure: li.uom || 'units',
+            unitPrice: price,
+            taxRate: tax,
+            totalAmount: calculatedTotal
+          };
+        });
+        setItems(extractedItems);
+      }
+      toast.success('Successfully extracted purchase order details and line items!');
+    } catch (err: any) {
+      toast.error(err.message || 'Auto-extraction failed; you may fill fields manually.');
+    } finally {
+      setExtractingPdf(false);
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -203,6 +289,11 @@ export function EditPurchaseOrderModal({
       setPdfFileId(fileAsset.id);
       setPdfFileName(file.name);
       toast.success('Official PO PDF attached successfully.');
+
+      // Auto-extract if fields are empty or default
+      if (!externalPoNumber || items.length <= 1) {
+        await handleExtractFromPdf(file);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to upload PDF file');
     } finally {
@@ -320,6 +411,9 @@ export function EditPurchaseOrderModal({
                 </h3>
                 <p className="text-xs font-semibold text-slate-500">
                   PO #{order.poNumber || order.id} • Base Value: {formatCurrency(order.amount || order.totalValue)}
+                  {order.seller?.organization?.organizationName && (
+                    <span className="text-slate-700 font-bold"> • Supplier: {order.seller.organization.organizationName}</span>
+                  )}
                 </p>
               </div>
             </div>
@@ -384,7 +478,7 @@ export function EditPurchaseOrderModal({
                     type="text"
                     value={externalPoNumber}
                     onChange={(e) => setExternalPoNumber(e.target.value)}
-                    placeholder="e.g. 4500981244"
+                    placeholder="e.g. 4500981244 or GEMC-5116877"
                     className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-mono font-bold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
@@ -404,6 +498,11 @@ export function EditPurchaseOrderModal({
                     className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-bold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
+                {expectedDelivery && new Date(expectedDelivery) < new Date(new Date().toDateString()) && (
+                  <p className="mt-1 text-[11px] font-bold text-amber-600 flex items-center gap-1" role="status">
+                    <AlertCircle className="h-3 w-3 shrink-0" /> Selected date is in the past ({expectedDelivery}). Please verify.
+                  </p>
+                )}
               </div>
 
               <div>
@@ -417,9 +516,17 @@ export function EditPurchaseOrderModal({
                     type="text"
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    placeholder="e.g. Net 30 Days, 100% on GRN"
+                    placeholder="e.g. Net 30 Days, Pay on Invoice"
+                    list="po-payment-terms-suggestions"
                     className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
+                  <datalist id="po-payment-terms-suggestions">
+                    <option value="Net 30 Days" />
+                    <option value="Pay on Invoice" />
+                    <option value="100% on Delivery (COD/POD)" />
+                    <option value="100% Advance Payment" />
+                    <option value="Net 60 Days" />
+                  </datalist>
                 </div>
               </div>
 
@@ -434,10 +541,15 @@ export function EditPurchaseOrderModal({
                     type="text"
                     value={deliveryAddress}
                     onChange={(e) => setDeliveryAddress(e.target.value)}
-                    placeholder="Plant Warehouse, Gate No. 2, MIDC..."
+                    placeholder="e.g. Singhal Enterprises Pvt Ltd, Industrial Area, Jharsuguda, Odisha - 768201"
                     className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
+                {deliveryAddress && deliveryAddress.trim().length > 0 && deliveryAddress.trim().length < 15 && (
+                  <p className="mt-1 text-[11px] font-semibold text-amber-600 flex items-center gap-1" role="status">
+                    <AlertCircle className="h-3 w-3 shrink-0" /> Full street address with PIN is recommended for consignee delivery.
+                  </p>
+                )}
               </div>
             </div>
 
@@ -490,7 +602,7 @@ export function EditPurchaseOrderModal({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Quantity *</label>
                         <input
@@ -542,13 +654,26 @@ export function EditPurchaseOrderModal({
                           <option value="28">28%</option>
                         </select>
                       </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase">HSN / SAC</label>
+                        <input
+                          type="text"
+                          value={item.description || ''}
+                          onChange={(e) => handleUpdateItem(idx, 'description', e.target.value)}
+                          placeholder="e.g. 4819"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1 font-mono text-slate-800 focus:border-[#12335f] focus:outline-none"
+                        />
+                      </div>
                     </div>
 
-                    <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-[11px]">
-                      <span className="text-slate-500 font-medium">
-                        Subtotal: {formatCurrency(item.quantity * item.unitPrice)}
-                      </span>
-                      <span className="font-mono font-bold text-indigo-700">
+                    <div className="flex flex-wrap items-center justify-between pt-1.5 border-t border-slate-100 text-[11px] gap-2">
+                      <div className="flex items-center gap-2 text-slate-600 font-medium">
+                        <span>Subtotal: <strong className="font-mono text-slate-800">{formatCurrency(item.quantity * item.unitPrice)}</strong></span>
+                        <span className="text-slate-300">•</span>
+                        <span>GST ({item.taxRate}%): <strong className="font-mono text-slate-800">{formatCurrency(((item.quantity * item.unitPrice) * (Number(item.taxRate) || 0)) / 100)}</strong></span>
+                      </div>
+                      <span className="font-mono font-black text-indigo-700 bg-indigo-50/70 px-2 py-0.5 rounded">
                         Line Total (incl. GST): {formatCurrency(item.totalAmount)}
                       </span>
                     </div>
@@ -577,24 +702,44 @@ export function EditPurchaseOrderModal({
               </div>
             </div>
 
-            {/* Official PDF Document Upload */}
+            {/* Official PDF Document Upload & Extraction */}
             <div>
-              <label className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                Official Buyer Purchase Order PDF (External ERP Document)
-              </label>
-              <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-2xs border border-slate-200">
-                  {uploadingPdf ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                  Official Buyer Purchase Order PDF (External ERP Document)
+                </label>
+                {pdfFileId && (
+                  <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    Document Attached
+                  </span>
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 rounded-2xl border border-dashed border-slate-300 bg-slate-50/70 p-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-700 shadow-2xs border border-slate-200">
+                    {uploadingPdf || extractingPdf ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : pdfFileId ? (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    ) : (
+                      <Upload className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-slate-800 truncate">
+                      {pdfFileName || 'Upload official digitally signed PO PDF'}
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      {extractingPdf
+                        ? 'Extracting PO number, line items, and delivery terms...'
+                        : 'PDF format up to 15MB. Accessible to seller upon issuance.'}
+                    </p>
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-bold text-slate-800 truncate">
-                    {pdfFileName || 'Upload official digitally signed PO PDF'}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    PDF format up to 15MB. Accessible to seller upon issuance.
-                  </p>
-                </div>
-                <div>
+
+                <div className="flex items-center gap-2 shrink-0">
                   <label
                     htmlFor="po-pdf-file-upload"
                     className="cursor-pointer rounded-xl bg-white border border-slate-300 px-3 py-1.5 text-xs font-black text-slate-700 hover:bg-slate-50 transition shadow-2xs inline-block"
@@ -607,8 +752,23 @@ export function EditPurchaseOrderModal({
                     accept="application/pdf"
                     onChange={handleFileUpload}
                     className="sr-only"
-                    disabled={uploadingPdf || submitting}
+                    disabled={uploadingPdf || extractingPdf || submitting}
                   />
+                  {pdfFileId && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPdfFileId(null);
+                        setPdfFileName('');
+                        toast.info('Document attachment unlinked.');
+                      }}
+                      className="p-1.5 text-slate-400 hover:text-rose-600 transition"
+                      title="Unlink PDF"
+                      aria-label="Unlink PDF"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>

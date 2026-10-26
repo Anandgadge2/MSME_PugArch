@@ -273,15 +273,30 @@ export function ImportExternalOrderModal({
 
       // Line items
       const items: EditableLineItem[] = Array.isArray(extracted.lineItems) && extracted.lineItems.length > 0
-        ? extracted.lineItems.map((li: any) => ({
-            itemName: li.itemName || 'Item',
-            description: li.description || '',
-            quantity: Number(li.quantity || 1),
-            unitOfMeasure: li.uom || 'NOS',
-            unitPrice: Number(li.unitPrice || 0),
-            taxRate: Number(li.taxRate || 18),
-            totalAmount: Number(li.totalAmount || (Number(li.quantity || 1) * Number(li.unitPrice || 0)))
-          }))
+        ? extracted.lineItems.map((li: any) => {
+            const qty = Number(li.quantity || 1);
+            const price = Number(li.unitPrice || 0);
+            const tax = Number(li.taxRate ?? 18);
+            const sub = qty * price;
+            const taxAmt = (sub * tax) / 100;
+            const calculatedTotal = Math.round((sub + taxAmt) * 100) / 100;
+            const extractedTotal = Number(li.totalAmount || 0);
+
+            // If extracted total equals the pre-tax subtotal and tax > 0, enforce the tax-inclusive total
+            const finalTotal = (Math.abs(extractedTotal - sub) < 0.05 && tax > 0)
+              ? calculatedTotal
+              : (extractedTotal > 0 ? extractedTotal : calculatedTotal);
+
+            return {
+              itemName: li.itemName || 'Item',
+              description: li.description || (li.hsnCode ? `HSN: ${li.hsnCode}` : ''),
+              quantity: qty,
+              unitOfMeasure: li.uom || 'NOS',
+              unitPrice: price,
+              taxRate: tax,
+              totalAmount: finalTotal
+            };
+          })
         : [
             {
               itemName: 'Procurement Item',
