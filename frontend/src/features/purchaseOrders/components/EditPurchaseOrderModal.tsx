@@ -15,12 +15,14 @@ import {
   Package,
   Plus,
   Trash2,
-  Calculator
+  Calculator,
+  ChevronDown
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { putApi, postApi } from '../../shared/apiClient';
-import { formatCurrency, formatDate } from '../../shared/format';
+import { formatCurrency, formatDate, formatDeliveryAddressString } from '../../shared/format';
+import { fetchDeliveryAddresses, type DeliveryAddressDto } from '../../directPurchase/api';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
 
 export interface EditableLineItem {
@@ -41,6 +43,59 @@ export interface EditPurchaseOrderModalProps {
   mode: 'draft' | 'amend';
   onSuccess: () => void;
 }
+
+export const STANDARD_PAYMENT_TERMS = [
+  { value: 'Pay on Invoice', label: 'Pay on Invoice (Standard)' },
+  { value: 'Net 30 Days', label: 'Net 30 Days (Credit)' },
+  { value: 'Net 60 Days', label: 'Net 60 Days (Credit)' },
+  { value: 'Net 90 Days', label: 'Net 90 Days (Credit)' },
+  { value: '100% on Delivery (COD/POD)', label: '100% on Delivery (COD/POD)' },
+  { value: '100% Advance Payment', label: '100% Advance Payment' },
+  { value: '50% Advance / 50% on Delivery', label: '50% Advance / 50% on Delivery' },
+  { value: 'Immediate Payment', label: 'Immediate Payment' },
+];
+
+export const STANDARD_UOM_OPTIONS = [
+  { value: 'Nos', label: 'Nos - Numbers' },
+  { value: 'Set', label: 'Set - Sets' },
+  { value: 'Kg', label: 'Kg - Kilograms' },
+  { value: 'Ton', label: 'Ton - Tonnes' },
+  { value: 'MT', label: 'MT - Metric Tonnes' },
+  { value: 'Meter', label: 'Meter - Meters' },
+  { value: 'Feet', label: 'Feet' },
+  { value: 'SqFt', label: 'Sq. Ft - Square Feet' },
+  { value: 'SqMeter', label: 'Sq. Meter - Square Meters' },
+  { value: 'Cum', label: 'Cum - Cubic Meters' },
+  { value: 'Litre', label: 'Litre - Litres' },
+  { value: 'Bag', label: 'Bag - Bags' },
+  { value: 'Box', label: 'Box - Boxes' },
+  { value: 'Packet', label: 'Packet - Packets' },
+  { value: 'Pair', label: 'Pair - Pairs' },
+  { value: 'Roll', label: 'Roll - Rolls' },
+  { value: 'Drum', label: 'Drum - Drums' },
+  { value: 'Carton', label: 'Carton - Cartons' },
+  { value: 'Cylinder', label: 'Cylinder - Cylinders' },
+  { value: 'Coil', label: 'Coil - Coils' },
+  { value: 'Bundle', label: 'Bundle - Bundles' },
+  { value: 'Piece', label: 'Piece - Pieces' },
+  { value: 'Unit', label: 'Unit - Units' },
+  { value: 'Lot', label: 'Lot - Lots' },
+  { value: 'Job', label: 'Job - Jobs' },
+];
+
+export const matchStandardUom = (uom?: string): string => {
+  if (!uom) return 'Nos';
+  const clean = uom.trim().toLowerCase();
+  const match = STANDARD_UOM_OPTIONS.find(opt => opt.value.toLowerCase() === clean);
+  return match ? match.value : 'Other';
+};
+
+export const matchStandardPaymentTerms = (term?: string): string => {
+  if (!term) return 'Pay on Invoice';
+  const clean = term.trim().toLowerCase();
+  const match = STANDARD_PAYMENT_TERMS.find(opt => opt.value.toLowerCase() === clean);
+  return match ? match.value : 'Other';
+};
 
 const formatPaymentTerms = (terms?: string) => {
   if (!terms) return 'Net 30 Days';
@@ -74,11 +129,28 @@ export function EditPurchaseOrderModal({
   const [pdfFileId, setPdfFileId] = useState<number | null>(null);
   const [pdfFileName, setPdfFileName] = useState<string>('');
   const [items, setItems] = useState<EditableLineItem[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<DeliveryAddressDto[]>([]);
+  const [isCustomAddress, setIsCustomAddress] = useState(false);
+  const [isCustomPaymentTerms, setIsCustomPaymentTerms] = useState(false);
 
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [extractingPdf, setExtractingPdf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    fetchDeliveryAddresses()
+      .then((addrs) => {
+        if (alive && Array.isArray(addrs)) {
+          setSavedAddresses(addrs);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (order && isOpen) {
@@ -98,8 +170,12 @@ export function EditPurchaseOrderModal({
       let cleanAddress = typeof order.deliveryAddress === 'string' ? order.deliveryAddress : '';
       cleanAddress = cleanAddress.replace(/\bLIMITI\b/gi, 'LIMITED');
       setDeliveryAddress(cleanAddress);
+      setIsCustomAddress(false);
 
-      setPaymentTerms(formatPaymentTerms(order.paymentTerms));
+      const initialTerms = formatPaymentTerms(order.paymentTerms);
+      setPaymentTerms(initialTerms);
+      setIsCustomPaymentTerms(matchStandardPaymentTerms(initialTerms) === 'Other');
+
       setAmendmentReason('');
       setPdfFileId(order.externalPdfFileId || null);
       setPdfFileName(order.externalPdfFile?.originalName || (order.externalPdfFileId ? 'Attached PO Document' : ''));
@@ -162,7 +238,24 @@ export function EditPurchaseOrderModal({
     };
   }, [items]);
 
-  if (!isOpen || !order) return null;
+  const matchingSavedAddress = useMemo(() => {
+    if (!deliveryAddress.trim() || savedAddresses.length === 0) return null;
+    const norm = deliveryAddress.trim().toLowerCase();
+    return (
+      savedAddresses.find((a) => {
+        const formatted = formatDeliveryAddressString(a).toLowerCase();
+        return formatted === norm || (a.addressLine1 && norm.includes(a.addressLine1.toLowerCase()));
+      }) || null
+    );
+  }, [deliveryAddress, savedAddresses]);
+
+  const activeAddressOption = isCustomAddress
+    ? 'custom'
+    : matchingSavedAddress
+    ? `addr_${matchingSavedAddress.id}`
+    : deliveryAddress
+    ? 'current_order'
+    : 'custom';
 
   const handleUpdateItem = (index: number, field: keyof EditableLineItem, value: any) => {
     setItems((prev) => {
@@ -391,6 +484,28 @@ export function EditPurchaseOrderModal({
     }
   };
 
+  const handleAddressSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (val === 'custom') {
+      setIsCustomAddress(true);
+    } else if (val === 'current_order') {
+      setIsCustomAddress(false);
+      let cleanAddress = typeof order?.deliveryAddress === 'string' ? order.deliveryAddress : '';
+      cleanAddress = cleanAddress.replace(/\bLIMITI\b/gi, 'LIMITED');
+      setDeliveryAddress(cleanAddress);
+    } else if (val.startsWith('addr_')) {
+      setIsCustomAddress(false);
+      const id = Number(val.replace('addr_', ''));
+      const found = savedAddresses.find((a) => a.id === id);
+      if (found) {
+        const fullAddr = formatDeliveryAddressString(found);
+        setDeliveryAddress(fullAddr);
+      }
+    }
+  };
+
+  if (!isOpen || !order) return null;
+
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto"
@@ -510,39 +625,80 @@ export function EditPurchaseOrderModal({
                   Payment Terms
                 </label>
                 <div className="relative">
-                  <CreditCard className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-                  <input
+                  <CreditCard className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <select
                     id="po-edit-payment-terms"
+                    value={isCustomPaymentTerms ? 'Other' : matchStandardPaymentTerms(paymentTerms)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val === 'Other') {
+                        setIsCustomPaymentTerms(true);
+                      } else {
+                        setIsCustomPaymentTerms(false);
+                        setPaymentTerms(val);
+                      }
+                    }}
+                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer appearance-none"
+                  >
+                    {STANDARD_PAYMENT_TERMS.map((term) => (
+                      <option key={term.value} value={term.value}>{term.label}</option>
+                    ))}
+                    <option value="Other">Other / Custom Terms...</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+                {(isCustomPaymentTerms || matchStandardPaymentTerms(paymentTerms) === 'Other') && (
+                  <input
                     type="text"
                     value={paymentTerms}
                     onChange={(e) => setPaymentTerms(e.target.value)}
-                    placeholder="e.g. Net 30 Days, Pay on Invoice"
-                    list="po-payment-terms-suggestions"
-                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    placeholder="Enter custom payment schedule / terms..."
+                    className="mt-1.5 w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
-                  <datalist id="po-payment-terms-suggestions">
-                    <option value="Net 30 Days" />
-                    <option value="Pay on Invoice" />
-                    <option value="100% on Delivery (COD/POD)" />
-                    <option value="100% Advance Payment" />
-                    <option value="Net 60 Days" />
-                  </datalist>
-                </div>
+                )}
               </div>
 
               <div>
-                <label htmlFor="po-edit-address" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
+                <label htmlFor="po-edit-address-select" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
                   Delivery / Consignee Address
                 </label>
                 <div className="relative">
-                  <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
+                  <select
+                    id="po-edit-address-select"
+                    value={activeAddressOption}
+                    onChange={handleAddressSelectChange}
+                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer appearance-none"
+                  >
+                    {savedAddresses.map((addr) => (
+                      <option key={addr.id} value={`addr_${addr.id}`}>
+                        {addr.addressLabel || addr.organizationName || 'Plant / Site'} ({addr.city}, {addr.state} - {addr.pincode})
+                      </option>
+                    ))}
+                    {deliveryAddress && !matchingSavedAddress && (
+                      <option value="current_order">
+                        Current Order Address ({deliveryAddress.slice(0, 36)}...)
+                      </option>
+                    )}
+                    <option value="custom">Custom / Manual Address Entry...</option>
+                  </select>
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
+                    <ChevronDown className="h-4 w-4" />
+                  </div>
+                </div>
+                <div className="mt-1.5">
                   <input
                     id="po-edit-address"
                     type="text"
                     value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
+                    onChange={(e) => {
+                      setDeliveryAddress(e.target.value);
+                      setIsCustomAddress(true);
+                    }}
                     placeholder="e.g. Singhal Enterprises Pvt Ltd, Industrial Area, Jharsuguda, Odisha - 768201"
-                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-3 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
                   />
                 </div>
                 {deliveryAddress && deliveryAddress.trim().length > 0 && deliveryAddress.trim().length < 15 && (
@@ -618,13 +774,34 @@ export function EditPurchaseOrderModal({
 
                       <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Unit</label>
-                        <input
-                          type="text"
-                          value={item.unitOfMeasure}
-                          onChange={(e) => handleUpdateItem(idx, 'unitOfMeasure', e.target.value)}
-                          placeholder="units, kg, meters..."
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1 text-slate-800 focus:border-[#12335f] focus:outline-none"
-                        />
+                        <div className="space-y-1">
+                          <select
+                            value={matchStandardUom(item.unitOfMeasure)}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === 'Other') {
+                                handleUpdateItem(idx, 'unitOfMeasure', matchStandardUom(item.unitOfMeasure) === 'Other' ? item.unitOfMeasure : '');
+                              } else {
+                                handleUpdateItem(idx, 'unitOfMeasure', val);
+                              }
+                            }}
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer"
+                          >
+                            {STANDARD_UOM_OPTIONS.map((opt) => (
+                              <option key={opt.value} value={opt.value}>{opt.label}</option>
+                            ))}
+                            <option value="Other">Other / Custom...</option>
+                          </select>
+                          {matchStandardUom(item.unitOfMeasure) === 'Other' && (
+                            <input
+                              type="text"
+                              value={item.unitOfMeasure}
+                              onChange={(e) => handleUpdateItem(idx, 'unitOfMeasure', e.target.value)}
+                              placeholder="Enter unit..."
+                              className="w-full rounded-lg border border-slate-300 px-2 py-1 text-[11px] font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none"
+                            />
+                          )}
+                        </div>
                       </div>
 
                       <div>
@@ -645,8 +822,11 @@ export function EditPurchaseOrderModal({
                         <select
                           value={item.taxRate}
                           onChange={(e) => handleUpdateItem(idx, 'taxRate', parseFloat(e.target.value) || 0)}
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1 font-mono text-slate-800 focus:border-[#12335f] focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer"
                         >
+                          {![0, 5, 12, 18, 28].includes(item.taxRate) && (
+                            <option value={item.taxRate}>{item.taxRate}% (Custom)</option>
+                          )}
                           <option value="0">0%</option>
                           <option value="5">5%</option>
                           <option value="12">12%</option>
