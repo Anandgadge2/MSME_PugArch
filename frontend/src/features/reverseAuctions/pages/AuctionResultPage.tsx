@@ -48,6 +48,7 @@ import { useUserRealtime } from '../../../hooks/useUserRealtime';
 import { reverseAuctionApi } from '../api';
 import { useReverseAuctionRealtime } from '../hooks/useReverseAuctionRealtime';
 import { toast } from 'sonner';
+import { parseDeclineReason } from '../../procurementBid/poDeclineReasons';
 
 export default function AuctionResultPage({ id }: { id: number | string }) {
   const qc = useQueryClient();
@@ -854,11 +855,21 @@ export default function AuctionResultPage({ id }: { id: number | string }) {
                             <span className="inline-flex items-center gap-1 text-[11px] font-black text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-200 shadow-xs">
                               <Clock className="h-3 w-3" /> Offer Awaiting Acceptance
                             </span>
-                          ) : (row.isAwardDeclined || row.status === 'AWARD_DECLINED' || row.awardStatus === 'DECLINED' || row.counterOfferStatus === 'DECLINED') ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-800 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 shadow-xs" title={row.declinedReason || 'Offer declined by supplier'}>
-                              <XCircle className="h-3 w-3 text-rose-600" /> Offer Declined
-                            </span>
-                          ) : canOfferAward ? (
+                          ) : (row.isAwardDeclined || row.status === 'AWARD_DECLINED' || row.awardStatus === 'DECLINED' || row.counterOfferStatus === 'DECLINED') ? (() => {
+                            const parsed = parseDeclineReason(row.declinedReason);
+                            return (
+                              <div className="flex flex-col items-end gap-0.5">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-black text-rose-800 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-200 shadow-xs" title={parsed.remarks ? `${parsed.shortLabel}: ${parsed.remarks}` : (parsed.label || 'Offer declined by supplier')}>
+                                  <XCircle className="h-3 w-3 text-rose-600" /> Offer Declined
+                                </span>
+                                {parsed.shortLabel && parsed.shortLabel !== 'Offer Declined' && (
+                                  <span className="text-[9px] font-bold text-rose-700 truncate max-w-[130px]" title={parsed.description || parsed.label}>
+                                    {parsed.shortLabel}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })() : canOfferAward ? (
                             <div className="flex items-center justify-end gap-1.5 flex-wrap">
                               {isL1 ? (
                                 <Button

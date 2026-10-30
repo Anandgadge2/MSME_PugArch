@@ -16,6 +16,19 @@ import { timingMiddleware } from '../middleware/timing.js';
 export const applySecurityMiddleware = (app: Express) => {
   app.disable('x-powered-by');
   app.set('trust proxy', 1);
+
+  // STQC / GIGW Mandate: Enforce HTTPS redirection in production or when ENFORCE_SSL is enabled
+  if (env.NODE_ENV === 'production' || env.ENFORCE_SSL) {
+    app.use((req, res, next) => {
+      const forwardedProto = req.header('x-forwarded-proto');
+      const isHttps = req.secure || (forwardedProto && forwardedProto.split(',')[0].trim().toLowerCase() === 'https');
+      if (!isHttps) {
+        const host = req.header('host') || 'localhost';
+        return res.redirect(301, `https://${host}${req.originalUrl || req.url}`);
+      }
+      next();
+    });
+  }
   app.use(requestId);
   app.use(timingMiddleware);
   app.use(securityHeaders);

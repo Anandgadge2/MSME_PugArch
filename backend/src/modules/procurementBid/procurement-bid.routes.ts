@@ -36,6 +36,16 @@ export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
       if (bidOrId.sourceId) keysToInvalidate.add(String(bidOrId.sourceId));
       if (bidOrId.purchaseOrder?.bidId) keysToInvalidate.add(String(bidOrId.purchaseOrder.bidId));
       if (bidOrId.award?.bidId) keysToInvalidate.add(String(bidOrId.award.bidId));
+      if (bidOrId.bid) {
+        if (bidOrId.bid.id) keysToInvalidate.add(String(bidOrId.bid.id));
+        if (bidOrId.bid.bidNumber) {
+          keysToInvalidate.add(String(bidOrId.bid.bidNumber));
+          for (const variant of getCanonicalLookupVariants(bidOrId.bid.bidNumber)) {
+            keysToInvalidate.add(variant);
+          }
+        }
+        if (bidOrId.bid.sourceId) keysToInvalidate.add(String(bidOrId.bid.sourceId));
+      }
       const sourceReqId = (bidOrId.technicalPacket as any)?.sourceRequirementId || (bidOrId.technicalPacket as any)?.requirementId;
       if (sourceReqId) keysToInvalidate.add(String(sourceReqId));
     }
@@ -43,6 +53,23 @@ export const invalidateBidCaches = async (bidOrId: any, token?: string) => {
       keysToInvalidate.add(String(token));
       for (const variant of getCanonicalLookupVariants(token)) {
         keysToInvalidate.add(variant);
+      }
+    }
+    // Deep purge: if any numeric id is present, query and also purge by bidNumber and sourceId
+    const numericTokens = Array.from(keysToInvalidate).filter((k) => /^\d+$/.test(k)).map(Number);
+    if (numericTokens.length > 0) {
+      const relatedBids = await (prisma as any).procurementBid.findMany({
+        where: { id: { in: numericTokens } },
+        select: { id: true, bidNumber: true, sourceId: true }
+      }).catch(() => []);
+      for (const b of relatedBids) {
+        if (b.bidNumber) {
+          keysToInvalidate.add(b.bidNumber);
+          for (const variant of getCanonicalLookupVariants(b.bidNumber)) {
+            keysToInvalidate.add(variant);
+          }
+        }
+        if (b.sourceId) keysToInvalidate.add(String(b.sourceId));
       }
     }
     for (const key of keysToInvalidate) {
@@ -2044,7 +2071,7 @@ router.post(['/seller/procurement-bids/:bidId/decline-award', '/seller/bids/:bid
   return apiResponse.success(res, data, 200, 'Award offer declined successfully');
 }));
 
-router.post(['/buyer/procurement-bids/:bidId/generate-po', '/seller/procurement-bids/:bidId/generate-po', '/procurement-bids/:bidId/generate-po'], authenticate, requireAccountType('buyer', 'admin', 'seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional() }).optional() }), asyncRoute(async (req, res) => {
+router.post(['/buyer/procurement-bids/:bidId/generate-po', '/seller/procurement-bids/:bidId/generate-po', '/procurement-bids/:bidId/generate-po'], authenticate, requireAccountType('buyer', 'admin', 'seller'), validate({ params: idParamSchema, body: z.object({ awardId: z.union([z.number(), z.string()]).optional(), asDraft: z.boolean().optional(), issueImmediately: z.boolean().optional() }).optional() }), asyncRoute(async (req, res) => {
   const data = await service.generatePOForBid(req, req.params.bidId, req.body || {});
   await invalidateBidCaches(data, req.params.bidId);
   return apiResponse.created(res, data, 'Purchase order generated and issued');

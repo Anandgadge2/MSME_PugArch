@@ -1232,18 +1232,39 @@ export function Header({ onMenuClick, onSidebarToggle, isSidebarCollapsed }: Hea
               <span className="hidden md:inline">Broadcast Notice</span>
             </button>
           )}
+          {user?.role === 'buyer' && (
+            <Link
+              href="/cart"
+              className={cn(
+                "group relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/90 bg-slate-50/80 text-slate-600 hover:bg-slate-100 hover:text-[#0b2447] hover:border-slate-300 transition-all shadow-3xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2447]",
+                pathname === '/cart' && "bg-slate-100 text-[#0b2447] border-slate-300"
+              )}
+              title={cartCount > 0 ? `Shopping Cart (${cartCount} ${cartCount === 1 ? 'item' : 'items'})` : 'Shopping Cart (Empty)'}
+              aria-label={cartCount > 0 ? `Shopping Cart, ${cartCount} ${cartCount === 1 ? 'item' : 'items'}` : 'Shopping Cart, Empty'}
+            >
+              <ShoppingCart className="h-4.5 w-4.5 text-slate-600 group-hover:text-[#0b2447] transition-colors" />
+              {cartCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 flex h-4.5 min-w-[20px] px-1.5 items-center justify-center rounded-full bg-emerald-600 text-white text-[9.5px] font-black leading-none shadow-xs ring-2 ring-white pointer-events-none">
+                  {cartCount > 99 ? '99+' : cartCount}
+                </span>
+              )}
+            </Link>
+          )}
           <div className="relative" ref={notificationRef}>
             <button
               suppressHydrationWarning
+              type="button"
               onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
               className={cn(
-                "p-2 rounded-lg transition-all relative",
-                isNotificationsOpen ? "bg-slate-100 text-[#0b2447]" : "text-slate-500 hover:bg-slate-50 hover:text-[#0b2447]"
+                "group relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200/90 bg-slate-50/80 text-slate-600 hover:bg-slate-100 hover:text-[#0b2447] hover:border-slate-300 transition-all shadow-3xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0b2447] cursor-pointer",
+                isNotificationsOpen ? "bg-slate-100 text-[#0b2447] border-slate-300" : ""
               )}
+              title={unreadCount > 0 ? `Notifications (${unreadCount} new)` : 'Notifications'}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} new` : 'Notifications'}
             >
-              <Bell className="h-5 w-5" />
+              <Bell className="h-4.5 w-4.5 text-slate-600 group-hover:text-[#0b2447] transition-colors" />
               {unreadCount > 0 && (
-                <span className="absolute top-2 right-2 h-2 w-2 bg-red-500 rounded-full ring-2 ring-white" />
+                <span className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 bg-red-500 rounded-full ring-2 ring-white pointer-events-none" />
               )}
             </button>
 

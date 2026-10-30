@@ -13,8 +13,8 @@ export const fetchProcurementMethods = () =>
 export const fetchProcurementDrafts = () =>
   getApi<any>('/api/procurement/drafts');
 
-export const fetchProcurementDraft = (id: number) =>
-  getApi<any>(`/api/procurement/drafts/${id}`);
+export const fetchProcurementDraft = (id: number | string) =>
+  getApi<any>(`/api/procurement/drafts/${encodeURIComponent(String(id).trim())}`);
 
 export const deleteProcurementDraft = (id: number) =>
   deleteApi<any>(`/api/buyer/requirements/${id}`);

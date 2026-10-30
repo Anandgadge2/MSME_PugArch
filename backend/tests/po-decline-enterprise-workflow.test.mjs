@@ -59,3 +59,27 @@ test('6. Frontend ProcurementDetailUnifiedView modal includes structured reasons
   assert.match(unifiedView, /handleDeclineEvidenceUpload/);
   assert.match(unifiedView, /declineModal\.reasonCode/);
 });
+
+test('7. ProcurementDetailUnifiedView guards Accept PO & Commit Delivery and Decline PO buttons against isPODeclined', () => {
+  const unifiedView = read('../frontend/src/features/rfq/components/ProcurementDetailUnifiedView.tsx');
+
+  assert.match(unifiedView, /const isPODeclined = Boolean\(/);
+  assert.match(unifiedView, /!isPODeclined/);
+  assert.match(unifiedView, /!isAwardDeclined/);
+  assert.match(unifiedView, /Purchase Order Declined/);
+  assert.match(unifiedView, /poDeclineMetadata/);
+});
+
+test('8. SellerAwardPoAlertPopup immediately purges declined PO from local state', () => {
+  const alertPopup = read('../frontend/src/features/notifications/SellerAwardPoAlertPopup.tsx');
+
+  assert.match(alertPopup, /setPOs\(\(prev\)\s*=>\s*prev\.filter\(\(p\)\s*=>\s*p\.id !== poId\)\)/);
+  assert.match(alertPopup, /setAwards\(\(prev\)\s*=>/);
+});
+
+test('9. Backend listPendingAwardsAndPOs excludes cancelled and declined POs from award associations', () => {
+  const service = read('src/modules/procurementBid/procurement-order.service.ts');
+
+  assert.match(service, /status:\s*\{\s*notIn:\s*\[['"]cancelled['"],\s*['"]rejected['"],\s*['"]declined['"]\]\s*\}/);
+  assert.match(service, /poStatus:\s*\{\s*notIn:\s*\[['"]CANCELLED['"],\s*['"]DECLINED['"],\s*['"]REJECTED['"]\]\s*\}/);
+});

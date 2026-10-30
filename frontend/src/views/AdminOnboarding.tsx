@@ -33,6 +33,7 @@ import { getFileAssetPreview, type DocumentPreview } from "../lib/files";
 import { DocumentPreviewModal } from "../components/DocumentPreviewModal";
 import { FocusTrap } from "../components/ui/FocusTrap";
 import { isShgUser } from "../lib/shg";
+import { MaskedDataDisplay } from "../components/ui/MaskedDataDisplay";
 import {
   Search,
   Eye,
@@ -3902,7 +3903,7 @@ export default function AdminOnboarding() {
                                   <p className="text-[11px] font-bold text-slate-700 uppercase">
                                     A/C:{" "}
                                     <span className="text-slate-900">
-                                      {bank.accountNumber}
+                                      <MaskedDataDisplay value={bank.accountNumber} type="bankAccount" />
                                     </span>{" "}
                                     | IFSC:{" "}
                                     <span className="text-slate-900">

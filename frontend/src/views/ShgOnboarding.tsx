@@ -7,6 +7,7 @@ import { DataTable, ColumnDef } from '../components/ui/data-table';
 import { Input, Select } from '../components/ui/input';
 import { cn } from '../lib/utils';
 import { api } from '../lib/api';
+import { MaskedDataDisplay } from '../components/ui/MaskedDataDisplay';
 import { useAuth } from '../hooks/useAuth';
 import { shgApi, type ShgProfile } from '../features/shg/api';
 import { formatDate } from '../features/shared/format';
@@ -836,7 +837,14 @@ function SimpleTable({ rows, columns }: { rows: any[]; columns: string[] }) {
   const columnDefs: ColumnDef<any>[] = columns.map(column => ({
     key: column,
     header: column,
-    cell: (row) => <span>{typeof row[column] === 'boolean' ? (row[column] ? 'Yes' : 'No') : row[column] || '-'}</span>,
+    cell: (row) => {
+      const val = row[column];
+      if (typeof val === 'boolean') return <span>{val ? 'Yes' : 'No'}</span>;
+      if (column.toLowerCase().includes('accountnumber') || column.toLowerCase().includes('masked')) {
+        return <MaskedDataDisplay value={val} type="bankAccount" />;
+      }
+      return <span>{val || '-'}</span>;
+    },
   }));
   return (
     <DataTable<any>

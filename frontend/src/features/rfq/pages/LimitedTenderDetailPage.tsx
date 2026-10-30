@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
@@ -18,6 +18,7 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
   const searchParams = useSearchParams();
   const pathname = usePathname() || '';
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
   const explicitReqId = searchParams?.get('requirementId') || '';
@@ -48,6 +49,11 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
     enabled: !!(requestId || activeLimitedId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 10_000,
+    refetchInterval: (query: any) => {
+      const status = String((query.state?.data as any)?.status || '').toUpperCase();
+      const isPending = ['AWARDED', 'AWARD_OFFERED', 'RECOMMENDED', 'PENDING_ACCEPTANCE'].includes(status);
+      return isPending ? 4000 : false;
+    },
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;
@@ -146,7 +152,14 @@ function LimitedTenderDetailContent({ initialData }: { initialData?: any }) {
     backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
     backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined,
     onRefresh: async () => {
-      await Promise.allSettled([refetchBid(), refetchReq()]);
+      await Promise.allSettled([
+        procurementBidApi.detail((requestId || activeLimitedId)!, true).then((freshBid) => {
+          if (freshBid) {
+            queryClient.setQueryData(['limited-tender-bid-detail', requestId || activeLimitedId, user?.id], freshBid);
+          }
+        }).catch(() => refetchBid()),
+        refetchReq()
+      ]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
     onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,

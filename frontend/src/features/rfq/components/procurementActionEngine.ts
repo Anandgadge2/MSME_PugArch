@@ -34,6 +34,8 @@ export interface DeriveActionParams {
   isCancelled: boolean;
   isContractSettled: boolean;
   isBidAwarded: boolean;
+  isPODeclined?: boolean;
+  isAwardDeclined?: boolean;
   isRateContract: boolean;
   isAwardAccepted: boolean;
   isBeforeSubmissionStart: boolean;
@@ -61,6 +63,8 @@ export function deriveProcurementPrimaryAction(
     isCancelled,
     isContractSettled,
     isBidAwarded,
+    isPODeclined,
+    isAwardDeclined,
     isRateContract,
     isAwardAccepted,
     isBeforeSubmissionStart,
@@ -107,6 +111,19 @@ export function deriveProcurementPrimaryAction(
   // BUYER / ADMIN ACTION WORKFLOW
   // ==========================================
   if (isBuyer) {
+    // 2.0 PO or Award Declined by Supplier -> Buyer Re-Award Action
+    if (isPODeclined || isAwardDeclined) {
+      return {
+        type: 'BUYER_VIEW_RESULTS',
+        label: 'Review Proposals & Re-Award →',
+        subtext: 'Supplier declined PO / award. Re-award to next eligible bidder (L2/standby) or re-tender.',
+        isExecutable: true,
+        isSealedLock: false,
+        targetTab: 'clarifications',
+        badgeTone: 'rose'
+      };
+    }
+
     // 2.1 Awarded / Call-Off Order Ready
     if (isBidAwarded) {
       if (isRateContract && isAwardAccepted) {

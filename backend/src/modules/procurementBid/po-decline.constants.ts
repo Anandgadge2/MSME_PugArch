@@ -1,6 +1,7 @@
 export interface PoDeclineReasonOption {
   code: string;
   label: string;
+  shortLabel?: string;
   category: 'EXCUSED' | 'UNEXCUSED';
   isExcused: boolean;
   requiresEvidence: boolean;
@@ -12,6 +13,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'BUYER_TERMS_DISCREPANCY',
     label: 'PO terms or specifications mismatch original RFQ / Tender',
+    shortLabel: 'Buyer Terms Discrepancy',
     category: 'EXCUSED',
     isExcused: true,
     requiresEvidence: false,
@@ -20,6 +22,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'DELIVERY_TIMELINE_UNFEASIBLE',
     label: 'Delivery timeline is significantly shorter than quoted in bid',
+    shortLabel: 'Delivery Timeline Unfeasible',
     category: 'EXCUSED',
     isExcused: true,
     requiresEvidence: false,
@@ -28,6 +31,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'FORCE_MAJEURE',
     label: 'Force Majeure (Natural disaster, statutory ban, emergency)',
+    shortLabel: 'Force Majeure',
     category: 'EXCUSED',
     isExcused: true,
     requiresEvidence: true,
@@ -36,6 +40,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'SPECIFICATION_AMBIGUITY',
     label: 'Technical specification ambiguity / unresolvable clarification',
+    shortLabel: 'Specification Ambiguity',
     category: 'EXCUSED',
     isExcused: true,
     requiresEvidence: false,
@@ -46,6 +51,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'CAPACITY_CONSTRAINTS',
     label: 'Unforeseen production capacity constraint / factory breakdown',
+    shortLabel: 'Capacity Constraints',
     category: 'UNEXCUSED',
     isExcused: false,
     requiresEvidence: false,
@@ -54,6 +60,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'RAW_MATERIAL_SHORTAGE',
     label: 'Raw material or component supply chain disruption',
+    shortLabel: 'Raw Material Shortage',
     category: 'UNEXCUSED',
     isExcused: false,
     requiresEvidence: false,
@@ -62,6 +69,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'PRICING_CALCULATION_ERROR',
     label: 'Pricing or quotation estimation error during bidding',
+    shortLabel: 'Pricing Calculation Error',
     category: 'UNEXCUSED',
     isExcused: false,
     requiresEvidence: false,
@@ -70,6 +78,7 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
   {
     code: 'OTHER_OPERATIONAL',
     label: 'Other operational constraint (Requires detailed justification)',
+    shortLabel: 'Other Operational Constraint',
     category: 'UNEXCUSED',
     isExcused: false,
     requiresEvidence: false,
@@ -79,5 +88,6 @@ export const PO_DECLINE_REASONS: PoDeclineReasonOption[] = [
 
 export const getPoDeclineReasonByCode = (code?: string): PoDeclineReasonOption | undefined => {
   if (!code) return undefined;
-  return PO_DECLINE_REASONS.find((r) => r.code === code);
+  const clean = String(code).trim().replace(/[\[\]]/g, '').toUpperCase();
+  return PO_DECLINE_REASONS.find((r) => r.code === clean);
 };

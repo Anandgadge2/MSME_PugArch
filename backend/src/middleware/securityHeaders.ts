@@ -21,9 +21,9 @@ export const securityHeaders = helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin' },
   referrerPolicy: { policy: 'no-referrer' },
   hsts: {
-    maxAge: 15552000,
+    maxAge: 31536000,
     includeSubDomains: true,
-    preload: false
+    preload: true
   },
   frameguard: { action: 'deny' },
   noSniff: true,

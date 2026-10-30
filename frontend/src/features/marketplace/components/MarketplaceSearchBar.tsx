@@ -13,11 +13,14 @@ import {
     ChevronDown,
     Loader2,
     ShieldCheck,
-    ArrowRight
+    ArrowRight,
+    Check,
+    Sparkles
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { marketplaceApi, type MarketplaceSearchResult } from '../api';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { parseSmartSearchQuery } from '../utils/smartSearch';
 
 export interface MarketplaceSearchBarProps {
     initialQuery?: string;
@@ -57,6 +60,8 @@ export function MarketplaceSearchBar({
 }: MarketplaceSearchBarProps) {
     const router = useRouter();
     const [query, setQuery] = useState(initialQuery);
+    const parsedSmart = React.useMemo(() => parseSmartSearchQuery(query), [query]);
+    const hasPriceConstraint = parsedSmart.minPrice !== undefined || parsedSmart.maxPrice !== undefined;
     const [scope, setScope] = useState<'all' | 'products' | 'services'>(isServices ? 'services' : 'all');
     const [isDropdownOpen, setIsDropdownOpen] = useState(false);
     const [isSearching, setIsSearching] = useState(false);
@@ -77,6 +82,11 @@ export function MarketplaceSearchBar({
     useEffect(() => {
         setQuery(initialQuery);
     }, [initialQuery]);
+
+    // Keep scope in sync with isServices prop
+    useEffect(() => {
+        setScope(isServices ? 'services' : 'all');
+    }, [isServices]);
 
     // Load recent searches from localStorage
     useEffect(() => {
@@ -155,7 +165,7 @@ export function MarketplaceSearchBar({
         return () => clearTimeout(timer);
     }, [query]);
 
-    // Close dropdown on outside click
+    // Close dropdown on outside click or Escape key
     useEffect(() => {
         const handler = (e: MouseEvent) => {
             if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -163,8 +173,18 @@ export function MarketplaceSearchBar({
                 setScopeDropdownOpen(false);
             }
         };
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') {
+                setIsDropdownOpen(false);
+                setScopeDropdownOpen(false);
+            }
+        };
         document.addEventListener('mousedown', handler);
-        return () => document.removeEventListener('mousedown', handler);
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', handler);
+            document.removeEventListener('keydown', handleKeyDown);
+        };
     }, []);
 
     const handleSearchSubmit = (e?: React.FormEvent) => {
@@ -228,49 +248,66 @@ export function MarketplaceSearchBar({
             {/* Main Search Bar Form */}
             <form
                 onSubmit={handleSearchSubmit}
-                className="flex items-stretch rounded-2xl bg-white border-2 border-slate-200/90 shadow-sm hover:border-slate-300 focus-within:border-[#0b2447] focus-within:ring-3 focus-within:ring-[#0b2447]/10 transition-all overflow-hidden"
+                className="relative flex items-stretch rounded-2xl bg-white border-2 border-slate-200/90 shadow-sm hover:border-slate-300 focus-within:border-[#0b2447] focus-within:ring-3 focus-within:ring-[#0b2447]/10 transition-all"
                 role="search"
             >
-                {/* Scope selector (Amazon style: All / Products / Services) */}
-                <div className="relative shrink-0 border-r border-slate-200 bg-slate-50/80">
+                {/* Scope selector (All / Products / Services) */}
+                <div className="relative shrink-0 border-r border-slate-200 bg-slate-50/80 rounded-l-[14px]">
                     <button
                         type="button"
                         onClick={() => setScopeDropdownOpen(!scopeDropdownOpen)}
-                        className="h-full px-3 sm:px-4 py-2 text-xs font-bold text-slate-700 hover:text-[#0b2447] flex items-center gap-1.5 transition-colors cursor-pointer select-none focus-visible:outline-none focus-visible:bg-slate-100"
+                        className="h-full px-3 sm:px-4 py-2 text-xs font-bold text-slate-700 hover:text-[#0b2447] flex items-center gap-1.5 transition-colors cursor-pointer select-none rounded-l-[14px] focus-visible:outline-none focus-visible:bg-slate-100"
                         aria-expanded={scopeDropdownOpen}
+                        aria-haspopup="listbox"
                         aria-label="Select search category scope"
                     >
                         {scope === 'all' && <Layers className="h-3.5 w-3.5 text-slate-500" />}
                         {scope === 'products' && <Package className="h-3.5 w-3.5 text-blue-600" />}
                         {scope === 'services' && <Wrench className="h-3.5 w-3.5 text-indigo-600" />}
-                        <span className="hidden sm:inline">
+                        <span className="hidden sm:inline font-bold">
                             {scope === 'all' ? 'All' : scope === 'products' ? 'Products' : 'Services'}
                         </span>
                         <ChevronDown className={cn("h-3.5 w-3.5 text-slate-400 transition-transform duration-150", scopeDropdownOpen && "rotate-180")} />
                     </button>
 
                     {scopeDropdownOpen && (
-                        <div className="absolute left-0 top-full mt-1.5 w-36 rounded-xl border border-slate-200 bg-white p-1 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
+                        <div className="absolute left-0 top-full mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-[70] animate-in fade-in zoom-in-95 duration-150">
+                            <div className="px-3 py-1.5 border-b border-slate-100 mb-1">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Search Catalog Scope</span>
+                            </div>
                             {[
-                                { id: 'all', label: 'All Offerings', icon: <Layers className="h-3.5 w-3.5 text-slate-500" /> },
-                                { id: 'products', label: 'Products', icon: <Package className="h-3.5 w-3.5 text-blue-600" /> },
-                                { id: 'services', label: 'Services', icon: <Wrench className="h-3.5 w-3.5 text-indigo-600" /> }
+                                { id: 'all', label: 'All Catalogue', desc: 'Search goods & industrial services', icon: <Layers className="h-4 w-4 text-slate-600" /> },
+                                { id: 'products', label: 'Products', desc: 'Industrial equipment, tools, raw materials', icon: <Package className="h-4 w-4 text-blue-600" /> },
+                                { id: 'services', label: 'Services', desc: 'Maintenance, AMC, fabrication & contracts', icon: <Wrench className="h-4 w-4 text-indigo-600" /> }
                             ].map(item => (
                                 <button
                                     key={item.id}
                                     type="button"
                                     onClick={() => {
-                                        setScope(item.id as any);
+                                        const newScope = item.id as any;
+                                        setScope(newScope);
                                         setScopeDropdownOpen(false);
                                         inputRef.current?.focus();
+                                        onSearch(query.trim(), newScope);
                                     }}
                                     className={cn(
-                                        "flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold transition-colors cursor-pointer",
-                                        scope === item.id ? "bg-blue-50 text-[#0b2447] font-bold" : "text-slate-700 hover:bg-slate-50"
+                                        "flex w-full items-center justify-between rounded-xl px-2.5 py-2 text-left transition-colors cursor-pointer group",
+                                        scope === item.id ? "bg-blue-50 text-[#0b2447]" : "text-slate-700 hover:bg-slate-50"
                                     )}
+                                    role="menuitem"
                                 >
-                                    {item.icon}
-                                    <span>{item.label}</span>
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                        <span className={cn("p-1.5 rounded-lg shrink-0", scope === item.id ? "bg-blue-100/70" : "bg-slate-100 group-hover:bg-slate-200/60")}>
+                                            {item.icon}
+                                        </span>
+                                        <div className="min-w-0">
+                                            <p className="text-xs font-bold leading-tight truncate">{item.label}</p>
+                                            <p className="text-[10px] text-slate-500 truncate leading-tight mt-0.5">{item.desc}</p>
+                                        </div>
+                                    </div>
+                                    {scope === item.id && (
+                                        <Check className="h-4 w-4 text-blue-600 shrink-0 ml-1.5" />
+                                    )}
                                 </button>
                             ))}
                         </div>
@@ -322,13 +359,27 @@ export function MarketplaceSearchBar({
                 {/* Submit Search Button (Amazon / Flipkart Style) */}
                 <button
                     type="submit"
-                    className="shrink-0 px-4 sm:px-6 bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-[0.98] transition-all font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                    className="shrink-0 px-4 sm:px-6 bg-[#0b2447] text-white hover:bg-[#12335f] active:scale-[0.98] transition-all font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer rounded-r-[14px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                     aria-label="Execute search"
                 >
                     <Search className="h-4 w-4" />
                     <span className="hidden sm:inline">Search</span>
                 </button>
             </form>
+            {hasPriceConstraint && (
+                <div className="mt-1.5 px-3 py-1 bg-blue-50/90 border border-blue-200/80 rounded-xl inline-flex items-center gap-2 text-[11px] text-[#0b2447] shadow-2xs animate-in fade-in duration-150">
+                    <Sparkles className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    <span>Keywords: <strong className="font-bold">{parsedSmart.cleanQuery || 'All items'}</strong></span>
+                    <span className="text-slate-300">|</span>
+                    <span>Budget Target: <strong className="font-bold text-emerald-700">
+                        {parsedSmart.minPrice !== undefined && parsedSmart.maxPrice !== undefined
+                            ? `₹${parsedSmart.minPrice.toLocaleString('en-IN')} - ₹${parsedSmart.maxPrice.toLocaleString('en-IN')}`
+                            : parsedSmart.maxPrice !== undefined
+                            ? `≤ ₹${parsedSmart.maxPrice.toLocaleString('en-IN')}`
+                            : `≥ ₹${parsedSmart.minPrice?.toLocaleString('en-IN')}`}
+                    </strong></span>
+                </div>
+            )}
 
             {/* Suggestions & Recent Searches Dropdown Modal */}
             {isDropdownOpen && (hasSuggestions || showRecent || (query.trim().length >= 2 && !isSearching)) && (

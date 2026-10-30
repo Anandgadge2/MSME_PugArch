@@ -12,7 +12,7 @@ import { getProcurementModeSettings } from '../procurementMode/procurement-mode.
 import { logger } from '../../config/logger.js';
 import { getOrGeneratePurchaseOrderPdfBuffer } from '../../services/invoice-pdf.service.js';
 import { formatRefId } from '../../utils/refIdUtils.js';
-import { broadcastToAuction, broadcastToProcurement } from '../../services/websocket.service.js';
+import { broadcastToAuction, broadcastToProcurement, broadcastToUser } from '../../services/websocket.service.js';
 import { invalidateBidCaches } from './procurement-bid.routes.js';
 import { getPoDeclineReasonByCode, PO_DECLINE_REASONS } from './po-decline.constants.js';
 
@@ -474,8 +474,9 @@ export const createOrReuseProcurementPOForAward = async (req: AuthRequest, award
         title: bid.title || 'Procurement Order',
         amount: awardedAmount,
         totalValue: awardedAmount,
-        status: 'issued',
-        poStatus: 'ISSUED',
+        status: 'draft',
+        poStatus: 'DRAFT',
+        isDraft: true,
         sourceType: 'procurement_bid_award',
         sourceId: award.id,
         bidId: null,
@@ -798,7 +799,12 @@ export const listPendingAwardsAndPOsForSeller = async (actor: AuthenticatedUser)
     posForAwards = awardIds.length > 0 ? await db.purchaseOrder.findMany({
       where: {
         sourceType: 'procurement_bid_award',
-        sourceId: { in: awardIds }
+        sourceId: { in: awardIds },
+        status: { notIn: ['cancelled', 'rejected', 'declined'] },
+        OR: [
+          { poStatus: null },
+          { poStatus: { notIn: ['CANCELLED', 'DECLINED', 'REJECTED'] } }
+        ]
       },
       select: {
         id: true,
@@ -1107,7 +1113,18 @@ export const acceptPO = async (req: AuthRequest, orderId: number, body: any = {}
   try {
     if (bidId) {
       invalidateBidCaches(bidId).catch(() => {});
-      broadcastToProcurement(Number(bidId), { type: 'PROCUREMENT_UPDATED', procurementId: Number(bidId), status: 'IN_PROGRESS', timestamp: new Date().toISOString() });
+      const targetIds = [Number(bidId), po.bid?.bidNumber, (po.metadata as any)?.bidNumber].filter(Boolean);
+      targetIds.forEach((tid: any) => {
+        broadcastToProcurement(tid, { type: 'PROCUREMENT_UPDATED', procurementId: Number(bidId), status: 'IN_PROGRESS', timestamp: new Date().toISOString() });
+      });
+    }
+    if (po.buyerId) {
+      broadcastToUser(po.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: bidId,
+        status: 'IN_PROGRESS',
+        timestamp: new Date().toISOString()
+      });
     }
     const targetAuctionId = po.sourceType === 'auction' ? po.sourceId : (po.metadata as any)?.auctionId;
     if (targetAuctionId) {
@@ -1157,7 +1174,68 @@ export const acceptSellerAward = async (req: AuthRequest, awardId: number, body:
     redirectUrl: `/bids/${award.bidId}`
   });
 
-  return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
+  try {
+    const targetIds = [award.bidId, award.bid?.bidNumber, award.bid?.sourceId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'AWARD_ACCEPTED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_ACCEPTED',
+        sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+      broadcastToProcurement(tid, {
+        type: 'BID_ACCEPTED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_ACCEPTED',
+        sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: award.bid?.sourceId || award.bidId,
+        procurementId: award.bidId,
+        status: 'AWARD_ACCEPTED',
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+    });
+    if (award.bid?.buyerId) {
+      broadcastToUser(award.bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_ACCEPTED',
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[acceptSellerAward] Broadcast failed');
+  }
+
+  return {
+    award: updatedAward,
+    bid: award.bid,
+    id: award.bidId,
+    bidId: award.bidId,
+    bidNumber: award.bid?.bidNumber,
+    sourceId: award.bid?.sourceId,
+    purchaseOrderId: po?.id,
+    delivery: updatedDelivery
+  };
 };
 
 export const rejectSellerAward = async (req: AuthRequest, awardId: number, reason: string) => {
@@ -1190,6 +1268,58 @@ export const rejectSellerAward = async (req: AuthRequest, awardId: number, reaso
     type: 'award_declined',
     redirectUrl: `/bids/${award.bidId}`
   });
+
+  try {
+    const targetIds = [award.bidId, award.bid?.bidNumber, award.bid?.sourceId].filter(Boolean);
+    targetIds.forEach((tid: any) => {
+      broadcastToProcurement(tid, {
+        type: 'AWARD_DECLINED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_DECLINED',
+        sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+      broadcastToProcurement(tid, {
+        type: 'BID_REJECTED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_DECLINED',
+        sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+      broadcastToProcurement(tid, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: award.bid?.sourceId || award.bidId,
+        procurementId: award.bidId,
+        status: 'AWARD_DECLINED',
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+    });
+    if (award.bid?.buyerId) {
+      broadcastToUser(award.bid.buyerId, {
+        type: 'BID_STATUS_CHANGED',
+        procurementId: award.bidId,
+        requirementId: award.bid?.sourceId || award.bidId,
+        status: 'AWARD_DECLINED',
+        awardId: award.id,
+        bidId: award.bidId,
+        bidNumber: award.bid?.bidNumber,
+        timestamp: new Date().toISOString()
+      });
+    }
+  } catch (bcErr) {
+    logger.warn({ bcErr }, '[rejectSellerAward] Broadcast failed');
+  }
 
   return { award: updatedAward, purchaseOrderId: po?.id, delivery: updatedDelivery };
 };
@@ -1237,9 +1367,14 @@ export const rejectPO = async (
     if (auctionRecord?.linkedBidId) bidId = auctionRecord.linkedBidId;
   }
 
+  const sellerIds = await getSellerUserIdsForActor(req.user!).catch(() => [po.sellerId]);
+  if (!sellerIds.includes(po.sellerId)) sellerIds.push(po.sellerId);
+  if (req.user?.id && !sellerIds.includes(Number(req.user.id))) sellerIds.push(Number(req.user.id));
+  if (req.user?.organizationId && !sellerIds.includes(Number(req.user.organizationId))) sellerIds.push(Number(req.user.organizationId));
+
   if (!awardId && bidId) {
     const awardRecord = await db.procurementBidAward.findFirst({
-      where: { bidId: Number(bidId), sellerId: po.sellerId }
+      where: { bidId: Number(bidId), sellerId: { in: sellerIds } }
     }).catch(() => null);
     if (awardRecord?.id) awardId = awardRecord.id;
   }
@@ -1324,12 +1459,28 @@ export const rejectPO = async (
       }).catch(() => undefined);
     }
 
+    if (bidId && !isNaN(Number(bidId))) {
+      await tx.procurementBidAward.updateMany({
+        where: {
+          bidId: Number(bidId),
+          sellerId: { in: sellerIds },
+          awardStatus: { in: ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED', 'AWARD_OFFERED', 'PENDING'] }
+        },
+        data: {
+          awardStatus: 'DECLINED',
+          declinedAt: new Date(),
+          declinedReason: `[${reasonCode}] ${reason}`,
+          remarks: `[${reasonCode}] ${reason}`
+        }
+      }).catch(() => undefined);
+    }
+
     // 5. Update Bid and Participation
     if (bidId && !isNaN(Number(bidId))) {
       await tx.procurementBidParticipation.updateMany({
         where: {
           bidId: Number(bidId),
-          sellerId: po.sellerId
+          sellerId: { in: sellerIds }
         },
         data: {
           finalStatus: 'AWARD_DECLINED',

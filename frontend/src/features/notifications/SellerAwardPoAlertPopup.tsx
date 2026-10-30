@@ -412,6 +412,10 @@ export default function SellerAwardPoAlertPopup() {
       setDeclineReason('');
       setDeclineReasonCode('BUYER_TERMS_DISCREPANCY');
       setEvidenceFile(null);
+      setPOs((prev) => prev.filter((p) => p.id !== poId));
+      setAwards((prev) =>
+        prev.map((a) => (a.purchaseOrder?.id === poId ? { ...a, purchaseOrder: null } : a))
+      );
       window.dispatchEvent(new CustomEvent('notifications:updated'));
       window.dispatchEvent(new CustomEvent('orders:updated'));
       await checkPendingAwardsAndPOs(true);

@@ -1357,6 +1357,11 @@ export default function App({
     /^\/marketplace\/services\/-?\d+$/.test(pathname) ||
     /^\/marketplace\/requirements\/-?\d+$/.test(pathname);
   const isMarketplaceRoute = (pathname.startsWith('/marketplace') && !useDashboardShellForMarketplace) || pathname === '/buyer/publish-bid' || /^\/vendors\/-?\d+$/.test(pathname) || /^\/sellers\/-?\d+$/.test(pathname) || /^\/seller\/-?\d+$/.test(pathname) || /^\/buyer-requirements\/-?\d+$/.test(pathname);
+  const isMarketplaceViewInDashboard =
+    pathname === '/buyer/marketplace' ||
+    pathname === '/seller/marketplace' ||
+    pathname === '/shg/marketplace' ||
+    useDashboardShellForMarketplace;
   const showDashboardLayout = user && !fixedAuthRoutes.includes(pathname) && !isMarketplaceRoute && !publicInfoRoutes.includes(pathname);
   const showOrgApprovalBanner = showDashboardLayout && !['master_admin', 'super_admin'].includes(user?.role || '');
 
@@ -1439,7 +1444,11 @@ export default function App({
             tabIndex={-1}
             className={cn(
             "flex-1 min-w-0 min-h-0",
-            !showDashboardLayout ? "p-0" : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
+            !showDashboardLayout
+              ? "p-0"
+              : isMarketplaceViewInDashboard
+              ? "dashboard-main overflow-y-auto p-0"
+              : "dashboard-main overflow-y-auto p-3 sm:p-4 md:p-5 pb-20 sm:pb-32"
           )}>
             <Suspense fallback={<RouteFallback />}>
               <PageMountReporter onMount={handlePageMount} routeKey={`${pathname}_${Boolean(user)}`} />

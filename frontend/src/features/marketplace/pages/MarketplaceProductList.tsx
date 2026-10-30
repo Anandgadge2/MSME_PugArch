@@ -2,7 +2,7 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useSearchParams, usePathname, useRouter } from 'next/navigation';
-import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus, ChevronDown } from 'lucide-react';
+import { Search, ChevronRight, Package, MapPin, BadgeCheck, ShoppingCart, Eye, ChevronLeft, Wrench, SlidersHorizontal, FileText, Minus, Plus, ChevronDown, Sparkles } from 'lucide-react';
 import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi } from '../api';
 import { MarketplaceHeader } from '../components/MarketplaceHeader';
@@ -21,6 +21,7 @@ import { CategoryHorizontalBar } from '../components/CategoryHorizontalBar';
 import { MarketplaceFilterPanel } from '../components/MarketplaceFilterPanel';
 import { MarketplaceSearchBar } from '../components/MarketplaceSearchBar';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
+import { parseSmartSearchQuery } from '../utils/smartSearch';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
 import { MarketplaceQuantityControl } from '../components/MarketplaceQuantityControl';
 import { cn } from '../../../lib/utils';
@@ -68,6 +69,7 @@ export default function MarketplaceProductList() {
     const { items: cartItems, add: addCartItem, update: updateCartItemQty, getQuantity, buyNow } = useMarketplaceCart();
 
     const searchQuery = (searchParams?.get('q') || '').trim();
+    const parsedSmartQuery = useMemo(() => parseSmartSearchQuery(searchQuery), [searchQuery]);
     const initialCategoryParam = searchParams?.get('categoryId') || '';
     const initialCategoryIds = useMemo(() => initialCategoryParam.split(',').map(s => s.trim()).filter(Boolean), [initialCategoryParam]);
     
@@ -270,23 +272,42 @@ export default function MarketplaceProductList() {
 
     // Enhanced Multi-Category & Multi-Faceted filtering
     const filteredItems = useMemo(() => items.filter((item: any) => {
-        // Search query match (supports multi-token keywords & specifications, just like Amazon/Flipkart)
-        const searchQueryLower = searchQuery.toLowerCase();
-        const searchTokens = searchQueryLower.split(/\s+/).filter(t => t.length > 1);
-        const itemNameLower = String(item.name || '').toLowerCase();
-        const itemDescLower = String(item.description || '').toLowerCase();
-        const itemCatLower = String(item.category?.name || '').toLowerCase();
-        const itemBrandLower = String(item.brand || '').toLowerCase();
-        const itemOrgLower = String(item.organization?.organizationName || item.seller?.name || '').toLowerCase();
-        const itemSkuLower = String(item.sku || item.modelNumber || item.hsnCode || '').toLowerCase();
-        const itemSpecsLower = Array.isArray(item.specifications)
-            ? item.specifications.map((s: any) => `${s.name || ''} ${s.value || ''}`).join(' ').toLowerCase()
-            : '';
-        const itemFullText = `${itemNameLower} ${itemDescLower} ${itemCatLower} ${itemBrandLower} ${itemOrgLower} ${itemSkuLower} ${itemSpecsLower} ${String(item.tags || '').toLowerCase()}`;
+        const price = Number(isServices ? item.basePrice || 0 : item.price || 0);
 
-        const matchesSearch = !searchQueryLower ||
-            itemFullText.includes(searchQueryLower) ||
-            (searchTokens.length > 1 && searchTokens.every(t => itemFullText.includes(t)));
+        // Smart query price extraction (e.g. "Printers below 2000" enforces price <= 2000)
+        if (parsedSmartQuery.minPrice !== undefined && price < parsedSmartQuery.minPrice) {
+            return false;
+        }
+        if (parsedSmartQuery.maxPrice !== undefined && (price > parsedSmartQuery.maxPrice || price <= 0)) {
+            return false;
+        }
+
+        // Smart query keywords & singular/plural token variants match
+        let matchesSearch = true;
+        if (parsedSmartQuery.cleanQuery) {
+            const itemNameLower = String(item.name || '').toLowerCase();
+            const itemDescLower = String(item.description || '').toLowerCase();
+            const itemCatLower = String(item.category?.name || '').toLowerCase();
+            const itemBrandLower = String(item.brand || '').toLowerCase();
+            const itemOrgLower = String(item.organization?.organizationName || item.seller?.name || '').toLowerCase();
+            const itemSkuLower = String(item.sku || item.modelNumber || item.hsnCode || '').toLowerCase();
+            const itemSpecsLower = Array.isArray(item.specifications)
+                ? item.specifications.map((s: any) => `${s.name || ''} ${s.value || ''}`).join(' ').toLowerCase()
+                : '';
+            const itemFullText = `${itemNameLower} ${itemDescLower} ${itemCatLower} ${itemBrandLower} ${itemOrgLower} ${itemSkuLower} ${itemSpecsLower} ${String(item.tags || '').toLowerCase()}`;
+
+            const cleanLower = parsedSmartQuery.cleanQuery.toLowerCase();
+            if (itemFullText.includes(cleanLower)) {
+                matchesSearch = true;
+            } else if (parsedSmartQuery.tokens.length > 0) {
+                matchesSearch = parsedSmartQuery.tokens.every((_t, idx) => {
+                    const variants = parsedSmartQuery.tokenVariants[idx] || [_t];
+                    return variants.some(v => itemFullText.includes(v.toLowerCase()));
+                });
+            } else {
+                matchesSearch = false;
+            }
+        }
 
         // Multi-category match
         const itemCatId = String(item.category?.id || item.categoryId || '');
@@ -294,7 +315,6 @@ export default function MarketplaceProductList() {
 
         const status = String(item.status || '').toUpperCase();
         const verification = String(item.organization?.verificationStatus || '').toUpperCase();
-        const price = Number(isServices ? item.basePrice || 0 : item.price || 0);
         
         const matchesStatus = !statusFilter || status === statusFilter;
         const matchesVerification = !verificationFilter || verification === verificationFilter;
@@ -622,18 +642,46 @@ export default function MarketplaceProductList() {
     }, [items]);
     return (
         <div className={useDashboardShell ? "w-full bg-slate-50/50" : "min-h-dvh bg-slate-50/50 flex flex-col"}>
-            <main className="flex-1">
+            <div className="flex-1">
                 {/* Breadcrumb */}
-                <div className="bg-white border-b border-slate-200">
+                <div className="bg-white border-b border-slate-200 w-full">
                     <div className="max-w-[1680px] mx-auto px-4 sm:px-6 2xl:px-8 py-3 flex items-center justify-between gap-2 text-xs font-semibold text-slate-500">
                         <div className="flex items-center gap-2 flex-wrap min-w-0">
-                            <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
-                            <ChevronRight className="h-3 w-3" />
-                            <Link href="/marketplace/products" className="hover:text-[#0b2447] transition">{isServices ? 'Services' : 'Products'}</Link>
+                            {user?.role === 'buyer' || isDashboardMarketplace ? (
+                                <>
+                                    <Link href="/dashboard" className="hover:text-[#0b2447] transition">Dashboard</Link>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <Link href="/buyer/marketplace" className="hover:text-[#0b2447] transition">
+                                        Marketplace
+                                    </Link>
+                                </>
+                            ) : isSellerDashboardMarketplace ? (
+                                <>
+                                    <Link href="/dashboard" className="hover:text-[#0b2447] transition">Dashboard</Link>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <Link href="/seller/marketplace" className="hover:text-[#0b2447] transition">
+                                        Marketplace
+                                    </Link>
+                                </>
+                            ) : (
+                                <>
+                                    <Link href="/" className="hover:text-[#0b2447] transition">Home</Link>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <Link href={isServices ? '/marketplace/services' : '/marketplace/products'} className="hover:text-[#0b2447] transition">
+                                        {isServices ? 'Services' : 'Products'}
+                                    </Link>
+                                </>
+                            )}
+                            {isServices && (user?.role === 'buyer' || isDashboardMarketplace) && (
+                                <>
+                                    <ChevronRight className="h-3 w-3" />
+                                    <span className="text-[#0b2447] font-semibold">Services</span>
+                                </>
+                            )}
                             {searchQuery && (
                                 <>
                                     <ChevronRight className="h-3 w-3" />
-                                    <span className="text-[#0b2447] font-black">Search: "{searchQuery}"</span>
+                                    <span className="text-[#0b2447] font-black">Search: &quot;{parsedSmartQuery.cleanQuery || searchQuery}&quot;</span>
                                 </>
                             )}
                             {selectedCategoryIds.length === 1 && activeCategory && (
@@ -649,21 +697,6 @@ export default function MarketplaceProductList() {
                                 </>
                             )}
                         </div>
-                        {user?.role === 'buyer' && (
-                            <Link
-                                href="/cart"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50 hover:text-[#0b2447] transition shadow-2xs shrink-0 cursor-pointer"
-                                title="View Shopping Cart"
-                            >
-                                <ShoppingCart className="h-4 w-4 text-[#0b2447]" />
-                                <span className="hidden sm:inline">Cart</span>
-                                {cartItems.length > 0 && (
-                                    <span className="flex items-center justify-center min-w-[18px] h-4.5 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-black leading-none">
-                                        {cartItems.length}
-                                    </span>
-                                )}
-                            </Link>
-                        )}
                     </div>
                 </div>
 
@@ -682,7 +715,7 @@ export default function MarketplaceProductList() {
                                     if (q) params.set('q', q);
                                     else params.delete('q');
                                     if (targetIsServices) params.set('type', 'services');
-                                    else if (scope === 'products') params.delete('type');
+                                    else params.delete('type');
                                     params.set('page', '1');
                                     router.replace(`${pathname}?${params.toString()}`, { scroll: false });
                                 } else {
@@ -690,6 +723,7 @@ export default function MarketplaceProductList() {
                                     const params = new URLSearchParams(searchParams?.toString() || '');
                                     if (q) params.set('q', q);
                                     else params.delete('q');
+                                    params.delete('type');
                                     params.set('page', '1');
                                     const qs = params.toString();
                                     router.push(qs ? `${targetPath}?${qs}` : targetPath);
@@ -714,9 +748,21 @@ export default function MarketplaceProductList() {
                     <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
                             <h1 className="text-2xl sm:text-3xl font-black text-[#0b2447] tracking-tight">
-                                {searchQuery
-                                    ? `Results for "${searchQuery}"`
-                                    : selectedCategoryIds.length === 1 && activeCategory 
+                                {searchQuery ? (
+                                        <span className="flex items-center flex-wrap gap-2">
+                                            <span>Results for &quot;{parsedSmartQuery.cleanQuery || searchQuery}&quot;</span>
+                                            {(parsedSmartQuery.minPrice !== undefined || parsedSmartQuery.maxPrice !== undefined) && (
+                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/90 text-xs font-bold text-[#0b2447]">
+                                                    <Sparkles className="h-3.5 w-3.5 text-blue-600" />
+                                                    Budget: {parsedSmartQuery.minPrice !== undefined && parsedSmartQuery.maxPrice !== undefined
+                                                        ? `₹${parsedSmartQuery.minPrice.toLocaleString('en-IN')} - ₹${parsedSmartQuery.maxPrice.toLocaleString('en-IN')}`
+                                                        : parsedSmartQuery.maxPrice !== undefined
+                                                        ? `≤ ₹${parsedSmartQuery.maxPrice.toLocaleString('en-IN')}`
+                                                        : `≥ ₹${parsedSmartQuery.minPrice?.toLocaleString('en-IN')}`}
+                                                </span>
+                                            )}
+                                        </span>
+                                    ) : selectedCategoryIds.length === 1 && activeCategory 
                                         ? `Shop ${activeCategory.name} Products` 
                                         : selectedCategoryIds.length > 1 
                                             ? `Shop Selected Categories (${selectedCategoryIds.length})` 
@@ -1426,7 +1472,7 @@ export default function MarketplaceProductList() {
                         </div>
                     </div>
                 </div>
-            </main>
+            </div>
 
             {!useDashboardShell && <MarketplaceFooter />}
             <CompareTray />

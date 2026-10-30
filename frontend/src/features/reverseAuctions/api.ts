@@ -221,7 +221,7 @@ export const reverseAuctionApi = {
       vendorName?: string;
     }>;
   }) => api.post('/api/reverse-auctions/start-from-bids', data, { headers: headers() }).then(res => json<ReverseAuction>(res)),
-  acceptAndGeneratePo: (id: number | string, data?: { participantId?: number; remarks?: string }) =>
+  acceptAndGeneratePo: (id: number | string, data?: { participantId?: number; remarks?: string; asDraft?: boolean; issueImmediately?: boolean }) =>
     api.post(`/api/reverse-auctions/${encodeURIComponent(String(id))}/accept-and-generate-po`, data || {}, { headers: headers() }).then(res => json<{ success: boolean; purchaseOrder: any; auction: ReverseAuction; winner: any }>(res)),
   getByProcurement: (procurementId: number | string) =>
     api.get(`/api/reverse-auctions/by-procurement/${encodeURIComponent(String(procurementId))}`, { headers: headers(), skipCache: true }).then(res => json<ReverseAuction | null>(res)),

@@ -49,6 +49,20 @@ export const maskAadhaar = (value: unknown) => maskValue(compact(value), 4);
 
 export const maskBankAccount = (value: unknown) => maskValue(String(value ?? '').replace(/\s+/g, ''), 4);
 
+export const maskEmail = (value: unknown) => {
+  const text = String(value ?? '').trim();
+  if (!text || !text.includes('@')) return maskValue(text);
+  const [local, domain] = text.split('@');
+  const visible = local.length > 2 ? `${local[0]}***${local.slice(-1)}` : `${local[0]}***`;
+  return `${visible}@${domain}`;
+};
+
+export const maskPhone = (value: unknown) => {
+  const text = String(value ?? '').replace(/\s+/g, '');
+  if (!text) return '';
+  return text.length > 4 ? `${'*'.repeat(text.length - 4)}${text.slice(-4)}` : maskValue(text);
+};
+
 export const maskSensitive = <T>(input: T): T => {
   const mask = (val: any, stack = new Set<any>()): any => {
     if (!val || typeof val !== 'object') return val;

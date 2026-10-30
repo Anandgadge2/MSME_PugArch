@@ -20,10 +20,18 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { api } from '../../../lib/api';
 import { putApi, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate, formatDeliveryAddressString } from '../../shared/format';
 import { fetchDeliveryAddresses, type DeliveryAddressDto } from '../../directPurchase/api';
+import { AddDeliveryAddressModal } from '../../directPurchase/components/AddDeliveryAddressModal';
 import { FocusTrap } from '../../../components/ui/FocusTrap';
+import {
+  PAYMENT_TERMS,
+  matchPaymentTerms,
+  QUANTITY_UNITS,
+  matchQuantityUnit
+} from '../../../constants/dropdowns';
 
 export interface EditableLineItem {
   id?: number;
@@ -44,58 +52,10 @@ export interface EditPurchaseOrderModalProps {
   onSuccess: () => void;
 }
 
-export const STANDARD_PAYMENT_TERMS = [
-  { value: 'Pay on Invoice', label: 'Pay on Invoice (Standard)' },
-  { value: 'Net 30 Days', label: 'Net 30 Days (Credit)' },
-  { value: 'Net 60 Days', label: 'Net 60 Days (Credit)' },
-  { value: 'Net 90 Days', label: 'Net 90 Days (Credit)' },
-  { value: '100% on Delivery (COD/POD)', label: '100% on Delivery (COD/POD)' },
-  { value: '100% Advance Payment', label: '100% Advance Payment' },
-  { value: '50% Advance / 50% on Delivery', label: '50% Advance / 50% on Delivery' },
-  { value: 'Immediate Payment', label: 'Immediate Payment' },
-];
-
-export const STANDARD_UOM_OPTIONS = [
-  { value: 'Nos', label: 'Nos - Numbers' },
-  { value: 'Set', label: 'Set - Sets' },
-  { value: 'Kg', label: 'Kg - Kilograms' },
-  { value: 'Ton', label: 'Ton - Tonnes' },
-  { value: 'MT', label: 'MT - Metric Tonnes' },
-  { value: 'Meter', label: 'Meter - Meters' },
-  { value: 'Feet', label: 'Feet' },
-  { value: 'SqFt', label: 'Sq. Ft - Square Feet' },
-  { value: 'SqMeter', label: 'Sq. Meter - Square Meters' },
-  { value: 'Cum', label: 'Cum - Cubic Meters' },
-  { value: 'Litre', label: 'Litre - Litres' },
-  { value: 'Bag', label: 'Bag - Bags' },
-  { value: 'Box', label: 'Box - Boxes' },
-  { value: 'Packet', label: 'Packet - Packets' },
-  { value: 'Pair', label: 'Pair - Pairs' },
-  { value: 'Roll', label: 'Roll - Rolls' },
-  { value: 'Drum', label: 'Drum - Drums' },
-  { value: 'Carton', label: 'Carton - Cartons' },
-  { value: 'Cylinder', label: 'Cylinder - Cylinders' },
-  { value: 'Coil', label: 'Coil - Coils' },
-  { value: 'Bundle', label: 'Bundle - Bundles' },
-  { value: 'Piece', label: 'Piece - Pieces' },
-  { value: 'Unit', label: 'Unit - Units' },
-  { value: 'Lot', label: 'Lot - Lots' },
-  { value: 'Job', label: 'Job - Jobs' },
-];
-
-export const matchStandardUom = (uom?: string): string => {
-  if (!uom) return 'Nos';
-  const clean = uom.trim().toLowerCase();
-  const match = STANDARD_UOM_OPTIONS.find(opt => opt.value.toLowerCase() === clean);
-  return match ? match.value : 'Other';
-};
-
-export const matchStandardPaymentTerms = (term?: string): string => {
-  if (!term) return 'Pay on Invoice';
-  const clean = term.trim().toLowerCase();
-  const match = STANDARD_PAYMENT_TERMS.find(opt => opt.value.toLowerCase() === clean);
-  return match ? match.value : 'Other';
-};
+export const STANDARD_PAYMENT_TERMS = PAYMENT_TERMS;
+export const STANDARD_UOM_OPTIONS = QUANTITY_UNITS;
+export const matchStandardUom = matchQuantityUnit;
+export const matchStandardPaymentTerms = matchPaymentTerms;
 
 const formatPaymentTerms = (terms?: string) => {
   if (!terms) return 'Net 30 Days';
@@ -132,6 +92,7 @@ export function EditPurchaseOrderModal({
   const [savedAddresses, setSavedAddresses] = useState<DeliveryAddressDto[]>([]);
   const [isCustomAddress, setIsCustomAddress] = useState(false);
   const [isCustomPaymentTerms, setIsCustomPaymentTerms] = useState(false);
+  const [isAddAddressModalOpen, setIsAddAddressModalOpen] = useState(false);
 
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [extractingPdf, setExtractingPdf] = useState(false);
@@ -302,12 +263,12 @@ export function EditPurchaseOrderModal({
       const formData = new FormData();
       formData.append('file', fileToExtract);
 
-      const res = await fetch('/api/documents/extract', {
+      const res = await api.fetch('/api/documents/extract', {
         method: 'POST',
         body: formData,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.message || 'Extraction failed');
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json?.message || json?.error || 'Extraction failed');
       const data = json?.data?.data || json?.data || {};
 
       if (data.poNumber) {
@@ -370,16 +331,18 @@ export function EditPurchaseOrderModal({
     const formData = new FormData();
     formData.append('file', file);
     formData.append('category', 'purchase_order');
+    formData.append('entityType', 'purchase_order');
 
     try {
-      const res = await fetch('/api/files/upload', {
+      const res = await api.fetch('/api/files/upload', {
         method: 'POST',
         body: formData,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Upload failed');
-      const fileAsset = data.fileAsset || data;
-      setPdfFileId(fileAsset.id);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.message || data?.error || 'Upload failed');
+      const payload = data?.data || data;
+      const fileId = payload?.fileAsset?.id || payload?.fileId || payload?.file?.id || payload?.id;
+      setPdfFileId(fileId ? Number(fileId) : null);
       setPdfFileName(file.name);
       toast.success('Official PO PDF attached successfully.');
 
@@ -486,6 +449,10 @@ export function EditPurchaseOrderModal({
 
   const handleAddressSelectChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
+    if (val === 'add_new') {
+      setIsAddAddressModalOpen(true);
+      return;
+    }
     if (val === 'custom') {
       setIsCustomAddress(true);
     } else if (val === 'current_order') {
@@ -514,7 +481,7 @@ export function EditPurchaseOrderModal({
       aria-labelledby="edit-po-modal-title"
     >
       <FocusTrap active={isOpen}>
-        <div className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+        <div className="relative w-full max-w-3xl lg:max-w-4xl max-h-[92vh] overflow-y-auto rounded-3xl border border-slate-200 bg-white p-5 sm:p-7 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
           <div className="flex items-start justify-between border-b border-slate-100 pb-4">
             <div className="flex items-center gap-3">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200">
@@ -546,11 +513,21 @@ export function EditPurchaseOrderModal({
           <div className="mt-5 space-y-4">
             {error && (
               <div
-                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-700 flex items-center gap-2"
+                className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-bold text-rose-700 flex items-center justify-between gap-2 animate-in fade-in"
                 role="alert"
               >
-                <AlertCircle className="h-4 w-4 shrink-0" />
-                <span>{error}</span>
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4 shrink-0 text-rose-600" />
+                  <span>{error}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="p-1 text-rose-400 hover:text-rose-700 hover:bg-rose-100 rounded-md transition"
+                  aria-label="Dismiss alert"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
               </div>
             )}
 
@@ -661,16 +638,26 @@ export function EditPurchaseOrderModal({
               </div>
 
               <div>
-                <label htmlFor="po-edit-address-select" className="block text-xs font-black uppercase tracking-wider text-slate-700 mb-1.5">
-                  Delivery / Consignee Address
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="po-edit-address-select" className="block text-xs font-black uppercase tracking-wider text-slate-700">
+                    Delivery / Consignee Address
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsAddAddressModalOpen(true)}
+                    className="inline-flex items-center gap-1 text-[11px] font-bold text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-2.5 py-1 rounded-lg border border-indigo-200 transition-colors shrink-0 whitespace-nowrap cursor-pointer"
+                  >
+                    <Plus className="h-3 w-3" />
+                    <span>Add Address</span>
+                  </button>
+                </div>
                 <div className="relative">
                   <MapPin className="absolute left-3 top-2.5 h-4 w-4 text-slate-400 pointer-events-none" />
                   <select
                     id="po-edit-address-select"
                     value={activeAddressOption}
                     onChange={handleAddressSelectChange}
-                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer appearance-none"
+                    className="w-full rounded-xl border border-slate-300 bg-white pl-9 pr-8 py-2 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer appearance-none truncate"
                   >
                     {savedAddresses.map((addr) => (
                       <option key={addr.id} value={`addr_${addr.id}`}>
@@ -682,6 +669,7 @@ export function EditPurchaseOrderModal({
                         Current Order Address ({deliveryAddress.slice(0, 36)}...)
                       </option>
                     )}
+                    <option value="add_new">+ Add New Delivery Address...</option>
                     <option value="custom">Custom / Manual Address Entry...</option>
                   </select>
                   <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-400">
@@ -689,16 +677,16 @@ export function EditPurchaseOrderModal({
                   </div>
                 </div>
                 <div className="mt-1.5">
-                  <input
+                  <textarea
                     id="po-edit-address"
-                    type="text"
+                    rows={2}
                     value={deliveryAddress}
                     onChange={(e) => {
                       setDeliveryAddress(e.target.value);
                       setIsCustomAddress(true);
                     }}
                     placeholder="e.g. Singhal Enterprises Pvt Ltd, Industrial Area, Jharsuguda, Odisha - 768201"
-                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20"
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 resize-none leading-relaxed"
                   />
                 </div>
                 {deliveryAddress && deliveryAddress.trim().length > 0 && deliveryAddress.trim().length < 15 && (
@@ -758,8 +746,8 @@ export function EditPurchaseOrderModal({
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
-                      <div>
+                    <div className="grid grid-cols-2 sm:grid-cols-12 gap-2 text-xs items-start">
+                      <div className="col-span-1 sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Quantity *</label>
                         <input
                           type="number"
@@ -767,12 +755,12 @@ export function EditPurchaseOrderModal({
                           step="any"
                           value={item.quantity}
                           onChange={(e) => handleUpdateItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
                           required
                         />
                       </div>
 
-                      <div>
+                      <div className="col-span-1 sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Unit</label>
                         <div className="space-y-1">
                           <select
@@ -785,7 +773,7 @@ export function EditPurchaseOrderModal({
                                 handleUpdateItem(idx, 'unitOfMeasure', val);
                               }
                             }}
-                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer"
+                            className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer truncate"
                           >
                             {STANDARD_UOM_OPTIONS.map((opt) => (
                               <option key={opt.value} value={opt.value}>{opt.label}</option>
@@ -804,7 +792,7 @@ export function EditPurchaseOrderModal({
                         </div>
                       </div>
 
-                      <div>
+                      <div className="col-span-1 sm:col-span-3">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">Unit Price (₹) *</label>
                         <input
                           type="number"
@@ -812,17 +800,17 @@ export function EditPurchaseOrderModal({
                           step="any"
                           value={item.unitPrice}
                           onChange={(e) => handleUpdateItem(idx, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono font-bold text-slate-800 focus:border-[#12335f] focus:outline-none"
                           required
                         />
                       </div>
 
-                      <div>
+                      <div className="col-span-1 sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">GST Rate (%)</label>
                         <select
                           value={item.taxRate}
                           onChange={(e) => handleUpdateItem(idx, 'taxRate', parseFloat(e.target.value) || 0)}
-                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1 font-mono text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer"
+                          className="w-full rounded-lg border border-slate-300 bg-white px-2 py-1.5 font-mono text-xs font-semibold text-slate-800 focus:border-[#12335f] focus:outline-none cursor-pointer"
                         >
                           {![0, 5, 12, 18, 28].includes(item.taxRate) && (
                             <option value={item.taxRate}>{item.taxRate}% (Custom)</option>
@@ -835,14 +823,14 @@ export function EditPurchaseOrderModal({
                         </select>
                       </div>
 
-                      <div>
+                      <div className="col-span-1 sm:col-span-2">
                         <label className="block text-[10px] font-bold text-slate-500 uppercase">HSN / SAC</label>
                         <input
                           type="text"
                           value={item.description || ''}
                           onChange={(e) => handleUpdateItem(idx, 'description', e.target.value)}
                           placeholder="e.g. 4819"
-                          className="w-full rounded-lg border border-slate-300 px-2 py-1 font-mono text-slate-800 focus:border-[#12335f] focus:outline-none"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 font-mono text-slate-800 focus:border-[#12335f] focus:outline-none"
                         />
                       </div>
                     </div>
@@ -1029,6 +1017,20 @@ export function EditPurchaseOrderModal({
           </div>
         </div>
       </FocusTrap>
+
+      <AddDeliveryAddressModal
+        isOpen={isAddAddressModalOpen}
+        onClose={() => setIsAddAddressModalOpen(false)}
+        hasExistingAddresses={savedAddresses.length > 0}
+        onAddressCreated={(newAddr) => {
+          setSavedAddresses((prev) => [newAddr, ...prev]);
+          const fullAddr = formatDeliveryAddressString(newAddr);
+          setDeliveryAddress(fullAddr);
+          setIsCustomAddress(false);
+          setIsAddAddressModalOpen(false);
+          toast.success('Address added and selected as delivery location.');
+        }}
+      />
     </div>
   );
 }

@@ -334,10 +334,8 @@ function RoleAwareActionCards() {
         <div className="space-y-2">
             <div className="flex items-center justify-between">
                 <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 pl-0.5 flex items-center gap-1.5">
-                    Overview Metrics & Quick Actions
-                    <span className="text-[9px] font-bold text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded">
-                        6 KPIs
-                    </span>
+                    Overview Metrics
+                   
                 </h4>
             </div>
             {/* Strictly 6 KPI cards in a single row on desktop (lg:grid-cols-6) and 2 in mobile (grid-cols-2) */}

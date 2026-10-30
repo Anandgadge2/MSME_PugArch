@@ -351,6 +351,16 @@ export function determineCurrentLifecycleStage({
     return s !== 'REJECTED' && s !== 'CANCELLED' && s !== 'DRAFT';
   });
 
+  const isPoDeclinedOrCancelled =
+    ['CANCELLED', 'DECLINED', 'REJECTED'].includes(poStatusUpper) ||
+    Boolean(activeOrder?.declinedAt || activeOrder?.metadata?.declinedAt);
+
+  // If PO was declined/cancelled, the order cannot advance to delivery or settlement. Return to Evaluation (1) or Award & PO (2).
+  if (isPoDeclinedOrCancelled) {
+    const hasOtherPendingAward = awards && awards.some(a => ['OFFERED', 'RECOMMENDED', 'ADMIN_APPROVED'].includes(String(a.awardStatus || '').toUpperCase()));
+    return hasOtherPendingAward ? 2 : 1;
+  }
+
   // Stage 5: Settlement
   if (
     statusUpper === 'COMPLETED' ||
@@ -667,10 +677,41 @@ export function ProcurementLifecycleStepper({
           );
 
         if (poExists) {
+          const isDeclinedPo = Boolean(
+            effectiveActiveOrder &&
+            (String(effectiveActiveOrder.poStatus || '').toUpperCase() === 'CANCELLED' ||
+             String(effectiveActiveOrder.poStatus || '').toUpperCase() === 'DECLINED' ||
+             String(effectiveActiveOrder.status || '').toLowerCase() === 'cancelled' ||
+             String(effectiveActiveOrder.status || '').toLowerCase() === 'declined' ||
+             Boolean(effectiveActiveOrder.declinedAt) ||
+             Boolean(effectiveActiveOrder.metadata?.declinedAt))
+          );
+          if (isDeclinedPo) {
+            return {
+              hasAction: true,
+              actionLabel: isBuyer ? 'PO Declined (Re-Award)' : 'PO Declined',
+              actionHint: isBuyer ? 'Purchase order was declined. Review rankings to re-award.' : 'Purchase order was declined.',
+              onClick: () => {
+                if (onViewEvaluation) onViewEvaluation();
+                else if (onNavigateStage) onNavigateStage(1);
+              },
+              isPrimary: true
+            };
+          }
+
+          const isDraftPo = Boolean(
+            effectiveActiveOrder &&
+            (effectiveActiveOrder.isDraft ||
+             String(effectiveActiveOrder.poStatus || '').toUpperCase() === 'DRAFT' ||
+             String(effectiveActiveOrder.status || '').toLowerCase() === 'draft')
+          );
+
           return {
             hasAction: true,
-            actionLabel: isBuyer ? (effectivePoNumber ? `View PO #${effectivePoNumber}` : 'View PO') : 'View PO Copy',
-            actionHint: 'Open purchase order dialog modal',
+            actionLabel: isDraftPo
+              ? (isBuyer ? 'Review & Issue PO' : 'View Draft PO')
+              : (isBuyer ? (effectivePoNumber ? `View PO #${effectivePoNumber}` : 'View PO') : 'View PO Copy'),
+            actionHint: isDraftPo ? 'Review PO draft details, edit terms, and issue to supplier' : 'Open purchase order dialog modal',
             onClick: () => {
               if (onViewPO) onViewPO();
               else router.push(isBuyer ? '/buyer/orders' : '/seller/orders');

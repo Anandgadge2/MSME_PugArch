@@ -5,9 +5,10 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { 
   Download, Trophy, FileText, X, Scale, CheckCircle2,
-  LayoutGrid, List, Users, Eye, Mail, Phone, Clock, Tag, Package,
+  LayoutGrid, List, Users, User, Eye, Mail, Phone, Clock, Tag, Package,
   CheckSquare, Square, Check, ArrowUp, ArrowDown, ArrowUpDown, Gavel,
-  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft, Radio, XCircle
+  ShieldCheck, AlertCircle, Target, Lock, Loader2, ArrowLeft, Radio, XCircle,
+  ClipboardCheck
 } from 'lucide-react';
 import StartReverseAuctionModal from '../../reverseAuctions/components/StartReverseAuctionModal';
 import TechnicalEvaluationModal from '../../rfq/components/TechnicalEvaluationModal';
@@ -28,13 +29,15 @@ import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { useProcurementRealtime } from '../../rfq/hooks/useProcurementRealtime';
 import { useReverseAuctionRealtime } from '../../reverseAuctions/hooks/useReverseAuctionRealtime';
 import { useUserRealtime } from '../../../hooks/useUserRealtime';
+import { PO_DECLINE_REASONS, getPoDeclineReasonByCode, parseDeclineReason } from '../poDeclineReasons';
 
 export default function BidResultsPage() {
   const { user } = useAuth();
   const isBuyer = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
   const pathname = usePathname() || '';
   const router = useRouter();
-  const bidId = pathname.split('/')[2];
+  const rawBidParam = pathname.split('/')[2] || '';
+  const bidId = rawBidParam ? decodeURIComponent(rawBidParam) : '';
   useProcurementRealtime(bidId);
   useReverseAuctionRealtime(bidId);
   useUserRealtime(user?.id);
@@ -277,7 +280,6 @@ export default function BidResultsPage() {
   const isPriceMatchPending = activeAward?.counterOfferStatus === 'PENDING';
   const isAwardOfferPending = activeAward && (activeAward.awardStatus === 'OFFERED' || activeAward.awardStatus === 'RECOMMENDED') && !isPriceMatchPending;
   const isAwardAccepted = activeAward && (activeAward.awardStatus === 'ACCEPTED' || activeAward.counterOfferStatus === 'ACCEPTED');
-  const isAwardDeclined = !poIssuedLocally && !activeAward && Boolean(latestDeclinedAward);
   
   const isContractFinalized = React.useMemo(() => {
     if (poIssuedLocally) return true;
@@ -308,6 +310,8 @@ export default function BidResultsPage() {
     (['AWARDED', 'PO_ISSUED', 'PO_GENERATED'].includes(String(bid?.status || '').toUpperCase()) && Boolean(activeAward || isContractFinalized)) ||
     Boolean(activeAward)
   );
+
+  const isAwardDeclined = !isContractFinalized && !isBidAlreadyAwarded && !poIssuedLocally && !activeAward && Boolean(latestDeclinedAward);
 
   const isReverseAuctionConcluded = React.useMemo(() => {
     const rawAuctionStatus = String(
@@ -370,21 +374,51 @@ export default function BidResultsPage() {
   }, [ranking]);
 
   const checkIsRowAwarded = React.useCallback((row: BidResultRow) => {
-    if (isContractFinalized) {
-      if (row.resultStatus === 'Awarded') return true;
-      if (String(row.finalStatus || '').toUpperCase() === 'AWARDED' || String(row.finalStatus || '').toUpperCase() === 'ORDERED') return true;
-      if (String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'AWARDED' || String(row.rawParticipation?.finalStatus || '').toUpperCase() === 'ORDERED') return true;
-    }
+    const rowPartId = Number(row.participationId || row.id);
+    const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
+
+    // 1. Explicit activeAward match
     if (activeAward) {
-      const partId = Number(row.participationId || row.id);
-      const sellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
-      return Boolean(
-        (partId && Number(activeAward.participationId) === partId) ||
-        (sellerId && Number(activeAward.sellerId) === sellerId)
-      );
+      if (activeAward.participationId && Number(activeAward.participationId) === rowPartId) return true;
+      if (activeAward.sellerId && Number(activeAward.sellerId) === rowSellerId) return true;
     }
+
+    // 2. Explicit bid-level awarded references
+    const bidAwardedPartId = Number((bid as any)?.awardedParticipationId || (bid as any)?.awardedParticipation?.id);
+    if (bidAwardedPartId && bidAwardedPartId === rowPartId) return true;
+
+    const bidAwardedSellerId = Number((bid as any)?.awardedSupplierId || (bid as any)?.awardedSellerId || (bid as any)?.winnerSellerId);
+    if (bidAwardedSellerId && bidAwardedSellerId === rowSellerId) return true;
+
+    // 3. Purchase order references
+    const poSupplierId = Number(
+      (bid as any)?.purchaseOrder?.supplierId || 
+      (bid as any)?.purchaseOrder?.sellerId ||
+      (bid as any)?.purchaseOrders?.[0]?.supplierId ||
+      (bid as any)?.purchaseOrders?.[0]?.sellerId
+    );
+    if (poSupplierId && poSupplierId === rowSellerId) return true;
+
+    const poPartId = Number(
+      (bid as any)?.purchaseOrder?.participationId || 
+      (bid as any)?.purchaseOrders?.[0]?.participationId
+    );
+    if (poPartId && poPartId === rowPartId) return true;
+
+    // 4. Row status itself
+    if (row.resultStatus === 'Awarded') return true;
+    const finalStatus = String(row.finalStatus || row.rawParticipation?.finalStatus || '').toUpperCase();
+    if (['AWARDED', 'ORDERED', 'PO_ISSUED'].includes(finalStatus)) return true;
+
+    // 5. Finalized contract fallback: If a PO has been issued and active, the awarded vendor is the qualified L1 bidder
+    if (isContractFinalized) {
+      if (row.finalRank === 'L1' && row.technicalStatus === 'Qualified') {
+        return true;
+      }
+    }
+
     return false;
-  }, [activeAward, isContractFinalized]);
+  }, [activeAward, bid, isContractFinalized]);
 
   const techEvaluationStats = React.useMemo(() => {
     const total = ranking.length;
@@ -1163,8 +1197,8 @@ export default function BidResultsPage() {
   const tableColumns = React.useMemo<ColumnDef<BidResultRow>[]>(() => [
     {
       key: 'select',
-      header: 'Select',
-      width: 'w-10',
+      header: '',
+      width: 'w-12',
       align: 'center',
       cell: (row, idx) => {
         const partId = row.participationId || idx + 1;
@@ -1173,7 +1207,7 @@ export default function BidResultsPage() {
           <button
             type="button"
             onClick={() => toggleSellerSelection(partId)}
-            className="text-slate-400 hover:text-blue-600 transition p-1"
+            className="text-slate-400 hover:text-blue-600 transition p-1 cursor-pointer"
             aria-label={isSelected ? `Deselect ${row.sellerName} for comparison` : `Select ${row.sellerName} for comparison`}
           >
             {isSelected ? (
@@ -1190,6 +1224,7 @@ export default function BidResultsPage() {
       header: 'Rank & Supplier',
       sortable: true,
       sortKey: 'seller',
+      width: 'w-[22%] min-w-[210px]',
       cell: (row) => {
         const sellerOrg = row.details?.organizationName || (row.seller as any)?.organization?.organizationName || row.sellerName || 'Supplier';
         const contactPerson = row.contactPerson || row.details?.contactPerson || row.sellerName || 'Representative';
@@ -1213,12 +1248,25 @@ export default function BidResultsPage() {
                   {isL1 && <Trophy className="h-3 w-3 text-emerald-600 inline" />} {rank}
                 </span>
               )}
-              <span className="font-black text-slate-900 uppercase text-xs tracking-tight">{sellerOrg}</span>
+              <span className="font-black text-slate-900 uppercase text-xs tracking-tight truncate max-w-[220px]" title={sellerOrg}>
+                {sellerOrg}
+              </span>
             </div>
-            <div className="text-[11px] font-bold text-slate-500">👤 {contactPerson}</div>
-            <div className="text-[10px] text-slate-400 font-medium flex flex-wrap items-center gap-x-2">
-              <span>✉️ {email}</span>
-              {mobile && mobile !== 'Not listed' && <span>📞 {mobile}</span>}
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-600">
+              <User className="h-3 w-3 text-slate-400 shrink-0" />
+              <span className="truncate max-w-[180px]">{contactPerson}</span>
+            </div>
+            <div className="text-[10px] text-slate-400 font-medium flex flex-wrap items-center gap-x-2.5 pt-0.5">
+              <span className="inline-flex items-center gap-1 text-slate-500">
+                <Mail className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[160px]">{email}</span>
+              </span>
+              {mobile && mobile !== 'Not listed' && (
+                <span className="inline-flex items-center gap-1 text-slate-500">
+                  <Phone className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                  <span>{mobile}</span>
+                </span>
+              )}
             </div>
           </div>
         );
@@ -1229,7 +1277,7 @@ export default function BidResultsPage() {
       header: 'Submission Date',
       sortable: true,
       sortKey: 'date',
-      width: 'w-36',
+      width: 'w-[14%] min-w-[130px]',
       cell: (row) => {
         const rawDate = row.submittedAt || row.details?.submittedAt || (row as any).createdAt || (row.details as any)?.createdAt;
         const submissionTime = rawDate ? formatDateTime(rawDate) : 'Submitted';
@@ -1246,10 +1294,13 @@ export default function BidResultsPage() {
       header: 'Offered Item / Make',
       sortable: true,
       sortKey: 'item',
+      width: 'w-[18%] min-w-[150px]',
       cell: (row) => (
-        <div>
-          <div className="font-bold text-slate-800 text-xs leading-snug">{row.offeredItem}</div>
-          <div className="text-[10px] text-slate-500 font-semibold mt-0.5">
+        <div className="max-w-[200px] space-y-0.5">
+          <div className="font-bold text-slate-800 text-xs leading-snug truncate" title={row.offeredItem}>
+            {row.offeredItem}
+          </div>
+          <div className="text-[10px] text-slate-500 font-semibold truncate" title={`${row.makeBrand && row.makeBrand !== 'As quoted' ? `Make: ${row.makeBrand}` : 'Standard Make'}${row.model && row.model !== 'Standard' ? ` • Model: ${row.model}` : ''}`}>
             {row.makeBrand && row.makeBrand !== 'As quoted' ? `Make: ${row.makeBrand}` : 'Standard Make'} 
             {row.model && row.model !== 'Standard' ? ` • Model: ${row.model}` : ''}
           </div>
@@ -1261,17 +1312,17 @@ export default function BidResultsPage() {
       header: 'Attachments',
       sortable: true,
       sortKey: 'attachments',
-      width: 'w-32',
+      width: 'w-[12%] min-w-[110px]',
       cell: (row) => {
         const docCount = row.documents ? row.documents.length : 0;
         const itemCount = row.details?.lineItems?.length || 1;
         return (
           <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-bold">
-            <span className="inline-flex items-center rounded-md bg-slate-100 text-slate-700 px-2 py-0.5">
-              📄 {docCount} Doc{docCount === 1 ? '' : 's'}
+            <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 border border-slate-200/70 text-slate-700 px-2 py-0.5 shadow-2xs">
+              <FileText className="h-3 w-3 text-slate-500" /> {docCount} Doc{docCount === 1 ? '' : 's'}
             </span>
-            <span className="inline-flex items-center rounded-md bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5">
-              📦 {itemCount} Item{itemCount === 1 ? '' : 's'}
+            <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200/70 px-2 py-0.5 shadow-2xs">
+              <Package className="h-3 w-3 text-blue-600" /> {itemCount} Item{itemCount === 1 ? '' : 's'}
             </span>
           </div>
         );
@@ -1283,7 +1334,7 @@ export default function BidResultsPage() {
       sortable: true,
       sortKey: 'totalPrice',
       align: 'right',
-      width: 'w-32',
+      width: 'w-[12%] min-w-[110px]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (row) => {
@@ -1320,14 +1371,16 @@ export default function BidResultsPage() {
     },
     {
       key: 'technicalStatus',
-      header: 'Technical Status',
+      header: isTwoPacketMode ? 'Technical Status' : 'Technical Compliance',
       sortable: true,
       sortKey: 'technicalStatus',
-      width: 'w-44',
+      width: 'w-[16%] min-w-[145px]',
       cell: (row) => {
         const isQualified = row.technicalStatus === 'Qualified';
         const isDisqualified = row.technicalStatus === 'Disqualified';
         const isPending = !isQualified && !isDisqualified;
+        const isRowL1 = row.finalRank === 'L1';
+
         return (
           <div className="flex flex-col gap-1 items-start">
             <span
@@ -1336,32 +1389,50 @@ export default function BidResultsPage() {
                   ? 'bg-emerald-100 border border-emerald-300 text-emerald-800'
                   : isDisqualified
                     ? 'bg-rose-100 border border-rose-300 text-rose-800'
-                    : 'bg-amber-100 border border-amber-300 text-amber-800'
+                    : isTwoPacketMode
+                      ? 'bg-amber-100 border border-amber-300 text-amber-800'
+                      : isRowL1
+                        ? 'bg-amber-100 border border-amber-300 text-amber-900 font-black'
+                        : 'bg-slate-100 border border-slate-250 text-slate-600'
               }`}
             >
               {isQualified && <CheckCircle2 className="h-3 w-3" />}
               {isDisqualified && <X className="h-3 w-3" />}
               {isPending && <Clock className="h-3 w-3" />}
-              {row.technicalStatus || 'Pending'}
+              {isQualified
+                ? (isTwoPacketMode ? 'Qualified' : '✓ Compliant')
+                : isDisqualified
+                  ? (isTwoPacketMode ? 'Disqualified' : '✕ Non-Responsive')
+                  : isTwoPacketMode
+                    ? 'Pending'
+                    : isRowL1
+                      ? 'Pending L1 Check'
+                      : 'Under Review'}
             </span>
             {isBidAlreadyAwarded ? (
               <button
                 type="button"
                 onClick={() => setSelectedForTechEval({ ...((row as any).rawParticipation || {}), ...row, rawParticipation: (row as any).rawParticipation || row })}
                 className="inline-flex items-center gap-1 text-[10px] font-semibold text-slate-600 hover:text-slate-900 hover:underline transition cursor-pointer"
-                title="View finalized technical evaluation (read-only audit record)"
+                title="View finalized evaluation audit record"
               >
                 <Eye className="h-3 w-3 text-slate-500" />
-                View Evaluation
+                {isTwoPacketMode ? 'View Evaluation' : 'View Spec Verification'}
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => setSelectedForTechEval({ ...((row as any).rawParticipation || {}), ...row, rawParticipation: (row as any).rawParticipation || row })}
-                className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-600 hover:text-blue-800 underline transition cursor-pointer"
+                className={`inline-flex items-center gap-1 text-[10px] font-bold underline transition cursor-pointer ${
+                  !isTwoPacketMode && isRowL1 && isPending
+                    ? 'text-blue-700 hover:text-blue-900 font-extrabold'
+                    : 'text-blue-600 hover:text-blue-800'
+                }`}
               >
                 <FileText className="h-3 w-3" />
-                {isPending ? 'Evaluate Technical Bid' : 'View Evaluation'}
+                {isPending
+                  ? (isTwoPacketMode ? 'Evaluate Technical Bid' : isRowL1 ? 'Verify L1 Specs' : 'Check Specs')
+                  : (isTwoPacketMode ? 'View Evaluation' : 'View Spec Verification')}
               </button>
             )}
           </div>
@@ -1372,7 +1443,7 @@ export default function BidResultsPage() {
       key: 'actions',
       header: 'Actions',
       align: 'right',
-      width: 'w-60',
+      width: 'w-[18%] min-w-[165px]',
       cellClassName: 'text-right',
       headerClassName: 'text-right',
       cell: (row) => (
@@ -1388,22 +1459,22 @@ export default function BidResultsPage() {
           {(() => {
             const rowPartId = Number(row.participationId || row.id);
             const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
-            const isThisRowAwarded = activeAward && (
+            const isThisRowAwarded = (activeAward && (
               (activeAward.participationId && Number(activeAward.participationId) === rowPartId) ||
               (activeAward.sellerId && Number(activeAward.sellerId) === rowSellerId)
-            );
+            )) || checkIsRowAwarded(row);
 
             if (isContractFinalized) {
-              if (isThisRowAwarded || checkIsRowAwarded(row)) {
+              if (isThisRowAwarded) {
                 return (
-                  <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-100 px-2.5 text-[10px] font-black text-emerald-800 uppercase tracking-wide">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Awarded & PO Issued
+                  <span className="inline-flex h-8 items-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 text-[10.5px] font-black uppercase tracking-wide shadow-2xs">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> PO Issued
                   </span>
                 );
               }
               return (
-                <span className="inline-flex h-8 items-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 px-2.5 text-[10px] font-semibold">
-                  Not Selected
+                <span className="inline-flex h-8 items-center rounded-xl bg-slate-50 border border-slate-200 text-slate-400 px-2.5 text-[10px] font-semibold">
+                  Not Awarded
                 </span>
               );
             }
@@ -1491,18 +1562,27 @@ export default function BidResultsPage() {
 
             if (isThisRowDeclined) {
               const reasonText = latestDeclinedAward?.declinedReason || latestDeclinedAward?.remarks || (row.rawParticipation as any)?.rejectionReason;
+              const parsed = parseDeclineReason(reasonText);
               return (
                 <div className="flex flex-col items-end gap-0.5">
                   <span 
                     className="inline-flex h-8 items-center gap-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 px-2.5 text-[10px] font-black"
-                    title={reasonText ? `Declined: ${reasonText}` : 'Offer declined by supplier'}
+                    title={parsed.remarks ? `${parsed.shortLabel}: ${parsed.remarks}` : (parsed.label || 'Offer declined by supplier')}
                   >
                     <XCircle className="h-3.5 w-3.5 text-rose-600" />
                     Offer Declined
                   </span>
-                  {reasonText && (
-                    <span className="text-[9px] font-semibold text-rose-600 truncate max-w-[130px]" title={reasonText}>
-                      "{reasonText}"
+                  {parsed.shortLabel && (
+                    <span 
+                      className="text-[9px] font-bold text-rose-700 truncate max-w-[140px]" 
+                      title={parsed.description || parsed.label}
+                    >
+                      {parsed.shortLabel}
+                    </span>
+                  )}
+                  {parsed.remarks && (
+                    <span className="text-[9px] font-medium text-slate-500 truncate max-w-[140px] italic" title={parsed.remarks}>
+                      &ldquo;{parsed.remarks}&rdquo;
                     </span>
                   )}
                 </div>
@@ -2072,6 +2152,28 @@ export default function BidResultsPage() {
               </div>
             </div>
 
+            {!isTwoPacketMode && awardModal.row.technicalStatus !== 'Qualified' && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/90 p-3 flex items-start gap-2">
+                <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
+                <div className="text-[11px] text-blue-950 leading-snug">
+                  <strong>Pre-Award Conformance Note:</strong> This supplier&apos;s specifications have not been formally recorded as verified. Awarding this contract constitutes buyer confirmation that the quotation conforms to all required parameters.
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const rowToEval = awardModal.row;
+                      setAwardModal({ show: false, row: null, remarks: '', justificationReason: '', submitting: false });
+                      if (rowToEval) {
+                        setSelectedForTechEval({ ...((rowToEval as any).rawParticipation || {}), ...rowToEval, rawParticipation: (rowToEval as any).rawParticipation || rowToEval });
+                      }
+                    }}
+                    className="ml-1 text-blue-700 font-bold underline hover:text-blue-900 cursor-pointer"
+                  >
+                    Verify Specs First →
+                  </button>
+                </div>
+              </div>
+            )}
+
             {awardModal.row.finalRank !== 'L1' && (
               <div className="space-y-2">
                 <div className="rounded-xl border border-amber-200 bg-amber-50/90 p-3 flex items-start gap-2">
@@ -2139,34 +2241,37 @@ export default function BidResultsPage() {
   return (
     <PageShell>
       <main className="mx-auto w-full max-w-7xl space-y-3 px-4 py-3 md:py-4">
-        {/* Compact Header Card */}
-        <section className="relative overflow-hidden rounded-xl border border-slate-200/90 bg-white px-4 py-3 md:px-5 md:py-3 shadow-2xs">
+        {/* Modern Clean Header Card */}
+        <section className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 md:p-5 shadow-xs">
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-blue-500" />
-          <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center sm:justify-between pt-0.5">
-            <div className="flex flex-wrap items-center gap-2.5 min-w-0">
-              <Link
-                href={`/bids/${bid.id}?tab=clarifications`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-250 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs cursor-pointer shrink-0"
-                title="Return to Bid Details"
-              >
-                <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
-                <span>Back to Bid</span>
-              </Link>
-              <div className="h-4 w-px bg-slate-200 hidden sm:block shrink-0" />
-              <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 select-none shrink-0">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
-                MSME Procurement Control
-              </span>
-              <h1 className="text-base md:text-lg font-black tracking-tight text-slate-900 truncate">
-                Bid Result and Financial Ranking
-              </h1>
-              <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 shrink-0">
-                {bid.id}
-              </span>
-              <span className="text-slate-300 hidden sm:inline">•</span>
-              <span className="text-xs md:text-sm font-semibold text-slate-700 truncate max-w-xs md:max-w-md" title={bid.title}>
-                {bid.title}
-              </span>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 pt-0.5">
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={`/bids/${bid.id}?tab=clarifications`}
+                  className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-slate-250 bg-white px-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition shadow-2xs cursor-pointer shrink-0"
+                  title="Return to Bid Details"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5 text-slate-500" />
+                  <span>Back to Bid</span>
+                </Link>
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-800 select-none shrink-0">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-600 animate-pulse" />
+                  MSME Procurement Control
+                </span>
+                <span className="font-mono text-xs font-semibold bg-slate-100 text-slate-700 px-2 py-0.5 rounded border border-slate-200 shrink-0">
+                  {bid.id}
+                </span>
+              </div>
+              <div className="flex flex-wrap items-baseline gap-2 pt-0.5">
+                <h1 className="text-base sm:text-lg md:text-xl font-black tracking-tight text-slate-900">
+                  Bid Result and Financial Ranking
+                </h1>
+                <span className="text-slate-300 hidden sm:inline">•</span>
+                <span className="text-xs md:text-sm font-semibold text-slate-600 truncate max-w-md lg:max-w-xl" title={bid.title}>
+                  {bid.title}
+                </span>
+              </div>
             </div>
 
             <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -2174,7 +2279,7 @@ export default function BidResultsPage() {
                 <button
                   type="button"
                   onClick={handleCompareClick}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3.5 text-xs font-bold text-white shadow-2xs transition cursor-pointer"
                 >
                   <Scale className="h-3.5 w-3.5" /> Compare Quotations {selectedForCompare.length > 0 && `(${selectedForCompare.length})`}
                 </button>
@@ -2193,7 +2298,7 @@ export default function BidResultsPage() {
                     }));
                     downloadCsv(`${bid.id}-result.csv`, rows);
                   }}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 px-3 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer"
+                  className="inline-flex h-8.5 items-center gap-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 text-xs font-bold text-slate-700 transition shadow-2xs cursor-pointer"
                 >
                   <Download className="h-3.5 w-3.5 text-slate-500" /> Export CSV
                 </button>
@@ -2217,24 +2322,69 @@ export default function BidResultsPage() {
             </div>
           </div>
 
-          <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
-            <div className="min-w-0">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Technical Scrutiny</span>
-              <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight">
-                {ranking.length > 0 ? `${techEvaluationStats.qualified} Qualified` : '0 Qualified'}
+          {isTwoPacketMode ? (
+            <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">Stage 1 Technical Scrutiny</span>
+                <div className="mt-0.5 text-base sm:text-lg font-black text-slate-900 leading-tight">
+                  {ranking.length > 0 ? `${techEvaluationStats.qualified} Qualified` : '0 Qualified'}
+                </div>
+                <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                  {ranking.length === 0
+                    ? 'Awaiting vendor proposals'
+                    : techEvaluationStats.pending > 0
+                      ? `${techEvaluationStats.pending} pending review`
+                      : `${techEvaluationStats.disqualified} disqualified • Completed`}
+                </p>
               </div>
-              <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
-                {ranking.length === 0
-                  ? 'Awaiting vendor proposals'
-                  : techEvaluationStats.pending > 0
-                    ? `${techEvaluationStats.pending} pending review`
-                    : `${techEvaluationStats.disqualified} disqualified • Completed`}
-              </p>
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
             </div>
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
-              <ShieldCheck className="h-4 w-4" />
-            </div>
-          </div>
+          ) : (() => {
+            const l1Row = ranking.find(r => r.finalRank === 'L1') || ranking[0];
+            const isL1Qualified = l1Row?.technicalStatus === 'Qualified';
+            const isL1Disqualified = l1Row?.technicalStatus === 'Disqualified';
+
+            return (
+              <div className="rounded-xl border border-slate-200/90 bg-white px-3.5 py-2.5 shadow-2xs flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">L1 Compliance & Specs</span>
+                  <div className="mt-0.5 text-base sm:text-lg font-black leading-tight">
+                    {ranking.length === 0 ? (
+                      <span className="text-slate-500">Awaiting Quotes</span>
+                    ) : isL1Qualified ? (
+                      <span className="text-emerald-700 flex items-center gap-1">
+                        <CheckCircle2 className="h-4 w-4 inline" /> L1 Verified
+                      </span>
+                    ) : isL1Disqualified ? (
+                      <span className="text-rose-700 flex items-center gap-1">
+                        <X className="h-4 w-4 inline" /> L1 Non-Responsive
+                      </span>
+                    ) : (
+                      <span className="text-amber-700 flex items-center gap-1">
+                        <Clock className="h-4 w-4 inline" /> L1 Under Review
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-0.5 text-[10px] font-medium text-slate-500 truncate">
+                    {ranking.length === 0
+                      ? 'No seller quotations submitted'
+                      : isL1Qualified
+                        ? 'Lowest quote verified against technical specs'
+                        : isL1Disqualified
+                          ? 'L1 rejected — proceed to evaluate L2'
+                          : 'Verify L1 specifications before contract award'}
+                  </p>
+                </div>
+                <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                  isL1Qualified ? 'bg-emerald-50 text-emerald-600' : isL1Disqualified ? 'bg-rose-50 text-rose-600' : 'bg-blue-50 text-blue-600'
+                }`}>
+                  <ClipboardCheck className="h-4 w-4" />
+                </div>
+              </div>
+            );
+          })()}
 
           {(() => {
             const rawAuctionLowest = Number(
@@ -2412,7 +2562,9 @@ export default function BidResultsPage() {
                     SELLER QUOTATIONS & EVALUATION ({ranking.length})
                   </h2>
                   <p className="text-[11px] text-slate-500 font-medium">
-                    Review submitted seller quotations, technical packet compliance, and financial ranking.
+                    {isTwoPacketMode
+                      ? 'Review submitted seller quotations, technical packet compliance, and financial ranking.'
+                      : 'Review submitted quotations, verify lowest bidder (L1) technical compliance, and award contract.'}
                   </p>
                 </div>
               </div>
@@ -2710,10 +2862,43 @@ export default function BidResultsPage() {
                           Declined on {declinedTime}
                         </span>
                       </div>
-                      <p className="text-xs text-slate-700 font-medium leading-relaxed">
-                        Supplier declined the offer{isCounterOffer ? ` to match ${targetPriceFormatted}` : ''}. 
-                        Reason stated: <strong className="text-slate-900 bg-amber-100/70 px-1.5 py-0.5 rounded text-[11px] font-bold">"{declineReason}"</strong>.
-                      </p>
+                      {(() => {
+                        const parsed = parseDeclineReason(declineReason);
+                        return (
+                          <div className="space-y-1 pt-0.5">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-700 font-medium leading-relaxed">
+                              <span>Supplier declined the offer{isCounterOffer ? ` to match ${targetPriceFormatted}` : ''}.</span>
+                              <span className="text-slate-300 hidden sm:inline">•</span>
+                              <span className="text-slate-600 font-bold">Reason:</span>
+                              <span 
+                                className="inline-flex items-center gap-1 rounded-md bg-amber-100 text-amber-950 border border-amber-300 px-2 py-0.5 text-[11px] font-black shadow-2xs"
+                                title={parsed.description || parsed.label}
+                              >
+                                <span>{parsed.shortLabel}</span>
+                                {parsed.isExcused !== undefined && (
+                                  <span className={`text-[9.5px] font-extrabold px-1.5 py-0.2 rounded-md ${
+                                    parsed.isExcused 
+                                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
+                                      : 'bg-rose-100 text-rose-800 border border-rose-300'
+                                  }`}>
+                                    {parsed.isExcused ? 'Excused (GFR 171)' : 'Unexcused Default'}
+                                  </span>
+                                )}
+                              </span>
+                              {parsed.remarks && (
+                                <span className="text-slate-900 text-[11px] font-semibold bg-white/90 border border-amber-200/90 px-2 py-0.5 rounded-md italic shadow-2xs">
+                                  &ldquo;{parsed.remarks}&rdquo;
+                                </span>
+                              )}
+                            </div>
+                            {parsed.label && parsed.label !== parsed.shortLabel && (
+                              <p className="text-[11px] text-slate-500 font-medium italic">
+                                {parsed.label}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <p className="text-[11px] text-slate-500 font-medium">
                         Procurement workflow has automatically reverted to commercial evaluation. In compliance with statutory procurement guidelines (GFR 2017 / MSE Purchase Preference), you can now award 100% to the compliant L1 bidder or invite the next qualified preference vendor.
                       </p>
@@ -2797,7 +2982,10 @@ export default function BidResultsPage() {
                               )}
                               <h3 className="text-xs font-black text-slate-900 uppercase tracking-tight">{sellerOrg}</h3>
                             </div>
-                            <p className="text-[11px] font-bold text-slate-500 mt-0.5">👤 {contactPerson}</p>
+                            <div className="flex items-center gap-1 text-[11px] font-semibold text-slate-600 mt-0.5">
+                              <User className="h-3 w-3 text-slate-400 shrink-0" />
+                              <span className="truncate max-w-[180px]">{contactPerson}</span>
+                            </div>
                           </div>
                         </div>
 
@@ -2852,17 +3040,28 @@ export default function BidResultsPage() {
                       </div>
 
                       <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-slate-500 font-semibold">Technical Evaluation:</span>
+                        <span className="text-slate-500 font-semibold">
+                          {isTwoPacketMode ? 'Technical Evaluation:' : 'Spec Conformance:'}
+                        </span>
                         <div className="flex items-center gap-1.5">
                           <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider ${
                             row.technicalStatus === 'Qualified'
                               ? 'bg-emerald-100 text-emerald-800'
                               : row.technicalStatus === 'Disqualified'
                                 ? 'bg-rose-100 text-rose-800'
-                                : 'bg-amber-100 text-amber-800'
+                                : isTwoPacketMode
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : row.finalRank === 'L1'
+                                    ? 'bg-amber-100 text-amber-900 font-black'
+                                    : 'bg-slate-100 text-slate-600'
                           }`}>
                             {row.technicalStatus === 'Qualified' && <CheckCircle2 className="h-3 w-3" />}
-                            {row.technicalStatus || 'Pending'}
+                            {row.technicalStatus === 'Disqualified' && <X className="h-3 w-3" />}
+                            {row.technicalStatus === 'Qualified'
+                              ? (isTwoPacketMode ? 'Qualified' : 'Compliant')
+                              : row.technicalStatus === 'Disqualified'
+                                ? (isTwoPacketMode ? 'Disqualified' : 'Non-Responsive')
+                                : (isTwoPacketMode ? 'Pending' : row.finalRank === 'L1' ? 'Pending L1' : 'Under Review')}
                           </span>
                           <button
                             type="button"
@@ -2872,9 +3071,9 @@ export default function BidResultsPage() {
                               rawParticipation: (row as any).rawParticipation || row,
                             })}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md border border-[#1B365D]/30 bg-[#1B365D]/5 hover:bg-[#1B365D]/10 text-[10px] font-bold text-[#1B365D] transition cursor-pointer"
-                            title="Evaluate or review technical compliance record"
+                            title="Verify or review specification compliance record"
                           >
-                            <ShieldCheck className="h-3 w-3 text-[#1B365D]" /> Record
+                            <ShieldCheck className="h-3 w-3 text-[#1B365D]" /> {isTwoPacketMode ? 'Record' : 'Verify'}
                           </button>
                         </div>
                       </div>
@@ -2891,22 +3090,22 @@ export default function BidResultsPage() {
                         {(() => {
                           const rowPartId = Number(row.participationId || row.id);
                           const rowSellerId = Number(row.sellerId || row.rawParticipation?.sellerId || row.rawParticipation?.sellerUserId);
-                          const isThisRowAwarded = activeAward && (
+                          const isThisRowAwarded = (activeAward && (
                             (activeAward.participationId && Number(activeAward.participationId) === rowPartId) ||
                             (activeAward.sellerId && Number(activeAward.sellerId) === rowSellerId)
-                          );
+                          )) || checkIsRowAwarded(row);
 
                           if (isContractFinalized) {
-                            if (isThisRowAwarded || checkIsRowAwarded(row)) {
+                            if (isThisRowAwarded) {
                               return (
-                                <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-100 text-emerald-800 text-[10px] font-black uppercase tracking-wide">
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> Awarded
+                                <span className="inline-flex h-8 items-center justify-center gap-1 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-[10px] font-black uppercase tracking-wide shadow-2xs">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> PO Issued
                                 </span>
                               );
                             }
                             return (
-                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-100 border border-slate-200 text-slate-500 text-[10px] font-semibold">
-                                Not Selected
+                              <span className="inline-flex h-8 items-center justify-center rounded-xl bg-slate-50 border border-slate-200 text-slate-400 text-[10px] font-semibold">
+                                Not Awarded
                               </span>
                             );
                           }
@@ -2993,18 +3192,27 @@ export default function BidResultsPage() {
 
                           if (isThisRowDeclined) {
                             const reasonText = latestDeclinedAward?.declinedReason || latestDeclinedAward?.remarks || (row.rawParticipation as any)?.rejectionReason;
+                            const parsed = parseDeclineReason(reasonText);
                             return (
                               <div className="flex flex-col items-center justify-center gap-0.5 w-full">
                                 <span 
                                   className="inline-flex h-8 items-center justify-center gap-1 w-full rounded-xl bg-rose-50 border border-rose-200 text-rose-800 px-2.5 text-[10px] font-black"
-                                  title={reasonText ? `Declined: ${reasonText}` : 'Offer declined by supplier'}
+                                  title={parsed.remarks ? `${parsed.shortLabel}: ${parsed.remarks}` : (parsed.label || 'Offer declined by supplier')}
                                 >
                                   <XCircle className="h-3.5 w-3.5 text-rose-600" />
                                   Offer Declined
                                 </span>
-                                {reasonText && (
-                                  <span className="text-[9px] font-semibold text-rose-600 truncate max-w-[180px]" title={reasonText}>
-                                    "{reasonText}"
+                                {parsed.shortLabel && (
+                                  <span 
+                                    className="text-[9px] font-bold text-rose-700 truncate max-w-[180px]" 
+                                    title={parsed.description || parsed.label}
+                                  >
+                                    {parsed.shortLabel}
+                                  </span>
+                                )}
+                                {parsed.remarks && (
+                                  <span className="text-[9px] font-medium text-slate-500 truncate max-w-[180px] italic" title={parsed.remarks}>
+                                    &ldquo;{parsed.remarks}&rdquo;
                                   </span>
                                 )}
                               </div>
@@ -3373,6 +3581,7 @@ export default function BidResultsPage() {
           result={selectedResult}
           bid={bid}
           bidId={bidId}
+          isTwoPacketMode={isTwoPacketMode}
           onAcceptAndGeneratePo={(res) => setAwardModal({ show: true, row: res, remarks: '', justificationReason: '', submitting: false })}
           onOpenTechnicalEvaluation={(res) => {
             setSelectedForTechEval({

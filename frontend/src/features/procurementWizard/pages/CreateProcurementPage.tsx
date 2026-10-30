@@ -68,7 +68,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useOrgRole } from '../../../hooks/useOrgRole';
 import { getResolvedOrgName, getResolvedBuyerAddress, getResolvedBuyerAddressInfo, type ResolvedAddressInfo } from '../../../utils/organizationUtils';
 import { marketplaceApi } from '../../marketplace/api';
-import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS } from '../../../constants/dropdowns';
+import { DELIVERY_TYPES, PAYMENT_TERMS, QUANTITY_UNITS, matchPaymentTerms } from '../../../constants/dropdowns';
 import { formatRefId } from '../../../utils/refIdUtils';
 import {
   PROCUREMENT_DRAFTS_ROUTE,
@@ -1278,6 +1278,7 @@ export default function CreateProcurementPage() {
   const draftIdParam = searchParams?.get('id') || searchParams?.get('draftId') || searchParams?.get('draft');
   const fromCart = searchParams?.get('fromCart') === '1';
   const isEditMode = searchParams?.get('edit') === '1' || Boolean(draftIdParam);
+  const [loadingDraftData, setLoadingDraftData] = useState<boolean>(() => Boolean(draftIdParam));
   const [loadedProcurementInfo, setLoadedProcurementInfo] = useState<{
     referenceNumber?: string;
     isPublished?: boolean;
@@ -1308,44 +1309,47 @@ export default function CreateProcurementPage() {
       } catch {
         // ignore
       }
-      try {
-        const raw = localStorage.getItem('msme:guided-procurement-create:v2');
-        if (raw) {
-          const saved = JSON.parse(raw);
-          if (saved && typeof saved === 'object') {
-            if (Array.isArray(saved.items)) {
-              saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
+      // Only load local draft from localStorage if not explicitly editing a server draft
+      if (!draftIdParam) {
+        try {
+          const raw = localStorage.getItem('msme:guided-procurement-create:v2');
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (saved && typeof saved === 'object') {
+              if (Array.isArray(saved.items)) {
+                saved.items = saved.items.map((it: any, idx: number) => normalizeDraftItem(it, idx));
+              }
+              if (saved.internal && !saved.internal.orgName && cachedOrg) {
+                saved.internal.orgName = cachedOrg;
+              }
+              if (saved.basics && !saved.basics.deliveryLocation && cachedAddress) {
+                saved.basics.deliveryLocation = cachedAddress;
+              }
+              if (saved.basics && saved.basics.category === 'Office Supplies & Stationery') {
+                saved.basics.category = '';
+              }
+              if (saved.schedule) {
+                saved.schedule = {
+                  ...saved.schedule,
+                  submissionStartDate: saved.schedule.submissionStartDate || '',
+                  submissionDate: saved.schedule.submissionDate || '',
+                  technicalOpeningDate: saved.schedule.technicalOpeningDate || '',
+                  financialOpeningDate: saved.schedule.financialOpeningDate || '',
+                };
+              }
+              if (saved.auctionConfig) {
+                saved.auctionConfig = {
+                  ...saved.auctionConfig,
+                  startDateTime: saved.auctionConfig.startDateTime || '',
+                  endDateTime: saved.auctionConfig.endDateTime || '',
+                };
+              }
+              return saved;
             }
-            if (saved.internal && !saved.internal.orgName && cachedOrg) {
-              saved.internal.orgName = cachedOrg;
-            }
-            if (saved.basics && !saved.basics.deliveryLocation && cachedAddress) {
-              saved.basics.deliveryLocation = cachedAddress;
-            }
-            if (saved.basics && saved.basics.category === 'Office Supplies & Stationery') {
-              saved.basics.category = '';
-            }
-            if (saved.schedule) {
-              saved.schedule = {
-                ...saved.schedule,
-                submissionStartDate: saved.schedule.submissionStartDate || '',
-                submissionDate: saved.schedule.submissionDate || '',
-                technicalOpeningDate: saved.schedule.technicalOpeningDate || '',
-                financialOpeningDate: saved.schedule.financialOpeningDate || '',
-              };
-            }
-            if (saved.auctionConfig) {
-              saved.auctionConfig = {
-                ...saved.auctionConfig,
-                startDateTime: saved.auctionConfig.startDateTime || '',
-                endDateTime: saved.auctionConfig.endDateTime || '',
-              };
-            }
-            return saved;
           }
+        } catch (e) {
+          console.error('Failed to load local draft from localStorage', e);
         }
-      } catch (e) {
-        console.error('Failed to load local draft from localStorage', e);
       }
     }
     const def = defaultDraft(initialMethod);
@@ -1364,6 +1368,9 @@ export default function CreateProcurementPage() {
     }
   }, [draft?.id]);
   const [activeStep, setActiveStep] = useState<number>(() => {
+    if (draftIdParam) {
+      return 1; // Default directly to Procurement Intent step when editing
+    }
     if (typeof window !== 'undefined') {
       try {
         const raw = localStorage.getItem('msme:guided-procurement-create:v2');
@@ -1543,10 +1550,11 @@ export default function CreateProcurementPage() {
   // Load draft or existing procurement
   useEffect(() => {
     if (!draftIdParam) return;
-    const id = parseInt(draftIdParam, 10);
-    if (isNaN(id)) return;
+    const cleanId = String(draftIdParam).trim();
+    if (!cleanId) return;
 
-    fetchProcurementDraft(id)
+    setLoadingDraftData(true);
+    fetchProcurementDraft(cleanId)
       .then((res) => {
         if (!res) return;
 
@@ -1554,33 +1562,34 @@ export default function CreateProcurementPage() {
         const normalizedMethod = normalizeProcurementMethod(resMethod, 'RFQ');
         const rawPayload = (res.payload || {}) as Record<string, any>;
 
+        const resolvedTitle = rawPayload.basics?.title || res.title || rawPayload.title || '';
+        const resolvedDescription = rawPayload.basics?.description || rawPayload.basics?.scopeDescription || res.description || rawPayload.description || '';
+        const resolvedCategory = rawPayload.basics?.procurementCategory || res.category?.name || rawPayload.procurementCategory || 'GOODS';
+        const resolvedEstimatedValue = Number(rawPayload.basics?.estimatedValue || res.estimatedValue || rawPayload.estimatedValue || 0);
+        const resolvedDelivery = rawPayload.basics?.deliveryLocation || rawPayload.tender?.deliveryLocation || res.deliveryLocation || rawPayload.deliveryLocation || '';
+
         // Robust reconstruction: ensure authentic top-level database fields populate draft
+        const rawItemsCandidates = [
+          rawPayload.items,
+          res.items,
+          rawPayload.boqTable,
+          res.tenderItems,
+          res.tenders?.[0]?.tenderItems,
+        ];
+        const loadedItems = rawItemsCandidates.find(arr => Array.isArray(arr) && arr.length > 0) || [];
+
         const payload: any = {
           ...rawPayload,
           type: rawPayload.type || normalizedMethod,
           basics: {
-            title: res.title || rawPayload.basics?.title || '',
-            description: res.description || rawPayload.basics?.description || rawPayload.basics?.scopeDescription || '',
-            procurementCategory: res.category?.name || rawPayload.basics?.procurementCategory || 'GOODS',
-            estimatedValue: Number(res.estimatedValue || rawPayload.basics?.estimatedValue || 0),
-            deliveryLocation: res.deliveryLocation || rawPayload.basics?.deliveryLocation || '',
+            title: resolvedTitle,
+            description: resolvedDescription,
+            procurementCategory: resolvedCategory,
+            estimatedValue: resolvedEstimatedValue,
+            deliveryLocation: resolvedDelivery,
             ...(rawPayload.basics || {})
           },
-          items: Array.isArray(rawPayload.items) && rawPayload.items.length > 0
-            ? rawPayload.items
-            : (Array.isArray(res.items) && res.items.length > 0
-                ? res.items.map((it: any, idx: number) => ({
-                    id: String(it.id || idx + 1),
-                    itemCode: (it.specifications as any)?.itemCode || `ITM-${String(idx + 1).padStart(2, '0')}`,
-                    itemName: it.itemName || '',
-                    description: it.description || '',
-                    quantity: Number(it.quantity || 1),
-                    unitOfMeasure: it.unitOfMeasure || 'NOS',
-                    estimatedUnitPrice: Number(it.estimatedUnitPrice || 0),
-                    hsnCode: (it.specifications as any)?.hsnCode || '',
-                    specifications: it.specifications || {}
-                  }))
-                : undefined)
+          items: loadedItems
         };
 
         const base = defaultDraft(payload.type || normalizedMethod);
@@ -1595,8 +1604,9 @@ export default function CreateProcurementPage() {
         const internalPayload = payload.internal || {};
 
         draftIdRef.current = res.id;
+        const refNo = res.requirementNumber || res.bidNumber || (res.id ? formatRefId(normalizedMethod, res.id, null, normalizedMethod) : String(cleanId));
         setLoadedProcurementInfo({
-          referenceNumber: res.requirementNumber || res.bidNumber || String(res.id),
+          referenceNumber: refNo,
           isPublished: Boolean(res.isPublished),
           version: Number(res.version || 1)
         });
@@ -1605,14 +1615,17 @@ export default function CreateProcurementPage() {
           ...base,
           ...payload,
           id: res.id,
+          requirementNumber: refNo,
           basics: {
             ...base.basics,
             ...(payload.basics || {}),
-            procurementCategory: payload.basics?.procurementCategory || 'GOODS',
+            title: resolvedTitle,
+            description: resolvedDescription,
+            procurementCategory: resolvedCategory,
             pricingFormat: payload.basics?.pricingFormat || (payload.type === 'RATE_CONTRACT' ? 'SOR' : 'SINGLE_ITEM'),
-            estimatedValue: Number(payload.basics?.estimatedValue || res.estimatedValue || base.basics.estimatedValue || 0),
+            estimatedValue: resolvedEstimatedValue,
             discloseEstimatedCost: Boolean(payload.basics?.discloseEstimatedCost ?? payload.discloseEstimatedCost ?? (res as any)?.discloseEstimatedCost ?? false),
-            deliveryLocation: payload.basics?.deliveryLocation || payload.tender?.deliveryLocation || base.basics.deliveryLocation || resolvedAddress || ''
+            deliveryLocation: resolvedDelivery || base.basics.deliveryLocation || resolvedAddress || ''
           },
           internal: {
             ...base.internal,
@@ -1626,7 +1639,7 @@ export default function CreateProcurementPage() {
           serviceDetails: {
             ...base.serviceDetails,
             ...(payload.serviceDetails || {}),
-            serviceTitle: payload.serviceDetails?.serviceTitle || payload.basics?.title || res.title || base.serviceDetails.serviceTitle || '',
+            serviceTitle: payload.serviceDetails?.serviceTitle || resolvedTitle || base.serviceDetails.serviceTitle || '',
           },
           vendors: {
             ...base.vendors,
@@ -1669,13 +1682,13 @@ export default function CreateProcurementPage() {
             ...base.rateContractConfig,
             ...(payload.rateContractConfig || payload.rateContract || {}),
           },
-          items: Array.isArray(payload.items) ? payload.items.map((it: any, idx: number) => normalizeDraftItem(it, idx)) : base.items,
+          items: loadedItems.length > 0 ? loadedItems.map((it: any, idx: number) => normalizeDraftItem(it, idx)) : base.items,
           boqTable: Array.isArray(payload.boqTable) ? payload.boqTable : base.boqTable,
           requiredDocs: Array.isArray(payload.requiredDocs) ? payload.requiredDocs : base.requiredDocs,
         });
 
         const isEditingPublishedOrDraft = isEditMode || Boolean(res.isPublished);
-        const loadedStep = isEditingPublishedOrDraft ? 0 : (res.draftStep || 0);
+        const loadedStep = isEditingPublishedOrDraft ? 1 : (res.draftStep || 0);
         const loadedCompletedStepIds = isEditingPublishedOrDraft
           ? [...ALL_STEPS]
           : Array.from(new Set([
@@ -1695,7 +1708,10 @@ export default function CreateProcurementPage() {
         setActiveStep(loadedStep);
       })
       .catch((err) => {
-        toast.error('Failed to load draft: ' + err.message);
+        toast.error('Failed to load procurement details: ' + (err?.message || 'Not found'));
+      })
+      .finally(() => {
+        setLoadingDraftData(false);
       });
   }, [draftIdParam, isEditMode]);
 
@@ -2536,6 +2552,20 @@ export default function CreateProcurementPage() {
     }
   };
 
+  if (loadingDraftData) {
+    return (
+      <div className="min-h-[70vh] flex flex-col items-center justify-center p-8 text-center bg-slate-50">
+        <div className="bg-white p-8 rounded-2xl shadow-sm border border-slate-200/80 flex flex-col items-center max-w-md w-full">
+          <Loader2 className="h-10 w-10 text-[#12335f] animate-spin mb-4" />
+          <h2 className="text-base font-extrabold text-slate-800">Loading Procurement Details...</h2>
+          <p className="text-xs text-slate-500 mt-1.5 leading-relaxed">
+            Retrieving procurement specifications, BOQ items, terms, and schedule for editing.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const currentStepKind = ALL_STEPS[activeStep];
   const stepConfig = stepLibrary[currentStepKind];
 
@@ -3242,12 +3272,12 @@ function BasicsStepForm({
             <input
               type="text"
               value={
-                draft.type === 'RATE_CONTRACT'
-                  ? ((draft as any).requirementNumber ? formatRefId('RC', draft.id, (draft as any).requirementNumber, 'RATE_CONTRACT') : (draft.id ? formatRefId('RC', draft.id, null, 'RATE_CONTRACT') : 'Auto-generated upon creation'))
-                  : draft.type === 'REVERSE_AUCTION'
-                  ? ((draft.auctionConfig as any)?.auctionCode || (draft as any).requirementNumber || (draft.id ? formatRefId('REVERSE_AUCTION', draft.id, null, 'REVERSE_AUCTION') : 'Auto-generated upon creation'))
-                  : (draft as any).requirementNumber
+                (draft as any).requirementNumber
                   ? formatRefId(draft.type, draft.id, (draft as any).requirementNumber, draft.type)
+                  : draft.type === 'RATE_CONTRACT'
+                  ? (draft.id ? formatRefId('RC', draft.id, null, 'RATE_CONTRACT') : 'Auto-generated upon creation')
+                  : draft.type === 'REVERSE_AUCTION'
+                  ? ((draft.auctionConfig as any)?.auctionCode || (draft.id ? formatRefId('REVERSE_AUCTION', draft.id, null, 'REVERSE_AUCTION') : 'Auto-generated upon creation'))
                   : (draft.id ? formatRefId(draft.type, draft.id, null, draft.type) : 'Auto-generated upon creation')
               }
               disabled
@@ -6783,7 +6813,7 @@ function ItemsDetailsForm({
       {
         key: 'type',
         header: 'Type',
-        width: isServiceMode ? 'w-[7%] min-w-[70px]' : 'w-[6%] min-w-[65px]',
+        width: isServiceMode ? 'w-[6%] min-w-[65px]' : 'w-[5%] min-w-[60px]',
         cell: (item: any) => (
           <span className={cn(
             "inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-[9.5px] font-black uppercase tracking-wider whitespace-nowrap shadow-3xs",
@@ -6798,7 +6828,7 @@ function ItemsDetailsForm({
       {
         key: 'name',
         header: isServiceMode ? 'Service Title' : 'Item / Product Name',
-        width: isServiceMode ? 'w-[17%] min-w-[160px]' : 'w-[16%] min-w-[150px]',
+        width: isServiceMode ? 'w-[18%] min-w-[170px]' : 'w-[16%] min-w-[160px]',
         cell: (item: any) => (
           <div className="font-bold text-slate-900 text-xs leading-snug break-words max-w-full" title={item.name}>
             <div className="line-clamp-2">{item.name || <span className="text-rose-500 italic font-normal">{isServiceMode ? 'Unnamed Service' : 'Unnamed Item'}</span>}</div>
@@ -6816,7 +6846,7 @@ function ItemsDetailsForm({
       {
         key: 'specifications',
         header: isServiceMode ? 'Scope & Deliverables' : 'Specifications / Scope',
-        width: isServiceMode ? 'w-[18%] min-w-[170px]' : 'w-[16%] min-w-[150px]',
+        width: isServiceMode ? 'w-[17%] min-w-[160px]' : 'w-[15%] min-w-[150px]',
         cellClassName: 'text-slate-600 font-medium',
         cell: (item: any) => {
           const descText = item.specification || item.technicalSpecification || (item as any).description || (item as any).scopeOfWork || (typeof (item as any).specifications === 'object' ? ((item as any).specifications?.specification || (item as any).specifications?.scopeOfWork || (item as any).specifications?.description) : '') || '';
@@ -6830,7 +6860,7 @@ function ItemsDetailsForm({
       {
         key: 'quantity',
         header: isServiceMode ? 'Billing Qty' : 'Qty & UOM',
-        width: isServiceMode ? 'w-[8%] min-w-[80px]' : 'w-[8%] min-w-[80px]',
+        width: isServiceMode ? 'w-[7%] min-w-[70px]' : 'w-[7%] min-w-[70px]',
         align: 'center',
         cell: (item: any) => (
           <div className="whitespace-nowrap text-center">
@@ -6842,7 +6872,7 @@ function ItemsDetailsForm({
       {
         key: 'rate',
         header: isServiceMode ? 'Est. Service Fee' : 'Est. Unit Rate',
-        width: isServiceMode ? 'w-[13%] min-w-[120px]' : 'w-[12%] min-w-[115px]',
+        width: isServiceMode ? 'w-[12%] min-w-[115px]' : 'w-[11%] min-w-[110px]',
         align: 'right',
         cellClassName: 'font-extrabold text-slate-900',
         cell: (item: any) => {
@@ -6884,7 +6914,7 @@ function ItemsDetailsForm({
       {
         key: 'total',
         header: isServiceMode ? 'Total (Incl. GST)' : 'Line Total (Incl. GST)',
-        width: isServiceMode ? 'w-[13%] min-w-[120px]' : 'w-[13%] min-w-[120px]',
+        width: isServiceMode ? 'w-[12%] min-w-[115px]' : 'w-[12%] min-w-[115px]',
         align: 'right',
         cellClassName: 'font-extrabold text-slate-900',
         cell: (item: any) => {
@@ -6908,7 +6938,7 @@ function ItemsDetailsForm({
       {
         key: 'hsn',
         header: isServiceMode ? 'SAC Code' : 'HSN Code',
-        width: isServiceMode ? 'w-[7%] min-w-[75px]' : 'w-[7%] min-w-[75px]',
+        width: isServiceMode ? 'w-[7%] min-w-[70px]' : 'w-[6%] min-w-[65px]',
         align: 'center',
         cellClassName: 'font-mono text-[11px] font-semibold text-slate-600 truncate text-center',
         cell: (item: any) => {
@@ -6934,7 +6964,7 @@ function ItemsDetailsForm({
       baseColumns.push({
         key: 'brand',
         header: 'Brand & Policy',
-        width: 'w-[9%] min-w-[95px]',
+        width: 'w-[8%] min-w-[85px]',
         cell: (item: any) => (
           <div className="min-w-0">
             <div className="text-slate-800 text-[11px] font-bold truncate max-w-full" title={item.brand_preference}>
@@ -6960,54 +6990,48 @@ function ItemsDetailsForm({
       {
         key: 'documents',
         header: isServiceMode ? 'SOW & Docs' : 'Docs & Specs',
-        width: isServiceMode ? 'w-[9%] min-w-[95px]' : 'w-[9%] min-w-[95px]',
+        width: isServiceMode ? 'w-[8%] min-w-[85px]' : 'w-[8%] min-w-[85px]',
+        align: 'center',
         cell: (item: any) => {
           const attachmentsList = item.attachments || [];
           const hasDocs = attachmentsList.length > 0 || Boolean(item.specificationFileName);
           const docCount = attachmentsList.length || (item.specificationFileName ? 1 : 0);
 
-          return hasDocs ? (
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
-              <button
-                type="button"
-                onClick={() => setQuickDocItem(item)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
-                title="Click to view all uploaded documents"
-                aria-label={`View ${docCount} documents for ${item.name || 'item'}`}
-              >
-                <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
-                <span>
-                  {docCount} file{docCount === 1 ? '' : 's'}
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setQuickDocItem(item)}
-                className="flex h-6 w-6 items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors cursor-pointer shrink-0"
-                title="Add more documents"
-                aria-label={`Add more documents for ${item.name || 'item'}`}
-              >
-                <Plus className="h-3 w-3" aria-hidden="true" />
-              </button>
+          return (
+            <div className="flex items-center justify-center">
+              {hasDocs ? (
+                <button
+                  type="button"
+                  onClick={() => setQuickDocItem(item)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50/90 hover:bg-emerald-100 hover:border-emerald-300 px-2.5 py-1 text-[10px] font-extrabold text-emerald-800 transition-all cursor-pointer shadow-3xs whitespace-nowrap shrink-0"
+                  title="Click to view and manage uploaded documents"
+                  aria-label={`View and manage ${docCount} documents for ${item.name || 'item'}`}
+                >
+                  <Paperclip className="h-3 w-3 text-emerald-600 shrink-0" aria-hidden="true" />
+                  <span>
+                    {docCount} file{docCount === 1 ? '' : 's'}
+                  </span>
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setQuickDocItem(item)}
+                  className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
+                  title="Attach specification or drawing"
+                  aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
+                >
+                  <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
+                  <span>Attach</span>
+                </button>
+              )}
             </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setQuickDocItem(item)}
-              className="inline-flex items-center gap-1 rounded-lg border border-dashed border-slate-300 bg-white hover:border-[#0b2447] hover:bg-slate-50 px-2.5 py-1 text-[10.5px] font-semibold text-slate-700 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-3xs"
-              title="Attach specification or drawing"
-              aria-label={`Attach specification or drawing for ${item.name || 'item'}`}
-            >
-              <Paperclip className="h-3 w-3 text-slate-400 shrink-0" aria-hidden="true" />
-              <span>Attach</span>
-            </button>
           );
         }
       },
       {
         key: 'actions',
         header: 'Actions',
-        width: isServiceMode ? 'w-[10%] min-w-[110px]' : 'w-[10%] min-w-[110px]',
+        width: isServiceMode ? 'w-[13%] min-w-[135px]' : 'w-[12%] min-w-[135px]',
         align: 'right',
         cell: (item: any) => (
           <div className="flex items-center justify-end gap-1.5 whitespace-nowrap shrink-0">
@@ -8211,7 +8235,7 @@ function ItemsDetailsForm({
         columns={procurementItemColumns}
         keyExtractor={(item: any, idx) => item.id || idx}
         showSrNo={false}
-        minWidth={isService ? 'min-w-[1100px]' : 'min-w-[1240px]'}
+        minWidth={isService ? 'min-w-[1150px]' : 'min-w-[1280px]'}
         scrollWrapperClassName="overflow-x-auto"
         rowClassName="align-middle hover:bg-slate-50/70 transition-colors group"
         emptyTitle={isService ? (isRateContract ? "No service rate lines added yet" : "No service contract lines added yet") : (isRateContract ? "No rate contract product items added yet" : "No product items added yet")}
@@ -8553,14 +8577,16 @@ function VendorsStepForm({
 
   const toggleInviteSeller = (id: number, name: string) => {
     updateDraft(current => {
-      const invited = current.vendors.invitedSellers || [];
-      const exists = invited.includes(id);
-      let nextInvites = [...invited];
-      if (exists) {
-        nextInvites = nextInvites.filter(x => x !== id);
-      } else {
-        nextInvites.push(id);
-      }
+      const invited = (current.vendors.invitedSellers || []).map(Number);
+      const targetId = Number(id);
+      const exists = invited.includes(targetId);
+      const nextInvites = exists
+        ? invited.filter(x => x !== targetId)
+        : [...invited, targetId];
+
+      const firstSeller = sellers.find(s => Number(s.id) === Number(nextInvites[0]));
+      const firstSellerName = firstSeller ? firstSeller.organizationName : (nextInvites.length > 0 ? name : '');
+
       return {
         ...current,
         vendors: {
@@ -8568,10 +8594,49 @@ function VendorsStepForm({
           invitedSellers: nextInvites,
           inviteCount: nextInvites.length,
           selectedSellerId: nextInvites[0] || null,
-          selectedSellerName: nextInvites[0] ? name : '',
+          selectedSellerName: nextInvites[0] ? firstSellerName : '',
         }
       };
     });
+  };
+
+  const handleBatchSelectSellers = (ids: number[], select: boolean) => {
+    updateDraft(current => {
+      const currentInvited = new Set((current.vendors.invitedSellers || []).map(Number));
+      ids.forEach(id => {
+        if (select) {
+          currentInvited.add(Number(id));
+        } else {
+          currentInvited.delete(Number(id));
+        }
+      });
+      const nextInvites = Array.from(currentInvited);
+      const firstSeller = sellers.find(s => Number(s.id) === Number(nextInvites[0]));
+
+      return {
+        ...current,
+        vendors: {
+          ...current.vendors,
+          invitedSellers: nextInvites,
+          inviteCount: nextInvites.length,
+          selectedSellerId: nextInvites[0] || null,
+          selectedSellerName: nextInvites[0] ? (firstSeller?.organizationName || '') : '',
+        }
+      };
+    });
+  };
+
+  const handleClearAllInvites = () => {
+    updateDraft(current => ({
+      ...current,
+      vendors: {
+        ...current.vendors,
+        invitedSellers: [],
+        inviteCount: 0,
+        selectedSellerId: null,
+        selectedSellerName: '',
+      }
+    }));
   };
 
   useEffect(() => {
@@ -8830,36 +8895,83 @@ function VendorsStepForm({
       )}
 
       <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
-        <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide">MSME & Preference Parameters</h3>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h3 className="text-xs font-black text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+            <ShieldCheck className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
+            <span>MSME & Statutory Preference Parameters</span>
+          </h3>
+          <span className="text-[10px] text-slate-500 font-semibold bg-white border border-slate-200 px-2 py-0.5 rounded-full">
+            GFR 2017 & PPP-MII Mandate
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <label
+            htmlFor="pref-msme-pricing"
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+              draft.vendors.msmePreference
+                ? 'border-[#12335f]/50 bg-blue-50/50 shadow-2xs'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
             <input
+              id="pref-msme-pricing"
               type="checkbox"
               checked={draft.vendors.msmePreference}
               onChange={e => updateDraft(c => ({ ...c, vendors: { ...c.vendors, msmePreference: e.target.checked } }))}
-              className="h-4 w-4 rounded accent-[#12335f]"
+              className="h-4 w-4 rounded accent-[#12335f] mt-0.5 shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
             />
-            <span>MSME pricing preference?</span>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-900 block">MSME Pricing Preference</span>
+              <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                PPP-MSE Order: L1 + 15% price purchase preference eligible MSEs.
+              </span>
+            </div>
           </label>
 
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+          <label
+            htmlFor="pref-local-supplier"
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+              draft.vendors.localVendorPreference
+                ? 'border-[#12335f]/50 bg-blue-50/50 shadow-2xs'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
             <input
+              id="pref-local-supplier"
               type="checkbox"
               checked={draft.vendors.localVendorPreference}
               onChange={e => updateDraft(c => ({ ...c, vendors: { ...c.vendors, localVendorPreference: e.target.checked } }))}
-              className="h-4 w-4 rounded accent-[#12335f]"
+              className="h-4 w-4 rounded accent-[#12335f] mt-0.5 shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
             />
-            <span>Local supplier preference?</span>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-900 block">Local Supplier Preference</span>
+              <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                Make-in-India (PPP-MII): Class-I local supplier purchase preference.
+              </span>
+            </div>
           </label>
 
-          <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer select-none">
+          <label
+            htmlFor="pref-exclude-blacklisted"
+            className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer select-none ${
+              draft.vendors.excludeBlacklisted
+                ? 'border-[#12335f]/50 bg-blue-50/50 shadow-2xs'
+                : 'border-slate-200 bg-white hover:border-slate-300'
+            }`}
+          >
             <input
+              id="pref-exclude-blacklisted"
               type="checkbox"
               checked={draft.vendors.excludeBlacklisted}
               onChange={e => updateDraft(c => ({ ...c, vendors: { ...c.vendors, excludeBlacklisted: e.target.checked } }))}
-              className="h-4 w-4 rounded accent-[#12335f]"
+              className="h-4 w-4 rounded accent-[#12335f] mt-0.5 shrink-0 cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
             />
-            <span>Auto-exclude blacklisted?</span>
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-900 block">Auto-Exclude Blacklisted</span>
+              <span className="text-[11px] text-slate-500 block leading-tight mt-0.5">
+                GFR Rule 151: Debarred or suspended suppliers cannot bid or be invited.
+              </span>
+            </div>
           </label>
         </div>
       </div>
@@ -8990,6 +9102,8 @@ function VendorsStepForm({
           suppliers={sellers}
           invitedIds={draft.vendors.invitedSellers}
           onToggleInvite={toggleInviteSeller}
+          onBatchSelect={handleBatchSelectSellers}
+          onClearAll={handleClearAllInvites}
           isLoading={loading}
           searchQuery={search}
           onSearchChange={setSearch}
@@ -9018,6 +9132,8 @@ function VendorsStepForm({
             suppliers={sellers}
             invitedIds={draft.vendors.invitedSellers}
             onToggleInvite={toggleInviteSeller}
+            onBatchSelect={handleBatchSelectSellers}
+            onClearAll={handleClearAllInvites}
             isLoading={loading}
             searchQuery={search}
             onSearchChange={setSearch}
@@ -10783,7 +10899,7 @@ function CommercialTermsForm({
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
             <select
               id="terms-payment-terms"
-              value={draft.terms.paymentTerms === 'ADVANCE_PAYMENT' ? 'ADVANCE_PAYMENT' : 'ON_DELIVERY'}
+              value={matchPaymentTerms(draft.terms.paymentTerms)}
               onChange={e => {
                 const val = e.target.value;
                 updateDraft(c => ({
@@ -10791,14 +10907,34 @@ function CommercialTermsForm({
                   terms: {
                     ...c.terms,
                     paymentTerms: val,
-                    advanceAllowed: val === 'ADVANCE_PAYMENT',
+                    advanceAllowed: val.toLowerCase().includes('advance'),
                   }
                 }));
               }}
               className={controlClass(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
             >
               {PAYMENT_TERMS.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              <option value="Other">Other / Custom Payment Terms...</option>
             </select>
+            {matchPaymentTerms(draft.terms.paymentTerms) === 'Other' && (
+              <input
+                type="text"
+                value={draft.terms.paymentTerms === 'Other' ? '' : draft.terms.paymentTerms}
+                onChange={e => {
+                  const val = e.target.value;
+                  updateDraft(c => ({
+                    ...c,
+                    terms: {
+                      ...c.terms,
+                      paymentTerms: val || 'Other',
+                      advanceAllowed: val.toLowerCase().includes('advance'),
+                    }
+                  }));
+                }}
+                placeholder="Enter specific payment terms & milestone schedule..."
+                className={cn(inputClass, "mt-2 text-xs font-semibold")}
+              />
+            )}
           </Field>
 
           <Field label="Delivery Terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.')}>

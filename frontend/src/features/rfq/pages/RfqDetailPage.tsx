@@ -58,6 +58,11 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     enabled: Boolean(requestId && (!explicitReqId || requestId !== explicitReqId)),
     initialData: Boolean(requestId) && isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.sourceModel === 'PROCUREMENT_BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
+    refetchInterval: (query: any) => {
+      const status = String((query.state?.data as any)?.status || '').toUpperCase();
+      const isPending = ['AWARDED', 'AWARD_OFFERED', 'RECOMMENDED', 'PENDING_ACCEPTANCE'].includes(status);
+      return isPending ? 4000 : false;
+    },
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || (!requestId?.startsWith('BID-') ? requestId : '');

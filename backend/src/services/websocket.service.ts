@@ -324,9 +324,8 @@ export const broadcastToProcurement = (procurementId: number | string, event: Pr
   const cleanId = String(procurementId).trim();
   if (!cleanId) return;
 
-  // Deduplicate rapid duplicate broadcasts for identical event on same procurement within 1.5s
-  const canonicalId = (event as any).procurementId || (event as any).requirementId || cleanId;
-  const dedupeKey = `proc:${canonicalId}:${event.type}:${(event as any).status || ''}:${(event as any).responseId || ''}`;
+  // Deduplicate per distinct room channel so aliases (e.g. LTND reference vs ID) are not dropped
+  const dedupeKey = `proc:${cleanId}:${event.type}:${(event as any).status || ''}:${(event as any).responseId || ''}`;
   const now = Date.now();
   const lastTime = recentBroadcastKeys.get(dedupeKey) || 0;
   if (now - lastTime < 1500) {

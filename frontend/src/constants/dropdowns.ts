@@ -5,26 +5,29 @@
 
 // ── Quantity / Unit of Measure ──────────────────────────────────────────────
 export const QUANTITY_UNITS = [
-  { value: 'Nos', label: 'Nos' },
-  { value: 'Kg', label: 'Kg' },
-  { value: 'Ton', label: 'Ton' },
-  { value: 'MT', label: 'MT' },
-  { value: 'Bag', label: 'Bag' },
-  { value: 'Box', label: 'Box' },
-  { value: 'Packet', label: 'Packet' },
-  { value: 'Set', label: 'Set' },
-  { value: 'Pair', label: 'Pair' },
-  { value: 'Roll', label: 'Roll' },
-  { value: 'Litre', label: 'Litre' },
-  { value: 'Meter', label: 'Meter' },
+  { value: 'Nos', label: 'Nos - Numbers' },
+  { value: 'Set', label: 'Set - Sets' },
+  { value: 'Kg', label: 'Kg - Kilograms' },
+  { value: 'Ton', label: 'Ton - Tonnes' },
+  { value: 'MT', label: 'MT - Metric Tonnes' },
+  { value: 'Bag', label: 'Bag - Bags' },
+  { value: 'Box', label: 'Box - Boxes' },
+  { value: 'Packet', label: 'Packet - Packets' },
+  { value: 'Pair', label: 'Pair - Pairs' },
+  { value: 'Roll', label: 'Roll - Rolls' },
+  { value: 'Litre', label: 'Litre - Litres' },
+  { value: 'Meter', label: 'Meter - Meters' },
   { value: 'Feet', label: 'Feet' },
-  { value: 'Piece', label: 'Piece' },
-  { value: 'Unit', label: 'Unit' },
-  { value: 'Coil', label: 'Coil' },
-  { value: 'Drum', label: 'Drum' },
-  { value: 'Bundle', label: 'Bundle' },
-  { value: 'Carton', label: 'Carton' },
-  { value: 'Cylinder', label: 'Cylinder' },
+  { value: 'SqFt', label: 'Sq. Ft - Square Feet' },
+  { value: 'SqMeter', label: 'Sq. Meter - Square Meters' },
+  { value: 'Cum', label: 'Cum - Cubic Meters' },
+  { value: 'Piece', label: 'Piece - Pieces' },
+  { value: 'Unit', label: 'Unit - Units' },
+  { value: 'Coil', label: 'Coil - Coils' },
+  { value: 'Drum', label: 'Drum - Drums' },
+  { value: 'Bundle', label: 'Bundle - Bundles' },
+  { value: 'Carton', label: 'Carton - Cartons' },
+  { value: 'Cylinder', label: 'Cylinder - Cylinders' },
   { value: 'Dozen', label: 'Dozen' },
   { value: 'Sheet', label: 'Sheet' },
   { value: 'Plate', label: 'Plate' },
@@ -32,10 +35,16 @@ export const QUANTITY_UNITS = [
   { value: 'Kit', label: 'Kit' },
   { value: 'Bottle', label: 'Bottle' },
   { value: 'Container', label: 'Container' },
-  { value: 'Cum', label: 'Cum' },
-  { value: 'SqFt', label: 'Sq. Ft' },
-  { value: 'SqMeter', label: 'Sq. Meter' },
+  { value: 'Lot', label: 'Lot - Lots' },
+  { value: 'Job', label: 'Job - Jobs' },
 ] as const;
+
+export const matchQuantityUnit = (uom?: string): string => {
+  if (!uom) return 'Nos';
+  const clean = uom.trim().toLowerCase();
+  const match = QUANTITY_UNITS.find(opt => opt.value.toLowerCase() === clean);
+  return match ? match.value : 'Other';
+};
 
 // ── MSME Type ───────────────────────────────────────────────────────────────
 export const MSME_TYPES = [
@@ -117,9 +126,31 @@ export const ITEM_CONDITIONS = [
 
 // ── Payment Terms ───────────────────────────────────────────────────────────
 export const PAYMENT_TERMS = [
-  { value: 'ADVANCE_PAYMENT', label: 'Advance Payment' },
-  { value: 'ON_DELIVERY', label: 'On Delivery' },
+  { value: 'Pay on Invoice', label: 'Pay on Invoice (Standard)' },
+  { value: 'Net 30 Days', label: 'Net 30 Days (Credit)' },
+  { value: 'Net 45 Days', label: 'Net 45 Days (MSMED Act Statutory Limit)' },
+  { value: 'Net 60 Days', label: 'Net 60 Days (Credit)' },
+  { value: 'Net 90 Days', label: 'Net 90 Days (Credit)' },
+  { value: '100% on Delivery (COD/POD)', label: '100% on Delivery (COD/POD)' },
+  { value: '100% Advance Payment', label: '100% Advance Payment' },
+  { value: '50% Advance / 50% on Delivery', label: '50% Advance / 50% on Delivery' },
+  { value: 'Immediate Payment', label: 'Immediate Payment' },
 ] as const;
+
+export const matchPaymentTerms = (term?: string): string => {
+  if (!term) return 'Pay on Invoice';
+  const clean = String(term).trim();
+  const lower = clean.toLowerCase();
+  if (lower === 'advance_payment' || lower === 'advance') return '100% Advance Payment';
+  if (lower === 'on_delivery' || lower === 'pay_on_delivery') return '100% on Delivery (COD/POD)';
+  if (lower === 'pay_on_invoice') return 'Pay on Invoice';
+  if (lower === 'standard_net_30' || lower === 'net_30') return 'Net 30 Days';
+  if (lower === 'net_60') return 'Net 60 Days';
+  if (lower === 'net_90') return 'Net 90 Days';
+  if (lower === 'immediate') return 'Immediate Payment';
+  const match = PAYMENT_TERMS.find(opt => opt.value.toLowerCase() === lower);
+  return match ? match.value : 'Other';
+};
 
 // ── Delivery Terms / Logistics Handover ─────────────────────────────────────
 export const DELIVERY_TYPES = [

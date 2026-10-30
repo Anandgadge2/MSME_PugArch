@@ -42,6 +42,7 @@ export interface SupplierQuotationDetailViewProps {
   onDownloadPdf?: (result: any) => void;
   onOpenTechnicalEvaluation?: (result: any) => void;
   isModal?: boolean;
+  isTwoPacketMode?: boolean;
 }
 
 export interface SupplierQuotationDetailModalProps {
@@ -53,6 +54,7 @@ export interface SupplierQuotationDetailModalProps {
   onAcceptAndGeneratePo?: (result: any) => void;
   onDownloadPdf?: (result: any) => void;
   onOpenTechnicalEvaluation?: (result: any) => void;
+  isTwoPacketMode?: boolean;
 }
 
 const formatCurrency = (val?: number | string | null) => {
@@ -210,12 +212,31 @@ export function SupplierQuotationDetailView({
   onDownloadPdf,
   onOpenTechnicalEvaluation,
   isModal = false,
+  isTwoPacketMode: isTwoPacketModeProp,
 }: SupplierQuotationDetailViewProps) {
   const [previewDocument, setPreviewDocument] = React.useState<DocumentPreview | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
   const [activeTab, setActiveTab] = React.useState<'pricing' | 'terms' | 'compliance'>('pricing');
 
   if (!result) return null;
+
+  const isTwoPacket = React.useMemo(() => {
+    if (isTwoPacketModeProp !== undefined) return isTwoPacketModeProp;
+    if (!bid) return false;
+    const b: any = bid;
+    if (b.packetType === 'SINGLE_PACKET' || b.technicalPacket?.schedule?.packetType === 'Single') return false;
+    return (
+      b.packetType === 'TWO_PACKET' ||
+      b.evaluationType === 'TWO_PACKET' ||
+      b.tenderType?.includes('TWO') ||
+      b.packetCount === 2 ||
+      b.stageType === 'TWO_STAGE' ||
+      b.bidType?.includes('TWO') ||
+      b.technicalPacket?.packetType === 'TWO_PACKET' ||
+      b.technicalPacket?.schedule?.packetType === 'Two' ||
+      b.technicalPacket?.schedule?.packetType === 'Two-Packet'
+    );
+  }, [isTwoPacketModeProp, bid]);
 
   // Extract seller identity & contact information
   const sellerOrg =
@@ -296,7 +317,9 @@ export function SupplierQuotationDetailView({
     result.details?.technicalRemarks ||
     result.details?.remarks ||
     result.details?.evaluationRemarks ||
-    'Bidder disqualified during Stage 1 Technical Scrutiny (non-compliant with tender specifications).'
+    (isTwoPacket
+      ? 'Bidder disqualified during Stage 1 Technical Scrutiny (non-compliant with tender specifications).'
+      : 'Quotation disqualified during technical & specification verification (non-compliant with tender requirements).')
   );
 
   const statusStr = isTechnicallyDisqualified
@@ -764,7 +787,7 @@ export function SupplierQuotationDetailView({
                 className="h-8 gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50 transition-colors cursor-pointer"
               >
                 <ShieldCheck className="h-3.5 w-3.5 text-blue-600" />
-                <span>Technical Evaluation Record</span>
+                <span>{isTwoPacket ? 'Technical Evaluation Record' : 'Quotation & Spec Verification'}</span>
               </Button>
             )}
 
@@ -849,12 +872,12 @@ export function SupplierQuotationDetailView({
                 <>
                   <span className="inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-800 border border-rose-200">
                     <XCircle className="h-3 w-3 text-rose-600" />
-                    Technically Disqualified • Ineligible
+                    {isTwoPacket ? 'Technically Disqualified • Ineligible' : 'Disqualified • Non-Responsive'}
                   </span>
 
                   <span className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-rose-100/70 text-rose-800 border border-rose-200">
                     <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
-                    Stage 1 Failed
+                    {isTwoPacket ? 'Stage 1 Failed' : 'Spec Non-Conformance'}
                   </span>
                 </>
               ) : (
@@ -922,20 +945,28 @@ export function SupplierQuotationDetailView({
             <div className="rounded-2xl border border-rose-200/90 bg-gradient-to-b from-rose-50/70 via-rose-50/40 to-white px-5 py-4 w-full lg:w-auto min-w-[280px] max-w-md flex flex-col justify-center space-y-2 shadow-2xs">
               <div className="flex items-center justify-between">
                 <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider text-rose-800">
-                  <Lock className="h-3.5 w-3.5 text-rose-600" />
-                  Financial Packet Sealed
+                  {isTwoPacket ? <Lock className="h-3.5 w-3.5 text-rose-600" /> : <XCircle className="h-3.5 w-3.5 text-rose-600" />}
+                  {isTwoPacket ? 'Financial Packet Sealed' : 'Quotation Non-Responsive'}
                 </span>
                 <span className="text-[9px] font-extrabold bg-rose-100 text-rose-800 px-2 py-0.5 rounded uppercase border border-rose-200">
-                  Stage 2 Sealed
+                  {isTwoPacket ? 'Stage 2 Sealed' : 'Non-Compliant'}
                 </span>
               </div>
               <div className="text-2xl sm:text-3xl font-black text-rose-700 tracking-tight leading-tight flex items-baseline gap-2">
-                <span>Sealed</span>
-                <span className="text-xs font-bold text-slate-500 font-sans tracking-normal">(Unopened)</span>
+                <span>{isTwoPacket ? 'Sealed' : 'Ineligible'}</span>
+                <span className="text-xs font-bold text-slate-500 font-sans tracking-normal">{isTwoPacket ? '(Unopened)' : '(Non-Responsive)'}</span>
               </div>
               <div className="text-[11px] font-medium text-slate-600 pt-1.5 border-t border-rose-100 space-y-1.5">
                 <p className="text-slate-700 leading-snug">
-                  <strong className="text-rose-900 font-bold">Packet Unopened:</strong> Financial bid held sealed per Two-Packet evaluation rules (GFR 173).
+                  {isTwoPacket ? (
+                    <>
+                      <strong className="text-rose-900 font-bold">Packet Unopened:</strong> Financial bid held sealed per Two-Packet evaluation rules (GFR 173).
+                    </>
+                  ) : (
+                    <>
+                      <strong className="text-rose-900 font-bold">Quotation Ineligible:</strong> Bidder disqualified due to specification or mandatory compliance failure (GFR Rule 160).
+                    </>
+                  )}
                 </p>
                 <div className="text-[10.5px] text-slate-700 bg-white/95 rounded-md p-2 border border-rose-150 space-y-0.5">
                   <span className="text-[9.5px] font-black uppercase tracking-wider text-rose-700 block">Disqualification Reason:</span>
@@ -1019,33 +1050,33 @@ export function SupplierQuotationDetailView({
           <div className="space-y-1 min-w-0">
             <div className="flex items-center gap-2 text-slate-500 text-[10px] font-black uppercase tracking-wider">
               <ShieldCheck className={cn("h-3.5 w-3.5", isTechnicallyDisqualified ? "text-rose-600" : "text-purple-600")} />
-              <span>Technical Standing</span>
+              <span>{isTwoPacket ? 'Technical Standing' : 'Spec Conformance'}</span>
             </div>
             {isTechnicallyDisqualified ? (
               <>
                 <p className="text-sm font-black text-rose-900">
-                  Disqualified
+                  {isTwoPacket ? 'Disqualified' : 'Non-Responsive'}
                 </p>
                 <span className="text-[10.5px] font-semibold text-rose-700 block truncate" title={disqualificationReason}>
-                  Stage 1 Failed
+                  {isTwoPacket ? 'Stage 1 Failed' : 'Specifications Not Met'}
                 </span>
               </>
             ) : isTechnicallyQualified ? (
               <>
                 <p className="text-sm font-black text-purple-900">
-                  Qualified Bidder
+                  {isTwoPacket ? 'Qualified Bidder' : 'Compliant Bidder'}
                 </p>
                 <span className="text-[10.5px] font-semibold text-emerald-700 block">
-                  Stage 1 Scrutiny Passed
+                  {isTwoPacket ? 'Stage 1 Scrutiny Passed' : 'Specifications Verified'}
                 </span>
               </>
             ) : (
               <>
                 <p className="text-sm font-black text-amber-900">
-                  Under Evaluation
+                  {isTwoPacket ? 'Under Evaluation' : 'Under Review'}
                 </p>
                 <span className="text-[10.5px] font-semibold text-amber-700 block">
-                  Stage 1 Scrutiny Pending
+                  {isTwoPacket ? 'Stage 1 Scrutiny Pending' : 'Specification Review Pending'}
                 </span>
               </>
             )}
@@ -1060,10 +1091,10 @@ export function SupplierQuotationDetailView({
                   ? "border-rose-300 bg-rose-100 hover:bg-rose-200 text-rose-900"
                   : "border-purple-200 bg-purple-50 hover:bg-purple-100 text-purple-800"
               )}
-              title="Open Technical Evaluation Record"
+              title={isTwoPacket ? 'Open Technical Evaluation Record' : 'Verify Quotation & Specifications'}
             >
               <Eye className="h-3.5 w-3.5" />
-              <span>Record</span>
+              <span>{isTwoPacket ? 'Record' : 'Verify'}</span>
             </button>
           )}
         </div>
@@ -1084,11 +1115,11 @@ export function SupplierQuotationDetailView({
               : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
           )}
         >
-          {isTechnicallyDisqualified ? <Lock className="h-3.5 w-3.5 text-rose-300" /> : <Package className="h-3.5 w-3.5" />}
+          {isTechnicallyDisqualified ? (isTwoPacket ? <Lock className="h-3.5 w-3.5 text-rose-300" /> : <XCircle className="h-3.5 w-3.5 text-rose-300" />) : <Package className="h-3.5 w-3.5" />}
           <span>Items &amp; Financial BOQ</span>
           {isTechnicallyDisqualified ? (
             <span className="text-[10px] px-1.5 py-0.2 rounded-md font-extrabold bg-rose-500/20 text-rose-200 border border-rose-400/30">
-              Sealed
+              {isTwoPacket ? 'Sealed' : 'Ineligible'}
             </span>
           ) : (
             <span className={cn(
@@ -1147,27 +1178,29 @@ export function SupplierQuotationDetailView({
       {activeTab === 'pricing' && (
         <section id="panel-pricing" role="tabpanel" className="space-y-4 animate-in fade-in duration-150">
           
-          {/* Disqualification Two-Packet Advisory Banner */}
+          {/* Disqualification Advisory Banner */}
           {isTechnicallyDisqualified && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 sm:p-5 flex items-start gap-3.5 shadow-2xs">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-100 text-rose-700 shrink-0 border border-rose-200">
-                <Lock className="h-5 w-5" />
+                {isTwoPacket ? <Lock className="h-5 w-5" /> : <XCircle className="h-5 w-5" />}
               </div>
               <div className="space-y-1.5 min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="text-xs sm:text-sm font-black uppercase tracking-wider text-rose-950">
-                    Financial Packet &amp; Price Schedule Remains Sealed
+                    {isTwoPacket ? 'Financial Packet & Price Schedule Remains Sealed' : 'Quotation Disqualified / Non-Responsive'}
                   </h3>
                   <span className="bg-rose-200 text-rose-900 text-[10px] font-black uppercase px-2 py-0.5 rounded border border-rose-300">
-                    Two-Packet Procurement Rule
+                    {isTwoPacket ? 'Two-Packet Procurement Rule' : 'Single-Packet Procurement Rule'}
                   </span>
                 </div>
                 <p className="text-xs text-rose-900 leading-relaxed font-medium">
-                  In compliance with standard Public Procurement Guidelines (GFR 2017 Rule 173(xvi)), financial envelopes of bidders who are disqualified in Stage 1 Technical Scrutiny are never unsealed. Commercial rates, unit pricing, and detailed price breakups remain strictly confidential and sealed.
+                  {isTwoPacket
+                    ? 'In compliance with standard Public Procurement Guidelines (GFR 2017 Rule 173(xvi)), financial envelopes of bidders who are disqualified in Stage 1 Technical Scrutiny are never unsealed. Commercial rates, unit pricing, and detailed price breakups remain strictly confidential and sealed.'
+                    : 'In compliance with GFR 2017 Rule 160/162 (Single-Packet Procurement), this quotation has been found non-responsive during specification and compliance verification and is disqualified from award consideration.'}
                 </p>
                 <div className="mt-2 rounded-xl bg-white/95 border border-rose-200/90 p-3 text-xs text-slate-800 shadow-2xs">
                   <span className="font-black text-rose-900 block text-[11px] uppercase tracking-wider mb-1">
-                    Technical Disqualification Reason:
+                    {isTwoPacket ? 'Technical Disqualification Reason:' : 'Disqualification Reason:'}
                   </span>
                   <p className="text-slate-800 font-semibold leading-relaxed">
                     {disqualificationReason}
@@ -1186,7 +1219,9 @@ export function SupplierQuotationDetailView({
                 </h2>
               </div>
               <span className="text-xs font-bold text-slate-500">
-                {isTechnicallyDisqualified ? 'Financial Bid Sealed (Unopened)' : 'All prices quoted in Indian Rupees (INR ₹)'}
+                {isTechnicallyDisqualified
+                  ? (isTwoPacket ? 'Financial Bid Sealed (Unopened)' : 'Quotation Ineligible / Non-Responsive')
+                  : 'All prices quoted in Indian Rupees (INR ₹)'}
               </span>
             </div>
 
@@ -1313,11 +1348,19 @@ export function SupplierQuotationDetailView({
                   <tfoot className="bg-rose-50/70 border-t border-rose-200 font-bold">
                     <tr>
                       <td colSpan={7} className="px-4 py-3 text-xs font-black uppercase tracking-wider text-rose-900 text-right">
-                        Stage 2 Financial Packet Standing:
+                        {isTwoPacket ? 'Stage 2 Financial Packet Standing:' : 'Quotation Evaluation Standing:'}
                       </td>
                       <td className="px-4 py-3 text-xs font-black text-rose-700 text-right tabular-nums">
                         <span className="inline-flex items-center gap-1.5 font-bold">
-                          <Lock className="h-3.5 w-3.5 text-rose-600" /> Sealed (Unopened)
+                          {isTwoPacket ? (
+                            <>
+                              <Lock className="h-3.5 w-3.5 text-rose-600" /> Sealed (Unopened)
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3.5 w-3.5 text-rose-600" /> Disqualified
+                            </>
+                          )}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center text-xs font-black text-rose-800">
@@ -1667,6 +1710,7 @@ export function SupplierQuotationDetailModal({
   onAcceptAndGeneratePo,
   onDownloadPdf,
   onOpenTechnicalEvaluation,
+  isTwoPacketMode: isTwoPacketModeProp,
 }: SupplierQuotationDetailModalProps) {
   React.useEffect(() => {
     if (!isOpen) return;
@@ -1680,6 +1724,20 @@ export function SupplierQuotationDetailModal({
   }, [isOpen, onClose]);
 
   if (!isOpen || !result) return null;
+
+  const isTwoPacket = isTwoPacketModeProp !== undefined
+    ? isTwoPacketModeProp
+    : (
+        bid?.packetType === 'TWO_PACKET' ||
+        bid?.evaluationType === 'TWO_PACKET' ||
+        bid?.tenderType?.includes('TWO') ||
+        bid?.packetCount === 2 ||
+        bid?.stageType === 'TWO_STAGE' ||
+        bid?.bidType?.includes('TWO') ||
+        bid?.technicalPacket?.packetType === 'TWO_PACKET' ||
+        bid?.technicalPacket?.schedule?.packetType === 'Two' ||
+        bid?.technicalPacket?.schedule?.packetType === 'Two-Packet'
+      );
 
   const sellerOrg =
     result.sellerName ||
@@ -1736,8 +1794,8 @@ export function SupplierQuotationDetailModal({
             </span>
             {isTechnicallyDisqualified && (
               <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-rose-100 text-rose-800 border border-rose-200 shrink-0">
-                <Lock className="h-3 w-3 text-rose-600" />
-                Financial Sealed
+                {isTwoPacket ? <Lock className="h-3 w-3 text-rose-600" /> : <XCircle className="h-3 w-3 text-rose-600" />}
+                {isTwoPacket ? 'Financial Sealed' : 'Disqualified'}
               </span>
             )}
           </div>
@@ -1762,6 +1820,7 @@ export function SupplierQuotationDetailModal({
             onDownloadPdf={onDownloadPdf}
             onOpenTechnicalEvaluation={onOpenTechnicalEvaluation}
             isModal={true}
+            isTwoPacketMode={isTwoPacket}
           />
         </div>
       </div>

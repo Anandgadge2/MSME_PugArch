@@ -50,6 +50,11 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
     enabled: !!(requestId || activeId),
     initialData: isMatchingInitial && (initialData?.sourceModel === 'BID' || initialData?.bidNumber) ? initialData : undefined,
     staleTime: 60_000,
+    refetchInterval: (query: any) => {
+      const status = String((query.state?.data as any)?.status || '').toUpperCase();
+      const isPending = ['AWARDED', 'AWARD_OFFERED', 'RECOMMENDED', 'PENDING_ACCEPTANCE'].includes(status);
+      return isPending ? 4000 : false;
+    },
   });
 
   const targetReqId = requirementId || (bidData as any)?.sourceId || (bidData as any)?.requirementId || fallbackReqId;

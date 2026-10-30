@@ -31,7 +31,7 @@ import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
 import { maskSensitive } from '../utils/maskSensitive.js';
 import { formatIstDateTime } from '../services/email-template.builder.js';
-import { sha256 } from '../utils/crypto.js';
+import { sha256, createHashFingerprint } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
 import { formatRequirementNumber, formatRefId, CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
@@ -1232,8 +1232,85 @@ export const serializeProcurementDraft = (requirement: any) => {
   };
 };
 
-const assertProcurementDraftAccess = async (req: AuthRequest, id: number) => {
-  const requirement = await db.requirement.findUnique({ where: { id }, include: procurementDraftInclude });
+export const resolveRequirementId = async (idParam: string | number): Promise<number | null> => {
+  const rawId = String(idParam || '').trim();
+  if (!rawId) return null;
+  const numId = Number(rawId);
+  if (!isNaN(numId) && Number.isFinite(numId) && numId > 0) {
+    return numId;
+  }
+  const upperToken = rawId.toUpperCase();
+  const variants = Array.from(new Set([
+    rawId,
+    upperToken,
+    ...getCanonicalLookupVariants(rawId),
+    ...getCanonicalLookupVariants(upperToken)
+  ]));
+  const found = await db.requirement.findFirst({
+    where: {
+      OR: [
+        { requirementNumber: { in: variants } },
+        { requirementNumber: { in: variants, mode: 'insensitive' } },
+        { requirementNumber: rawId },
+        { requirementNumber: upperToken }
+      ]
+    },
+    select: { id: true }
+  });
+  if (found) return found.id;
+
+  // Check tail sequence number if rawId is in format PREFIX-YYYY-XXXXX or PREFIX-XXXXX
+  const tailMatch = rawId.match(/-(\d+)$/);
+  if (tailMatch) {
+    const tailId = Number(tailMatch[1]);
+    if (!isNaN(tailId) && tailId > 0) {
+      const byTail = await db.requirement.findFirst({
+        where: { id: tailId },
+        select: { id: true }
+      });
+      if (byTail) return byTail.id;
+    }
+  }
+
+  const matchingBid = await db.procurementBid.findFirst({
+    where: {
+      OR: [
+        { bidNumber: { in: variants } },
+        { bidNumber: { in: variants, mode: 'insensitive' } },
+        { bidNumber: rawId },
+        { bidNumber: upperToken },
+        ...(tailMatch && Number(tailMatch[1]) > 0 ? [{ id: Number(tailMatch[1]) }] : [])
+      ]
+    },
+    select: { id: true, bidNumber: true, technicalPacket: true }
+  });
+  if (matchingBid) {
+    const packet = typeof matchingBid.technicalPacket === 'object' && matchingBid.technicalPacket !== null
+      ? (matchingBid.technicalPacket as any)
+      : {};
+    const linkedId = Number(packet.sourceRequirementId || packet.requirementId || 0);
+    if (linkedId > 0) return linkedId;
+
+    const reqByBid = await db.requirement.findFirst({
+      where: {
+        OR: [
+          ...(matchingBid.bidNumber ? [{ requirementNumber: matchingBid.bidNumber }, { requirementNumber: { equals: matchingBid.bidNumber, mode: 'insensitive' } }] : []),
+          { id: matchingBid.id }
+        ]
+      },
+      select: { id: true }
+    });
+    if (reqByBid) return reqByBid.id;
+  }
+  return null;
+};
+
+const assertProcurementDraftAccess = async (req: AuthRequest, idParam: number | string) => {
+  const resolvedId = await resolveRequirementId(idParam);
+  if (!resolvedId) {
+    throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
+  }
+  const requirement = await db.requirement.findUnique({ where: { id: resolvedId }, include: procurementDraftInclude });
   if (!requirement || (!isAdmin(req) && req.user?.role !== 'master_admin' && requirement.buyerId !== userId(req))) {
     throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
   }
@@ -6028,8 +6105,11 @@ router.get('/procurement/drafts', authenticate, authorize('buyer'), asyncRoute(a
 }, 'Unable to load procurement drafts'));
 
 router.get('/procurement/drafts/:id', authenticate, authorize('buyer', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
-  const { id } = parse(idParams, req.params);
-  const draft = await assertProcurementDraftAccess(req, id);
+  const rawId = String(req.params.id || '').trim();
+  if (!rawId) {
+    throw new ApiError(400, 'Draft ID or reference number is required', 'DRAFT_ID_REQUIRED');
+  }
+  const draft = await assertProcurementDraftAccess(req, rawId);
   ok(res, serializeProcurementDraft(draft));
 }, 'Unable to load procurement draft'));
 
@@ -7118,44 +7198,6 @@ router.get('/buyer/requirements', authenticate, authorize('buyer'), asyncRoute(a
   res.setHeader('Cache-Control', 'private, max-age=30, stale-while-revalidate=60');
   ok(res, paged(requirements, total, query));
 }));
-
-const resolveRequirementId = async (idParam: string | number): Promise<number | null> => {
-  const rawId = String(idParam || '').trim();
-  if (!rawId) return null;
-  const numId = Number(rawId);
-  if (!isNaN(numId) && Number.isFinite(numId) && numId > 0) {
-    return numId;
-  }
-  const variants = getCanonicalLookupVariants(rawId);
-  const found = await db.requirement.findFirst({
-    where: {
-      OR: [
-        { requirementNumber: { in: variants } },
-        { requirementNumber: rawId }
-      ]
-    },
-    select: { id: true }
-  });
-  if (found) return found.id;
-
-  const matchingBid = await db.procurementBid.findFirst({
-    where: {
-      OR: [
-        { bidNumber: { in: variants } },
-        { bidNumber: rawId }
-      ]
-    },
-    select: { id: true, technicalPacket: true }
-  });
-  if (matchingBid) {
-    const packet = typeof matchingBid.technicalPacket === 'object' && matchingBid.technicalPacket !== null
-      ? (matchingBid.technicalPacket as any)
-      : {};
-    const linkedId = Number(packet.sourceRequirementId || packet.requirementId || 0);
-    if (linkedId > 0) return linkedId;
-  }
-  return null;
-};
 
 router.get('/requirements/:id', authenticate, asyncRoute(async (req, res) => {
   const resolvedId = await resolveRequirementId(req.params.id);
@@ -13527,14 +13569,30 @@ router.post('/seller/settings/profile', authenticate, asyncRoute(async (req, res
 
 router.post('/seller/settings/aadhaar', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
   const { aadhaarNumber } = req.body;
-  if (!aadhaarNumber) throw new ApiError(400, 'Aadhaar number is required');
+  const cleanedAadhaar = String(aadhaarNumber ?? '').replace(/\s+/g, '');
+  if (!cleanedAadhaar || !/^\d{12}$/.test(cleanedAadhaar)) {
+    throw new ApiError(400, 'Valid 12-digit Aadhaar number is required');
+  }
+
+  // STQC & UIDAI Statutory Mandate:
+  // Never persist raw Aadhaar in databases or return it in responses.
+  const aadhaarMasked = `XXXXXXXX${cleanedAadhaar.slice(-4)}`;
+  const aadhaarHash = createHashFingerprint(cleanedAadhaar, 'aadhaar_vault');
 
   const sellerProfile = await db.sellerProfile.update({
     where: { userId: userId(req) },
     data: {
-      aadhaarNumber,
-      aadhaarMasked: aadhaarNumber.slice(-4).padStart(aadhaarNumber.length, '*'),
+      aadhaarNumber: null, // Wipe plaintext Aadhaar from persistent storage
+      aadhaarHash,
+      aadhaarMasked,
       aadhaarVerified: true
+    },
+    select: {
+      id: true,
+      userId: true,
+      aadhaarMasked: true,
+      aadhaarVerified: true,
+      updatedAt: true
     }
   });
 

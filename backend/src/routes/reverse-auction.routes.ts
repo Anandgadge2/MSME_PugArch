@@ -4035,7 +4035,9 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
     if (!id) throw new ApiError(404, 'Auction not found', 'AUCTION_NOT_FOUND');
     const schema = z.object({
       participantId: z.coerce.number().int().positive().optional(),
-      remarks: z.string().trim().max(1000).optional()
+      remarks: z.string().trim().max(1000).optional(),
+      asDraft: z.boolean().optional(),
+      issueImmediately: z.boolean().optional()
     });
     const payload = schema.parse(req.body);
 
@@ -4145,8 +4147,9 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
           amount: winningAmount,
           totalValue: Number(winningAmount),
           currency: auction.currency || 'INR',
-          status: 'generated',
-          poStatus: 'ISSUED',
+          status: payload.asDraft ? 'draft' : 'generated',
+          poStatus: payload.asDraft ? 'DRAFT' : 'ISSUED',
+          isDraft: Boolean(payload.asDraft),
           sourceType: 'auction',
           sourceId: auction.id,
           metadata: {
@@ -4258,12 +4261,14 @@ router.post('/reverse-auctions/:id/accept-and-generate-po', requirePermission('r
       overrideReason: isNonL1 ? payload.remarks : null
     });
 
-    await notificationService.notifyUser(sellerUserId, {
-      title: 'Purchase Order Issued',
-      message: `Official Purchase Order #${po.poNumber} has been issued for Reverse Auction "${auction.title || auction.auctionCode}". Please accept the PO to commit to fulfillment.`,
-      type: 'purchase_order',
-      redirectUrl: `/seller/orders?orderId=${po.id}`
-    }).catch(() => undefined);
+    if (!payload.asDraft) {
+      await notificationService.notifyUser(sellerUserId, {
+        title: 'Purchase Order Issued',
+        message: `Official Purchase Order #${po.poNumber} has been issued for Reverse Auction "${auction.title || auction.auctionCode}". Please accept the PO to commit to fulfillment.`,
+        type: 'purchase_order',
+        redirectUrl: `/seller/orders?orderId=${po.id}`
+      }).catch(() => undefined);
+    }
 
     // Invalidate caches and broadcast lifecycle updates across linked bids and auction
     try {

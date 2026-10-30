@@ -1070,8 +1070,10 @@ export interface Supplier {
 
 interface SupplierSelectorProps {
   suppliers: Supplier[];
-  invitedIds: number[];
+  invitedIds: (number | string)[];
   onToggleInvite: (id: number, name: string) => void;
+  onBatchSelect?: (ids: number[], select: boolean) => void;
+  onClearAll?: () => void;
   isLoading?: boolean;
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -1083,71 +1085,247 @@ export function SupplierSelector({
   suppliers,
   invitedIds,
   onToggleInvite,
+  onBatchSelect,
+  onClearAll,
   isLoading = false,
   searchQuery,
   onSearchChange,
   msmeOnly = false,
   onMsmeOnlyChange
 }: SupplierSelectorProps) {
+  const headerCheckboxRef = React.useRef<HTMLInputElement>(null);
+
+  const visibleSupplierIds = React.useMemo(
+    () => suppliers.map(s => Number(s.id)),
+    [suppliers]
+  );
+
+  const selectedVisibleCount = React.useMemo(
+    () => visibleSupplierIds.filter(id => invitedIds.some(invId => Number(invId) === id)).length,
+    [visibleSupplierIds, invitedIds]
+  );
+
+  const allVisibleSelected = suppliers.length > 0 && selectedVisibleCount === suppliers.length;
+  const isIndeterminate = selectedVisibleCount > 0 && !allVisibleSelected;
+
+  React.useEffect(() => {
+    if (headerCheckboxRef.current) {
+      headerCheckboxRef.current.indeterminate = isIndeterminate;
+    }
+  }, [isIndeterminate]);
+
+  const handleToggleSelectAllVisible = () => {
+    if (allVisibleSelected) {
+      // Uncheck all visible
+      if (onBatchSelect) {
+        onBatchSelect(visibleSupplierIds, false);
+      } else {
+        visibleSupplierIds.forEach(id => {
+          const s = suppliers.find(item => Number(item.id) === id);
+          onToggleInvite(id, s?.organizationName || '');
+        });
+      }
+    } else {
+      // Check all visible
+      const idsToSelect = visibleSupplierIds.filter(id => !invitedIds.some(invId => Number(invId) === id));
+      if (onBatchSelect) {
+        onBatchSelect(visibleSupplierIds, true);
+      } else {
+        idsToSelect.forEach(id => {
+          const s = suppliers.find(item => Number(item.id) === id);
+          onToggleInvite(id, s?.organizationName || '');
+        });
+      }
+    }
+  };
+
+  // Find known suppliers that are currently invited
+  const selectedSuppliers = React.useMemo(() => {
+    return suppliers.filter(s => invitedIds.some(invId => Number(invId) === Number(s.id)));
+  }, [suppliers, invitedIds]);
+
   return (
     <div className="space-y-3">
+      {/* Search and Filters */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
           <input
+            id="supplier-search-input"
             value={searchQuery}
             onChange={e => onSearchChange(e.target.value)}
-            className="h-9 w-full border border-slate-200 rounded-lg pl-9 pr-3 font-semibold focus:outline-none focus:ring-1 focus:ring-[#12335f]"
+            className="h-9 w-full border border-slate-200 rounded-lg pl-9 pr-8 font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#12335f]/20 focus:border-[#12335f] transition-all"
             placeholder="Search verified suppliers database..."
+            aria-label="Search verified suppliers database"
           />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => onSearchChange('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded"
+              aria-label="Clear search query"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         {onMsmeOnlyChange && (
-          <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer select-none">
+          <label
+            htmlFor="filter-msme-only-checkbox"
+            className={`flex items-center gap-2 font-semibold px-3 py-1.5 rounded-lg border cursor-pointer select-none transition-all ${
+              msmeOnly
+                ? 'border-emerald-300 bg-emerald-50/80 text-emerald-950 shadow-2xs'
+                : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
+            }`}
+          >
             <input
+              id="filter-msme-only-checkbox"
               type="checkbox"
               checked={msmeOnly}
               onChange={e => onMsmeOnlyChange(e.target.checked)}
-              className="h-4 w-4 rounded accent-[#12335f]"
+              className="h-4 w-4 rounded accent-[#12335f] cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
             />
-            <span>Filter MSME / Udyam verified only</span>
+            <span className="flex items-center gap-1.5">
+              <span>Filter MSME / Udyam verified only</span>
+              {msmeOnly && (
+                <span className="bg-emerald-200 text-emerald-900 text-[9px] font-black px-1.5 py-0.2 rounded border border-emerald-300 uppercase tracking-wider">
+                  Active
+                </span>
+              )}
+            </span>
           </label>
         )}
       </div>
 
-      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-lg max-h-[320px] overflow-y-auto">
+      {/* Selected Vendors Chips Bar (when items are selected) */}
+      {invitedIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 p-2.5 rounded-xl bg-blue-50/70 border border-blue-200/80">
+          <span className="text-[11px] font-black uppercase text-[#12335f] mr-1 flex items-center gap-1">
+            <CheckCircle2 className="h-3.5 w-3.5 text-blue-700" aria-hidden="true" />
+            <span>Invited Pool ({invitedIds.length}):</span>
+          </span>
+          {selectedSuppliers.map(seller => (
+            <span
+              key={seller.id}
+              className="inline-flex items-center gap-1.5 bg-white border border-blue-200 text-[#12335f] text-xs font-bold px-2 py-0.5 rounded-md shadow-2xs hover:border-blue-300 transition-colors"
+            >
+              <span>{seller.organizationName}</span>
+              <button
+                type="button"
+                onClick={e => {
+                  e.stopPropagation();
+                  onToggleInvite(Number(seller.id), seller.organizationName);
+                }}
+                className="text-slate-400 hover:text-rose-600 rounded p-0.5 transition-colors"
+                aria-label={`Remove ${seller.organizationName} from invited suppliers`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+          {invitedIds.length > selectedSuppliers.length && (
+            <span className="text-[10px] font-bold text-blue-800 bg-blue-100/80 px-2 py-0.5 rounded-md border border-blue-200">
+              +{invitedIds.length - selectedSuppliers.length} more in other filters
+            </span>
+          )}
+          {onClearAll && (
+            <button
+              type="button"
+              onClick={onClearAll}
+              className="text-[11px] font-bold text-rose-600 hover:text-rose-700 ml-auto hover:underline px-1 py-0.5"
+            >
+              Clear Selection
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Supplier Table */}
+      <div className="w-full min-w-0 overflow-x-auto border border-slate-200 rounded-xl max-h-[340px] overflow-y-auto shadow-2xs bg-white">
         {isLoading ? (
-          <div className="p-10 flex items-center justify-center text-slate-450 text-xs font-semibold">
-            <Loader2 className="h-5 w-5 animate-spin mr-2" /> Searching supplier repository...
+          <div className="p-10 flex items-center justify-center text-slate-500 text-xs font-semibold">
+            <Loader2 className="h-5 w-5 animate-spin mr-2 text-[#12335f]" /> Searching supplier repository...
           </div>
         ) : suppliers.length === 0 ? (
-          <div className="p-10 text-center text-slate-450 text-xs font-semibold">No category matched suppliers found.</div>
+          <div className="p-10 text-center text-slate-500 text-xs font-semibold">
+            No category matched suppliers found. Try adjusting your search query or filters.
+          </div>
         ) : (
-          <table className="w-full border-collapse text-left text-xs">
-            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200 sticky top-0">
+          <table className="w-full border-collapse text-left text-xs" role="table">
+            <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-600 border-b border-slate-200 sticky top-0 z-10 shadow-2xs">
               <tr>
-                <th className="px-3 py-2 w-14 text-center">Select</th>
-                <th className="px-3 py-2">Supplier Name</th>
-                <th className="px-3 py-2">Categories / Trade</th>
-                <th className="px-3 py-2">Location</th>
-                <th className="px-3 py-2 text-center">Type</th>
+                <th scope="col" className="px-3 py-2.5 w-14 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <label htmlFor="select-all-suppliers-checkbox" className="sr-only">
+                      Select all visible suppliers
+                    </label>
+                    <input
+                      id="select-all-suppliers-checkbox"
+                      ref={headerCheckboxRef}
+                      type="checkbox"
+                      checked={allVisibleSelected}
+                      onChange={handleToggleSelectAllVisible}
+                      className="h-4 w-4 rounded accent-[#12335f] cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
+                      title={allVisibleSelected ? 'Deselect all visible suppliers' : 'Select all visible suppliers'}
+                      aria-label="Select all visible suppliers"
+                    />
+                  </div>
+                </th>
+                <th scope="col" className="px-3 py-2.5">Supplier Name</th>
+                <th scope="col" className="px-3 py-2.5">Categories / Trade</th>
+                <th scope="col" className="px-3 py-2.5">Location</th>
+                <th scope="col" className="px-3 py-2.5 text-center">Type</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 font-semibold text-slate-750">
+            <tbody className="divide-y divide-slate-100 font-semibold text-slate-700">
               {suppliers.map(seller => {
-                const isSelected = invitedIds.includes(seller.id);
+                const isSelected = invitedIds.some(id => Number(id) === Number(seller.id));
                 return (
-                  <tr key={seller.id} className="align-middle hover:bg-slate-50/50">
-                    <td className="px-3 py-2 text-center">
+                  <tr
+                    key={seller.id}
+                    tabIndex={0}
+                    role="row"
+                    aria-selected={isSelected}
+                    onClick={() => onToggleInvite(Number(seller.id), seller.organizationName)}
+                    onKeyDown={e => {
+                      if (e.key === ' ' || e.key === 'Enter') {
+                        e.preventDefault();
+                        onToggleInvite(Number(seller.id), seller.organizationName);
+                      }
+                    }}
+                    className={`align-middle cursor-pointer transition-colors ${
+                      isSelected
+                        ? 'bg-blue-50/80 hover:bg-blue-100/70 border-l-4 border-l-[#12335f]'
+                        : 'hover:bg-slate-50/70 border-l-4 border-l-transparent'
+                    }`}
+                  >
+                    <td
+                      className="px-3 py-2.5 text-center"
+                      onClick={e => e.stopPropagation()}
+                    >
+                      <label htmlFor={`supplier-check-${seller.id}`} className="sr-only">
+                        Select {seller.organizationName}
+                      </label>
                       <input
+                        id={`supplier-check-${seller.id}`}
                         type="checkbox"
                         checked={isSelected}
-                        onChange={() => onToggleInvite(seller.id, seller.organizationName)}
-                        className="h-4 w-4 rounded accent-[#12335f] cursor-pointer"
+                        onChange={() => onToggleInvite(Number(seller.id), seller.organizationName)}
+                        className="h-4 w-4 rounded accent-[#12335f] cursor-pointer focus-visible:ring-2 focus-visible:ring-[#12335f]"
                         aria-label={`Select ${seller.organizationName}`}
                       />
                     </td>
-                    <td className="px-3 py-2 font-extrabold text-slate-900">{seller.organizationName}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-3 py-2.5 font-extrabold text-slate-900">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{seller.organizationName}</span>
+                        {isSelected && (
+                          <span className="text-[10px] text-blue-800 bg-blue-100/90 px-1.5 py-0.2 rounded font-black border border-blue-200">
+                            ✓ Invited
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-2.5">
                       {seller.categories && seller.categories.length > 0 ? (
                         <div className="flex flex-wrap gap-1">
                           {seller.categories.slice(0, 2).map((cat, idx) => (
@@ -1163,8 +1341,8 @@ export function SupplierSelector({
                         <span className="text-slate-400 text-[10px]">Verified Seller</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
-                    <td className="px-3 py-2 text-center">
+                    <td className="px-3 py-2.5 truncate max-w-[150px]">{seller.officeCity || 'N/A'}</td>
+                    <td className="px-3 py-2.5 text-center">
                       {seller.isUdyamVerified ? (
                         <span className="bg-emerald-50 text-emerald-700 text-[9px] font-black px-1.5 py-0.5 rounded border border-emerald-200">
                           MSME
@@ -1182,8 +1360,15 @@ export function SupplierSelector({
           </table>
         )}
       </div>
-      <div className="text-[10px] text-slate-450 font-bold pl-0.5">
-        Selected: <span className="text-slate-900 font-black">{invitedIds.length} suppliers</span> to invite.
+
+      {/* Footer count indicator */}
+      <div className="flex items-center justify-between text-[11px] text-slate-500 font-semibold pl-0.5" aria-live="polite">
+        <div>
+          Showing <span className="font-bold text-slate-800">{suppliers.length}</span> verified suppliers in pool.
+        </div>
+        <div>
+          Total Invited: <span className="text-[#12335f] font-black bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">{invitedIds.length} suppliers</span>
+        </div>
       </div>
     </div>
   );

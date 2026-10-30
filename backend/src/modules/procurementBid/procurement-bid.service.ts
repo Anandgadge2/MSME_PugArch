@@ -5032,20 +5032,37 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
     const targetIds = [bid.id, bid.bidNumber, bid.sourceId, (bid.technicalPacket as any)?.sourceRequirementId].filter(Boolean);
     targetIds.forEach((tid: any) => {
       broadcastToProcurement(tid, {
+        type: 'AWARD_ACCEPTED',
+        procurementId: bid.id,
+        requirementId: bid.sourceId || bid.id,
+        status: 'AWARD_ACCEPTED',
+        sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: bid.id,
+        bidNumber: bid.bidNumber,
+        timestamp: new Date().toISOString()
+      } as any);
+      broadcastToProcurement(tid, {
         type: 'BID_ACCEPTED',
         procurementId: bid.id,
         requirementId: bid.sourceId || bid.id,
         status: 'AWARD_ACCEPTED',
         sellerOrgId: award.sellerId,
+        awardId: award.id,
+        bidId: bid.id,
+        bidNumber: bid.bidNumber,
         timestamp: new Date().toISOString()
-      });
+      } as any);
       broadcastToProcurement(tid, {
         type: 'PROCUREMENT_UPDATED',
         requirementId: bid.sourceId || bid.id,
         procurementId: bid.id,
         status: 'AWARD_ACCEPTED',
+        awardId: award.id,
+        bidId: bid.id,
+        bidNumber: bid.bidNumber,
         timestamp: new Date().toISOString()
-      });
+      } as any);
     });
     if (bid.buyerId) {
       broadcastToUser(bid.buyerId, {
@@ -5053,6 +5070,9 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
         procurementId: bid.id,
         requirementId: bid.sourceId || bid.id,
         status: 'AWARD_ACCEPTED',
+        awardId: award.id,
+        bidId: bid.id,
+        bidNumber: bid.bidNumber,
         timestamp: new Date().toISOString()
       });
     }
@@ -5060,7 +5080,15 @@ export const acceptAward = async (req: AuthRequest, bidId: string) => {
     logger.warn({ bcErr }, '[ACCEPT_AWARD] Failed to broadcast award acceptance to procurement');
   }
 
-  return { award: updatedAward, status: 'AWARD_ACCEPTED' };
+  return {
+    award: updatedAward,
+    bid,
+    id: bid.id,
+    bidId: bid.id,
+    bidNumber: bid.bidNumber,
+    sourceId: bid.sourceId,
+    status: 'AWARD_ACCEPTED'
+  };
 };
 
 export const declineAward = async (req: AuthRequest, bidId: string, body: any = {}) => {
@@ -5790,45 +5818,68 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
     };
   }
 
-  await db.purchaseOrder.update({
-    where: { id: po.purchaseOrder.id },
-    data: {
-      status: 'pending_acceptance',
-      poStatus: 'ISSUED'
-    }
-  });
+  const shouldIssueImmediately = body?.issueImmediately === true || body?.asDraft === false;
 
-  await db.procurementBid.update({
-    where: { id: bid.id },
-    data: {
-      status: 'PO_GENERATED'
-    }
-  });
-
-  await notificationService.notifyUser(award.sellerId, {
-    title: 'Purchase Order Issued',
-    message: `Purchase Order #${po.purchaseOrder.poNumber} has been generated for "${bid.title}". Please accept the PO to commit to fulfillment.`,
-    type: 'purchase_order',
-    redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
-  }).catch(() => undefined);
-
-  try {
-    broadcastToProcurement(bid.id, {
-      type: 'PROCUREMENT_UPDATED',
-      requirementId: bid.id,
-      procurementId: bid.id,
-      status: 'PO_GENERATED',
-      timestamp: new Date().toISOString()
+  if (shouldIssueImmediately) {
+    const updatedPo = await db.purchaseOrder.update({
+      where: { id: po.purchaseOrder.id },
+      data: {
+        status: 'pending_acceptance',
+        poStatus: 'ISSUED',
+        isDraft: false,
+        issuedAt: new Date()
+      }
     });
-  } catch (bcErr) {
-    logger.warn({ bcErr }, '[GENERATE_PO] Failed to broadcast PO generation to procurement');
-  }
 
-  return {
-    purchaseOrder: po.purchaseOrder,
-    reused: po.reused,
-    award
-  };
+    await db.procurementBid.update({
+      where: { id: bid.id },
+      data: {
+        status: 'PO_GENERATED'
+      }
+    });
+
+    await notificationService.notifyUser(award.sellerId, {
+      title: 'Purchase Order Issued',
+      message: `Purchase Order #${po.purchaseOrder.poNumber} has been generated for "${bid.title}". Please accept the PO to commit to fulfillment.`,
+      type: 'purchase_order',
+      redirectUrl: `/seller/orders?orderId=${po.purchaseOrder.id}`
+    }).catch(() => undefined);
+
+    try {
+      broadcastToProcurement(bid.id, {
+        type: 'PROCUREMENT_UPDATED',
+        requirementId: bid.id,
+        procurementId: bid.id,
+        status: 'PO_GENERATED',
+        timestamp: new Date().toISOString()
+      });
+    } catch (bcErr) {
+      logger.warn({ bcErr }, '[GENERATE_PO] Failed to broadcast PO generation to procurement');
+    }
+
+    return {
+      purchaseOrder: updatedPo,
+      reused: po.reused,
+      award
+    };
+  } else {
+    // Generate as DRAFT so buyer can review, edit details, and issue cleanly
+    const updatedPo = await db.purchaseOrder.update({
+      where: { id: po.purchaseOrder.id },
+      data: {
+        status: 'draft',
+        poStatus: 'DRAFT',
+        isDraft: true
+      }
+    });
+
+    return {
+      purchaseOrder: updatedPo,
+      reused: po.reused,
+      isDraft: true,
+      award
+    };
+  }
 };
 
 export const approveFinalAward = async (req: AuthRequest, bidId: string, body: any) => {

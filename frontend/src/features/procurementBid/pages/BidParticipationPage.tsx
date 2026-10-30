@@ -238,7 +238,8 @@ export default function BidParticipationPage() {
   const { user } = useAuth();
   const router = useRouter();
   const pathname = usePathname() || '';
-  const bidId = pathname.split('/')[2];
+  const rawBidParam = pathname.split('/')[2] || '';
+  const bidId = rawBidParam ? decodeURIComponent(rawBidParam) : '';
   const [bid, setBid] = useState<ProcurementBid | null>(null);
   const [participation, setParticipation] = useState<ParticipationState | null>(null);
   const [step, setStep] = useState(2);

@@ -16,6 +16,7 @@ import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { getAccessTokenFromRequest } from '../services/auth-cookie.service.js';
 import { invalidateBidCaches } from '../modules/procurementBid/procurement-bid.routes.js';
+import { parseSmartSearchQuery } from '../utils/smartSearch.js';
 
 const db = prisma as any;
 const router = Router();
@@ -2084,9 +2085,8 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
         const categoryId = await resolveCategoryId(query);
 
         const where: any = productPublicWhere();
-        if (query.q) {
-            const cleanQ = query.q.trim();
-            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+        const parsedQuery = parseSmartSearchQuery(query.q);
+        if (parsedQuery.cleanQuery) {
             const buildConditions = (term: string) => [
                 { name: { contains: term, mode: 'insensitive' } },
                 { description: { contains: term, mode: 'insensitive' } },
@@ -2100,27 +2100,47 @@ router.get('/marketplace/products', optionalAuthenticate, checkFeatureIfAuthenti
                 { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
 
-            if (tokens.length > 1) {
+            if (parsedQuery.tokens.length > 1) {
                 where.AND = [
                     ...(where.AND || []),
                     {
                         OR: [
-                            ...buildConditions(cleanQ),
+                            ...buildConditions(parsedQuery.cleanQuery),
                             {
-                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                                AND: parsedQuery.tokens.map((_t, idx) => {
+                                    const variants = parsedQuery.tokenVariants[idx] || [_t];
+                                    return {
+                                        OR: variants.flatMap(v => buildConditions(v))
+                                    };
+                                })
                             }
                         ]
                     }
                 ];
+            } else if (parsedQuery.tokens.length === 1) {
+                const variants = parsedQuery.tokenVariants[0] || [parsedQuery.cleanQuery];
+                where.AND = [
+                    ...(where.AND || []),
+                    { OR: variants.flatMap(v => buildConditions(v)) }
+                ];
             } else {
-                where.OR = buildConditions(cleanQ);
+                where.AND = [
+                    ...(where.AND || []),
+                    { OR: buildConditions(parsedQuery.cleanQuery) }
+                ];
             }
         }
         if (categoryId) where.categoryId = categoryId;
-        const minPrice = query.priceMin ?? query.minPrice;
-        const maxPrice = query.priceMax ?? query.maxPrice;
+        const queryMin = query.priceMin ?? query.minPrice;
+        const queryMax = query.priceMax ?? query.maxPrice;
+        let minPrice = queryMin !== undefined && parsedQuery.minPrice !== undefined
+            ? Math.max(queryMin, parsedQuery.minPrice)
+            : (queryMin ?? parsedQuery.minPrice);
+        let maxPrice = queryMax !== undefined && parsedQuery.maxPrice !== undefined
+            ? Math.min(queryMax, parsedQuery.maxPrice)
+            : (queryMax ?? parsedQuery.maxPrice);
         if (minPrice !== undefined || maxPrice !== undefined) {
-            where.price = {};
+            where.price = { ...(where.price || {}) };
             if (minPrice !== undefined) where.price.gte = minPrice;
             if (maxPrice !== undefined) where.price.lte = maxPrice;
         }
@@ -2225,9 +2245,8 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
         const categoryId = await resolveCategoryId(query);
 
         const where: any = servicePublicWhere();
-        if (query.q) {
-            const cleanQ = query.q.trim();
-            const tokens = cleanQ.split(/\s+/).filter(t => t.length > 1);
+        const parsedQuery = parseSmartSearchQuery(query.q);
+        if (parsedQuery.cleanQuery) {
             const buildConditions = (term: string) => [
                 { name: { contains: term, mode: 'insensitive' } },
                 { description: { contains: term, mode: 'insensitive' } },
@@ -2240,27 +2259,47 @@ router.get('/marketplace/services', optionalAuthenticate, checkFeatureIfAuthenti
                 { specifications: { some: { OR: [{ name: { contains: term, mode: 'insensitive' } }, { value: { contains: term, mode: 'insensitive' } }] } } }
             ];
 
-            if (tokens.length > 1) {
+            if (parsedQuery.tokens.length > 1) {
                 where.AND = [
                     ...(where.AND || []),
                     {
                         OR: [
-                            ...buildConditions(cleanQ),
+                            ...buildConditions(parsedQuery.cleanQuery),
                             {
-                                AND: tokens.map(t => ({ OR: buildConditions(t) }))
+                                AND: parsedQuery.tokens.map((_t, idx) => {
+                                    const variants = parsedQuery.tokenVariants[idx] || [_t];
+                                    return {
+                                        OR: variants.flatMap(v => buildConditions(v))
+                                    };
+                                })
                             }
                         ]
                     }
                 ];
+            } else if (parsedQuery.tokens.length === 1) {
+                const variants = parsedQuery.tokenVariants[0] || [parsedQuery.cleanQuery];
+                where.AND = [
+                    ...(where.AND || []),
+                    { OR: variants.flatMap(v => buildConditions(v)) }
+                ];
             } else {
-                where.OR = buildConditions(cleanQ);
+                where.AND = [
+                    ...(where.AND || []),
+                    { OR: buildConditions(parsedQuery.cleanQuery) }
+                ];
             }
         }
         if (categoryId) where.categoryId = categoryId;
-        const minPrice = query.priceMin ?? query.minPrice;
-        const maxPrice = query.priceMax ?? query.maxPrice;
+        const queryMin = query.priceMin ?? query.minPrice;
+        const queryMax = query.priceMax ?? query.maxPrice;
+        let minPrice = queryMin !== undefined && parsedQuery.minPrice !== undefined
+            ? Math.max(queryMin, parsedQuery.minPrice)
+            : (queryMin ?? parsedQuery.minPrice);
+        let maxPrice = queryMax !== undefined && parsedQuery.maxPrice !== undefined
+            ? Math.min(queryMax, parsedQuery.maxPrice)
+            : (queryMax ?? parsedQuery.maxPrice);
         if (minPrice !== undefined || maxPrice !== undefined) {
-            where.basePrice = {};
+            where.basePrice = { ...(where.basePrice || {}) };
             if (minPrice !== undefined) where.basePrice.gte = minPrice;
             if (maxPrice !== undefined) where.basePrice.lte = maxPrice;
         }
@@ -4905,21 +4944,34 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
         const q = String(req.query.q || '').replace(/\0/g, '').trim();
         if (!q || q.length < 2) return ok(res, { products: [], services: [], sellers: [], categories: [] });
 
+        const parsedQuery = parseSmartSearchQuery(q);
+        const searchTerms = parsedQuery.cleanQuery || q;
+        const variants = parsedQuery.tokenVariants.length > 0 && parsedQuery.tokenVariants[0].length > 0
+            ? parsedQuery.tokenVariants[0]
+            : [searchTerms];
+
+        const productWhereConditions: any[] = variants.flatMap(v => [
+            { name: { contains: v, mode: 'insensitive' } },
+            { description: { contains: v, mode: 'insensitive' } },
+            { brand: { contains: v, mode: 'insensitive' } },
+            { modelNumber: { contains: v, mode: 'insensitive' } },
+            { sku: { contains: v, mode: 'insensitive' } },
+            { category: { name: { contains: v, mode: 'insensitive' } } },
+            { organization: { organizationName: { contains: v, mode: 'insensitive' } } },
+            { seller: { name: { contains: v, mode: 'insensitive' } } },
+            { specifications: { some: { OR: [{ name: { contains: v, mode: 'insensitive' } }, { value: { contains: v, mode: 'insensitive' } }] } } }
+        ]);
+
+        const productSearchFilter: any = { OR: productWhereConditions };
+        if (parsedQuery.minPrice !== undefined || parsedQuery.maxPrice !== undefined) {
+            productSearchFilter.price = {};
+            if (parsedQuery.minPrice !== undefined) productSearchFilter.price.gte = parsedQuery.minPrice;
+            if (parsedQuery.maxPrice !== undefined) productSearchFilter.price.lte = parsedQuery.maxPrice;
+        }
+
         const [products, services, sellers, categories] = await Promise.all([
             db.product.findMany({
-                where: productPublicWhere({
-                    OR: [
-                        { name: { contains: q, mode: 'insensitive' } },
-                        { description: { contains: q, mode: 'insensitive' } },
-                        { brand: { contains: q, mode: 'insensitive' } },
-                        { modelNumber: { contains: q, mode: 'insensitive' } },
-                        { sku: { contains: q, mode: 'insensitive' } },
-                        { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
-                        { seller: { name: { contains: q, mode: 'insensitive' } } },
-                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
-                    ]
-                }),
+                where: productPublicWhere(productSearchFilter),
                 take: 6,
                 select: {
                     id: true,
@@ -4940,16 +4992,22 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
             }),
             db.service.findMany({
                 where: servicePublicWhere({
-                    OR: [
-                        { name: { contains: q, mode: 'insensitive' } },
-                        { description: { contains: q, mode: 'insensitive' } },
-                        { scopeOfWork: { contains: q, mode: 'insensitive' } },
-                        { deliverables: { contains: q, mode: 'insensitive' } },
-                        { category: { name: { contains: q, mode: 'insensitive' } } },
-                        { organization: { organizationName: { contains: q, mode: 'insensitive' } } },
-                        { seller: { name: { contains: q, mode: 'insensitive' } } },
-                        { specifications: { some: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { value: { contains: q, mode: 'insensitive' } }] } } }
-                    ]
+                    OR: variants.flatMap(v => [
+                        { name: { contains: v, mode: 'insensitive' } },
+                        { description: { contains: v, mode: 'insensitive' } },
+                        { scopeOfWork: { contains: v, mode: 'insensitive' } },
+                        { deliverables: { contains: v, mode: 'insensitive' } },
+                        { category: { name: { contains: v, mode: 'insensitive' } } },
+                        { organization: { organizationName: { contains: v, mode: 'insensitive' } } },
+                        { seller: { name: { contains: v, mode: 'insensitive' } } },
+                        { specifications: { some: { OR: [{ name: { contains: v, mode: 'insensitive' } }, { value: { contains: v, mode: 'insensitive' } }] } } }
+                    ]),
+                    ...(parsedQuery.minPrice !== undefined || parsedQuery.maxPrice !== undefined ? {
+                        basePrice: {
+                            ...(parsedQuery.minPrice !== undefined ? { gte: parsedQuery.minPrice } : {}),
+                            ...(parsedQuery.maxPrice !== undefined ? { lte: parsedQuery.maxPrice } : {})
+                        }
+                    } : {})
                 }),
                 take: 6,
                 select: {
@@ -4969,11 +5027,11 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
             db.organization.findMany({
                 where: {
                     ...sellerOrganizationWhere,
-                    OR: [
-                        { organizationName: { contains: q, mode: 'insensitive' } },
-                        { city: { contains: q, mode: 'insensitive' } },
-                        { district: { contains: q, mode: 'insensitive' } }
-                    ]
+                    OR: variants.flatMap(v => [
+                        { organizationName: { contains: v, mode: 'insensitive' } },
+                        { city: { contains: v, mode: 'insensitive' } },
+                        { district: { contains: v, mode: 'insensitive' } }
+                    ])
                 },
                 take: 5,
                 select: {
@@ -4991,7 +5049,7 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
             db.category.findMany({
                 where: {
                     isActive: true,
-                    name: { contains: q, mode: 'insensitive' }
+                    OR: variants.map(v => ({ name: { contains: v, mode: 'insensitive' } }))
                 },
                 take: 5,
                 select: {

@@ -755,7 +755,7 @@ export function TechnicalEvaluationModal({
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded bg-blue-400/20 text-blue-200 border border-blue-300/30 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-400 animate-pulse" aria-hidden="true" />{" "}
-                        Technical Scrutiny
+                        {isSinglePacket ? "Quotation & Spec Verification" : "Technical Scrutiny"}
                       </span>
                     )}
                   </div>
@@ -764,12 +764,14 @@ export function TechnicalEvaluationModal({
                     className="text-base sm:text-lg font-black text-white tracking-tight leading-snug mt-1"
                   >
                     {isEffectiveReadOnly
-                      ? "Technical Evaluation Record (Sealed Audit Trail)"
+                      ? (isSinglePacket ? "Quotation Compliance Record (Audit Trail)" : "Technical Evaluation Record (Sealed Audit Trail)")
                       : isAlreadyQualified
                         ? isSinglePacket
-                          ? "Technical Evaluation Record • Qualified"
+                          ? "Quotation Specification Record • Compliant"
                           : "Technical Evaluation Record • Stage 1 Qualified"
-                        : "Technical & Compliance Evaluation Record"}
+                        : isSinglePacket
+                          ? "Quotation & Technical Compliance Verification"
+                          : "Technical & Compliance Evaluation Record"}
                   </h3>
                 </div>
               </div>
@@ -886,10 +888,10 @@ export function TechnicalEvaluationModal({
               <div className="rounded-xl border border-blue-100 bg-blue-50/70 p-3 text-xs text-blue-900 font-medium flex items-center gap-2.5 shadow-2xs">
                 <ShieldCheck className="h-4 w-4 text-blue-700 shrink-0" />
                 <span>
-                  <strong>Technical &amp; Compliance Scrutiny:</strong> Verify
-                  offered model conformity, specifications, parameters, and
-                  statutory eligibility. Bidders marked as Qualified are
-                  eligible for commercial ranking and contract award.
+                  <strong>{isSinglePacket ? "Quotation & Spec Verification:" : "Technical & Compliance Scrutiny:"}</strong>{" "}
+                  {isSinglePacket
+                    ? "Verify offered model conformity, specifications, parameters, and statutory eligibility for this quotation prior to contract release."
+                    : "Verify offered model conformity, specifications, parameters, and statutory eligibility. Bidders marked as Qualified are eligible for commercial ranking and contract award."}
                 </span>
               </div>
             )}

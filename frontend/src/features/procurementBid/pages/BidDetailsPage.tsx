@@ -104,6 +104,11 @@ export default function BidDetailsPage() {
     },
     enabled: !!requestId,
     staleTime: 60_000,
+    refetchInterval: (query: any) => {
+      const status = String((query.state?.data as any)?.status || '').toUpperCase();
+      const isPending = ['AWARDED', 'AWARD_OFFERED', 'RECOMMENDED', 'PENDING_ACCEPTANCE'].includes(status);
+      return isPending ? 4000 : false;
+    },
   });
 
   // Canonical URL enforcement: If accessed via numeric ID (e.g. /bids/318) or alias,

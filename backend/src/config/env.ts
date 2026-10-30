@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -170,6 +171,9 @@ const envSchema = z.object({
   DIGILOCKER_PURPOSE_ONBOARDING: withFallback(['MERIPEHCHAAN_PURPOSE_ONBOARDING'], z.string().trim().max(50).default('User Onboarding KYC Verification')),
   DIGILOCKER_PURPOSE_PREREG: withFallback(['MERIPEHCHAAN_PURPOSE_PREREG'], z.string().trim().max(50).default('Pre Registration KYC Verification')),
   AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+  FIELD_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)').optional(),
+  FIELD_ENCRYPTION_KEY_FALLBACK: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY_FALLBACK must be a 64-character hex string (32 bytes)').optional(),
+  ENFORCE_SSL: envBoolean(false),
   GEMINI_API_KEY: optionalString(),
   NVIDIA_NIM_API_KEY: withFallback(['NVIDIA_NIM_API_KEY', 'NVIDIA_API_KEY'], optionalString()),
   NVIDIA_API_KEY: optionalString()
@@ -224,6 +228,10 @@ if (isTrueProduction) {
   if (parsed.data.PAYMENT_PROVIDER === 'bandhan' && !parsed.data.BANDHAN_WEBHOOK_SECRET) {
     console.warn('[env] WARNING: PAYMENT_PROVIDER is set to "bandhan" but BANDHAN_WEBHOOK_SECRET is not set in production. Gateway webhooks cannot be verified securely.');
   }
+
+  if (!parsed.data.FIELD_ENCRYPTION_KEY) {
+    throw new Error('FIELD_ENCRYPTION_KEY must be explicitly configured as a 64-character hex string in production');
+  }
 }
 
 const normalizeDatabaseUrl = (value?: string) => {
@@ -265,7 +273,9 @@ export const env = {
   DATABASE_URL: databaseUrl,
   JWT_SECRET: parsed.data.JWT_SECRET,
   JWT_ACCESS_SECRET: parsed.data.JWT_ACCESS_SECRET || parsed.data.JWT_SECRET,
-  JWT_REFRESH_SECRET: parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_SECRET
+  JWT_REFRESH_SECRET: parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_SECRET,
+  FIELD_ENCRYPTION_KEY: parsed.data.FIELD_ENCRYPTION_KEY || crypto.createHash('sha256').update(parsed.data.JWT_SECRET || 'dev_master_key_msme_pugarch_2026').digest('hex'),
+  FIELD_ENCRYPTION_KEY_FALLBACK: parsed.data.FIELD_ENCRYPTION_KEY_FALLBACK
 };
 
 export const isProduction = env.NODE_ENV === 'production';

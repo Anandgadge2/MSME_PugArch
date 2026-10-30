@@ -1,6 +1,53 @@
 import '../config/env.js';
 import { PrismaClient } from '@prisma/client'
 import { invalidateByPattern } from '../services/cache.service.js';
+import { encryptField, decryptField, isEncrypted } from '../utils/crypto.js';
+
+const ENCRYPTED_FIELDS_BY_MODEL: Record<string, string[]> = {
+  sellerprofile: ['pan', 'nameAsInPan'],
+  buyerprofile: ['pan', 'nameAsInPan', 'bankAccountNo', 'bankIfsc', 'bankName', 'bankAddress', 'accountHolderName'],
+  sellerbankaccount: ['accountNumber', 'ifsc', 'holderName', 'bankAddress', 'bankName']
+};
+
+function encryptModelPayload(fields: string[], data: any): void {
+  if (!data || typeof data !== 'object') return;
+  if (Array.isArray(data)) {
+    data.forEach(item => encryptModelPayload(fields, item));
+    return;
+  }
+  for (const f of fields) {
+    if (typeof data[f] === 'string' && data[f].trim() !== '') {
+      data[f] = encryptField(data[f]);
+    } else if (data[f] && typeof data[f].set === 'string' && data[f].set.trim() !== '') {
+      data[f].set = encryptField(data[f].set);
+    }
+  }
+}
+
+function decryptDeep<T>(record: T, depth = 0): T {
+  if (!record || depth > 8 || typeof record !== 'object') return record;
+  if (record instanceof Date || Buffer.isBuffer(record)) return record;
+  if ((record as any).constructor && ((record as any).constructor.name === 'Decimal' || (record as any)._isDecimal === true)) {
+    return record;
+  }
+
+  if (Array.isArray(record)) {
+    for (let i = 0; i < record.length; i++) {
+      record[i] = decryptDeep(record[i], depth + 1);
+    }
+    return record;
+  }
+
+  for (const key of Object.keys(record)) {
+    const val = (record as any)[key];
+    if (typeof val === 'string' && isEncrypted(val)) {
+      (record as any)[key] = decryptField(val);
+    } else if (val && typeof val === 'object') {
+      (record as any)[key] = decryptDeep(val, depth + 1);
+    }
+  }
+  return record;
+}
 
 const AFFECTED_MODELS = new Set([
   'cart', 'cartitem', 'procurementapproval', 'goodsreceiptnote', 
@@ -41,7 +88,23 @@ const prismaClientSingleton = () => {
       },
       $allModels: {
         async $allOperations({ model, operation, args, query }) {
-          const result = await query(args);
+          // STQC Data-at-Rest Encryption: Transparently encrypt sensitive fields on write
+          if (model) {
+            const modelLower = model.toLowerCase();
+            const fieldsToEncrypt = ENCRYPTED_FIELDS_BY_MODEL[modelLower];
+            if (fieldsToEncrypt && ['create', 'update', 'upsert', 'createMany', 'updateMany'].includes(operation)) {
+              if (operation === 'upsert') {
+                if ((args as any)?.create) encryptModelPayload(fieldsToEncrypt, (args as any).create);
+                if ((args as any)?.update) encryptModelPayload(fieldsToEncrypt, (args as any).update);
+              } else if ((args as any)?.data) {
+                encryptModelPayload(fieldsToEncrypt, (args as any).data);
+              }
+            }
+          }
+
+          const rawResult = await query(args);
+          // STQC Data-at-Rest Decryption: Transparently decrypt ciphertext on read
+          const result = decryptDeep(rawResult);
           if (
             model &&
             AFFECTED_MODELS.has(model.toLowerCase()) &&

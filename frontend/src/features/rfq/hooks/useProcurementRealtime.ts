@@ -97,15 +97,34 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       void queryClient.invalidateQueries({ queryKey: ['navigation-counts'] });
 
       // Dispatch browser-wide CustomEvents so active detail pages reload immediately without waiting for query intervals
+      const enrichedDetail = {
+        ...data,
+        bidId: data.procurementId || (data as any).bidId || cleanId,
+        procurementId: data.procurementId || cleanId,
+        requirementId: data.requirementId || cleanId,
+        bidNumber: (data as any).bidNumber || cleanId,
+        awardId: (data as any).awardId,
+        status: data.status || 'AWARD_ACCEPTED'
+      };
+
       if (typeof window !== 'undefined') {
-        window.dispatchEvent(new CustomEvent('procurement:realtime', { detail: data }));
+        window.dispatchEvent(new CustomEvent('procurement:realtime', { detail: enrichedDetail }));
         if (data.type === 'CORRIGENDUM_ISSUED') {
-          window.dispatchEvent(new CustomEvent('procurement:corrigendum', { detail: data }));
+          window.dispatchEvent(new CustomEvent('procurement:corrigendum', { detail: enrichedDetail }));
         }
-        if (data.type === 'PROCUREMENT_UPDATED' || data.type === 'CORRIGENDUM_ISSUED' || data.type === 'BID_ACCEPTED' || data.type === 'AWARD_ACCEPTED' || data.type === 'BID_REJECTED' || data.type === 'AWARD_DECLINED' || data.status === 'AWARD_DECLINED') {
-          window.dispatchEvent(new CustomEvent('procurement:updated', { detail: data }));
-          window.dispatchEvent(new CustomEvent('award:accepted', { detail: data }));
-          window.dispatchEvent(new CustomEvent('awards:updated', { detail: data }));
+        if (
+          data.type === 'PROCUREMENT_UPDATED' ||
+          data.type === 'CORRIGENDUM_ISSUED' ||
+          data.type === 'BID_ACCEPTED' ||
+          data.type === 'AWARD_ACCEPTED' ||
+          data.type === 'BID_REJECTED' ||
+          data.type === 'AWARD_DECLINED' ||
+          data.status === 'AWARD_ACCEPTED' ||
+          data.status === 'AWARD_DECLINED'
+        ) {
+          window.dispatchEvent(new CustomEvent('procurement:updated', { detail: enrichedDetail }));
+          window.dispatchEvent(new CustomEvent('award:accepted', { detail: enrichedDetail }));
+          window.dispatchEvent(new CustomEvent('awards:updated', { detail: enrichedDetail }));
         }
       }
 
@@ -165,6 +184,14 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
             duration: 4000,
           });
         });
+      } else if (data.type === 'AWARD_ACCEPTED' || data.type === 'BID_ACCEPTED' || data.status === 'AWARD_ACCEPTED') {
+        triggerDeduplicatedToast(`award-accepted-${cleanId}`, () => {
+          toast.success('🏆 Contract Award Accepted by Supplier!', {
+            id: `award-accepted-${cleanId}`,
+            description: 'The supplier has formally accepted the contract award offer. Purchase Order generation is now unlocked.',
+            duration: 7000,
+          });
+        });
       } else if (data.type === 'BID_REJECTED' || data.type === 'AWARD_DECLINED' || data.status === 'AWARD_DECLINED') {
         triggerDeduplicatedToast(`award-declined-${cleanId}`, () => {
           toast.warning('⚠️ Award / Counter-Offer Declined by Supplier', {
@@ -203,7 +230,9 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
         'CORRIGENDUM_ISSUED',
         'PROCUREMENT_AWARDED',
         'BID_ACCEPTED',
+        'AWARD_ACCEPTED',
         'BID_REJECTED',
+        'AWARD_DECLINED',
         'TECHNICAL_EVALUATION_STARTED',
         'FINANCIAL_EVALUATION_STARTED',
         'L1_GENERATED'
@@ -233,7 +262,23 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
       pollInterval = setInterval(() => {
         if (!isMounted) return;
         void queryClient.invalidateQueries({ queryKey: ['rfq-buyer-responses-v2'] });
-      }, 15000);
+        void queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
+        void queryClient.invalidateQueries({ queryKey: ['procurement-bids'] });
+        void queryClient.invalidateQueries({ queryKey: ['limited-tender-bid-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['limited-tender-req-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['open-tender-bid-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['open-tender-req-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['rfp-bid-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['rfp-req-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['rate-contract-bid-detail'] });
+        void queryClient.invalidateQueries({ queryKey: ['bid-dispatcher-meta'] });
+        void queryClient.invalidateQueries({ queryKey: ['buyerMyProcurements'] });
+        void queryClient.invalidateQueries({ queryKey: ['buyer-procurements'] });
+        void queryClient.invalidateQueries({ queryKey: ['procurement-awards'] });
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('procurement:updated', { detail: { procurementId: cleanId, status: 'POLL_SYNC' } }));
+        }
+      }, 8000);
     };
 
     let baseUrl = getBaseUrl().replace(/\/$/, '');
@@ -294,7 +339,9 @@ export const useProcurementRealtime = (procurementId: string | number | undefine
                 'CORRIGENDUM_ISSUED',
                 'PROCUREMENT_AWARDED',
                 'BID_ACCEPTED',
+                'AWARD_ACCEPTED',
                 'BID_REJECTED',
+                'AWARD_DECLINED',
                 'TECHNICAL_EVALUATION_STARTED',
                 'FINANCIAL_EVALUATION_STARTED',
                 'L1_GENERATED'

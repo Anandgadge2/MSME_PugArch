@@ -35,6 +35,14 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
       void queryClient.invalidateQueries({ queryKey: ['quote-requests'] });
       void queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
       void queryClient.invalidateQueries({ queryKey: ['procurement-bids'] });
+      void queryClient.invalidateQueries({ queryKey: ['limited-tender-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['limited-tender-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-tender-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['open-tender-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['rfp-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['rfp-req-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['rate-contract-bid-detail'] });
+      void queryClient.invalidateQueries({ queryKey: ['bid-dispatcher-meta'] });
       void queryClient.invalidateQueries({ queryKey: ['buyerMyProcurements'] });
       void queryClient.invalidateQueries({ queryKey: ['buyer-procurements'] });
       void queryClient.invalidateQueries({ queryKey: ['marketplace-requirement'] });
@@ -42,6 +50,7 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-live'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-participants'] });
       void queryClient.invalidateQueries({ queryKey: ['reverse-auction-result'] });
+      void queryClient.invalidateQueries({ queryKey: ['procurement-awards'] });
       void queryClient.invalidateQueries({ queryKey: ['dashboard', 'summary'] });
     };
 
@@ -62,9 +71,23 @@ export const useUserRealtime = (userId: number | string | null | undefined) => {
     channel.bind('BID_STATUS_CHANGED', (data: UserRealtimeEvent) => {
       if (!isMounted) return;
       invalidateAll();
+      const enriched = {
+        ...data,
+        bidId: data.procurementId || (data as any).bidId,
+        procurementId: data.procurementId,
+        requirementId: data.requirementId,
+        status: data.status,
+      };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('procurement:updated', { detail: enriched }));
+        if (data.status === 'AWARD_ACCEPTED' || data.type === 'AWARD_ACCEPTED') {
+          window.dispatchEvent(new CustomEvent('award:accepted', { detail: enriched }));
+          window.dispatchEvent(new CustomEvent('awards:updated', { detail: enriched }));
+        }
+      }
       toast.info('Procurement Status Updated', {
         id: `bid-status-${data.procurementId || data.requirementId || 'status'}`,
-        description: data.status ? `Status updated to ${data.status}.` : 'Your procurement dashboard has been refreshed.',
+        description: data.status ? `Status updated to ${data.status.replace(/_/g, ' ')}.` : 'Your procurement dashboard has been refreshed.',
         duration: 5000,
       });
     });

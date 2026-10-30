@@ -18,6 +18,7 @@ import { MSME_TYPES, VENDOR_TYPES, REGISTRATION_TYPES, PRODUCT_CATEGORY_OTHER } 
 import { cn } from '../lib/utils';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../lib/validation';
 import { isShgBusinessType, isShgUser } from '../lib/shg';
+import { MaskedDataDisplay } from '../components/ui/MaskedDataDisplay';
 
 const toDateInputValue = (value: unknown) => {
   if (!value) return '';
@@ -1521,7 +1522,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       header: 'Bank Account Number',
       sortable: true,
       sortKey: 'accountNumber',
-      cell: (bank: any) => <span className="break-all font-mono">{bankAccountDisplay(bank)}</span>
+      cell: (bank: any) => <MaskedDataDisplay value={bankAccountDisplay(bank)} type="bankAccount" className="break-all font-mono" />
     },
     {
       key: 'holderName',

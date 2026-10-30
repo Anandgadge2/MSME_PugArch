@@ -59,6 +59,8 @@ import {
   SlidersHorizontal,
   Repeat,
   RefreshCw,
+  FileEdit,
+  Send,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,6 +68,7 @@ import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { DataTable, ColumnDef } from "../../../components/ui/data-table";
 import { useAuth } from "../../../hooks/useAuth";
+import { api } from "../../../lib/api";
 import {
   openFileAsset,
   getFileAssetPreview,
@@ -84,7 +87,7 @@ import { cn } from "../../../lib/utils";
 import { PdfEngine, moneyPdf } from "../../../lib/pdfEngine";
 import { getApi } from "../../shared/apiClient";
 import { procurementBidApi } from "../../procurementBid/api";
-import { PO_DECLINE_REASONS, getPoDeclineReasonByCode } from "../../procurementBid/poDeclineReasons";
+import { PO_DECLINE_REASONS, getPoDeclineReasonByCode, parseDeclineReason } from "../../procurementBid/poDeclineReasons";
 import { KpiCard } from "../../shared/KpiCard";
 import ClarificationPanel from "./ClarificationPanel";
 import type { SubmittedVendorItem } from "../../reverseAuctions/components/StartReverseAuctionModal";
@@ -122,6 +125,10 @@ const TechnicalEvaluationModal = dynamic(
 );
 const PurchaseOrderReceiptModal = dynamic(
   () => import("../../purchaseOrders/components/PurchaseOrderReceiptModal").then((m) => m.PurchaseOrderReceiptModal),
+  { ssr: false, loading: ModalLoadingFallback }
+);
+const EditPurchaseOrderModal = dynamic(
+  () => import("../../purchaseOrders/components/EditPurchaseOrderModal").then((m) => m.EditPurchaseOrderModal),
   { ssr: false, loading: ModalLoadingFallback }
 );
 const TaxInvoiceRegistryModal = dynamic(
@@ -3363,11 +3370,13 @@ function ServiceDossierCard({
   buyingType,
   scopeText,
   onOpenDoc,
+  onDownloadDoc,
 }: {
   serviceDetails: any;
   buyingType?: string;
   scopeText?: string;
   onOpenDoc?: (doc: any, name: string) => void;
+  onDownloadDoc?: (doc: any, name: string) => void;
 }) {
   const isGoodsCategory = String(buyingType || "").trim().toUpperCase() === "GOODS";
   if (!serviceDetails || !isPlainObject(serviceDetails) || isGoodsCategory) {
@@ -3413,17 +3422,46 @@ function ServiceDossierCard({
 
   if (!hasAnyData) return null;
 
+  const hasManpower =
+    Boolean(manpowerRequired) &&
+    manpowerRequired !== 0 &&
+    manpowerRequired !== "0" &&
+    manpowerRequired !== "N/A";
+  const hasExperience =
+    experienceRequired != null &&
+    experienceRequired !== "" &&
+    experienceRequired !== 0 &&
+    experienceRequired !== "0" &&
+    experienceRequired !== "N/A";
+
+  const hasKeyParams = Boolean(
+    resolvedDuration ||
+      slaResponseTime ||
+      penaltyClause ||
+      hasManpower ||
+      hasExperience ||
+      location,
+  );
+
+  const sowDocPayload = {
+    id: sowFileAssetId,
+    fileAssetId: sowFileAssetId,
+    url: sowFileUrl,
+    fileName: sowFileName || "SOW_Document.pdf",
+    originalName: sowFileName || "SOW_Document.pdf",
+  };
+
   return (
     <DataCard
       title="Service Level Agreement (SLA) & Scope of Work (SOW)"
       icon={Briefcase}
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         {/* Top Header Card */}
-        <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/40 to-white p-4">
+        <div className="rounded-xl border border-indigo-150 bg-gradient-to-r from-indigo-50/70 via-blue-50/30 to-white p-3 sm:p-3.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="space-y-1 min-w-0">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 rounded-md bg-indigo-600 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
                   Service Contract
                 </span>
@@ -3436,76 +3474,90 @@ function ServiceDossierCard({
                   Lump-Sum SOW Fee
                 </span>
               </div>
-              <h3 className="text-sm font-extrabold text-slate-900 mt-1">
+              <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
                 {resolvedTitle || "Service Specifications & Contract Scope"}
               </h3>
             </div>
 
-            {/* SOW Document Download Action */}
+            {/* SOW Document Actions: Distinct View (Modal) and Direct Download */}
             {(sowFileAssetId || sowFileName || sowFileUrl) && (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  const docPayload = {
-                    id: sowFileAssetId,
-                    fileAssetId: sowFileAssetId,
-                    url: sowFileUrl,
-                    fileName: sowFileName || "SOW_Document.pdf",
-                    originalName: sowFileName || "SOW_Document.pdf",
-                  };
-                  if (onOpenDoc) {
-                    onOpenDoc(docPayload, sowFileName || "SOW_Document.pdf");
-                  } else {
-                    openFileAsset(docPayload, sowFileName || "SOW_Document.pdf");
-                  }
-                }}
-                className="shrink-0 border-indigo-300 bg-white text-indigo-700 hover:bg-indigo-50 font-bold text-xs h-9 shadow-xs cursor-pointer"
-              >
-                <Download className="h-3.5 w-3.5 mr-1.5" />
-                Download SOW Document
-              </Button>
+              <div className="flex items-center gap-2 shrink-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (onOpenDoc) {
+                      onOpenDoc(sowDocPayload, sowFileName || "SOW_Document.pdf");
+                    } else {
+                      openFileAsset(sowDocPayload, sowFileName || "SOW_Document.pdf");
+                    }
+                  }}
+                  className="border-slate-200 bg-white text-slate-700 hover:bg-slate-50 font-bold text-xs h-8 px-2.5 shadow-2xs cursor-pointer"
+                  title="View SOW in Document Viewer"
+                >
+                  <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                  View SOW
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    if (onDownloadDoc) {
+                      onDownloadDoc(sowDocPayload, sowFileName || "SOW_Document.pdf");
+                    } else if (onOpenDoc) {
+                      onOpenDoc(sowDocPayload, sowFileName || "SOW_Document.pdf");
+                    } else {
+                      openFileAsset(sowDocPayload, sowFileName || "SOW_Document.pdf");
+                    }
+                  }}
+                  className="border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 font-bold text-xs h-8 px-2.5 shadow-2xs cursor-pointer"
+                  title="Download SOW Document"
+                >
+                  <Download className="h-3.5 w-3.5 mr-1" />
+                  Download SOW
+                </Button>
+              </div>
             )}
           </div>
         </div>
 
-        {/* SLA & Service Key Parameters Grid */}
-        <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
-          <PropertyGrid columns={4}>
-            {resolvedDuration && (
-              <PropertyItem label="Contract Duration" value={resolvedDuration} />
-            )}
-            {slaResponseTime && (
-              <PropertyItem label="SLA Response Time" value={slaResponseTime} />
-            )}
-            {penaltyClause && (
-              <PropertyItem label="Downtime / Penalty Clause" value={penaltyClause} />
-            )}
-            {manpowerRequired && (
-              <PropertyItem label="Manpower Required" value={formatPrimitiveValue(manpowerRequired)} />
-            )}
-            {experienceRequired != null &&
-              experienceRequired !== "" &&
-              experienceRequired !== 0 &&
-              experienceRequired !== "0" && (
+        {/* SLA & Service Key Parameters Grid - Compact, hiding zero manpower */}
+        {hasKeyParams && (
+          <div className="rounded-xl bg-slate-50/70 p-3 border border-slate-150">
+            <PropertyGrid columns={3}>
+              {resolvedDuration && (
+                <PropertyItem label="Contract Duration" value={resolvedDuration} />
+              )}
+              {slaResponseTime && (
+                <PropertyItem label="SLA Response Time" value={slaResponseTime} />
+              )}
+              {penaltyClause && (
+                <PropertyItem label="Downtime / Penalty Clause" value={penaltyClause} />
+              )}
+              {hasManpower && (
+                <PropertyItem label="Manpower Required" value={formatPrimitiveValue(manpowerRequired)} />
+              )}
+              {hasExperience && (
                 <PropertyItem
                   label="Experience Required"
                   value={formatPrimitiveValue(experienceRequired)}
                 />
               )}
-            {location && (
-              <PropertyItem label="Service Location" value={location} />
-            )}
-          </PropertyGrid>
-        </div>
+              {location && (
+                <PropertyItem label="Service Location" value={location} />
+              )}
+            </PropertyGrid>
+          </div>
+        )}
 
-        {/* Scope of Work & Key Deliverables */}
-        {(resolvedScope || deliverables) && (
-          <div className="grid gap-3.5 sm:grid-cols-2">
+        {/* Scope, Deliverables, Inclusions, and Exclusions - Unified compact 2-column grid */}
+        {(resolvedScope || deliverables || inclusions || exclusions) && (
+          <div className="grid gap-3 sm:grid-cols-2">
             {resolvedScope && (
-              <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+              <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
                   <FileText className="h-3.5 w-3.5 text-indigo-600" /> Scope of Work (SOW)
                 </h4>
                 <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
@@ -3514,8 +3566,8 @@ function ServiceDossierCard({
               </div>
             )}
             {deliverables && (
-              <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-2 flex items-center gap-1.5">
+              <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center gap-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Key Deliverables &amp; Outcomes
                 </h4>
                 <p className="text-xs text-slate-700 whitespace-pre-wrap leading-relaxed">
@@ -3523,15 +3575,9 @@ function ServiceDossierCard({
                 </p>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Inclusions & Exclusions */}
-        {(inclusions || exclusions) && (
-          <div className="grid gap-3.5 sm:grid-cols-2">
             {inclusions && (
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-1.5 flex items-center gap-1.5">
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-900 mb-1 flex items-center gap-1.5">
                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" /> Scope Inclusions
                 </h4>
                 <p className="text-xs text-emerald-900/90 leading-relaxed whitespace-pre-wrap">
@@ -3540,8 +3586,8 @@ function ServiceDossierCard({
               </div>
             )}
             {exclusions && (
-              <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3.5">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-rose-900 mb-1.5 flex items-center gap-1.5">
+              <div className="rounded-xl border border-rose-200 bg-rose-50/40 p-3">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-rose-900 mb-1 flex items-center gap-1.5">
                   <AlertCircle className="h-3.5 w-3.5 text-rose-600" /> Scope Exclusions &amp; Limitations
                 </h4>
                 <p className="text-xs text-rose-900/90 leading-relaxed whitespace-pre-wrap">
@@ -5466,6 +5512,16 @@ export function ProcurementDetailUnifiedView(
   const [selectedCompareIds, setSelectedCompareIds] = useState<string[]>([]);
   const [localCreatedOrder, setLocalCreatedOrder] = useState<any | null>(null);
   const [localAcceptedPO, setLocalAcceptedPO] = useState(false);
+  const [localDeclinedPO, setLocalDeclinedPO] = useState<{
+    orderId: string | number;
+    reason: string;
+    reasonCode: string;
+    reasonLabel?: string;
+    isExcused?: boolean;
+    category?: 'EXCUSED' | 'UNEXCUSED';
+    evidenceFile?: { id: number; name: string } | null;
+    declinedAt: string;
+  } | null>(null);
   const [locallyAcceptedAwardIds, setLocallyAcceptedAwardIds] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -5493,6 +5549,11 @@ export function ProcurementDetailUnifiedView(
   const [isExtendScheduleOpen, setIsExtendScheduleOpen] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
   const [isDownloadingQuotationPdf, setIsDownloadingQuotationPdf] = useState(false);
+  const [isEditPoModalOpen, setIsEditPoModalOpen] = useState(false);
+  const [editPoTargetOrder, setEditPoTargetOrder] = useState<any | null>(null);
+  const [editPoMode, setEditPoMode] = useState<'draft' | 'amend'>('draft');
+  const [isIssuingPO, setIsIssuingPO] = useState(false);
+  const [isRecallingPO, setIsRecallingPO] = useState(false);
 
   const [nowMs, setNowMs] = useState(() => Date.now());
   React.useEffect(() => {
@@ -5541,25 +5602,36 @@ export function ProcurementDetailUnifiedView(
     }
   }, [queryClient, props.onRefresh]);
 
-  // Listen for realtime corrigendum or procurement updates to trigger instant refresh on seller side
+  // Listen for realtime corrigendum or procurement updates to trigger instant refresh
   React.useEffect(() => {
     const handleProcurementEvent = (e: Event) => {
       const customEvt = e as CustomEvent;
       const detail = customEvt.detail;
-      const matchId = String(props.id || '');
-      const matchDisplay = String(props.displayId || '');
-      const eventProcId = String(detail?.procurementId || detail?.bidId || '');
-      const eventReqId = String(detail?.requirementId || detail?.bidNumber || '');
+      const matchId = String(props.id || '').toLowerCase();
+      const matchDisplay = String(props.displayId || '').toLowerCase();
+      const matchTarget = String(targetId || '').toLowerCase();
+
+      const eventProcId = String(detail?.procurementId || detail?.bidId || detail?.id || '').toLowerCase();
+      const eventReqId = String(detail?.requirementId || detail?.bidNumber || '').toLowerCase();
 
       const isRelevant =
         !eventProcId ||
         eventProcId === matchId ||
         eventProcId === matchDisplay ||
+        eventProcId === matchTarget ||
         eventReqId === matchId ||
         eventReqId === matchDisplay ||
+        eventReqId === matchTarget ||
         detail?.requirementId === 'all';
 
       if (isRelevant) {
+        if (
+          detail?.status === 'AWARD_ACCEPTED' ||
+          (detail as any)?.type === 'AWARD_ACCEPTED' ||
+          (detail as any)?.type === 'BID_ACCEPTED'
+        ) {
+          markAwardLocallyAccepted([props.id, props.displayId, targetId, detail?.awardId, detail?.procurementId]);
+        }
         handleTimerExpiry();
       }
     };
@@ -5570,7 +5642,7 @@ export function ProcurementDetailUnifiedView(
       window.removeEventListener('procurement:corrigendum', handleProcurementEvent);
       window.removeEventListener('procurement:updated', handleProcurementEvent);
     };
-  }, [props.id, props.displayId, handleTimerExpiry]);
+  }, [props.id, props.displayId, targetId, markAwardLocallyAccepted, handleTimerExpiry]);
   const userRoleStr = String(currentUser?.role || "").toLowerCase();
   const isBuyerOrAdmin =
     userRoleStr === "buyer" ||
@@ -6068,6 +6140,33 @@ export function ProcurementDetailUnifiedView(
 
   const activeAward = React.useMemo(() => {
     if (!rawActiveAward) return null;
+    if (String(rawActiveAward.awardStatus || "").toUpperCase() === "DECLINED" || rawActiveAward.declinedAt) {
+      return rawActiveAward;
+    }
+
+    const existingOrder = props.activeOrder || props.rawBid?.activeOrder || localCreatedOrder;
+    const existingOrderStatus = String(
+      existingOrder?.status ||
+      existingOrder?.poStatus ||
+      existingOrder?.orderStatus ||
+      existingOrder?.lifecycleStatus ||
+      ""
+    ).toLowerCase();
+    const isOrderDeclined = Boolean(
+      localDeclinedPO ||
+      (existingOrder && (
+        ["cancelled", "rejected", "declined"].includes(existingOrderStatus) ||
+        Boolean(existingOrder.declinedAt) ||
+        Boolean(existingOrder.metadata?.declinedAt) ||
+        Boolean(existingOrder.metadata?.declineReason) ||
+        String(existingOrder.poStatus || "").toUpperCase() === "CANCELLED" ||
+        String(existingOrder.poStatus || "").toUpperCase() === "DECLINED" ||
+        String(existingOrder.status || "").toUpperCase() === "CANCELLED" ||
+        String(existingOrder.status || "").toUpperCase() === "DECLINED" ||
+        String(existingOrder.status || "").toUpperCase() === "REJECTED"
+      ))
+    );
+
     const isAcceptedLocally =
       (rawActiveAward.id && locallyAcceptedAwardIds.has(String(rawActiveAward.id))) ||
       (rawActiveAward.bidId && locallyAcceptedAwardIds.has(String(rawActiveAward.bidId))) ||
@@ -6083,8 +6182,13 @@ export function ProcurementDetailUnifiedView(
       linkedAuction?.isAwardAccepted === true ||
       (Array.isArray(linkedAuction?.participants) &&
         linkedAuction.participants.some((p: any) => String(p.status).toUpperCase() === 'ACCEPTED')) ||
-      Boolean(props.activeOrder || props.rawBid?.activeOrder || localCreatedOrder) ||
-      (Array.isArray(props.purchaseOrders) && props.purchaseOrders.length > 0);
+      (!isOrderDeclined && Boolean(existingOrder)) ||
+      (!isOrderDeclined &&
+        Array.isArray(props.purchaseOrders) &&
+        props.purchaseOrders.some((po: any) => {
+          const s = String(po.status || po.poStatus || "").toLowerCase();
+          return !["cancelled", "rejected", "declined"].includes(s) && !po.declinedAt && !po.metadata?.declinedAt;
+        }));
     if (isAcceptedLocally) {
       return { ...rawActiveAward, awardStatus: "ACCEPTED" };
     }
@@ -6101,7 +6205,8 @@ export function ProcurementDetailUnifiedView(
     linkedAuction,
     props.activeOrder,
     localCreatedOrder,
-    props.purchaseOrders
+    props.purchaseOrders,
+    localDeclinedPO
   ]);
 
   const isAwardedToMe = Boolean(
@@ -6262,8 +6367,26 @@ export function ProcurementDetailUnifiedView(
     if (ord && localAcceptedPO) {
       return { ...ord, status: "accepted", poStatus: "ACCEPTED" };
     }
+    if (ord && localDeclinedPO && String(ord.id) === String(localDeclinedPO.orderId)) {
+      return {
+        ...ord,
+        status: "cancelled",
+        poStatus: "CANCELLED",
+        declinedAt: localDeclinedPO.declinedAt,
+        metadata: {
+          ...(typeof ord.metadata === "object" && ord.metadata !== null ? ord.metadata : {}),
+          declineReason: localDeclinedPO.reason,
+          declineReasonCode: localDeclinedPO.reasonCode,
+          declineReasonLabel: localDeclinedPO.reasonLabel,
+          declineCategory: localDeclinedPO.category,
+          isExcused: localDeclinedPO.isExcused,
+          evidenceFile: localDeclinedPO.evidenceFile,
+          declinedAt: localDeclinedPO.declinedAt,
+        },
+      };
+    }
     return ord;
-  }, [fetchedOrder, localCreatedOrder, directActiveOrder, localAcceptedPO]);
+  }, [fetchedOrder, localCreatedOrder, directActiveOrder, localAcceptedPO, localDeclinedPO]);
 
   const rawOrderStatus = String(
     effectiveActiveOrder?.status ||
@@ -6273,8 +6396,87 @@ export function ProcurementDetailUnifiedView(
     "",
   ).toLowerCase();
 
+  const isPODeclined = Boolean(
+    localDeclinedPO ||
+      (effectiveActiveOrder &&
+        (["cancelled", "rejected", "declined"].includes(rawOrderStatus) ||
+          Boolean((effectiveActiveOrder as any)?.declinedAt) ||
+          Boolean((effectiveActiveOrder as any)?.metadata?.declinedAt) ||
+          Boolean((effectiveActiveOrder as any)?.metadata?.declineReason) ||
+          String(effectiveActiveOrder?.poStatus || "").toUpperCase() === "CANCELLED" ||
+          String(effectiveActiveOrder?.poStatus || "").toUpperCase() === "DECLINED" ||
+          String(effectiveActiveOrder?.status || "").toUpperCase() === "CANCELLED" ||
+          String(effectiveActiveOrder?.status || "").toUpperCase() === "DECLINED" ||
+          String(effectiveActiveOrder?.status || "").toUpperCase() === "REJECTED"))
+  );
+
+  const isAwardDeclined = Boolean(
+    activeAward &&
+      (String(activeAward.awardStatus || "").toUpperCase() === "DECLINED" ||
+        Boolean(activeAward.declinedAt) ||
+        Boolean(activeAward.declinedReason))
+  );
+
+  const poDeclineMetadata = useMemo(() => {
+    if (localDeclinedPO) {
+      return {
+        reason: localDeclinedPO.reason,
+        reasonCode: localDeclinedPO.reasonCode,
+        reasonLabel: localDeclinedPO.reasonLabel,
+        isExcused: localDeclinedPO.isExcused,
+        category: localDeclinedPO.category,
+        evidenceFile: localDeclinedPO.evidenceFile,
+        declinedAt: localDeclinedPO.declinedAt,
+      };
+    }
+    const meta = (effectiveActiveOrder?.metadata as any) || {};
+    const rawReason =
+      meta.declineReason ||
+      meta.reason ||
+      (effectiveActiveOrder as any)?.declinedReason ||
+      (effectiveActiveOrder as any)?.rejectionReason ||
+      "";
+    const parsed = parseDeclineReason(rawReason);
+    const code =
+      meta.declineReasonCode ||
+      meta.reasonCode ||
+      (effectiveActiveOrder as any)?.declineReasonCode ||
+      parsed.code ||
+      "BUYER_TERMS_DISCREPANCY";
+    const matched = getPoDeclineReasonByCode(code);
+    const reasonText = parsed.remarks || (parsed.code ? "" : rawReason);
+    const isExcusedVal =
+      meta.isExcused !== undefined
+        ? Boolean(meta.isExcused)
+        : matched?.isExcused ?? parsed.isExcused ?? false;
+
+    return {
+      reason: reasonText,
+      reasonCode: code,
+      reasonLabel: meta.declineReasonLabel || matched?.label || parsed.label || code,
+      shortLabel: matched?.shortLabel || parsed.shortLabel || code,
+      isExcused: isExcusedVal,
+      category: meta.declineCategory || (isExcusedVal ? "EXCUSED" : "UNEXCUSED"),
+      evidenceFile: meta.evidenceFile || null,
+      declinedAt: meta.declinedAt || (effectiveActiveOrder as any)?.declinedAt || null,
+    };
+  }, [localDeclinedPO, effectiveActiveOrder]);
+
+  const isPODraft = Boolean(
+    effectiveActiveOrder &&
+      !isPODeclined &&
+      (effectiveActiveOrder.isDraft ||
+        ["draft", "generated"].includes(rawOrderStatus) ||
+        String(effectiveActiveOrder.poStatus || "").toUpperCase() === "DRAFT") &&
+      rawOrderStatus !== "issued" &&
+      rawOrderStatus !== "pending_acceptance" &&
+      rawOrderStatus !== "accepted"
+  );
+
   const isPOAccepted = Boolean(
     effectiveActiveOrder &&
+      !isPODraft &&
+      !isPODeclined &&
       (Boolean(effectiveActiveOrder.acceptedAt) ||
         localAcceptedPO ||
         [
@@ -6296,16 +6498,21 @@ export function ProcurementDetailUnifiedView(
         ].includes(rawOrderStatus) ||
         (rawOrderStatus &&
           ![
+            "draft",
             "issued",
             "generated",
             "order_placed",
             "pending_acceptance",
             "cancelled",
             "rejected",
+            "declined",
           ].includes(rawOrderStatus))),
   );
 
   const poStatusBadgeText = useMemo(() => {
+    if (isPODeclined) {
+      return "Purchase Order Declined (Contract Cancelled)";
+    }
     if (["delivered", "grn_completed", "grn_pending"].includes(rawOrderStatus)) {
       return "Supplier Accepted — Items Delivered (GRN Pending)";
     }
@@ -6589,30 +6796,58 @@ export function ProcurementDetailUnifiedView(
     return 'PO_PENDING';
   }, [effectiveActiveOrder, deliveryStatus, allOrderInvoices, isPOAccepted, hasApprovedGrn, hasCreatedGrn]);
 
-  // Listen for external award acceptance (e.g. from pop-up or another window)
+  // Listen for external award acceptance (e.g. from pop-up, socket, or another window)
   useEffect(() => {
     const handleAwardAcceptedEvent = (e: any) => {
       const detail = e.detail;
-      if (
+      const matchTarget = String(targetId || '').toLowerCase();
+      const matchPropId = String(props.id || '').toLowerCase();
+      const matchDisplay = String(props.displayId || '').toLowerCase();
+
+      const incomingBidId = String(detail?.bidId || detail?.procurementId || detail?.id || '').toLowerCase();
+      const incomingReqId = String(detail?.requirementId || detail?.bidNumber || '').toLowerCase();
+      const incomingAwardId = String(detail?.awardId || '').toLowerCase();
+      const currentAwardId = String(activeAward?.id || '').toLowerCase();
+
+      const isMatch =
         !detail ||
-        String(detail.bidId) === String(targetId) ||
-        (activeAward?.id && String(detail.awardId) === String(activeAward.id))
-      ) {
+        incomingBidId === matchTarget ||
+        incomingBidId === matchPropId ||
+        incomingBidId === matchDisplay ||
+        incomingReqId === matchTarget ||
+        incomingReqId === matchPropId ||
+        incomingReqId === matchDisplay ||
+        (Boolean(incomingAwardId) && incomingAwardId === currentAwardId) ||
+        detail?.requirementId === 'all';
+
+      if (isMatch) {
         const idToAdd = String(detail?.awardId || activeAward?.id || targetId);
-        setLocallyAcceptedAwardIds((prev) => new Set(prev).add(idToAdd).add(String(targetId)));
+        markAwardLocallyAccepted([idToAdd, targetId, props.id, props.displayId]);
         void queryClient.invalidateQueries({ queryKey: ["rfq-detail-bid"] });
         void queryClient.invalidateQueries({ queryKey: ["rfq-detail-req"] });
+        void queryClient.invalidateQueries({ queryKey: ["limited-tender-bid-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["limited-tender-req-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["open-tender-bid-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["open-tender-req-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["rfp-bid-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["rfp-req-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["rate-contract-bid-detail"] });
+        void queryClient.invalidateQueries({ queryKey: ["bid-dispatcher-meta"] });
+        void queryClient.invalidateQueries({ queryKey: ["procurement-bid"] });
         void queryClient.invalidateQueries({ queryKey: ["procurement-awards"] });
         void queryClient.invalidateQueries({ queryKey: ["procurement-active-order"] });
+        handleTimerExpiry();
       }
     };
     window.addEventListener("award:accepted", handleAwardAcceptedEvent);
+    window.addEventListener("awards:updated", handleAwardAcceptedEvent);
     window.addEventListener("orders:updated", handleAwardAcceptedEvent);
     return () => {
       window.removeEventListener("award:accepted", handleAwardAcceptedEvent);
+      window.removeEventListener("awards:updated", handleAwardAcceptedEvent);
       window.removeEventListener("orders:updated", handleAwardAcceptedEvent);
     };
-  }, [targetId, activeAward?.id, queryClient]);
+  }, [targetId, props.id, props.displayId, activeAward?.id, markAwardLocallyAccepted, queryClient, handleTimerExpiry]);
 
   const handleAcceptPriceMatch = async (awardId: string) => {
     if (isDisqualified) {
@@ -6770,32 +7005,75 @@ export function ProcurementDetailUnifiedView(
     }
   };
 
-  const handleGeneratePOFromBanner = async (awardId: string) => {
+  const handleIssueActivePO = async (poId: number | string) => {
+    try {
+      setIsIssuingPO(true);
+      await postApi(`/api/purchase-orders/${poId}/issue`, {});
+      toast.success("Purchase Order officially issued to supplier! Supplier has been notified.");
+      await queryClient.invalidateQueries();
+      queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+      queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+      queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
+      queryClient.refetchQueries({ queryKey: ["reverse-auction"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to issue Purchase Order.");
+    } finally {
+      setIsIssuingPO(false);
+    }
+  };
+
+  const handleRecallAndEditPO = async (poId: number | string) => {
+    const confirmed = window.confirm(
+      "Recall this Purchase Order to Draft mode?\n\nThis will allow you to edit line items, consignee delivery addresses, schedules, and terms before re-issuing to the supplier."
+    );
+    if (!confirmed) return;
+    try {
+      setIsRecallingPO(true);
+      const res: any = await postApi(`/api/purchase-orders/${poId}/recall`, {});
+      const target = res?.purchaseOrder || res?.data || res || effectiveActiveOrder;
+      toast.success("Purchase Order recalled to Draft mode. You may now make adjustments.");
+      setEditPoTargetOrder(target);
+      setEditPoMode('draft');
+      setIsEditPoModalOpen(true);
+      await queryClient.invalidateQueries();
+      queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+      queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to recall Purchase Order.");
+    } finally {
+      setIsRecallingPO(false);
+    }
+  };
+
+  const handleGeneratePOFromBanner = async (awardId: string, options: { openEditImmediately?: boolean; asDraft?: boolean } = {}) => {
     try {
       setIsIssuingPOFromBanner(true);
       const isExplicitAuction =
         props.procurementType === "REVERSE_AUCTION" ||
         String(targetId).toUpperCase().startsWith("RA-");
 
+      const shouldDraft = options.asDraft !== undefined ? options.asDraft : true;
       let created: any = null;
       if (isExplicitAuction) {
         const auctionIdToUse = linkedAuction?.id || targetId;
         const res = await reverseAuctionApi.acceptAndGeneratePo(auctionIdToUse, {
           participantId: activeAward?.participationId ? Number(activeAward.participationId) : undefined,
-          remarks: "Purchase Order issued from Procurement Highway"
+          remarks: "Purchase Order draft created from Procurement Highway",
+          asDraft: shouldDraft
         });
         created = res?.purchaseOrder || res;
       } else {
         // Tender / Rate Contract: First attempt direct tender PO generation with awardId
         try {
-          const res: any = await procurementBidApi.generatePO(targetId, { awardId });
+          const res: any = await procurementBidApi.generatePO(targetId, { awardId, asDraft: shouldDraft });
           created = res?.purchaseOrder || res?.data?.purchaseOrder || res?.data || res;
         } catch (tenderErr: any) {
           // If tender PO creation fails and a linked auction exists, fallback to reverse auction PO generation
           if (linkedAuction?.id) {
             const res = await reverseAuctionApi.acceptAndGeneratePo(linkedAuction.id, {
               participantId: activeAward?.participationId ? Number(activeAward.participationId) : undefined,
-              remarks: "Purchase Order issued from Procurement Highway"
+              remarks: "Purchase Order draft created from Procurement Highway",
+              asDraft: shouldDraft
             });
             created = res?.purchaseOrder || res;
           } else {
@@ -6804,19 +7082,32 @@ export function ProcurementDetailUnifiedView(
         }
       }
 
-      toast.success(
-        "Purchase Order issued successfully! Awaiting supplier acceptance before final contract activation.",
-      );
       if (created && (created.id || created.poNumber)) {
         setLocalCreatedOrder(created);
+        setEditPoTargetOrder(created);
+        setEditPoMode('draft');
+        if (options.openEditImmediately !== false) {
+          setIsEditPoModalOpen(true);
+        }
       }
+
+      if (shouldDraft) {
+        toast.success(
+          "Purchase Order draft created! Review terms and click 'Issue to Supplier' when ready."
+        );
+      } else {
+        toast.success(
+          "Purchase Order issued successfully! Awaiting supplier acceptance before final contract activation."
+        );
+      }
+
       await queryClient.invalidateQueries();
       queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
       queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
       queryClient.refetchQueries({ queryKey: ["bid-dispatcher-meta"] });
       queryClient.refetchQueries({ queryKey: ["reverse-auction"] });
     } catch (err: any) {
-      toast.error(err.message || "Failed to issue Purchase Order.");
+      toast.error(err.message || "Failed to process Purchase Order.");
     } finally {
       setIsIssuingPOFromBanner(false);
     }
@@ -6904,6 +7195,17 @@ export function ProcurementDetailUnifiedView(
           ? "Purchase Order declined. Excused contractual reason recorded (zero rating penalty). PBG released under GFR 171."
           : "Purchase Order declined. Commercial default recorded under Vendor Discipline."
       );
+      setLocalDeclinedPO({
+        orderId: poId,
+        reason: declineModal.reason.trim(),
+        reasonCode: declineModal.reasonCode || 'BUYER_TERMS_DISCREPANCY',
+        reasonLabel: matchedReason?.label,
+        isExcused: matchedReason?.isExcused,
+        category: matchedReason?.category,
+        evidenceFile: declineModal.evidenceFile,
+        declinedAt: new Date().toISOString()
+      });
+      setLocalAcceptedPO(false);
       setDeclineModal({
         show: false,
         awardId: "",
@@ -7538,7 +7840,7 @@ export function ProcurementDetailUnifiedView(
       const role = isBuyerSide ? "buyer" : "seller";
       return `/${role}/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/results`;
     }
-    return `/bids/${targetId}/results`;
+    return `/bids/${encodeURIComponent(targetId)}/results`;
   }, [isReverseAuctionType, targetId, linkedAuction, isBuyerSide]);
 
   const corrigendumCount = Number(
@@ -7649,6 +7951,9 @@ export function ProcurementDetailUnifiedView(
   const [previewLoadingDocId, setPreviewLoadingDocId] = useState<
     string | number | null
   >(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<
+    string | number | null
+  >(null);
 
   const handleOpenDoc = useCallback(
     async (doc: any, fallbackName = "Document") => {
@@ -7712,6 +8017,65 @@ export function ProcurementDetailUnifiedView(
         );
       } finally {
         setPreviewLoadingDocId(null);
+      }
+    },
+    [],
+  );
+
+  const handleDownloadDoc = useCallback(
+    async (doc: any, fallbackName = "Document.pdf") => {
+      const fileName =
+        doc?.name || doc?.fileName || doc?.originalName || fallbackName;
+      const fileId =
+        doc?.fileAssetId ||
+        doc?.fileId ||
+        (typeof doc?.id === "number" || /^\d+$/.test(String(doc?.id || ""))
+          ? Number(doc.id)
+          : undefined);
+      const rawUrl =
+        doc?.url || doc?.fileUrl || doc?.signedUrl || doc?.documentUrl || "";
+
+      const docIdentifier = doc?.id || doc?.fileAssetId || fileName;
+      setDownloadingDocId(docIdentifier);
+
+      try {
+        let downloadEndpoint = "";
+        if (fileId) {
+          downloadEndpoint = `/api/files/${fileId}/download`;
+        } else if (rawUrl) {
+          downloadEndpoint = rawUrl;
+        }
+
+        if (downloadEndpoint) {
+          try {
+            const res = await api.fetch(downloadEndpoint, { method: "GET", skipCache: true });
+            if (res.ok) {
+              const blob = await res.blob();
+              const blobUrl = window.URL.createObjectURL(blob);
+              const a = document.createElement("a");
+              a.href = blobUrl;
+              a.download = fileName;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              window.URL.revokeObjectURL(blobUrl);
+              toast.success(`Downloaded ${fileName}`);
+              return;
+            }
+          } catch (fetchErr) {
+            console.warn("Direct blob download failed, trying window.open fallback:", fetchErr);
+          }
+        }
+
+        if (downloadEndpoint || rawUrl) {
+          window.open(downloadEndpoint || rawUrl, "_blank");
+        } else {
+          toast.error("Document download URL is not available.");
+        }
+      } catch (err: any) {
+        toast.error(err?.message || "Failed to download document.");
+      } finally {
+        setDownloadingDocId(null);
       }
     },
     [],
@@ -9807,6 +10171,7 @@ export function ProcurementDetailUnifiedView(
   );
 
   const isBidAwarded = useMemo(() => {
+    if (isPODeclined || isAwardDeclined) return false;
     return (
       ["AWARDED", "PO_GENERATED", "COMPLETED"].includes(statusUpper) ||
       ["AWARDED", "PO_GENERATED", "COMPLETED"].includes(lifecycleStageUpper) ||
@@ -10703,6 +11068,8 @@ export function ProcurementDetailUnifiedView(
       isCancelled: isCancelled,
       isContractSettled: isContractSettled,
       isBidAwarded: isBidAwarded,
+      isPODeclined: isPODeclined,
+      isAwardDeclined: isAwardDeclined,
       isRateContract: isRateContractType,
       isAwardAccepted: isAwardAccepted,
       isBeforeSubmissionStart: isBeforeSubmissionStart,
@@ -11995,11 +12362,83 @@ export function ProcurementDetailUnifiedView(
               </div>
             )}
 
+          {/* Seller: Purchase Order Declined */}
+          {!isBuyerSide &&
+            effectiveActiveOrder &&
+            isPODeclined && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="relative overflow-hidden rounded-2xl border-2 border-rose-400 bg-gradient-to-r from-rose-950 via-slate-900 to-slate-950 p-4 sm:p-5 text-white shadow-xl animate-fadeIn"
+              >
+                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-2">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/20 border border-rose-400/50 px-3 py-1 text-xs font-black uppercase tracking-wider text-rose-300">
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      Purchase Order Declined
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                      Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} Declined
+                    </h3>
+                    <p className="text-xs sm:text-sm font-medium text-rose-100 max-w-2xl leading-relaxed">
+                      {poDeclineMetadata.isExcused
+                        ? "You declined this Purchase Order under an excused contractual ground (GFR 171 compliant). Zero penalty applies to your vendor reliability score and any PBG obligations are released."
+                        : "You declined this Purchase Order. This commercial default has been recorded in the audit trail under Vendor Discipline guidelines."}
+                    </p>
+                    <div className="rounded-xl border border-rose-800/80 bg-rose-900/30 p-3 text-xs space-y-1.5 max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-2 text-rose-200">
+                        <span className="font-bold text-white">Reason Category:</span>
+                        <span className="inline-flex items-center rounded-md bg-rose-500/20 px-2 py-0.5 font-bold text-rose-200 border border-rose-400/30">
+                          {poDeclineMetadata.reasonLabel || poDeclineMetadata.reasonCode}
+                        </span>
+                        {poDeclineMetadata.isExcused ? (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-400/30 text-[11px]">
+                            <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Excused (GFR 171)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-0.5 font-bold text-amber-300 border border-amber-400/30 text-[11px]">
+                            <ShieldAlert className="h-3 w-3" aria-hidden="true" /> Commercial Default
+                          </span>
+                        )}
+                      </div>
+                      {poDeclineMetadata.reason && (
+                        <div className="text-rose-100/90 font-medium">
+                          <span className="font-bold text-white">Remarks: </span>
+                          <span>&ldquo;{poDeclineMetadata.reason}&rdquo;</span>
+                        </div>
+                      )}
+                      {poDeclineMetadata.evidenceFile?.name && (
+                        <div className="flex items-center gap-1.5 text-xs text-rose-200 pt-1">
+                          <FileText className="h-3.5 w-3.5 text-rose-300" aria-hidden="true" />
+                          <span className="font-bold text-white">Evidence: </span>
+                          <span className="truncate">{poDeclineMetadata.evidenceFile.name}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsReceiptModalOpen(true)}
+                      className="h-10 px-4 gap-1.5 text-xs font-bold bg-white/10 hover:bg-white/20 text-white border-white/20 rounded-xl cursor-pointer"
+                    >
+                      <FileText className="h-4 w-4 mr-1 text-rose-300" aria-hidden="true" />
+                      View PO Details
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* Seller: Purchase Order Received — Accept PO & Commit Delivery */}
           {!isBuyerSide &&
             isAwardedToMe &&
             effectiveActiveOrder &&
-            !isPOAccepted && (
+            !isPOAccepted &&
+            !isPODeclined &&
+            !isAwardDeclined && (
               <div className="relative overflow-hidden rounded-2xl border-2 border-emerald-400 bg-gradient-to-r from-emerald-800 via-teal-900 to-slate-950 p-5 text-white shadow-xl animate-fadeIn">
                 <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="space-y-1.5">
@@ -12628,19 +13067,191 @@ export function ProcurementDetailUnifiedView(
                       suppliers.
                     </p>
                   </div>
-                  <div className="shrink-0">
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
                     <Button
                       type="button"
                       disabled={isIssuingPOFromBanner}
-                      onClick={() => handleGeneratePOFromBanner(activeAward.id)}
+                      onClick={() => handleGeneratePOFromBanner(activeAward.id, { asDraft: true, openEditImmediately: true })}
                       className="h-9 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs px-4 shadow-md border border-emerald-300 gap-1.5 cursor-pointer rounded-lg transition-transform active:scale-95"
                     >
                       {isIssuingPOFromBanner ? (
                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
                       ) : (
-                        <FileText className="h-3.5 w-3.5" />
+                        <FileEdit className="h-3.5 w-3.5" />
                       )}
+                      Generate &amp; Edit PO Draft
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isIssuingPOFromBanner}
+                      onClick={() => handleGeneratePOFromBanner(activeAward.id, { asDraft: false, openEditImmediately: false })}
+                      className="h-9 bg-slate-900/60 hover:bg-slate-800 text-slate-200 hover:text-white font-bold text-xs px-3 border border-slate-600 gap-1.5 cursor-pointer rounded-lg"
+                    >
+                      <FileText className="h-3.5 w-3.5 text-slate-400" />
                       Generate &amp; Issue Purchase Order
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* Buyer: Purchase Order Draft (Unissued) */}
+          {isBuyerSide &&
+            Boolean(effectiveActiveOrder) &&
+            isPODraft && (
+              <div className="rounded-xl border border-amber-300 bg-gradient-to-r from-amber-50/95 via-amber-50/50 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="flex items-start gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500 text-white shadow-2xs">
+                      <FileEdit className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-800 border border-amber-200">
+                          <FileEdit className="h-3 w-3 text-amber-600" />
+                          Purchase Order Draft — Not Yet Sent
+                        </span>
+                        <span className="rounded-md bg-white border border-slate-200 px-2 py-0.5 text-[10.5px] font-mono font-bold text-slate-700 shadow-2xs">
+                          PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id}
+                        </span>
+                        <span className="rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border bg-amber-50 text-amber-900 border-amber-300">
+                          Draft Review Phase
+                        </span>
+                      </div>
+                      <h3 className="text-xs sm:text-[13px] font-extrabold text-slate-900 tracking-tight">
+                        Purchase Order Draft Prepared — Review &amp; Edit Before Official Release
+                      </h3>
+                      <p className="text-xs text-slate-600 max-w-3xl leading-relaxed">
+                        Purchase Order #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} has been drafted for{" "}
+                        <strong className="text-slate-900 font-bold">
+                          {activeAward?.sellerName ||
+                            activeAward?.seller?.name ||
+                            effectiveActiveOrder?.seller?.name ||
+                            "Awarded Supplier"}
+                        </strong>{" "}
+                        for{" "}
+                        <strong className="text-amber-800 font-bold">
+                          ₹{Number(
+                            effectiveActiveOrder.amount ||
+                              effectiveActiveOrder.totalValue ||
+                              activeAward?.finalAmount ||
+                              0,
+                          ).toLocaleString("en-IN")}
+                        </strong>
+                        . Review delivery consignee addresses, dates, and attachments before dispatching to the seller.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-amber-200">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setEditPoTargetOrder(effectiveActiveOrder);
+                        setEditPoMode('draft');
+                        setIsEditPoModalOpen(true);
+                      }}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 border border-amber-400 shadow-xs rounded-lg cursor-pointer"
+                    >
+                      <FileEdit className="h-3.5 w-3.5" />
+                      Edit PO Draft
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setIsReceiptModalOpen(true)}
+                      className="h-8 px-3 gap-1.5 text-xs font-bold bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                    >
+                      <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
+                      Preview PO
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={isIssuingPO}
+                      onClick={() => handleIssueActivePO(effectiveActiveOrder.id)}
+                      className="h-8 px-3.5 gap-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs rounded-lg cursor-pointer"
+                    >
+                      {isIssuingPO ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                      Issue PO to Supplier
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* Buyer: Supplier Declined Purchase Order */}
+          {isBuyerSide &&
+            effectiveActiveOrder &&
+            isPODeclined && (
+              <div
+                role="status"
+                aria-live="polite"
+                className="relative overflow-hidden rounded-2xl border-2 border-rose-300 bg-gradient-to-r from-rose-900 via-slate-900 to-slate-950 p-4 sm:p-5 text-white shadow-xl animate-fadeIn"
+              >
+                <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-rose-500/20 border border-rose-400/40 px-3 py-1 text-xs font-black uppercase tracking-wider text-rose-300">
+                      <XCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                      Supplier Declined Purchase Order
+                    </div>
+                    <h3 className="text-lg sm:text-xl font-black tracking-tight text-white">
+                      PO #{effectiveActiveOrder.poNumber || effectiveActiveOrder.id} was Declined by Supplier
+                    </h3>
+                    <p className="text-xs sm:text-sm font-medium text-rose-100 max-w-2xl leading-relaxed">
+                      The awarded supplier has formally declined this Purchase Order. The order is cancelled. The tender has been returned to evaluation so you may award the contract to the next eligible bidder (L2/standby) or initiate re-tendering.
+                    </p>
+                    {(poDeclineMetadata.reason || poDeclineMetadata.reasonLabel) && (
+                      <div className="rounded-xl border border-rose-800/80 bg-rose-900/30 p-2.5 text-xs text-rose-100 max-w-2xl space-y-1.5">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-bold text-white">Reason Category:</span>
+                          <span className="inline-flex items-center rounded-md bg-rose-500/20 px-2 py-0.5 font-bold text-rose-200 border border-rose-400/30">
+                            {poDeclineMetadata.reasonLabel || poDeclineMetadata.reasonCode}
+                          </span>
+                          {poDeclineMetadata.isExcused ? (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-emerald-500/20 px-2 py-0.5 font-bold text-emerald-300 border border-emerald-400/30 text-[11px]">
+                              <ShieldCheck className="h-3 w-3" aria-hidden="true" /> Excused (GFR 171)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-500/20 px-2 py-0.5 font-bold text-amber-300 border border-amber-400/30 text-[11px]">
+                              <ShieldAlert className="h-3 w-3" aria-hidden="true" /> Commercial Default
+                            </span>
+                          )}
+                        </div>
+                        {poDeclineMetadata.reason && (
+                          <div className="text-rose-100 font-medium">
+                            <span className="font-bold text-white">Decline Justification: </span>
+                            <span>&ldquo;{poDeclineMetadata.reason}&rdquo;</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        if (resultsPageUrl) {
+                          router.push(resultsPageUrl);
+                        } else {
+                          setActiveTab("clarifications");
+                          setTimeout(() => {
+                            const targetEl =
+                              document.getElementById("proposals-section") ||
+                              document.getElementById("tabpanel-clarifications") ||
+                              document.getElementById("tabs-navigation-section");
+                            if (targetEl) {
+                              targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+                            }
+                          }, 80);
+                        }
+                      }}
+                      className="h-10 px-4 bg-white/20 hover:bg-white/30 text-white font-bold text-xs border border-white/30 rounded-xl flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>Review Proposals &amp; Re-Award</span>
+                      <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
                     </Button>
                   </div>
                 </div>
@@ -12649,7 +13260,9 @@ export function ProcurementDetailUnifiedView(
 
           {/* Buyer: Purchase Order Issued & Active */}
           {isBuyerSide &&
-            Boolean(effectiveActiveOrder) && (
+            Boolean(effectiveActiveOrder) &&
+            !isPODraft &&
+            !isPODeclined && (
               <div className="rounded-xl border border-emerald-200 bg-gradient-to-r from-emerald-50/90 via-teal-50/40 to-white p-3 sm:p-3.5 shadow-2xs transition-all animate-fadeIn">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="flex items-start gap-2.5">
@@ -12742,6 +13355,41 @@ export function ProcurementDetailUnifiedView(
                       <FileText className="h-3.5 w-3.5 mr-0.5 text-slate-500" />
                       View Purchase Order
                     </Button>
+
+                    {/* Pre-acceptance Recall & Edit: If PO was issued but supplier hasn't accepted yet */}
+                    {!isPOAccepted && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isRecallingPO}
+                        onClick={() => handleRecallAndEditPO(effectiveActiveOrder.id)}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        {isRecallingPO ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <FileEdit className="h-3.5 w-3.5 text-amber-700" />
+                        )}
+                        Edit / Recall PO
+                      </Button>
+                    )}
+
+                    {/* Post-acceptance Amend PO */}
+                    {isPOAccepted && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        onClick={() => {
+                          setEditPoTargetOrder(effectiveActiveOrder);
+                          setEditPoMode('amend');
+                          setIsEditPoModalOpen(true);
+                        }}
+                        className="h-8 px-3 gap-1.5 text-xs font-bold bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-300 shadow-2xs rounded-lg cursor-pointer"
+                      >
+                        <FileEdit className="h-3.5 w-3.5 text-slate-500" />
+                        Amend PO
+                      </Button>
+                    )}
 
                     {/* View Tax Invoice if seller has generated it */}
                     {hasCreatedInvoice && (
@@ -13215,6 +13863,26 @@ export function ProcurementDetailUnifiedView(
                 </div>
               </div>
             </div>
+          )}
+
+          {isEditPoModalOpen && (editPoTargetOrder || effectiveActiveOrder) && (
+            <EditPurchaseOrderModal
+              isOpen={isEditPoModalOpen}
+              onClose={() => {
+                setIsEditPoModalOpen(false);
+                setEditPoTargetOrder(null);
+              }}
+              order={editPoTargetOrder || effectiveActiveOrder}
+              mode={editPoMode}
+              onSuccess={async () => {
+                setIsEditPoModalOpen(false);
+                setEditPoTargetOrder(null);
+                await queryClient.invalidateQueries();
+                queryClient.refetchQueries({ queryKey: ["procurement-active-order"] });
+                queryClient.refetchQueries({ queryKey: ["rfq-detail-bid"] });
+                queryClient.refetchQueries({ queryKey: ["reverse-auction"] });
+              }}
+            />
           )}
 
           {isReceiptModalOpen && effectiveActiveOrder && (
@@ -14029,7 +14697,7 @@ export function ProcurementDetailUnifiedView(
                     type="button"
                     size="sm"
                     onClick={() => {
-                      if (isBuyerOrAdmin && isBidAwarded) {
+                      if (isBuyerOrAdmin && (isBidAwarded || isPODeclined || isAwardDeclined)) {
                         if (linkedAuction) {
                           const code = (linkedAuction as any).auctionCode || linkedAuction.id;
                           router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(code))}/result`);
@@ -14095,8 +14763,8 @@ export function ProcurementDetailUnifiedView(
                     props.participations?.length || 0,
                   )}
                   onEditClick={() => {
-                    const targetId = props.rawBid?.id || props.id;
-                    router.push(`/buyer/procurement/create?id=${encodeURIComponent(targetId)}&edit=1`);
+                    const targetId = props.rawBid?.id || (props as any).rawRequirement?.id || props.id;
+                    router.push(`/buyer/procurement/create?id=${encodeURIComponent(String(targetId))}&edit=1`);
                   }}
                   onCancelClick={props.onCancelClick}
                 />
@@ -14717,15 +15385,19 @@ export function ProcurementDetailUnifiedView(
                     />
                     <PropertyItem label="Buying Type" value={buyingType} />
                     <PropertyItem label="Category" value={category} />
-                    <PropertyItem
-                      label="Sourcing Strategy"
-                      value={sourcingStrategyLabel}
-                    />
-                    <PropertyItem
-                      label="Minimum Bids Quorum"
-                      value={minimumBiddersQuorumLabel}
-                      highlight
-                    />
+                    {isBuyerSide && (
+                      <>
+                        <PropertyItem
+                          label="Sourcing Strategy"
+                          value={sourcingStrategyLabel}
+                        />
+                        <PropertyItem
+                          label="Minimum Bids Quorum"
+                          value={minimumBiddersQuorumLabel}
+                          highlight
+                        />
+                      </>
+                    )}
                     <PropertyItem
                       label="Delivery Location"
                       value={deliveryLocation}
@@ -14892,6 +15564,7 @@ export function ProcurementDetailUnifiedView(
                   buyingType={buyingType}
                   scopeText={scopeText}
                   onOpenDoc={handleOpenDoc}
+                  onDownloadDoc={handleDownloadDoc}
                 />
               )}
 
@@ -14933,11 +15606,11 @@ export function ProcurementDetailUnifiedView(
                                     ? `doc-${doc.id}-${index}`
                                     : `doc-idx-${index}`
                                 }
-                                className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors"
+                                className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-3.5 shadow-xs flex flex-col justify-between hover:bg-slate-50 transition-colors"
                               >
                                 <div className="flex items-start gap-3">
-                                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
-                                    <FileText className="h-5 w-5" />
+                                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                    <FileText className="h-4 w-4" />
                                   </span>
                                   <div className="min-w-0 flex-1">
                                     <p className="break-words text-xs font-bold text-slate-900 leading-snug">
@@ -14959,23 +15632,42 @@ export function ProcurementDetailUnifiedView(
                                     </div>
                                   </div>
                                 </div>
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleOpenDoc(doc, docDisplayName)}
-                                  disabled={!doc.fileAssetId && !doc.url}
-                                  className="mt-3.5 w-full text-xs h-8.5 rounded-lg border-slate-250 bg-white hover:bg-slate-100 font-bold"
-                                >
-                                  {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName) ? (
-                                    <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
-                                  ) : (
-                                    <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                                  )}
-                                  {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName)
-                                    ? "Opening..."
-                                    : "Open Document"}
-                                </Button>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOpenDoc(doc, docDisplayName)}
+                                    disabled={!doc.fileAssetId && !doc.url}
+                                    className="text-xs h-8 rounded-lg border-slate-200 bg-white hover:bg-slate-50 font-bold"
+                                  >
+                                    {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName) ? (
+                                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                    ) : (
+                                      <Eye className="h-3.5 w-3.5 mr-1 text-slate-500" />
+                                    )}
+                                    {previewLoadingDocId === (doc.id || doc.fileAssetId || docDisplayName)
+                                      ? "Opening..."
+                                      : "Preview"}
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDownloadDoc(doc, docDisplayName)}
+                                    disabled={!doc.fileAssetId && !doc.url}
+                                    className="text-xs h-8 rounded-lg border-indigo-200 bg-indigo-50/70 text-indigo-700 hover:bg-indigo-100 font-bold"
+                                  >
+                                    {downloadingDocId === (doc.id || doc.fileAssetId || docDisplayName) ? (
+                                      <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                                    ) : (
+                                      <Download className="h-3.5 w-3.5 mr-1" />
+                                    )}
+                                    {downloadingDocId === (doc.id || doc.fileAssetId || docDisplayName)
+                                      ? "Downloading..."
+                                      : "Download"}
+                                  </Button>
+                                </div>
                               </article>
                             );
                           })}
@@ -15106,11 +15798,13 @@ export function ProcurementDetailUnifiedView(
                               : "Single Packet Envelope (Commercial Only)"
                           }
                         />
-                        <PropertyItem
-                          label="Minimum Sourcing Quorum"
-                          value={minimumBiddersQuorumLabel}
-                          highlight
-                        />
+                        {isBuyerSide && (
+                          <PropertyItem
+                            label="Minimum Sourcing Quorum"
+                            value={minimumBiddersQuorumLabel}
+                            highlight
+                          />
+                        )}
                       </PropertyGrid>
                     </div>
                   </div>
@@ -15410,6 +16104,7 @@ export function ProcurementDetailUnifiedView(
                 />
               )}
 
+              {isBuyerSide && (
                 <DataCard title="Supplier Reach & Sourcing Governance" icon={Users}>
                   <div className="space-y-5">
                     <div className="rounded-xl bg-slate-50/70 p-4 border border-slate-150">
@@ -15490,6 +16185,7 @@ export function ProcurementDetailUnifiedView(
                       )}
                   </div>
                 </DataCard>
+              )}
             </div>
           )}
 
@@ -17256,9 +17952,9 @@ export function SellerQuotationReviewModal({
       {
         key: "itemName",
         header: "Line Item & Specifications",
-        width: "w-[40%] min-w-[280px]",
+        width: "w-[38%] min-w-[280px]",
         cellClassName: "align-top",
-        headerClassName: "w-[40%] min-w-[280px]",
+        headerClassName: "w-[38%] min-w-[280px]",
         cell: (item, idx) => {
           const itemHsn = item.hsnCode || item.hsn_sac_code;
           const itemBrandPolicy = item.brandPolicy;
@@ -17281,7 +17977,7 @@ export function SellerQuotationReviewModal({
 
               <div className="flex flex-wrap items-center gap-1.5">
                 {itemHsn && (
-                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-1.5 py-0.5 text-[10px] font-mono font-bold text-indigo-800">
+                  <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200/80 px-1.5 py-0.5 text-[10px] font-mono font-bold text-indigo-800">
                     HSN: {itemHsn}
                   </span>
                 )}
@@ -17311,17 +18007,17 @@ export function SellerQuotationReviewModal({
               </div>
 
               {item.specifications && (
-                <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2 text-[11px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
-                    Offered Specifications:
+                <div className="rounded-md bg-slate-50/80 border-l-2 border-l-blue-500 border border-slate-200/60 px-2.5 py-1.5 text-xs text-slate-700">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mr-1.5">
+                    Offered Specs:
                   </span>
-                  <span className="break-words font-medium">{item.specifications}</span>
+                  <span className="break-words font-medium text-slate-800">{item.specifications}</span>
                 </div>
               )}
 
               {itemAttachments.length > 0 && (
                 <div className="pt-1 space-y-1">
-                  <span className="text-[9.5px] font-bold uppercase text-slate-500 block">
+                  <span className="text-[9.5px] font-bold uppercase tracking-wider text-slate-400 block">
                     Item Documents ({itemAttachments.length}):
                   </span>
                   <div className="flex flex-col gap-1">
@@ -17331,27 +18027,29 @@ export function SellerQuotationReviewModal({
                       return (
                         <div
                           key={attIdx}
-                          className="flex items-center justify-between rounded border border-slate-200 bg-white p-1.5 text-xs shadow-2xs"
+                          className="flex items-center justify-between rounded-md border border-slate-200/90 bg-white px-2 py-1 text-xs shadow-2xs hover:border-blue-300 transition-colors"
                         >
-                          <div className="min-w-0 pr-2">
+                          <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                            <FileText className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                             <p className="font-bold text-slate-800 truncate text-[11px]" title={attName}>
                               {attName}
                             </p>
-                            <p className="text-[9px] font-medium text-slate-400">
-                              {att.documentType ? att.documentType.replace(/_/g, " ") : "Technical Sheet"}
-                              {att.customNote ? ` • ${att.customNote}` : ""}
-                            </p>
+                            {att.documentType && (
+                              <span className="text-[9px] font-bold text-slate-500 uppercase bg-slate-100 rounded px-1.5 py-0.2 shrink-0">
+                                {att.documentType.replace(/_/g, " ")}
+                              </span>
+                            )}
                           </div>
                           <button
                             type="button"
                             disabled={isAttLoading}
                             onClick={() => handleViewAttachment(att, attName)}
-                            className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                            className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors shrink-0 cursor-pointer disabled:opacity-50"
                           >
                             {isAttLoading ? (
-                              <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                              <Loader2 className="h-3 w-3 animate-spin text-current" />
                             ) : (
-                              <Eye className="h-3 w-3 text-blue-600" />
+                              <Eye className="h-3 w-3" />
                             )}
                             View
                           </button>
@@ -17368,11 +18066,11 @@ export function SellerQuotationReviewModal({
       {
         key: "makeBrand",
         header: "Make / Brand",
-        width: "w-[14%] min-w-[100px]",
+        width: "w-[13%] min-w-[90px]",
         cellClassName: "align-top",
         cell: (item) => (
-          <div className="pt-0.5">
-            <span className="text-slate-800 font-medium break-words text-xs">
+          <div className="pt-1">
+            <span className="text-slate-900 font-bold break-words text-xs">
               {item.makeBrand || item.brand || "—"}
             </span>
           </div>
@@ -17381,14 +18079,15 @@ export function SellerQuotationReviewModal({
       {
         key: "quantity",
         header: "Qty",
-        width: "w-[10%] min-w-[80px]",
-        cellClassName: "align-top",
+        width: "w-[11%] min-w-[80px]",
+        cellClassName: "align-top text-right",
+        headerClassName: "text-right",
         align: "right",
         cell: (item) => {
           const q = Number(item.quantity ?? item.qty ?? 1);
           return (
-            <div className="pt-0.5 flex justify-end">
-              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded text-[11px] border border-slate-200 inline-flex items-center gap-1 whitespace-nowrap">
+            <div className="pt-1 flex justify-end">
+              <span className="bg-slate-100 text-slate-800 font-bold px-2 py-0.5 rounded-md text-[11px] border border-slate-200 inline-flex items-center gap-1 whitespace-nowrap">
                 <span>{q}</span>{" "}
                 <span
                   className="text-[9px] font-semibold text-slate-500 uppercase truncate max-w-[60px]"
@@ -17404,13 +18103,14 @@ export function SellerQuotationReviewModal({
       {
         key: "unitRate",
         header: "Unit Rate (₹)",
-        width: "w-[14%] min-w-[100px]",
-        cellClassName: "align-top",
+        width: "w-[13%] min-w-[100px]",
+        cellClassName: "align-top text-right",
+        headerClassName: "text-right",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <div className="pt-0.5 flex justify-end">
+              <div className="pt-1 flex justify-end">
                 <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
                   <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
                 </span>
@@ -17421,7 +18121,7 @@ export function SellerQuotationReviewModal({
             item.unitPrice ?? item.unitRate ?? item.rate ?? item.price ?? 0,
           );
           return (
-            <div className="pt-0.5">
+            <div className="pt-1 text-right flex justify-end">
               <span className="tabular-nums font-bold text-slate-900 text-xs whitespace-nowrap">
                 ₹
                 {uPrice.toLocaleString("en-IN", {
@@ -17436,13 +18136,14 @@ export function SellerQuotationReviewModal({
       {
         key: "gst",
         header: "GST %",
-        width: "w-[8%] min-w-[65px]",
-        cellClassName: "align-top",
+        width: "w-[9%] min-w-[65px]",
+        cellClassName: "align-top text-right",
+        headerClassName: "text-right",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <div className="pt-0.5">
+              <div className="pt-1 text-right flex justify-end">
                 <span className="text-slate-400 font-medium text-xs">—</span>
               </div>
             );
@@ -17462,7 +18163,7 @@ export function SellerQuotationReviewModal({
                         ? Number(participation.gstPercent)
                         : 18;
           return (
-            <div className="pt-0.5">
+            <div className="pt-1 text-right flex justify-end">
               <span className="tabular-nums font-semibold text-slate-700 text-xs">
                 {gst}%
               </span>
@@ -17473,13 +18174,14 @@ export function SellerQuotationReviewModal({
       {
         key: "lineTotal",
         header: "Line Total (₹)",
-        width: "w-[14%] min-w-[110px]",
-        cellClassName: "align-top",
+        width: "w-[16%] min-w-[110px]",
+        cellClassName: "align-top text-right",
+        headerClassName: "text-right",
         align: "right",
         cell: (item) => {
           if (isFinancialSealed) {
             return (
-              <div className="pt-0.5 flex justify-end">
+              <div className="pt-1 flex justify-end">
                 <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-200 px-2 py-0.5 text-[10px] font-bold text-indigo-700">
                   <Lock className="h-2.5 w-2.5 text-indigo-500" /> Sealed
                 </span>
@@ -17506,7 +18208,7 @@ export function SellerQuotationReviewModal({
               ? Number(item.lineTotal ?? item.totalAmount ?? item.totalPrice)
               : uPrice * q * (1 + gst / 100);
           return (
-            <div className="pt-0.5">
+            <div className="pt-1 text-right flex justify-end">
               <span className="font-black text-slate-900 tabular-nums text-xs whitespace-nowrap">
                 ₹
                 {tot.toLocaleString("en-IN", {
@@ -18029,39 +18731,44 @@ export function SellerQuotationReviewModal({
               </div>
             </div>
 
-            {/* Technical Specifications, Model & Remarks */}
-            {(makeBrand !== "—" || model !== "—" || techSpecs || message) && (
-              <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-2xs space-y-3">
-                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
-                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-purple-50 text-purple-700">
-                    <Tag className="h-3.5 w-3.5" />
+            {/* Single-Scope Specifications & Parameters (Only rendered when no line items table exists) */}
+            {lineItems.length === 0 && (makeBrand !== "—" || model !== "—" || techSpecs || message) && (
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3.5">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2.5">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-50 text-purple-700">
+                    <Tag className="h-4 w-4" />
                   </div>
-                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
-                    Offered Product Specifications &amp; Parameters
-                  </h4>
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                      Offered Scope &amp; Technical Parameters
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      Supplier offered technical specifications and fulfillment terms
+                    </p>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
                       Make / Brand
                     </span>
                     <p className="font-bold text-slate-900 break-words leading-tight" title={makeBrand}>{makeBrand}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
                       Model / Ref No
                     </span>
                     <p className="font-bold text-slate-900 break-words leading-tight" title={model}>{model}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
                       Offered Quantity
                     </span>
                     <p className="font-bold text-slate-900 break-words leading-tight">{offeredQty}</p>
                   </div>
                   <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-2.5 space-y-0.5">
-                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wide block">
                       Delivery Window
                     </span>
                     <p className="font-bold text-slate-900 break-words leading-tight">{deliveryTimeline}</p>
@@ -18069,37 +18776,73 @@ export function SellerQuotationReviewModal({
                 </div>
 
                 {techSpecs && (
-                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
-                      Technical Specifications:
+                  <div className="rounded-lg bg-slate-50/80 border-l-2 border-l-purple-500 border border-slate-200/60 p-3 text-xs space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 block">
+                      Technical Specifications &amp; Compliance Offer:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700 break-words">
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-800 break-words">
                       {techSpecs}
                     </p>
                   </div>
                 )}
 
                 {warranty && warranty !== "—" && (
-                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                  <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-3 text-xs space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Warranty &amp; Guarantee Terms:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-700 break-words">
+                    <p className="whitespace-pre-wrap font-medium leading-relaxed text-slate-800 break-words">
                       {warranty}
                     </p>
                   </div>
                 )}
 
                 {message && message !== techSpecs && (
-                  <div className="rounded-lg bg-slate-50 border border-slate-200/80 p-3 text-xs">
-                    <span className="text-[10px] font-bold uppercase text-slate-400 block mb-1">
+                  <div className="rounded-lg bg-slate-50/80 border border-slate-200/60 p-3 text-xs space-y-1">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
                       Supplier Remarks / Cover Note:
                     </span>
-                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed break-words">
+                    <p className="whitespace-pre-wrap font-medium text-slate-700 leading-relaxed break-words italic">
                       "{message}"
                     </p>
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Supplier Remarks & Warranty Terms (Rendered when line items exist and supplier has added remarks/warranty) */}
+            {lineItems.length > 0 && ((warranty && warranty !== "—") || (message && message !== techSpecs)) && (
+              <div className="rounded-xl border border-slate-200/90 bg-white p-4 shadow-2xs space-y-3">
+                <div className="flex items-center gap-2 border-b border-slate-100 pb-2">
+                  <div className="flex h-6 w-6 items-center justify-center rounded-md bg-amber-50 text-amber-700">
+                    <FileText className="h-3.5 w-3.5" />
+                  </div>
+                  <h4 className="text-xs font-black uppercase tracking-wider text-slate-800">
+                    Supplier Submission Remarks &amp; Warranty Terms
+                  </h4>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  {warranty && warranty !== "—" && (
+                    <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-3 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                        Warranty &amp; Guarantee Terms
+                      </span>
+                      <p className="font-semibold text-slate-800 break-words leading-relaxed whitespace-pre-wrap">
+                        {warranty}
+                      </p>
+                    </div>
+                  )}
+                  {message && message !== techSpecs && (
+                    <div className="rounded-lg bg-slate-50/80 border border-slate-200/70 p-3 space-y-1">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+                        Cover Note / Submission Remarks
+                      </span>
+                      <p className="font-medium text-slate-700 break-words leading-relaxed whitespace-pre-wrap italic">
+                        "{message}"
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -18126,17 +18869,17 @@ export function SellerQuotationReviewModal({
                   emptyTitle="No line items"
                   emptyDescription="No line items attached."
                   footer={
-                    <tr>
+                    <tr className="bg-slate-50/90 border-t-2 border-slate-300">
                       <td
                         colSpan={5}
-                        className="px-3 py-2 text-right text-xs font-bold text-slate-600 uppercase tracking-wider"
+                        className="px-4 py-3 text-right text-xs font-bold text-slate-700 uppercase tracking-wider"
                       >
                         Total Quoted Value (incl. GST)
                       </td>
-                      <td className="px-3 py-2 text-right text-sm font-black tabular-nums">
+                      <td className="px-4 py-3 text-right text-sm sm:text-base font-black tabular-nums">
                         {isFinancialSealed ? (
-                          <span className="inline-flex items-center gap-1 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-0.5 text-xs font-bold text-indigo-700">
-                            <Lock className="h-3 w-3 text-indigo-500" /> Commercial Bid Sealed (Stage 2)
+                          <span className="inline-flex items-center gap-1.5 rounded-md bg-indigo-50 border border-indigo-200 px-2.5 py-1 text-xs font-bold text-indigo-700">
+                            <Lock className="h-3.5 w-3.5 text-indigo-500" /> Commercial Bid Sealed (Stage 2)
                           </span>
                         ) : effectiveTotalAmount > 0 ? (
                           <span className="text-emerald-700 font-black">
@@ -18261,26 +19004,71 @@ export function SellerQuotationReviewModal({
                     }
                   }
 
-                  const renderDocItem = (doc: any, idx: number, iconColor: string) => {
-                    const docName = doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
+                  const renderDocItem = (
+                    doc: any,
+                    idx: number,
+                    iconColor: string,
+                    badgeBg: string,
+                    badgeText: string,
+                  ) => {
+                    const docName =
+                      doc.documentName || doc.name || doc.fileName || `Attachment #${idx + 1}`;
                     const isCurrentlyLoading = previewLoadingId === (doc.id || docName);
+                    const rawCat =
+                      doc.documentCategory ||
+                      doc.documentType ||
+                      doc.category ||
+                      doc.type ||
+                      "Proposal Document";
+                    const catDisplay = String(rawCat).replace(/_/g, " ");
+
                     return (
-                      <div key={idx} className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50/70 p-2.5">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <FileText className={`h-4 w-4 ${iconColor} shrink-0`} />
+                      <div
+                        key={idx}
+                        className="flex items-center justify-between rounded-xl border border-slate-200/90 bg-white p-3 shadow-2xs hover:shadow-xs hover:border-slate-300 transition-all gap-3"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div
+                            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${badgeBg} ${iconColor}`}
+                          >
+                            <FileText className="h-5 w-5" />
+                          </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-extrabold text-slate-900 truncate" title={docName}>{docName}</p>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase">{doc.documentCategory || doc.documentType || "Proposal Document"}</p>
+                            <p
+                              className="text-xs font-bold text-slate-900 truncate"
+                              title={docName}
+                            >
+                              {docName}
+                            </p>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <span
+                                className={`inline-block rounded px-1.5 py-0.2 text-[9.5px] font-bold uppercase tracking-wider ${badgeBg} ${badgeText}`}
+                              >
+                                {catDisplay}
+                              </span>
+                              {doc.fileSize && (
+                                <span className="text-[10px] text-slate-400 font-medium">
+                                  • {typeof doc.fileSize === "number" ? `${Math.round(doc.fileSize / 1024)} KB` : doc.fileSize}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </div>
                         <button
                           type="button"
                           disabled={isCurrentlyLoading}
-                          onClick={(e) => { e.stopPropagation(); handleViewAttachment(doc, docName); }}
-                          className="inline-flex items-center gap-1 rounded bg-blue-50 border border-blue-200 px-2.5 py-1 text-xs font-bold text-blue-700 hover:bg-blue-100 shrink-0 cursor-pointer disabled:opacity-50"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewAttachment(doc, docName);
+                          }}
+                          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-50 border border-blue-200 px-3 py-1.5 text-xs font-bold text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-colors shrink-0 cursor-pointer disabled:opacity-50 shadow-2xs"
                         >
-                          {isCurrentlyLoading ? <Loader2 className="h-3 w-3 animate-spin text-blue-600" /> : <Eye className="h-3 w-3 text-blue-600" />}
-                          View
+                          {isCurrentlyLoading ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-current" />
+                          ) : (
+                            <Eye className="h-3.5 w-3.5" />
+                          )}
+                          <span>View</span>
                         </button>
                       </div>
                     );
@@ -18293,8 +19081,10 @@ export function SellerQuotationReviewModal({
                           <span className="text-[10px] font-black uppercase text-blue-700 tracking-wider">
                             Technical Specifications &amp; Datasheets ({techDocs.length})
                           </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {techDocs.map((d: any, i: number) => renderDocItem(d, i, "text-blue-600"))}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {techDocs.map((d: any, i: number) =>
+                              renderDocItem(d, i, "text-blue-600", "bg-blue-50", "text-blue-700")
+                            )}
                           </div>
                         </div>
                       )}
@@ -18302,7 +19092,7 @@ export function SellerQuotationReviewModal({
                       {/* Financial Proposals: Sealed during Stage 1 technical scrutiny */}
                       {finDocs.length > 0 && (
                         isFinancialSealed ? (
-                          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 space-y-2 shadow-2xs">
+                          <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-3.5 space-y-2 shadow-2xs">
                             <div className="flex items-center justify-between">
                               <span className="text-[10px] font-black uppercase text-indigo-800 tracking-wider flex items-center gap-1.5">
                                 <Lock className="h-3.5 w-3.5 text-indigo-600" />
@@ -18315,16 +19105,18 @@ export function SellerQuotationReviewModal({
                             <p className="text-[11px] text-indigo-900/80 font-medium">
                               Commercial bids and detailed price breakups are sealed during Stage 1 Technical Scrutiny and will unlock only upon technical qualification.
                             </p>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-0.5">
                               {finDocs.map((doc: any, idx: number) => {
                                 const docName = doc.documentName || doc.name || doc.fileName || `Price Breakup #${idx + 1}`;
                                 return (
-                                  <div key={idx} className="flex items-center justify-between rounded-lg border border-indigo-150 bg-white/90 p-2 text-xs">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <FileText className="h-4 w-4 text-indigo-400 shrink-0" />
+                                  <div key={idx} className="flex items-center justify-between rounded-xl border border-indigo-200/80 bg-white p-3 text-xs shadow-2xs">
+                                    <div className="flex items-center gap-2.5 min-w-0">
+                                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500">
+                                        <Lock className="h-4 w-4" />
+                                      </div>
                                       <div className="min-w-0">
-                                        <p className="text-xs font-bold text-slate-700 truncate" title={docName}>{docName}</p>
-                                        <p className="text-[9.5px] text-indigo-600 font-bold uppercase">Commercial Bid Sealed</p>
+                                        <p className="text-xs font-bold text-slate-800 truncate" title={docName}>{docName}</p>
+                                        <p className="text-[9.5px] text-indigo-700 font-bold uppercase">Commercial Bid Sealed</p>
                                       </div>
                                     </div>
                                     <span className="inline-flex items-center gap-1 rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200 shrink-0">
@@ -18340,8 +19132,10 @@ export function SellerQuotationReviewModal({
                             <span className="text-[10px] font-black uppercase text-emerald-700 tracking-wider">
                               Financial Proposals &amp; Detailed Quotations ({finDocs.length})
                             </span>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                              {finDocs.map((d: any, i: number) => renderDocItem(d, i, "text-emerald-600"))}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              {finDocs.map((d: any, i: number) =>
+                                renderDocItem(d, i, "text-emerald-600", "bg-emerald-50", "text-emerald-700")
+                              )}
                             </div>
                           </div>
                         )
@@ -18352,8 +19146,10 @@ export function SellerQuotationReviewModal({
                           <span className="text-[10px] font-black uppercase text-purple-700 tracking-wider">
                             Statutory &amp; Registration Documents ({statDocs.length})
                           </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {statDocs.map((d: any, i: number) => renderDocItem(d, i, "text-purple-600"))}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {statDocs.map((d: any, i: number) =>
+                              renderDocItem(d, i, "text-purple-600", "bg-purple-50", "text-purple-700")
+                            )}
                           </div>
                         </div>
                       )}
@@ -18363,8 +19159,10 @@ export function SellerQuotationReviewModal({
                           <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">
                             Other Attachments ({otherDocs.length})
                           </span>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {otherDocs.map((d: any, i: number) => renderDocItem(d, i, "text-slate-600"))}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {otherDocs.map((d: any, i: number) =>
+                              renderDocItem(d, i, "text-slate-600", "bg-slate-100", "text-slate-700")
+                            )}
                           </div>
                         </div>
                       )}
@@ -18372,6 +19170,39 @@ export function SellerQuotationReviewModal({
                   );
                 })()
               )}
+            </div>
+          </div>
+
+          {/* Grounded Modal Footer */}
+          <div className="shrink-0 border-t border-slate-200 bg-slate-50/90 px-6 py-3 flex items-center justify-between gap-3">
+            <div className="text-xs text-slate-500 flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-slate-700">{sellerOrg}</span>
+              {submittedAt && (
+                <>
+                  <span className="text-slate-300">•</span>
+                  <span>Submitted {formatDateTime(submittedAt)}</span>
+                </>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!isFinancialSealed && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleDownloadQuotationPdf}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 border-slate-300 cursor-pointer shadow-2xs"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  <span>Download PDF</span>
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={onClose}
+                className="bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs px-4 py-2 cursor-pointer shadow-xs"
+              >
+                Close
+              </Button>
             </div>
           </div>
         </div>
