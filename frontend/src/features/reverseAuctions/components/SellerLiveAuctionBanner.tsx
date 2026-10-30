@@ -24,6 +24,7 @@ export interface SellerLiveAuctionBannerProps {
   auctionId: number;
   procurementTitle?: string;
   procurementReference?: string;
+  isTwoStage?: boolean;
   onBidSubmitted?: () => void;
   isDisqualified?: boolean;
   isNonParticipant?: boolean;
@@ -33,6 +34,7 @@ export default function SellerLiveAuctionBanner({
   auctionId,
   procurementTitle,
   procurementReference,
+  isTwoStage: propIsTwoStage,
   onBidSubmitted,
   isDisqualified,
   isNonParticipant,
@@ -70,6 +72,13 @@ export default function SellerLiveAuctionBanner({
 
   const isScheduled = status === 'SCHEDULED' || (startTimeMs > 0 && startTimeMs > nowMs);
   const isLive = status === 'LIVE' && !isScheduled;
+
+  const isTwoStage = propIsTwoStage ?? (
+    summary?.auction?.ruleType === 'AFTER_TECHNICAL_QUALIFICATION' ||
+    summary?.auction?.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+    summary?.auction?.procurementMethod === 'AFTER_TECHNICAL_QUALIFICATION' ||
+    Boolean(summary?.auction?.linkedBidId)
+  );
 
   useEffect(() => {
     if (isDisqualified || isNonParticipant) return;
@@ -185,7 +194,13 @@ export default function SellerLiveAuctionBanner({
                 isLive ? 'text-rose-700' : 'text-blue-700'
               }`}
             >
-              {isLive ? 'Stage 2: Live Reverse Auction Active' : 'Stage 2: Reverse Auction (Scheduled)'}
+              {isLive
+                ? isTwoStage
+                  ? 'Stage 2: Live Reverse Auction Active'
+                  : 'Live Reverse Auction Active'
+                : isTwoStage
+                ? 'Stage 2: Reverse Auction (Scheduled)'
+                : 'Reverse Auction Scheduled'}
             </span>
             {procurementReference && (
               <span className="rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10px] font-mono font-bold text-slate-700">
@@ -209,25 +224,27 @@ export default function SellerLiveAuctionBanner({
           </div>
         </div>
 
-        {/* Two-Stage Explanatory Banner */}
-        <div className={`mt-3.5 flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[11px] ${
-          isLive
-            ? 'bg-amber-50/90 border-amber-200 text-amber-950'
-            : 'bg-blue-50/90 border-blue-200 text-blue-950'
-        }`}>
-          <Info className={`h-4 w-4 shrink-0 ${isLive ? 'text-amber-600' : 'text-blue-600'}`} aria-hidden="true" />
-          <span>
-            {isLive ? (
-              <>
-                <strong className="text-amber-800 font-bold">Two-Stage Procurement Notice:</strong> This banner reflects the <strong>Stage 2 Live Reverse Auction</strong> closing time. Initial qualification quotes must be submitted by the <strong>Stage 1 Submission Deadline</strong> below.
-              </>
-            ) : (
-              <>
-                <strong className="text-blue-800 font-bold">Two-Stage Procurement Notice:</strong> This reverse auction is scheduled to commence on <strong>{formattedStartTime}</strong> following technical qualification. Initial qualification quotes must be submitted by the <strong>Stage 1 Submission Deadline</strong> below.
-              </>
-            )}
-          </span>
-        </div>
+        {/* Two-Stage Explanatory Banner (Only for two-stage procurements with prior technical qualification) */}
+        {isTwoStage && (
+          <div className={`mt-3.5 flex items-center gap-2 rounded-xl border px-3.5 py-2 text-[11px] ${
+            isLive
+              ? 'bg-amber-50/90 border-amber-200 text-amber-950'
+              : 'bg-blue-50/90 border-blue-200 text-blue-950'
+          }`}>
+            <Info className={`h-4 w-4 shrink-0 ${isLive ? 'text-amber-600' : 'text-blue-600'}`} aria-hidden="true" />
+            <span>
+              {isLive ? (
+                <>
+                  <strong className="text-amber-800 font-bold">Two-Stage Procurement Notice:</strong> This banner reflects the <strong>Stage 2 Live Reverse Auction</strong> closing time. Initial qualification quotes must be submitted by the <strong>Stage 1 Submission Deadline</strong> below.
+                </>
+              ) : (
+                <>
+                  <strong className="text-blue-800 font-bold">Two-Stage Procurement Notice:</strong> This reverse auction is scheduled to commence on <strong>{formattedStartTime}</strong> following technical qualification. Initial qualification quotes must be submitted by the <strong>Stage 1 Submission Deadline</strong> below.
+                </>
+              )}
+            </span>
+          </div>
+        )}
 
         {/* Content & KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 py-4">
@@ -241,7 +258,11 @@ export default function SellerLiveAuctionBanner({
               {timeLeft}
             </p>
             <p className="text-[10px] text-slate-500 font-medium">
-              {isLive ? 'Stage 2 Live Auction Cutoff' : `Scheduled Start: ${formattedStartTime}`}
+              {isLive
+                ? isTwoStage
+                  ? 'Stage 2 Live Auction Cutoff'
+                  : 'Live Auction Cutoff'
+                : `Scheduled Start: ${formattedStartTime}`}
             </p>
           </div>
 

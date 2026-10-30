@@ -11876,6 +11876,7 @@ export function ProcurementDetailUnifiedView(
                 auctionId={linkedAuction.id}
                 procurementTitle={resolvedSubject}
                 procurementReference={displayIdStr}
+                isTwoStage={isTwoStageReverseAuction}
                 isDisqualified={isDisqualified}
                 isNonParticipant={isNonParticipant}
                 onBidSubmitted={() => {
@@ -12126,6 +12127,11 @@ export function ProcurementDetailUnifiedView(
                 );
               }
 
+              // If seller is active and qualified, SellerLiveAuctionBanner is already rendered above!
+              if (!isBuyerSide) {
+                return null;
+              }
+
               return (
                 <div className="rounded-2xl border border-red-200 bg-gradient-to-r from-red-50/90 via-rose-50/60 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-3">
@@ -12233,6 +12239,11 @@ export function ProcurementDetailUnifiedView(
                     </div>
                   </div>
                 );
+              }
+
+              // If seller is active and qualified, SellerLiveAuctionBanner is already rendered above!
+              if (!isBuyerSide) {
+                return null;
               }
 
               return (
@@ -14480,20 +14491,21 @@ export function ProcurementDetailUnifiedView(
 
 
 
-                  if (isLive && (isBuyerSide || (!isDisqualified && !isNonParticipant))) {
+                  // For buyers, provide a dedicated live console shortcut button in header.
+                  // For sellers, primaryHighwayAction (SSOT) already provides the primary action button to enter/join the live room, eliminating duplicate buttons.
+                  if (isLive && isBuyerSide) {
                     return (
                       <Button
                         type="button"
                         size="sm"
                         onClick={() => {
-                          const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
-                          router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
+                          router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
                         }}
                         className="h-8 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm gap-1.5 flex items-center cursor-pointer transition-all active:scale-95 animate-pulse"
                         title="Enter Live Reverse Auction Console"
                       >
                         <Gavel className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-                        <span>{isBuyerSide ? "Live Bid Console" : "Enter Live Auction"}</span>
+                        <span>Live Bid Console</span>
                       </Button>
                     );
                   }
@@ -14616,9 +14628,7 @@ export function ProcurementDetailUnifiedView(
                           : isRateContractType
                             ? "Download My Proposal (PDF)"
                             : isReverseAuctionType
-                              ? isBiddingClosed
-                                ? "View Auction Results"
-                                : "Download My Bid (PDF)"
+                              ? "Download My Bid (PDF)"
                               : "Download My Proposal (PDF)"}
                     </span>
                   </Button>
@@ -14708,6 +14718,11 @@ export function ProcurementDetailUnifiedView(
                       }
                       if (primaryHighwayAction.type === 'SELLER_VIEW_SUBMITTED') {
                         handleOpenMyQuotationModal();
+                        return;
+                      }
+                      if (primaryHighwayAction.type === 'SELLER_VIEW_AUCTION_RESULTS') {
+                        const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || targetId;
+                        router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}/results`);
                         return;
                       }
                       if (primaryHighwayAction.type === 'SELLER_ENTER_AUCTION') {

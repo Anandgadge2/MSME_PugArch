@@ -507,6 +507,18 @@ export function ProcurementLifecycleStepper({
     return statusUpper === 'COMPLETED' || poStatusUpper === 'COMPLETED' || hasSettledInvoice;
   }, [status, effectiveActiveOrder, hasSettledInvoice]);
 
+  const isBidAwarded = useMemo(() => {
+    const statusUpper = String(status || '').toUpperCase().trim();
+    const stageUpper = String(lifecycleStage || '').toUpperCase().trim();
+    return (
+      Boolean(activeAward) ||
+      (Array.isArray(awards) && awards.length > 0) ||
+      ['AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'ORDERED'].includes(statusUpper) ||
+      ['AWARD_OFFERED', 'AWARD_ACCEPTED', 'AWARD_RECOMMENDED', 'AWARDED', 'PO_GENERATED', 'ORDERED'].includes(stageUpper) ||
+      Boolean(effectiveActiveOrder)
+    );
+  }, [activeAward, awards, status, lifecycleStage, effectiveActiveOrder]);
+
   const isStage1Open = currentStageId === 1 && !isDeadlinePassed && isBiddingOpen !== false;
   const stage1Name = isStage1Open ? 'Bidding & Quotes' : 'Evaluation';
   const stage1ShortName = isStage1Open ? 'Bidding' : 'Evaluation';
@@ -815,7 +827,7 @@ export function ProcurementLifecycleStepper({
           grnCreated
         );
 
-        if (!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)) {
+        if (!isBuyer && (isDisqualified || isLosingBidder || isNonParticipant || (isBidAwarded && isAwardedToSeller === false))) {
           return {
             hasAction: false,
             idleStatusText: 'Not Applicable'
@@ -825,7 +837,7 @@ export function ProcurementLifecycleStepper({
         if (!isDeliveryPhase) {
           return {
             hasAction: false,
-            idleStatusText: 'Pending Acceptance'
+            idleStatusText: isBidAwarded ? 'Pending Acceptance' : 'Pending Award'
           };
         }
 
@@ -1036,8 +1048,10 @@ export function ProcurementLifecycleStepper({
             hasAction: false,
             idleStatusText: isBuyer
               ? 'Awaiting Invoice'
-              : (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)
+              : (isDisqualified || isLosingBidder || isNonParticipant || (isBidAwarded && isAwardedToSeller === false))
               ? 'Not Applicable'
+              : !isBidAwarded
+              ? 'Pending Award'
               : 'PO Required'
           };
         }
@@ -1141,8 +1155,10 @@ export function ProcurementLifecycleStepper({
           }
           return {
             hasAction: false,
-            idleStatusText: (isDisqualified || isLosingBidder || isNonParticipant || isAwardedToSeller === false)
+            idleStatusText: (isDisqualified || isLosingBidder || isNonParticipant || (isBidAwarded && isAwardedToSeller === false))
               ? 'Not Applicable'
+              : !isBidAwarded
+              ? 'Pending Award'
               : 'Awaiting Buyer Payment'
           };
         }

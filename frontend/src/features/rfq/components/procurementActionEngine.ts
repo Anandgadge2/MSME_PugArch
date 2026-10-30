@@ -12,6 +12,7 @@ export type ProcurementActionType =
   | 'SELLER_WINDOW_CLOSED'
   | 'SELLER_JOIN_AUCTION'
   | 'SELLER_ENTER_AUCTION'
+  | 'SELLER_VIEW_AUCTION_RESULTS'
   | 'BUYER_SEALED_AWAITING_CLOSING'
   | 'BUYER_EVALUATE_PROPOSALS'
   | 'BUYER_ISSUE_CALL_OFF'
@@ -197,6 +198,16 @@ export function deriveProcurementPrimaryAction(
       };
     }
     if (isReverseAuction) {
+      if (isBiddingClosed || isDeadlinePassed || isBidAwarded) {
+        return {
+          type: 'SELLER_VIEW_AUCTION_RESULTS',
+          label: 'View Auction Results →',
+          subtext: 'Reverse auction bidding concluded — view final rankings and outcomes',
+          isExecutable: true,
+          isSealedLock: false,
+          badgeTone: 'emerald'
+        };
+      }
       return {
         type: 'SELLER_ENTER_AUCTION',
         label: 'Enter Live Bidding Floor →',

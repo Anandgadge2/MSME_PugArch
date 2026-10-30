@@ -795,8 +795,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 4. Active Qualified Seller Ready Alert */}
-      {hasJoined && !isAuctionClosed && !isAuctionCancelled && isTechnicallyQualified && !isDisqualifiedSeller && !evalPending && (
+      {/* 4. Active Qualified Seller Ready Alert (Only when live/scheduled banner is not active) */}
+      {hasJoined && !isAuctionClosed && !isAuctionCancelled && isTechnicallyQualified && !isDisqualifiedSeller && !evalPending && status !== 'LIVE' && status !== 'SCHEDULED' && (
         <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-teal-50/50 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-sm">
@@ -868,31 +868,6 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 6. Closed / Concluded Auction Notice */}
-      {isAuctionClosed && (
-        <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-50 via-indigo-50/30 to-white p-4.5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-slate-900 text-amber-400 flex items-center justify-center shrink-0 shadow-sm">
-              <Trophy className="h-5 w-5" />
-            </div>
-            <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-slate-900">
-                Reverse Auction Bidding Concluded
-              </h4>
-              <p className="text-xs font-semibold text-slate-600 mt-0.5">
-                The bidding window has ended. You can view final L1 outcomes, ranking, and award recommendations.
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(canonicalCode)}/results`)}
-            className="rounded-xl bg-slate-900 hover:bg-[#0b2447] text-white px-4 py-2.5 text-xs font-bold uppercase tracking-wider shrink-0 text-center transition-all shadow-sm focus:outline-none focus:ring-2 focus:ring-slate-900 focus:ring-offset-2"
-          >
-            View Auction Results
-          </button>
-        </div>
-      )}
 
       {/* 7. Not Joined Public Auction Notice (Only when auction is active and open) */}
       {!hasJoined && isPublicAuction && !isAuctionClosed && !isAuctionCancelled && (
