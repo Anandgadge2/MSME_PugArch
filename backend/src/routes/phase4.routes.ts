@@ -1237,8 +1237,42 @@ export const resolveRequirementId = async (idParam: string | number): Promise<nu
   if (!rawId) return null;
   const numId = Number(rawId);
   if (!isNaN(numId) && Number.isFinite(numId) && numId > 0) {
-    return numId;
+    const existingReq = await db.requirement.findUnique({
+      where: { id: numId },
+      select: { id: true }
+    });
+    if (existingReq) return existingReq.id;
+
+    // Check if numId matches a ProcurementBid
+    const matchingBid = await db.procurementBid.findUnique({
+      where: { id: numId },
+      select: { id: true, bidNumber: true, technicalPacket: true }
+    });
+    if (matchingBid) {
+      const packet = typeof matchingBid.technicalPacket === 'object' && matchingBid.technicalPacket !== null
+        ? (matchingBid.technicalPacket as any)
+        : {};
+      const linkedId = Number(packet.sourceRequirementId || packet.requirementId || 0);
+      if (linkedId > 0) {
+        const byLinked = await db.requirement.findUnique({ where: { id: linkedId }, select: { id: true } });
+        if (byLinked) return byLinked.id;
+      }
+
+      if (matchingBid.bidNumber) {
+        const reqByBid = await db.requirement.findFirst({
+          where: {
+            OR: [
+              { requirementNumber: matchingBid.bidNumber },
+              { requirementNumber: { equals: matchingBid.bidNumber, mode: 'insensitive' } }
+            ]
+          },
+          select: { id: true }
+        });
+        if (reqByBid) return reqByBid.id;
+      }
+    }
   }
+
   const upperToken = rawId.toUpperCase();
   const variants = Array.from(new Set([
     rawId,
@@ -1279,7 +1313,8 @@ export const resolveRequirementId = async (idParam: string | number): Promise<nu
         { bidNumber: { in: variants, mode: 'insensitive' } },
         { bidNumber: rawId },
         { bidNumber: upperToken },
-        ...(tailMatch && Number(tailMatch[1]) > 0 ? [{ id: Number(tailMatch[1]) }] : [])
+        ...(tailMatch && Number(tailMatch[1]) > 0 ? [{ id: Number(tailMatch[1]) }] : []),
+        ...(!isNaN(numId) && numId > 0 ? [{ id: numId }] : [])
       ]
     },
     select: { id: true, bidNumber: true, technicalPacket: true }
@@ -1305,13 +1340,163 @@ export const resolveRequirementId = async (idParam: string | number): Promise<nu
   return null;
 };
 
+export const synthesizeDraftFromProcurementBid = (bid: any) => {
+  const technicalPacket = typeof bid.technicalPacket === 'object' && bid.technicalPacket ? (bid.technicalPacket as any) : {};
+  const packetBasics = technicalPacket.basics || {};
+  const packetSchedule = technicalPacket.schedule || {};
+  const packetTerms = technicalPacket.terms || {};
+  const packetInternal = technicalPacket.internal || {};
+  const packetVendors = technicalPacket.vendors || {};
+  const method = bid.canonicalMethod || bid.procurementType || 'OPEN_TENDER';
+  const methodSlug = normalizeToCanonicalMethod(method).toLowerCase().replace(/_/g, '-');
+
+  const tenderItems = Array.isArray(technicalPacket.items) && technicalPacket.items.length > 0
+    ? technicalPacket.items
+    : [{
+        id: 1,
+        itemName: bid.title,
+        quantity: bid.quantity ? String(bid.quantity) : '1',
+        unitOfMeasure: bid.unit || 'Nos',
+        description: bid.description,
+        estimatedUnitPrice: bid.estimatedValue && bid.quantity ? Number(bid.estimatedValue) / Number(bid.quantity) : undefined
+      }];
+
+  const requirementItems = tenderItems.map((it: any, idx: number) => ({
+    id: it.id || idx + 1,
+    itemName: it.itemName || it.name || bid.title,
+    quantity: String(it.quantity || '1'),
+    unitOfMeasure: it.unitOfMeasure || it.unit || 'Nos',
+    description: it.description || '',
+    estimatedUnitPrice: it.estimatedUnitPrice,
+    specifications: {
+      ...(it.specifications || it),
+      procurementMethodSlug: methodSlug,
+      draftMeta: {
+        methodSlug,
+        draftStep: 1,
+        workflowStatus: bid.status,
+        approvalStatus: bid.approvalStatus || 'APPROVED',
+        payload: {
+          ...technicalPacket,
+          type: method,
+          basics: {
+            title: bid.title,
+            description: bid.description,
+            procurementCategory: bid.categoryType || packetBasics.procurementCategory || 'GOODS',
+            estimatedValue: Number(bid.estimatedValue || 0),
+            deliveryLocation: bid.deliveryLocation,
+            ...packetBasics
+          },
+          schedule: {
+            submissionStartDate: bid.startDate?.toISOString?.() || packetSchedule.submissionStartDate || '',
+            submissionDate: bid.endDate?.toISOString?.() || packetSchedule.submissionDate || '',
+            technicalOpeningDate: bid.technicalOpeningDate?.toISOString?.() || packetSchedule.technicalOpeningDate || '',
+            financialOpeningDate: bid.financialOpeningDate?.toISOString?.() || packetSchedule.financialOpeningDate || '',
+            ...packetSchedule
+          },
+          internal: {
+            orgName: bid.buyerOrganizationName || packetInternal.orgName || '',
+            ...packetInternal
+          },
+          vendors: packetVendors,
+          terms: packetTerms,
+          items: tenderItems
+        }
+      }
+    }
+  }));
+
+  return {
+    id: bid.id,
+    requirementNumber: bid.bidNumber,
+    title: bid.title,
+    description: bid.description,
+    buyerId: bid.buyerId,
+    status: bid.status,
+    canonicalMethod: method,
+    procurementMethod: method,
+    estimatedValue: Number(bid.estimatedValue || 0),
+    deliveryLocation: bid.deliveryLocation,
+    version: Number(bid.version || 1),
+    isPublished: true,
+    draftStep: 1,
+    createdAt: bid.createdAt,
+    updatedAt: bid.updatedAt,
+    publishedAt: bid.publishedAt || bid.createdAt,
+    postPublishEditCount: Number(bid.postPublishEditCount || 0),
+    items: requirementItems,
+    payload: {
+      ...technicalPacket,
+      type: method,
+      basics: {
+        title: bid.title,
+        description: bid.description,
+        procurementCategory: bid.categoryType || packetBasics.procurementCategory || 'GOODS',
+        estimatedValue: Number(bid.estimatedValue || 0),
+        deliveryLocation: bid.deliveryLocation,
+        ...packetBasics
+      },
+      schedule: {
+        submissionStartDate: bid.startDate?.toISOString?.() || packetSchedule.submissionStartDate || '',
+        submissionDate: bid.endDate?.toISOString?.() || packetSchedule.submissionDate || '',
+        technicalOpeningDate: bid.technicalOpeningDate?.toISOString?.() || packetSchedule.technicalOpeningDate || '',
+        financialOpeningDate: bid.financialOpeningDate?.toISOString?.() || packetSchedule.financialOpeningDate || '',
+        ...packetSchedule
+      },
+      internal: {
+        orgName: bid.buyerOrganizationName || packetInternal.orgName || '',
+        ...packetInternal
+      },
+      vendors: packetVendors,
+      terms: packetTerms,
+      items: tenderItems
+    }
+  };
+};
+
 const assertProcurementDraftAccess = async (req: AuthRequest, idParam: number | string) => {
   const resolvedId = await resolveRequirementId(idParam);
-  if (!resolvedId) {
+  let requirement = resolvedId
+    ? await db.requirement.findUnique({ where: { id: resolvedId }, include: procurementDraftInclude })
+    : null;
+
+  if (!requirement) {
+    const rawId = String(idParam || '').trim();
+    const numId = Number(rawId);
+    const variants = Array.from(new Set([
+      rawId,
+      rawId.toUpperCase(),
+      ...getCanonicalLookupVariants(rawId),
+      ...getCanonicalLookupVariants(rawId.toUpperCase())
+    ]));
+
+    const bid = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          ...(!isNaN(numId) && numId > 0 ? [{ id: numId }] : []),
+          { bidNumber: { in: variants } },
+          { bidNumber: { in: variants, mode: 'insensitive' } },
+          { bidNumber: rawId }
+        ]
+      },
+      include: {
+        buyer: { include: { buyerProfile: true, organization: true } },
+        documents: true,
+        participations: true
+      }
+    });
+
+    if (bid) {
+      if (!isAdmin(req) && req.user?.role !== 'master_admin' && bid.buyerId !== userId(req)) {
+        throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
+      }
+      return synthesizeDraftFromProcurementBid(bid);
+    }
+
     throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
   }
-  const requirement = await db.requirement.findUnique({ where: { id: resolvedId }, include: procurementDraftInclude });
-  if (!requirement || (!isAdmin(req) && req.user?.role !== 'master_admin' && requirement.buyerId !== userId(req))) {
+
+  if (!isAdmin(req) && req.user?.role !== 'master_admin' && requirement.buyerId !== userId(req)) {
     throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
   }
   return requirement;
@@ -1888,15 +2073,43 @@ const saveProcurementDraft = async (req: AuthRequest, body: z.infer<typeof procu
 
   const saved = body.id
     ? await (async () => {
-      const existing = await db.requirement.findFirst({ where: { id: body.id, buyerId: userId(req) } });
-      if (!existing) throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
+      let resolvedReqId = await resolveRequirementId(body.id);
+      let existing = resolvedReqId ? await db.requirement.findFirst({ where: { id: resolvedReqId, buyerId: userId(req) } }) : null;
+      if (!existing) {
+        // Check if body.id is a ProcurementBid directly
+        const numId = Number(body.id);
+        if (!isNaN(numId) && numId > 0) {
+          const bid = await db.procurementBid.findFirst({
+            where: { id: numId, buyerId: userId(req) }
+          });
+          if (bid) {
+            existing = await db.requirement.create({
+              data: {
+                requirementNumber: bid.bidNumber,
+                title: body.title || bid.title,
+                description: body.description || bid.description,
+                buyerId: userId(req),
+                status: targetStatus === 'DRAFT' ? 'DRAFT' : (bid.status || 'APPROVED'),
+                procurementMethod: bid.canonicalMethod || bid.procurementType || 'OPEN_TENDER',
+                canonicalMethod: bid.canonicalMethod || bid.procurementType || 'OPEN_TENDER',
+                estimatedValue: body.estimatedValue ?? bid.estimatedValue,
+                deliveryLocation: (body.payload as any)?.basics?.deliveryLocation || bid.deliveryLocation,
+                payload: data.payload,
+                draftStep: data.draftStep
+              }
+            });
+            resolvedReqId = existing.id;
+          }
+        }
+      }
+      if (!existing || !resolvedReqId) throw new ApiError(404, 'Procurement draft not found', 'PROCUREMENT_DRAFT_NOT_FOUND');
       if (targetStatus === 'DRAFT' && !['DRAFT', 'REJECTED'].includes(String(existing.status))) {
         throw new ApiError(409, 'Submitted procurement cannot be edited as a draft', 'PROCUREMENT_DRAFT_LOCKED');
       }
       const [, updated] = await db.$transaction([
-        db.requirementItem.deleteMany({ where: { requirementId: body.id } }),
+        db.requirementItem.deleteMany({ where: { requirementId: resolvedReqId } }),
         db.requirement.update({
-          where: { id: body.id },
+          where: { id: resolvedReqId },
           data: { ...data, items: items.length ? { create: items } : undefined },
           include: procurementDraftInclude
         })
@@ -6329,28 +6542,49 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
 
   // Grace Period Edit or Idempotency guard: prevent double-submission race condition (VULN-02)
   if (parsed.id) {
-    const existingReq = await db.requirement.findFirst({
+    let existingReq = await db.requirement.findFirst({
       where: { id: parsed.id, buyerId: userId(req) },
       select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true, createdAt: true }
     });
-    if (existingReq && !['DRAFT', 'REJECTED'].includes(String(existingReq.status))) {
-      const existingBid = await db.procurementBid.findFirst({
-        where: {
-          OR: [
-            ...(existingReq.requirementNumber ? [{ bidNumber: existingReq.requirementNumber }] : []),
+    let existingBid = await db.procurementBid.findFirst({
+      where: {
+        OR: [
+          ...(existingReq?.requirementNumber ? [{ bidNumber: existingReq.requirementNumber }] : []),
+          ...(existingReq?.id ? [
             { technicalPacket: { path: ['sourceRequirementId'], equals: existingReq.id } },
             { technicalPacket: { path: ['requirementId'], equals: existingReq.id } }
-          ]
-        },
-        include: {
-          participations: { select: { id: true, submissionStatus: true } }
-        }
-      }).catch(() => null);
+          ] : []),
+          { id: parsed.id }
+        ]
+      },
+      include: {
+        participations: { select: { id: true, submissionStatus: true } }
+      }
+    }).catch(() => null);
 
+    if (!existingReq && existingBid) {
+      // Find requirement through existingBid
+      const packet = typeof existingBid.technicalPacket === 'object' && existingBid.technicalPacket ? (existingBid.technicalPacket as any) : {};
+      const linkedReqId = Number(packet.sourceRequirementId || packet.requirementId || 0);
+      if (linkedReqId > 0) {
+        existingReq = await db.requirement.findFirst({
+          where: { id: linkedReqId, buyerId: userId(req) },
+          select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true, createdAt: true }
+        });
+      }
+      if (!existingReq && existingBid.bidNumber) {
+        existingReq = await db.requirement.findFirst({
+          where: { requirementNumber: { equals: existingBid.bidNumber, mode: 'insensitive' }, buyerId: userId(req) },
+          select: { id: true, status: true, requirementNumber: true, procurementMethod: true, canonicalMethod: true, createdAt: true }
+        });
+      }
+    }
+
+    if ((existingReq && !['DRAFT', 'REJECTED'].includes(String(existingReq.status))) || (existingBid && ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(String(existingBid.status)))) {
       const isGracePeriodEdit = Boolean((parsed as any).isGracePeriodEdit);
       if (isGracePeriodEdit) {
         // Enforce 6-hour, 0-bids, 1-edit limit
-        const pubDate = existingBid?.publishedAt || existingReq.createdAt;
+        const pubDate = existingBid?.publishedAt || existingBid?.createdAt || existingReq?.createdAt;
         const elapsed = Date.now() - new Date(pubDate).getTime();
         const withinWindow = elapsed <= 6 * 60 * 60 * 1000;
         const activeBids = (existingBid?.participations || []).filter(
@@ -6367,6 +6601,26 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
         if (editCount >= 1) {
           throw new ApiError(409, 'One-time grace edit has already been utilized for this procurement', 'GRACE_EDIT_ALREADY_USED');
         }
+
+        // If existingReq didn't exist in DB, create it with matching requirementNumber
+        if (!existingReq && existingBid) {
+          existingReq = await db.requirement.create({
+            data: {
+              requirementNumber: existingBid.bidNumber,
+              title: parsed.title || existingBid.title,
+              description: parsed.description || existingBid.description,
+              buyerId: userId(req),
+              status: existingBid.status || 'APPROVED',
+              procurementMethod: existingBid.canonicalMethod || existingBid.procurementType || 'OPEN_TENDER',
+              canonicalMethod: existingBid.canonicalMethod || existingBid.procurementType || 'OPEN_TENDER',
+              estimatedValue: existingBid.estimatedValue,
+              deliveryLocation: existingBid.deliveryLocation,
+              payload: parsed.payload || null
+            }
+          });
+        }
+
+        parsed.id = existingReq.id;
 
         // Allow update to proceed:
         const submitted = await saveProcurementDraft(req, parsed, existingReq.status || 'APPROVED');
@@ -6413,11 +6667,11 @@ router.post('/procurement/submit', authenticate, authorize('buyer'), asyncRoute(
       }
 
       return ok(res, {
-        procurement: serializeProcurementDraft({ ...existingReq, items: [] }),
+        procurement: existingReq ? serializeProcurementDraft({ ...existingReq, items: [] }) : null,
         procurementBid: existingBid,
         auction: null,
         rateContract: null,
-        referenceNumber: formatRequirementNumber(existingReq.id, existingReq.requirementNumber, existingReq.procurementMethod || existingReq.canonicalMethod)
+        referenceNumber: existingReq ? formatRequirementNumber(existingReq.id, existingReq.requirementNumber, existingReq.procurementMethod || existingReq.canonicalMethod) : (existingBid?.bidNumber || String(parsed.id))
       });
     }
   }

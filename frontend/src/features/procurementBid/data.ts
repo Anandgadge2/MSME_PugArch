@@ -86,6 +86,7 @@ export interface ProcurementBid {
   rawSubmissionStartDate?: string | null;
   publishedAt?: string | null;
   approvedAt?: string | null;
+  postPublishEditCount?: number;
   createdAt?: string;
   updatedAt?: string;
   status: BidStatus;

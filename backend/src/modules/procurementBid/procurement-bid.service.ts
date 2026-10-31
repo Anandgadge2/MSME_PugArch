@@ -1681,7 +1681,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       ? (rawTechnicalPacket.internal || null)
       : undefined,
     approvedAt: bid.approvedAt || null,
-    publishedAt: bid.approvedAt || bid.createdAt || bid.startDate,
+    publishedAt: bid.publishedAt || bid.approvedAt || bid.createdAt || bid.startDate,
+    postPublishEditCount: Number(bid.postPublishEditCount || 0),
     createdAt: bid.createdAt,
     updatedAt: bid.updatedAt,
     buyer: bid.buyer ? {

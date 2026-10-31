@@ -467,6 +467,7 @@ export const normalizeBid = (raw: any): ProcurementBid => {
     rawSubmissionStartDate,
     publishedAt: authenticPublishedAt,
     approvedAt: raw.approvedAt || null,
+    postPublishEditCount: Number(raw.postPublishEditCount || 0),
     createdAt: raw.createdAt || undefined,
     updatedAt: raw.updatedAt || undefined,
     status: (raw.awards && raw.awards.length > 0) || (participations && participations.some((p: any) => String(p.finalStatus || p.resultStatus || '').toUpperCase().includes('AWARD')))

@@ -16,6 +16,19 @@ export interface EditProcurementGraceBannerProps {
   className?: string;
 }
 
+const parseTimestamp = (val?: string | Date | null): number | null => {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val.getTime();
+  const str = String(val).trim();
+  if (!str) return null;
+  const direct = new Date(str).getTime();
+  if (!isNaN(direct) && direct > 0) return direct;
+  const cleaned = str.replace(/,/g, '');
+  const cleanParsed = new Date(cleaned).getTime();
+  if (!isNaN(cleanParsed) && cleanParsed > 0) return cleanParsed;
+  return null;
+};
+
 export function EditProcurementGraceBanner({
   publishedAt,
   createdAt,
@@ -26,13 +39,24 @@ export function EditProcurementGraceBanner({
   onCancelClick,
   className
 }: EditProcurementGraceBannerProps) {
-  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number; totalMs: number } | null>(null);
-
   const statusUpper = String(status || '').toUpperCase();
   const isPublished = ['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(statusUpper);
 
   // Compute reference publish timestamp (fallback to createdAt if publishedAt is absent)
-  const publishTimestamp = publishedAt ? new Date(publishedAt).getTime() : (createdAt ? new Date(createdAt).getTime() : null);
+  const publishTimestamp = parseTimestamp(publishedAt) || parseTimestamp(createdAt);
+  const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
+
+  const [timeLeft, setTimeLeft] = useState<{ hours: number; minutes: number; seconds: number; totalMs: number } | null>(() => {
+    if (!isPublished || !publishTimestamp) return null;
+    const elapsed = Date.now() - publishTimestamp;
+    const remainingMs = Math.max(0, SIX_HOURS_MS - elapsed);
+    return {
+      hours: Math.floor(remainingMs / (1000 * 60 * 60)),
+      minutes: Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60)),
+      seconds: Math.floor((remainingMs % (1000 * 60)) / 1000),
+      totalMs: remainingMs
+    };
+  });
 
   useEffect(() => {
     if (!isPublished || !publishTimestamp) {
@@ -41,7 +65,6 @@ export function EditProcurementGraceBanner({
     }
 
     const calculateRemaining = () => {
-      const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
       const elapsed = Date.now() - publishTimestamp;
       const remainingMs = Math.max(0, SIX_HOURS_MS - elapsed);
 
@@ -55,10 +78,10 @@ export function EditProcurementGraceBanner({
     calculateRemaining();
     const timer = setInterval(calculateRemaining, 1000);
     return () => clearInterval(timer);
-  }, [isPublished, publishTimestamp]);
+  }, [isPublished, publishTimestamp, SIX_HOURS_MS]);
 
-  // If status is not active published, don't show the grace banner
-  if (!isPublished) {
+  // If status is not active published or no timestamp available, don't show the grace banner
+  if (!isPublished || !publishTimestamp) {
     return null;
   }
 

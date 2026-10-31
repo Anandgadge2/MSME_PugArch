@@ -5686,6 +5686,25 @@ export function ProcurementDetailUnifiedView(
 
   const canExtendSchedule = isBuyerSide && !isPostFinancialOrAwarded;
 
+  const canGraceEdit = useMemo(() => {
+    if (!isBuyerOrAdmin) return false;
+    const s = String(props.status || '').toUpperCase();
+    if (['DRAFT'].includes(s)) return true;
+    if (!['PUBLISHED', 'OPEN', 'OPEN_FOR_BIDDING'].includes(s)) return false;
+    if (Number(props.postPublishEditCount || 0) >= 1) return false;
+    const quotationsCount = Math.max(
+      Number(props.participantsCount) || 0,
+      props.participations?.length || 0
+    );
+    if (quotationsCount > 0) return false;
+    const rawTime = props.publishedAt || props.createdAt;
+    if (!rawTime) return false;
+    const ts = new Date(rawTime).getTime();
+    if (isNaN(ts) || ts <= 0) return false;
+    const elapsed = Date.now() - ts;
+    return elapsed <= 6 * 60 * 60 * 1000;
+  }, [isBuyerOrAdmin, props.status, props.postPublishEditCount, props.participantsCount, props.participations?.length, props.publishedAt, props.createdAt]);
+
   const [isStartAuctionModalOpen, setIsStartAuctionModalOpen] = useState(false);
 
   // ── Bid Lifecycle & Price-Match Counter-Offer State ──
@@ -14568,6 +14587,23 @@ export function ProcurementDetailUnifiedView(
                   </Button>
                 )}
                 {isBuyerOrAdmin && props.buyerAuctionActions}
+                {canGraceEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const targetId = props.rawBid?.id || (props as any).rawRequirement?.id || props.id;
+                      router.push(`/buyer/procurement/create?id=${encodeURIComponent(String(targetId))}&edit=1`);
+                    }}
+                    className="h-9 px-3.5 border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 text-xs font-bold rounded-lg transition-all active:scale-95 cursor-pointer shadow-2xs gap-1.5 flex items-center"
+                    title="Edit Procurement (One-Time Grace Period)"
+                    aria-label="Edit Procurement (One-Time Grace Period)"
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+                    <span>Edit</span>
+                  </Button>
+                )}
                 {canExtendSchedule && (
                   <Button
                     type="button"
@@ -14769,6 +14805,7 @@ export function ProcurementDetailUnifiedView(
                 />
               ) : (
                 <EditProcurementGraceBanner
+                  status={props.status}
                   publishedAt={props.publishedAt}
                   createdAt={props.createdAt}
                   postPublishEditCount={props.postPublishEditCount}
