@@ -32,6 +32,7 @@ import {
   Paperclip,
   Check,
   AlertCircle,
+  AlertTriangle,
   Eye,
   ExternalLink,
   File,
@@ -1689,8 +1690,16 @@ export default function CreateProcurementPage() {
 
         const isEditingPublishedOrDraft = isEditMode || Boolean(res.isPublished);
         const loadedStep = isEditingPublishedOrDraft ? 1 : (res.draftStep || 0);
+
+        // Check if schedule is already expired
+        const loadedAuctionStart = payload.auctionConfig?.startDateTime || payload.rules?.auctionConfig?.startDateTime || base.auctionConfig.startDateTime;
+        const isLoadedAuctionExpired = isReverseAuctionMethod(base.type) && loadedAuctionStart && new Date(loadedAuctionStart).getTime() <= Date.now() + 60000;
+        const loadedSubmissionDate = payload.schedule?.submissionDate || base.schedule.submissionDate;
+        const isLoadedTenderExpired = !isReverseAuctionMethod(base.type) && loadedSubmissionDate && new Date(loadedSubmissionDate).getTime() <= Date.now();
+        const isScheduleExpired = Boolean(isLoadedAuctionExpired || isLoadedTenderExpired);
+
         const loadedCompletedStepIds = isEditingPublishedOrDraft
-          ? [...ALL_STEPS]
+          ? ALL_STEPS.filter(s => !(isScheduleExpired && s === 'schedule'))
           : Array.from(new Set([
               ...(payload.completedStepIds || payload.completedSteps || []),
               ...ALL_STEPS.slice(0, loadedStep)
@@ -1808,7 +1817,31 @@ export default function CreateProcurementPage() {
     }
 
     // Step 5 Event timeline - Errors
-    if (!isReverseAuctionMethod(d.type)) {
+    if (isReverseAuctionMethod(d.type)) {
+      const startMs = d.auctionConfig.startDateTime ? new Date(d.auctionConfig.startDateTime).getTime() : NaN;
+      const endMs = d.auctionConfig.endDateTime ? new Date(d.auctionConfig.endDateTime).getTime() : NaN;
+      list.push({ label: 'Auction start date and time is required', ok: Boolean(d.auctionConfig.startDateTime), severity: 'error', stepIdx: 5 });
+      if (d.auctionConfig.startDateTime) {
+        list.push({
+          label: 'Auction start date and time must be scheduled at least 1 minute in the future',
+          ok: Number.isFinite(startMs) && startMs > Date.now() + 60000,
+          severity: 'error',
+          stepIdx: 5
+        });
+      }
+      list.push({
+        label: 'Auction end date and time must be after start date and time',
+        ok: Number.isFinite(startMs) && Number.isFinite(endMs) && endMs > startMs,
+        severity: 'error',
+        stepIdx: 5
+      });
+      list.push({
+        label: 'Auction duration must be greater than 0 minutes',
+        ok: (d.auctionConfig.durationMinutes || 0) > 0,
+        severity: 'error',
+        stepIdx: 5
+      });
+    } else {
       list.push({ label: 'Submission deadline date is required', ok: Boolean(d.schedule.submissionDate), severity: 'error', stepIdx: 5 });
       if (d.schedule.submissionDate) {
         list.push({
@@ -1985,7 +2018,8 @@ export default function CreateProcurementPage() {
         if (!title) return false;
         if (!category || category === 'Other') return false;
         if (!currency || currency === 'Other') return false;
-        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) return false;
+        if (!Number.isFinite(start) || start <= Date.now() + 60000) return false;
+        if (!Number.isFinite(end) || start >= end) return false;
         if (auction.durationMinutes <= 0) return false;
         if (auction.startingBidPrice !== -1 && auction.startingBidPrice <= 0) return false;
         if (auction.startingBidPrice === -1 && d.basics.estimatedValue <= 0) return false;
@@ -2343,8 +2377,14 @@ export default function CreateProcurementPage() {
           toast.error('Currency is required.');
           return false;
         }
-        if (!Number.isFinite(start) || !Number.isFinite(end) || start >= end) {
-          toast.error('Auction start datetime must be before auction end datetime.');
+        if (!auction.startDateTime || !Number.isFinite(start) || start <= Date.now() + 60000) {
+          toast.error('Auction start date and time must be scheduled at least 1 minute in the future.');
+          scrollToErrorField('auction-start-datetime');
+          return false;
+        }
+        if (!auction.endDateTime || !Number.isFinite(end) || start >= end) {
+          toast.error('Auction end datetime must be after start datetime.');
+          scrollToErrorField('auction-end-datetime');
           return false;
         }
         if (auction.durationMinutes <= 0) {
@@ -2523,7 +2563,34 @@ export default function CreateProcurementPage() {
       const lower = rawMsg.toLowerCase();
 
       // Intelligent Error Recovery & Focus Trapping
-      if (lower.includes('auction') || lower.includes('startingbidprice') || lower.includes('starting bid') || lower.includes('decrement') || lower.includes('reserve price') || lower.includes('reserveprice') || lower.includes('duration')) {
+      if (
+        lower.includes('start date') ||
+        lower.includes('auction start') ||
+        lower.includes('submission deadline') ||
+        lower.includes('submission date') ||
+        lower.includes('must be scheduled at least 1 minute in the future') ||
+        lower.includes('procurement_auction_start_past') ||
+        lower.includes('procurement_deadline_past') ||
+        lower.includes('procurement_date_invalid')
+      ) {
+        const schedStepIdx = ALL_STEPS.indexOf('schedule');
+        if (schedStepIdx !== -1) {
+          changeActiveStep(schedStepIdx);
+          setTriedNext(true);
+          setTimeout(() => {
+            const el = document.getElementById('auction-start-datetime') || document.getElementById('submission-date-input');
+            el?.focus();
+            el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 350);
+        }
+      } else if (
+        lower.includes('startingbidprice') ||
+        lower.includes('starting bid') ||
+        lower.includes('decrement') ||
+        lower.includes('reserve price') ||
+        lower.includes('reserveprice') ||
+        lower.includes('procurement_auction_reserve_invalid')
+      ) {
         const evalStepIdx = ALL_STEPS.indexOf('evaluation');
         if (evalStepIdx !== -1) {
           changeActiveStep(evalStepIdx);
@@ -9261,10 +9328,11 @@ function ScheduleStepForm({
       const nextConfig = { ...c.auctionConfig, [key]: val };
       if (key === 'startDateTime') {
         const start = val as string;
-        if (nextConfig.endDateTime) {
+        const dur = Number(nextConfig.durationMinutes || 60);
+        if (dur > 0) {
+          nextConfig.endDateTime = getEndDateTime(start, dur);
+        } else if (nextConfig.endDateTime) {
           nextConfig.durationMinutes = getMinutesBetween(start, nextConfig.endDateTime);
-        } else if (nextConfig.durationMinutes > 0) {
-          nextConfig.endDateTime = getEndDateTime(start, nextConfig.durationMinutes);
         }
       } else if (key === 'endDateTime') {
         const end = val as string;
@@ -10230,44 +10298,115 @@ function ScheduleStepForm({
           {isAuction && (
             <div className="space-y-6 pt-1">
               {/* Standalone REVERSE_AUCTION: Timing & Window */}
-              {isReverseAuctionMethod(draft.type) && (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
-                    <Clock className="h-3.5 w-3.5 text-[#0b2447]" />
-                    <span>Auction Window &amp; Countdown Clock</span>
+              {isReverseAuctionMethod(draft.type) && (() => {
+                const isAuctionStartInPast = Boolean(
+                  draft.auctionConfig.startDateTime &&
+                  new Date(draft.auctionConfig.startDateTime).getTime() <= Date.now() + 60000
+                );
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-black uppercase tracking-wider text-slate-700">
+                      <Clock className="h-3.5 w-3.5 text-[#0b2447]" />
+                      <span>Auction Window &amp; Countdown Clock</span>
+                    </div>
+
+                    {isAuctionStartInPast && (
+                      <div className="rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 text-xs text-amber-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" />
+                          <div>
+                            <span className="font-bold">Schedule Expired or Starting Too Soon: </span>
+                            <span>The auction start time has already passed or is within 1 minute. Please schedule at least 1 minute in the future to publish.</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const now = new Date(Date.now() + 15 * 60000);
+                              updateAuction('startDateTime', toDateTimeLocal(now));
+                            }}
+                            className="h-7 px-2 text-[11px] font-bold bg-white hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer"
+                          >
+                            +15 Mins
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const now = new Date(Date.now() + 30 * 60000);
+                              updateAuction('startDateTime', toDateTimeLocal(now));
+                            }}
+                            className="h-7 px-2 text-[11px] font-bold bg-white hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer"
+                          >
+                            +30 Mins
+                          </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const now = new Date(Date.now() + 60 * 60000);
+                              updateAuction('startDateTime', toDateTimeLocal(now));
+                            }}
+                            className="h-7 px-2 text-[11px] font-bold bg-white hover:bg-amber-100 text-amber-900 border-amber-300 cursor-pointer"
+                          >
+                            +1 Hour
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <Field
+                        label="Auction Start DateTime"
+                        required
+                        error={fieldError(
+                          showErrors && (!draft.auctionConfig.startDateTime || isAuctionStartInPast),
+                          !draft.auctionConfig.startDateTime
+                            ? 'Auction start datetime is required.'
+                            : 'Auction start date and time must be scheduled at least 1 minute in the future.'
+                        )}
+                      >
+                        <DateTimePicker
+                          id="auction-start-datetime"
+                          value={draft.auctionConfig.startDateTime}
+                          onChange={val => updateAuction('startDateTime', val)}
+                          error={fieldError(
+                            showErrors && (!draft.auctionConfig.startDateTime || isAuctionStartInPast),
+                            !draft.auctionConfig.startDateTime
+                              ? 'Auction start datetime is required.'
+                              : 'Auction start date and time must be scheduled at least 1 minute in the future.'
+                          )}
+                          placeholder="Select auction start date & time"
+                        />
+                      </Field>
+                      <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
+                        <DateTimePicker
+                          id="auction-end-datetime"
+                          value={draft.auctionConfig.endDateTime}
+                          onChange={val => updateAuction('endDateTime', val)}
+                          error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}
+                          placeholder="Select auction end date & time"
+                        />
+                      </Field>
+                      <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
+                        <input
+                          type="number"
+                          min={1}
+                          value={draft.auctionConfig.durationMinutes || ''}
+                          onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))}
+                          className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))}
+                          placeholder="e.g. 60"
+                        />
+                      </Field>
+                    </div>
                   </div>
-                  <div className="grid gap-4 sm:grid-cols-3">
-                    <Field label="Auction Start DateTime" required error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}>
-                      <DateTimePicker
-                        id="auction-start-datetime"
-                        value={draft.auctionConfig.startDateTime}
-                        onChange={val => updateAuction('startDateTime', val)}
-                        error={fieldError(showErrors && !draft.auctionConfig.startDateTime, 'Auction start datetime is required.')}
-                        placeholder="Select auction start date & time"
-                      />
-                    </Field>
-                    <Field label="Auction End DateTime" required error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}>
-                      <DateTimePicker
-                        id="auction-end-datetime"
-                        value={draft.auctionConfig.endDateTime}
-                        onChange={val => updateAuction('endDateTime', val)}
-                        error={fieldError(showErrors && (!draft.auctionConfig.endDateTime || new Date(draft.auctionConfig.endDateTime) <= new Date(draft.auctionConfig.startDateTime)), 'Auction end must be after start datetime.')}
-                        placeholder="Select auction end date & time"
-                      />
-                    </Field>
-                    <Field label="Auction Duration (Minutes)" required error={fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.')}>
-                      <input
-                        type="number"
-                        min={1}
-                        value={draft.auctionConfig.durationMinutes || ''}
-                        onChange={e => updateAuction('durationMinutes', Number(e.target.value || 0))}
-                        className={controlClass(fieldError(showErrors && draft.auctionConfig.durationMinutes <= 0, 'Auction duration must be greater than 0.'))}
-                        placeholder="e.g. 60"
-                      />
-                    </Field>
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Subsection: Qualification & Sourcing Rules */}
               <div className="space-y-3">

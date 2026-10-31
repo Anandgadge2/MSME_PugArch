@@ -2159,46 +2159,77 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
   // Only standalone REVERSE_AUCTION creates the auction immediately.
   if (!isStandaloneReverseAuction) return null;
 
-  const existing = await db.auction.findFirst({ where: { linkedRequirementId: requirement.id } });
-  if (existing) return existing;
-
   const normalized = normalizeAuctionConfigForDraft(draftBody);
   if (methodSlug !== 'reverse-auction') {
     normalized.procurementMethod = 'BID_WITH_REVERSE_AUCTION';
   }
   const config = validateAuctionConfigForDraft(normalized, methodSlug, (draftBody.payload as any)?.vendors?.selection);
+
+  const existing = await db.auction.findFirst({
+    where: {
+      OR: [
+        { linkedRequirementId: requirement.id },
+        ...(requirement.requirementNumber ? [{ referenceNo: { contains: requirement.requirementNumber } }] : [])
+      ]
+    }
+  });
+
+  const auctionData = {
+    title: config.auctionTitle,
+    description: config.auctionDescription || null,
+    procurementMethod: config.procurementMethod,
+    category: config.category || null,
+    auctionType: config.auctionType,
+    auctionMode: config.auctionMode,
+    auctionDurationMinutes: config.auctionDurationMinutes,
+    purchaseGroup: config.purchaseGroup || null,
+    purchaseOrganization: config.purchaseOrganization || null,
+    startPrice: Number(config.startingBidPrice),
+    basePrice: Number(config.startingBidPrice),
+    reservePrice: config.reservePrice ? Number(config.reservePrice) : null,
+    currentBid: Number(config.startingBidPrice),
+    minDecrement: Number(config.minimumBidDecrement),
+    minDecrementAmount: Number(config.minimumBidDecrement),
+    autoExtensionEnabled: config.autoExtensionEnabled,
+    autoExtensionWindowMinutes: config.extensionTriggerMinutes || 5,
+    autoExtensionByMinutes: config.extensionDurationMinutes || 5,
+    maxAutoExtensions: config.maximumExtensions || 0,
+    currency: config.currency.toUpperCase(),
+    rankVisibility: config.rankVisibility,
+    minimumQualifiedBidders: config.minimumQualifiedBidders,
+    termsDocumentFileId: config.auctionTermsDocument?.fileAssetId || null,
+    termsDocumentName: config.auctionTermsDocument?.fileName || null,
+    buyerMonitorSettings: config.buyerMonitorSettings,
+    auctionConfig: config,
+    visibilityMode: (
+      config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
+      (draftBody.payload as any)?.vendors?.selection === 'Open' ||
+      !config.qualifiedVendors?.length
+    ) ? 'TECHNICALLY_QUALIFIED_ONLY' : 'INVITED_SELLERS_ONLY',
+    startTime: config.auctionStartDateTime,
+    endTime: config.auctionEndDateTime,
+    status: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'pending' : 'active',
+    statusEnum: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'SCHEDULED' : 'LIVE'
+  };
+
+  if (existing) {
+    const updated = await db.auction.update({
+      where: { id: existing.id },
+      data: auctionData
+    });
+    return updated;
+  }
+
   const auction = await db.auction.create({
     data: {
       linkedRequirementId: requirement.id,
       auctionCode: config.auctionNumber || nextProcurementAuctionCode(),
       referenceNo: formatRequirementNumber(requirement.id, requirement.requirementNumber, requirement.procurementMethod || requirement.canonicalMethod),
-      title: config.auctionTitle,
-      description: config.auctionDescription || null,
-      procurementMethod: config.procurementMethod,
-      category: config.category || null,
-      auctionType: config.auctionType,
-      auctionMode: config.auctionMode,
-      auctionDurationMinutes: config.auctionDurationMinutes,
-      purchaseGroup: config.purchaseGroup || null,
-      purchaseOrganization: config.purchaseOrganization || null,
+      ...auctionData,
       buyerOrgId: (req as any)._buyerContext?.organizationId || req.user?.organizationId || requirement.organizationId || null,
       createdByUserId: userId(req),
-      startPrice: Number(config.startingBidPrice),
-      basePrice: Number(config.startingBidPrice),
-      reservePrice: config.reservePrice ? Number(config.reservePrice) : null,
-      currentBid: Number(config.startingBidPrice),
-      minDecrement: Number(config.minimumBidDecrement),
-      minDecrementAmount: Number(config.minimumBidDecrement),
-      autoExtensionEnabled: config.autoExtensionEnabled,
-      autoExtensionWindowMinutes: config.extensionTriggerMinutes || 5,
-      autoExtensionByMinutes: config.extensionDurationMinutes || 5,
-      maxAutoExtensions: config.maximumExtensions || 0,
-      currency: config.currency.toUpperCase(),
-      rankVisibility: config.rankVisibility,
-      minimumQualifiedBidders: config.minimumQualifiedBidders,
-      termsDocumentFileId: config.auctionTermsDocument?.fileAssetId || null,
-      termsDocumentName: config.auctionTermsDocument?.fileName || null,
-      buyerMonitorSettings: config.buyerMonitorSettings,
+      allowCompetitorNames: false,
+      remarks: 'Created from guided procurement wizard',
       preBidStage: config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ? {
         required: true,
         triggerConfiguration: config.triggerConfiguration,
@@ -2208,19 +2239,7 @@ const createAuctionForSubmittedProcurement = async (req: AuthRequest, requiremen
         ? config.triggerConfiguration?.auctionAmongTopNBidders
           ? 'TOP_N_BIDDERS'
           : 'ALL_TECHNICALLY_QUALIFIED'
-        : null,
-      auctionConfig: config,
-      visibilityMode: (
-        config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
-        (draftBody.payload as any)?.vendors?.selection === 'Open' ||
-        !config.qualifiedVendors?.length
-      ) ? 'TECHNICALLY_QUALIFIED_ONLY' : 'INVITED_SELLERS_ONLY',
-      allowCompetitorNames: false,
-      remarks: 'Created from guided procurement wizard',
-      startTime: config.auctionStartDateTime,
-      endTime: config.auctionEndDateTime,
-      status: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'pending' : 'active',
-      statusEnum: (config.procurementMethod === 'BID_WITH_REVERSE_AUCTION' || Boolean(config.triggerConfiguration?.preBidStageRequired) || (config.auctionStartDateTime && new Date(config.auctionStartDateTime).getTime() > Date.now())) ? 'SCHEDULED' : 'LIVE'
+        : null
     }
   });
 

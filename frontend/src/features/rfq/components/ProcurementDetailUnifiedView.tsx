@@ -60,6 +60,7 @@ import {
   Repeat,
   RefreshCw,
   FileEdit,
+  Pencil,
   Send,
 } from "lucide-react";
 import dynamic from "next/dynamic";
