@@ -2047,7 +2047,7 @@ export const fetchMarketplaceHomeData = async () => {
             latestBids,
             sections: homeLayout?.sections || []
         };
-    }, 300); // Cache 5 minutes
+    }, 3600); // Cache 1 hour (revalidated on mutation)
 };
 
 export const prewarmMarketplaceHomeCache = () => fetchMarketplaceHomeData().catch(() => undefined);

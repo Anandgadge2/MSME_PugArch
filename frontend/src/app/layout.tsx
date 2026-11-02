@@ -40,6 +40,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className={`${plusJakarta.variable} ${inter.variable}`} suppressHydrationWarning>
       <head>
+        {/* Preload primary hero banner for fast LCP rendering */}
+        <link rel="preload" as="image" href="https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=1920&q=80&auto=format&fit=crop" fetchPriority="high" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
