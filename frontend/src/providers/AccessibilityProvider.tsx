@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export type FontSizeOption = 'small' | 'normal' | 'large';
-export type ContrastOption = 'standard' | 'high-contrast';
+export type ContrastOption = 'standard';
 export type LanguageOption = 'en' | 'hi' | 'or';
 
 interface AccessibilityContextType {
@@ -18,49 +18,39 @@ interface AccessibilityContextType {
 const AccessibilityContext = createContext<AccessibilityContextType | undefined>(undefined);
 
 const FONT_STORAGE_KEY = 'jsg_acc_font_size';
-const CONTRAST_STORAGE_KEY = 'jsg_acc_contrast';
 const LANG_STORAGE_KEY = 'jsg_acc_language';
 
 export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [fontSize, setFontSizeState] = useState<FontSizeOption>('normal');
-  const [contrastMode, setContrastModeState] = useState<ContrastOption>('standard');
   const [language, setLanguageState] = useState<LanguageOption>('en');
 
   // Initialize from localStorage safely in client
   useEffect(() => {
     try {
+      // Purge any legacy high-contrast state from localStorage and DOM
+      localStorage.removeItem('jsg_acc_contrast');
+      document.documentElement.classList.remove('high-contrast');
+
       const savedFont = localStorage.getItem(FONT_STORAGE_KEY) as FontSizeOption;
       if (savedFont && ['small', 'normal', 'large'].includes(savedFont)) {
         setFontSizeState(savedFont);
-      }
-      const savedContrast = localStorage.getItem(CONTRAST_STORAGE_KEY) as ContrastOption;
-      if (savedContrast && ['standard', 'high-contrast'].includes(savedContrast)) {
-        setContrastModeState(savedContrast);
       }
       const savedLang = localStorage.getItem(LANG_STORAGE_KEY) as LanguageOption;
       if (savedLang && ['en', 'hi', 'or'].includes(savedLang)) {
         setLanguageState(savedLang);
       }
     } catch {
-      // In case localStorage is blocked by user security preferences
+      // In case localStorage is blocked
     }
   }, []);
 
   // Update DOM classes whenever settings change
   useEffect(() => {
     const root = document.documentElement;
-
-    root.classList.remove('font-size-small', 'font-size-normal', 'font-size-large');
+    root.classList.remove('font-size-small', 'font-size-normal', 'font-size-large', 'high-contrast');
     root.classList.add(`font-size-${fontSize}`);
-
-    if (contrastMode === 'high-contrast') {
-      root.classList.add('high-contrast');
-    } else {
-      root.classList.remove('high-contrast');
-    }
-
     root.setAttribute('lang', language);
-  }, [fontSize, contrastMode, language]);
+  }, [fontSize, language]);
 
   const setFontSize = (size: FontSizeOption) => {
     setFontSizeState(size);
@@ -69,11 +59,8 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     } catch {}
   };
 
-  const setContrastMode = (mode: ContrastOption) => {
-    setContrastModeState(mode);
-    try {
-      localStorage.setItem(CONTRAST_STORAGE_KEY, mode);
-    } catch {}
+  const setContrastMode = () => {
+    // No-op - contrast bar decommissioned
   };
 
   const setLanguage = (lang: LanguageOption) => {
@@ -85,7 +72,6 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
 
   const resetAccessibility = () => {
     setFontSize('normal');
-    setContrastMode('standard');
     setLanguage('en');
   };
 
@@ -94,7 +80,7 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
       value={{
         fontSize,
         setFontSize,
-        contrastMode,
+        contrastMode: 'standard',
         setContrastMode,
         language,
         setLanguage,
@@ -113,4 +99,3 @@ export const useAccessibility = (): AccessibilityContextType => {
   }
   return context;
 };
-
