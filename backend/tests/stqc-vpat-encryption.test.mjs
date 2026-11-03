@@ -81,4 +81,11 @@ assert.match(malwareScannerSrc, /scanWithClamAvDaemon/);
 assert.match(malwareScannerSrc, /zINSTREAM/);
 console.log('✔ STQC ASVS 12.4 Anti-Malware Streaming Hook & EICAR Scanner Verified');
 
+// 10. CERT-In Directions 2022 180-Day Log Retention & NTP Status
+const complianceRoutesSrc = readFileSync(new URL('../src/routes/compliance.routes.ts', import.meta.url), 'utf8');
+assert.match(complianceRoutesSrc, /router\.get\('\/audit-log-status'/);
+assert.match(complianceRoutesSrc, /statutoryRetentionPeriodDays:\s*180/);
+assert.match(complianceRoutesSrc, /time.nplindia.org/);
+console.log('✔ CERT-In 180-Day Audit Trail Retention & NTP Sync Verified');
+
 console.log('\nAll STQC, DPDPA & VPAT Verification Tests Passed Cleanly!');

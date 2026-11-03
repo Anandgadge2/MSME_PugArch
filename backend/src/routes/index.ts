@@ -40,6 +40,7 @@ import procurementSubmissionRoutes from './procurement-submission.routes.js';
 import pbgRoutes from '../modules/pbg/pbg.routes.js';
 import negotiationRoutes from '../modules/negotiation/negotiation.routes.js';
 import externalProcurementRoutes from './external-procurement.routes.js';
+import complianceRoutes from './compliance.routes.js';
 
 const API_VERSION = 'v1';
 
@@ -155,6 +156,7 @@ router.use('/', procurementSubmissionRoutes);
 router.use('/pbg', pbgRoutes);
 router.use('/negotiations', negotiationRoutes);
 router.use('/', externalProcurementRoutes);
+router.use('/compliance', complianceRoutes);
 
   return router;
 };
