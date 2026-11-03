@@ -32,9 +32,9 @@ export function Pagination({
 
   return (
     <div
-      className={`flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 text-xs lg:text-sm font-semibold text-slate-500 sm:flex-row sm:items-center sm:justify-between w-full max-w-full box-border ${className}`}
+      className={`flex flex-col gap-3 border-t border-slate-100 bg-white px-4 py-3 text-xs lg:text-sm font-semibold text-slate-700 sm:flex-row sm:items-center sm:justify-between w-full max-w-full box-border ${className}`}
     >
-      <div className="shrink flex-1 min-w-0 text-center sm:text-left text-xs sm:text-sm text-slate-600">
+      <div role="status" aria-live="polite" className="shrink flex-1 min-w-0 text-center sm:text-left text-xs sm:text-sm text-slate-700">
         Showing <span className="font-extrabold text-slate-900">{start}-{end}</span> of{' '}
         <span className="font-extrabold text-slate-900">{total.toLocaleString('en-IN')}</span> {label}
       </div>

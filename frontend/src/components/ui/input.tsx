@@ -13,7 +13,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
     return (
       <div className="w-full min-w-0 space-y-1">
         {label && (
-          <label htmlFor={id} className="block break-words text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-500 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-[11px]">
+          <label htmlFor={id} className="block break-words text-[10px] font-bold sm:font-extrabold uppercase tracking-wide sm:tracking-widest text-slate-700 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 sm:text-[11px]">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -43,13 +43,13 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
               type="button"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? "Hide password" : "Show password"}
-              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 h-9 w-9 sm:h-7 sm:w-7 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors focus:outline-none"
+              className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 h-9 w-9 sm:h-7 sm:w-7 flex items-center justify-center text-slate-600 hover:text-indigo-700 transition-colors focus:outline-none"
             >
               {showPassword ? <EyeOff className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> : <Eye className="h-4 w-4 sm:h-3.5 sm:w-3.5" />}
             </button>
           )}
         </div>
-        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-500">{error}</p>}
+        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-700 font-semibold">{error}</p>}
       </div>
     );
   }
@@ -64,7 +64,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
     return (
       <div className="w-full min-w-0 space-y-1">
         {label && (
-          <label htmlFor={id} className="block break-words text-[9px] font-extrabold uppercase tracking-widest text-slate-500 leading-none sm:text-[11px] sm:tracking-wide">
+          <label htmlFor={id} className="block break-words text-[9px] font-extrabold uppercase tracking-widest text-slate-700 leading-none sm:text-[11px] sm:tracking-wide">
             {label}
             {required && <span className="text-red-500 ml-1 font-bold">*</span>}
           </label>
@@ -86,7 +86,7 @@ const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttributes<HT
         >
           {children}
         </select>
-        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-500">{error}</p>}
+        {error && <p id={errorId} role="alert" className="text-[10px] sm:text-xs text-red-700 font-semibold">{error}</p>}
       </div>
     );
   }

@@ -29,6 +29,7 @@ import Link from 'next/link';
 import { cn } from '../../lib/utils';
 import { indiaStates, indiaStatesDistricts } from '../../data/indiaStatesDistricts';
 import { aadhaarKycApi, type AadhaarKycStatus } from '../../features/kyc/aadhaarKycApi';
+import { focusFirstError } from '../../utils/accessibility';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../../lib/validation';
 
 interface RegistrationDetailsFlowProps {
@@ -871,13 +872,17 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   const handleNext = () => {
+    const onValidationError = (msg: string) => {
+      toast.error(msg);
+      setTimeout(() => focusFirstError(), 50);
+    };
     if (currentSubStep === 1) {
       if (isPrimaryBuyer && !isPrimaryBuyerOrganisationComplete) {
-        toast.error('Please complete Organisation Details');
+        onValidationError('Please complete Organisation Details');
         return;
       }
       if (!formData.businessName) {
-        toast.error('Please enter Organization Name');
+        onValidationError('Please enter Organization Name');
         return;
       }
       if (role === 'seller' && !formData.udyamNumber) {

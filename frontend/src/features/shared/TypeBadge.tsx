@@ -30,15 +30,15 @@ export function TypeBadge({ type, className }: { type: OpportunityType; classNam
 
   const getBaseColorClass = (t: string) => {
     const norm = t.toLowerCase();
-    if (norm === 'rfq') return 'border-orange-200 bg-orange-50 text-orange-700';
-    if (norm === 'rfp') return 'border-purple-200 bg-purple-50 text-purple-700';
-    if (norm.includes('open tender') || norm === 'opentender' || norm === 'tender') return 'border-emerald-200 bg-emerald-50 text-emerald-700';
-    if (norm.includes('limited tender') || norm === 'limitedtender') return 'border-blue-200 bg-blue-50 text-blue-700';
-    if (norm.includes('rate contract')) return 'border-teal-200 bg-teal-50 text-teal-800';
-    if (norm.includes('cart checkout') || norm.includes('direct purchase')) return 'border-violet-200 bg-violet-50 text-violet-800';
-    if (norm.includes('repeat order')) return 'border-pink-200 bg-pink-50 text-pink-800';
-    if (norm.includes('reverse auction') || norm === 'auction') return 'border-red-200 bg-red-50 text-red-700';
-    return 'border-slate-200 bg-slate-50 text-slate-700';
+    if (norm === 'rfq') return 'border-orange-300 bg-orange-50 text-orange-950';
+    if (norm === 'rfp') return 'border-purple-300 bg-purple-50 text-purple-950';
+    if (norm.includes('open tender') || norm === 'opentender' || norm === 'tender') return 'border-emerald-300 bg-emerald-50 text-emerald-900';
+    if (norm.includes('limited tender') || norm === 'limitedtender') return 'border-blue-300 bg-blue-50 text-blue-950';
+    if (norm.includes('rate contract')) return 'border-teal-300 bg-teal-50 text-teal-900';
+    if (norm.includes('cart checkout') || norm.includes('direct purchase')) return 'border-violet-300 bg-violet-50 text-violet-950';
+    if (norm.includes('repeat order')) return 'border-pink-300 bg-pink-50 text-pink-950';
+    if (norm.includes('reverse auction') || norm === 'auction') return 'border-red-300 bg-red-50 text-red-950';
+    return 'border-slate-300 bg-slate-100 text-slate-800';
   };
 
   return (
@@ -50,7 +50,7 @@ export function TypeBadge({ type, className }: { type: OpportunityType; classNam
         {baseType}
       </span>
       {isPlusRa && (
-        <span className="inline-flex items-center gap-0.5 rounded border border-rose-200 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-700 shrink-0 shadow-2xs whitespace-nowrap">
+        <span className="inline-flex items-center gap-0.5 rounded border border-rose-300 bg-rose-50 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-rose-950 shrink-0 shadow-2xs whitespace-nowrap">
           <Gavel className="h-2.5 w-2.5 text-rose-600" aria-hidden="true" />
           + RA
         </span>

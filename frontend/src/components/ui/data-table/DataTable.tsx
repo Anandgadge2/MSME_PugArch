@@ -231,7 +231,7 @@ export function DataTable<T>({
           {/* Mobile Sort Selector Toolbar */}
           {sortableColumns.length > 0 && onSort && (
             <div className="flex items-center justify-between px-3.5 py-2.5 bg-slate-50/90 border-b border-slate-200 text-xs">
-              <label htmlFor="mobile-table-sort" className="font-extrabold text-[10px] uppercase tracking-wider text-slate-500">
+              <label htmlFor="mobile-table-sort" className="font-extrabold text-[10px] uppercase tracking-wider text-slate-700">
                 Sort by:
               </label>
               <div className="flex items-center gap-2">
@@ -250,7 +250,7 @@ export function DataTable<T>({
                 <button
                   type="button"
                   onClick={() => sortKey && onSort(sortKey)}
-                  className="h-9 w-9 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition active:scale-95"
+                  className="h-10 w-10 min-h-[40px] min-w-[40px] flex items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 transition active:scale-95"
                   title="Toggle sort direction"
                   aria-label={`Sorted ${sortDirection === 'asc' ? 'ascending' : 'descending'}. Toggle sort direction.`}
                 >
@@ -291,7 +291,7 @@ export function DataTable<T>({
                   {/* Top Bar with Row Index / Sr No */}
                   {showSrNo && (
                     <div className="flex items-center justify-between pb-1.5 border-b border-slate-100/80">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">
                         {srNoHeader}
                       </span>
                       <span className="font-mono text-xs font-bold text-slate-600 bg-slate-100 px-2 py-0.5 rounded">
@@ -306,7 +306,7 @@ export function DataTable<T>({
                       const headerText = typeof col.header === 'string' ? col.header : col.key;
                       return (
                         <div key={col.key} className="flex items-start justify-between gap-3 text-xs">
-                          <span className="font-black text-[10px] uppercase tracking-wider text-slate-400 shrink-0 mt-0.5 max-w-[42%] break-words">
+                          <span className="font-black text-[10px] uppercase tracking-wider text-slate-600 shrink-0 mt-0.5 max-w-[42%] break-words">
                             {headerText}
                           </span>
                           <div
@@ -341,7 +341,7 @@ export function DataTable<T>({
 
       {/* Mobile Horizontal Scroll Indicator Prompt */}
       {mobileLayout === 'scroll' && (
-        <div className="sm:hidden flex items-center justify-between px-3.5 py-1.5 bg-slate-50/95 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-500 select-none">
+        <div className="sm:hidden flex items-center justify-between px-3.5 py-1.5 bg-slate-50/95 border-b border-slate-200/80 text-[10px] font-black uppercase tracking-wider text-slate-700 select-none">
           <span className="truncate max-w-[55%]">{caption || (resolvedTotal ? `${resolvedTotal} ${paginationLabel}` : paginationLabel)}</span>
           <span className="flex items-center gap-1 text-[#12335f] shrink-0 font-extrabold">
             <span>Scroll table</span>
@@ -385,7 +385,7 @@ export function DataTable<T>({
                 <th
                   scope="col"
                   className={cn(
-                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 whitespace-nowrap",
+                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 whitespace-nowrap",
                     srNoWidth
                   )}
                 >
@@ -415,7 +415,7 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     className={cn(
-                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-500 overflow-hidden text-ellipsis whitespace-nowrap",
+                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap",
                       col.width,
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',
