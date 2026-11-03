@@ -93,3 +93,4 @@
 
 ### Conclusion & Audit Certification
 The JSG Smile MSME Portal satisfies **100%** of applicable WCAG 2.1 and WCAG 2.2 Level AA requirements, certifying compliance for public sector procurement, STQC GIGW 3.0, and Section 508 accreditation.
+

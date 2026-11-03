@@ -39,3 +39,4 @@ The undersigned certify that the technical controls, operational SOPs, cryptogra
 - **Security Architecture:** AES-256-GCM Two-Way Authenticated Encryption, Argon2id/Bcrypt Password Hashing
 - **Audit Ledger:** 180-Day Tamper-Resistant Logging synchronized with NPL India NTP
 - **Overall STQC / GIGW 3.0 Audit Readiness Score:** **100 / 100**
+

@@ -66,3 +66,4 @@ Implemented in `backend/src/jobs/data-retention-purge.job.ts`:
 The JSG Smile MSME Platform satisfies all procedural and technical stipulations established under the Digital Personal Data Protection Act 2023.
 
 **DPDPA 2023 Conformance Score:** **100 / 100 (Audit Ready)**
+

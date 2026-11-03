@@ -90,3 +90,4 @@ export function getContrastRatio(fgHex: string, bgHex: string): number {
     return 4.5;
   }
 }
+
