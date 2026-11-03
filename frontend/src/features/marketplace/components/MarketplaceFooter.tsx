@@ -130,6 +130,8 @@ export function MarketplaceFooter() {
                                 { label: 'Hyperlinking Policy', href: '/hyperlinking-policy' },
                                 { label: 'Public Procurement Disclaimer', href: '/disclaimer' },
                                 { label: 'Caution Notice against Fraud', href: '/caution-notice' },
+                                { label: 'Website Monitoring Policy', href: '/website-monitoring' },
+                                { label: 'Contingency Management Plan', href: '/contingency-plan' },
                                 { label: 'Portal Sitemap', href: '/sitemap' },
                             ].map((item) => (
                                 <li key={item.label}>

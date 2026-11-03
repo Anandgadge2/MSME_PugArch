@@ -73,7 +73,9 @@ type PageKey =
   | 'feedback'
   | 'faqs'
   | 'sitemap'
-  | 'screen-reader';
+  | 'screen-reader'
+  | 'monitoring'
+  | 'contingency';
 
 const routeToPage: Record<string, PageKey> = {
   '/contact-us': 'contact',
@@ -106,6 +108,10 @@ const routeToPage: Record<string, PageKey> = {
   '/caution-notices': 'caution',
   '/screen-reader-access': 'screen-reader',
   '/screen-reader': 'screen-reader',
+  '/website-monitoring': 'monitoring',
+  '/monitoring-policy': 'monitoring',
+  '/contingency-plan': 'contingency',
+  '/disaster-recovery': 'contingency',
 };
 
 interface OfficialDocumentMeta {
@@ -252,6 +258,32 @@ const OFFICIAL_DOCS: Record<string, OfficialDocumentMeta> = {
     pdfHref: '/docs/Terms_and_Conditions.pdf',
     fileSize: '122 KB',
     description: 'Guidelines on external links, inbound deep-linking, framing restrictions, and security under Indian Government Web Standards.',
+  },
+  monitoring: {
+    key: 'monitoring',
+    title: 'Website Performance & Security Monitoring Policy',
+    shortTitle: 'Monitoring Policy',
+    badge: 'GIGW 3.0 Standard',
+    category: 'Operational Governance',
+    refNo: 'JSG-DIC-MON-2026/13',
+    effectiveDate: '30 July 2026',
+    pdfFilename: 'Website_Monitoring_Policy.pdf',
+    pdfHref: '/docs/Terms_and_Conditions.pdf',
+    fileSize: '112 KB',
+    description: 'Statutory guidelines on automated uptime monitoring, performance SLAs, link integrity, and security audit schedules.',
+  },
+  contingency: {
+    key: 'contingency',
+    title: 'Website Contingency & Disaster Recovery Management Plan',
+    shortTitle: 'Contingency Plan',
+    badge: 'Disaster Recovery',
+    category: 'Business Continuity',
+    refNo: 'JSG-DIC-CMP-2026/14',
+    effectiveDate: '30 July 2026',
+    pdfFilename: 'Contingency_Management_Plan.pdf',
+    pdfHref: '/docs/Terms_and_Conditions.pdf',
+    fileSize: '118 KB',
+    description: 'Action plan for technical contingency, cyber incident mitigation, rapid restoration, and communication protocols during outages.',
   },
   'screen-reader': {
     key: 'screen-reader',
@@ -651,6 +683,8 @@ function LegalDocumentReader({ activeKey }: { activeKey: PageKey }) {
             {activeKey === 'hyperlinks' && <HyperlinkPolicyText />}
             {activeKey === 'caution' && <CautionNoticeText />}
             {activeKey === 'screen-reader' && <ScreenReaderAccessText />}
+            {activeKey === 'monitoring' && <WebsiteMonitoringText />}
+            {activeKey === 'contingency' && <ContingencyPlanText />}
           </div>
 
           {/* Official Seal & Authentication Block */}
@@ -2152,6 +2186,122 @@ function ScreenReaderAccessText() {
           <p className="text-slate-600">Toll Free Helpline: 1800-345-7111 / +91 (06645) 272-100</p>
           <p className="text-slate-500 pt-1">All accessibility grievances are addressed within 7 working days.</p>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function WebsiteMonitoringText() {
+  return (
+    <div className="space-y-6 font-sans text-xs sm:text-sm text-slate-700 leading-relaxed">
+      <div className="text-center border-b border-slate-200 pb-4 mb-4">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
+          WEBSITE MONITORING &amp; PERFORMANCE SLA POLICY
+        </h2>
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
+          In Accordance with GIGW 3.0 Guidelines for Indian Government Websites
+        </p>
+      </div>
+
+      <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-slate-800 space-y-2">
+        <h3 className="font-extrabold text-[#0b2447] text-sm uppercase tracking-wide">
+          1. Continuous Monitoring Mandate
+        </h3>
+        <p>
+          The JsgSmile Portal undergoes automated, round-the-clock synthetic monitoring to verify service availability,
+          page load speeds, database latency, and cryptographic certificate health.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          2. Statutory Performance Targets
+        </h3>
+        <ul className="space-y-2 pl-2">
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Target Service Availability:</strong> Minimum 99.9% uptime across all working days.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Health Check Cadence:</strong> Automated synthetic pings every 5 minutes targeting <code>/api/v1/health</code>.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Link Integrity:</strong> Automated broken-link sweeps executed weekly across all public routes.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Security Audits:</strong> Periodic VAPT assessments conducted by CERT-In empanelled auditors.</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          3. Web Information Manager (WIM)
+        </h3>
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+          <p className="font-bold text-[#0b2447]">General Manager, District Industries Centre (DIC)</p>
+          <p className="text-slate-600">District Collectorate Campus, Jharsuguda, Odisha - 768201</p>
+          <p className="text-slate-600">Official Email: <a href="mailto:jsgsmileportal@gmail.com" className="text-blue-700 underline font-semibold">jsgsmileportal@gmail.com</a></p>
+          <p className="text-slate-600">Landline: +91 (06645) 272-100</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ContingencyPlanText() {
+  return (
+    <div className="space-y-6 font-sans text-xs sm:text-sm text-slate-700 leading-relaxed">
+      <div className="text-center border-b border-slate-200 pb-4 mb-4">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
+          CONTINGENCY &amp; DISASTER RECOVERY MANAGEMENT PLAN (CMP)
+        </h2>
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
+          Business Continuity Charter as per National Informatics Centre &amp; GIGW 3.0 Standards
+        </p>
+      </div>
+
+      <div className="p-4 rounded-xl bg-amber-50/70 border border-amber-200 text-slate-800 space-y-2">
+        <h3 className="font-extrabold text-[#78350f] text-sm uppercase tracking-wide">
+          1. Purpose and Scope
+        </h3>
+        <p>
+          This plan defines rapid response protocols for unexpected interruptions including server outages,
+          hardware failures, network disruptions, or cyber defacements affecting the MSME procurement exchange.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          2. Incident Response Scenarios
+        </h3>
+        <div className="space-y-2 text-xs">
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <p className="font-bold text-slate-900">Scenario A: Unauthorized Modification / Defacement</p>
+            <p className="text-slate-600 mt-1">Portal is placed in maintenance mode immediately. Server images are restored from authenticated golden snapshots within 30 minutes.</p>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <p className="font-bold text-slate-900">Scenario B: Database / Primary Storage Outage</p>
+            <p className="text-slate-600 mt-1">High-availability automated database failover kicks in with Recovery Point Objective (RPO) $le 15$ minutes and Recovery Time Objective (RTO) $le 2$ hours.</p>
+          </div>
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg">
+            <p className="font-bold text-slate-900">Scenario C: Network / DDoS Disruption</p>
+            <p className="text-slate-600 mt-1">Edge DDoS throttling activates automatically with strict rate limits, maintaining essential public procurement services.</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          3. Emergency Coordination
+        </h3>
+        <p>
+          All critical security incidents trigger escalation to CERT-In (Computer Emergency Response Team - India)
+          in compliance with the 6-hour CERT-In statutory cyber incident reporting directives.
+        </p>
       </div>
     </div>
   );

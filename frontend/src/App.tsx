@@ -381,6 +381,8 @@ const publicInfoRoutes = [
   '/privacy-policy',
   '/screen-reader-access',
   '/screen-reader',
+  '/website-monitoring',
+  '/contingency-plan',
   '/vendor-verification-policy',
   '/verification-policy',
   '/order-placement-policy',
