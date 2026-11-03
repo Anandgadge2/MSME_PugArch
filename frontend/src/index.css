@@ -29,6 +29,8 @@
 :root {
   --font-body: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-heading: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-plus-jakarta: var(--font-body);
+  --font-inter: var(--font-body);
 }
 
 :root,
