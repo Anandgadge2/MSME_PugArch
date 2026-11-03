@@ -898,7 +898,20 @@ export const resolveAuctionAsBidRecord = async (token: string, client: any = db)
     (Array.isArray(origPayload?.consigneeDetails) && origPayload.consigneeDetails.length > 0 ? origPayload.consigneeDetails : null) ||
     [];
 
-  const deliveryLocation = linkedBid?.deliveryLocation || origBasics?.deliveryLocation || linkedReq?.deliveryLocation || linkedReq?.location || '';
+  const isGenericLocVal = (val?: string | null) => {
+    if (!val) return true;
+    const s = String(val).trim().toLowerCase();
+    return !s || s === 'india' || s === 'pan-india' || s === 'all india' || s === 'location not specified' || s === 'not specified' || s === '—' || s === 'n/a';
+  };
+
+  const deliveryLocation = (!isGenericLocVal(origBasics?.deliveryLocation) ? origBasics.deliveryLocation : null) ||
+    (!isGenericLocVal(consigneeDetails[0]?.location) ? consigneeDetails[0].location : null) ||
+    (!isGenericLocVal(linkedBid?.deliveryLocation) ? linkedBid.deliveryLocation : null) ||
+    (!isGenericLocVal(linkedReq?.deliveryLocation) ? linkedReq.deliveryLocation : null) ||
+    (!isGenericLocVal(linkedReq?.location) ? linkedReq.location : null) ||
+    (buyerOrg ? [buyerOrg.addressLine1, buyerOrg.addressLine2, buyerOrg.city, buyerOrg.district, buyerOrg.state, buyerOrg.pincode].filter(Boolean).join(', ') : null) ||
+    linkedBid?.deliveryLocation ||
+    'Location as per procurement document';
   const paymentTerms = linkedBid?.paymentTerms || origTerms?.paymentTerms || origBasics?.paymentTerms || linkedReq?.paymentTerms || 'Standard commercial payment terms';
   const deliveryTerms = linkedBid?.deliveryTerms || origTerms?.deliveryTerms || origBasics?.deliveryTerms || linkedReq?.deliveryTerms || 'Door delivery within contract period';
 
@@ -1248,7 +1261,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
               buyerOrganizationName: buyerOrgName || 'Buyer Organization',
               status: 'OPEN',
               lifecycleStage: 'SELLER_PARTICIPATION',
-              deliveryLocation: 'India',
+              deliveryLocation: (qReq as any).deliveryLocation || (qReq as any).location || (buyerUser?.organization ? [buyerUser.organization.addressLine1, buyerUser.organization.city, buyerUser.organization.state].filter(Boolean).join(', ') : null) || 'Location as per procurement document',
               startDate: qReq.createdAt || new Date(),
               endDate: new Date(Date.now() + 30 * 86400000),
               technicalPacket: {
@@ -1298,7 +1311,38 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
           validBuyerId = fallbackUser?.id;
         }
 
+        const reqPayload = (typeof buyerReq.payload === 'object' && buyerReq.payload ? buyerReq.payload : {}) as any;
+        const reqBasics = reqPayload.basics || {};
+        const reqOrg = buyerReq.organization || buyerReq.buyerOrganization || (buyerReq.buyer as any)?.buyerProfile?.organization || (buyerReq.buyer as any)?.organization;
+        const orgAddr = reqOrg ? [reqOrg.addressLine1, reqOrg.addressLine2, reqOrg.city, reqOrg.district, reqOrg.state, reqOrg.pincode].filter(Boolean).join(', ') : '';
+        const orgLoc = reqOrg ? [reqOrg.city, reqOrg.district, reqOrg.state].filter(Boolean).join(', ') : '';
+
+        const isGeneric = (loc?: string | null) => {
+          if (!loc) return true;
+          const s = String(loc).trim().toLowerCase();
+          return !s || s === 'india' || s === 'pan-india' || s === 'all india' || s === 'location not specified' || s === 'not specified' || s === '—' || s === 'n/a';
+        };
+
+        const resolvedDeliveryLoc =
+          (!isGeneric(reqBasics.deliveryLocation) ? reqBasics.deliveryLocation : null) ||
+          (Array.isArray(reqPayload.consigneeDetails) && reqPayload.consigneeDetails[0]?.location && !isGeneric(reqPayload.consigneeDetails[0].location) ? reqPayload.consigneeDetails[0].location : null) ||
+          (!isGeneric(reqPayload.tender?.deliveryLocation) ? reqPayload.tender.deliveryLocation : null) ||
+          (!isGeneric(reqPayload.deliveryLocation) ? reqPayload.deliveryLocation : null) ||
+          (!isGeneric(buyerReq.location) ? buyerReq.location : null) ||
+          (!isGeneric(buyerReq.deliveryLocation) ? buyerReq.deliveryLocation : null) ||
+          orgAddr ||
+          orgLoc ||
+          'Location as per procurement document';
+
         const shadowTechnicalPacket: any = {
+          ...reqPayload,
+          basics: {
+            ...reqBasics,
+            deliveryLocation: reqBasics.deliveryLocation || resolvedDeliveryLoc
+          },
+          consigneeDetails: (Array.isArray(reqPayload.consigneeDetails) && reqPayload.consigneeDetails.length > 0)
+            ? reqPayload.consigneeDetails
+            : (orgAddr ? [{ name: reqOrg?.organizationName, location: orgAddr }] : []),
           ...(buyerReq.items && buyerReq.items.length > 0 ? { wizardData: { items: buyerReq.items } } : {}),
           sourceModel: 'REQUIREMENT',
           sourceRequirementId: reqId,
@@ -1320,7 +1364,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: buyerOrgName || 'Buyer Organization',
             status: buyerReq.status === 'APPROVED' ? 'OPEN' : (buyerReq.status || 'OPEN'),
             lifecycleStage: 'SELLER_PARTICIPATION',
-            deliveryLocation: buyerReq.location || buyerReq.deliveryLocation || [buyerReq.buyerOrganization?.district, buyerReq.buyerOrganization?.state].filter(Boolean).join(', ') || 'India',
+            deliveryLocation: resolvedDeliveryLoc,
             startDate: buyerReq.createdAt || new Date(),
             endDate: buyerReq.lastDate || buyerReq.requiredBy || new Date(Date.now() + 30 * 86400000),
             technicalPacket: shadowTechnicalPacket
@@ -1417,7 +1461,7 @@ export const resolveBid = async (bidIdOrNumber: string | number, include: any = 
             buyerOrganizationName: meta.buyerOrgName || 'Buyer Organization',
             status: 'OPEN',
             lifecycleStage: 'SELLER_PARTICIPATION',
-            deliveryLocation: meta.deliveryLocation || 'India',
+            deliveryLocation: meta.deliveryLocation || (contract.deliveryLocation ? contract.deliveryLocation : null) || (buyerUser?.organization ? [buyerUser.organization.addressLine1, buyerUser.organization.city, buyerUser.organization.state].filter(Boolean).join(', ') : null) || 'Location as per contract',
             startDate: formatDate(contract.startDate) || new Date(),
             endDate: formatDate(contract.endDate) || new Date(Date.now() + 365 * 86400000),
             technicalPacket: {

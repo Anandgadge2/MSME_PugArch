@@ -8897,20 +8897,27 @@ export function ProcurementDetailUnifiedView(
     ? formatDateString(bidValidityDateComputed, false)
     : undefined;
 
+  const isGenericLoc = (val?: string | null) => {
+    if (!val) return true;
+    const s = String(val).trim().toLowerCase();
+    return !s || s === "—" || s === "n/a" || s === "delivery location not specified" || s === "india" || s === "pan-india" || s === "all india" || s === "location not specified";
+  };
+
   const rawDeliveryLocation = firstPresent(
-    props.deliveryLocation &&
-      props.deliveryLocation !== "—" &&
-      props.deliveryLocation !== "N/A" &&
-      props.deliveryLocation !== "Delivery location not specified"
+    props.deliveryLocation && !isGenericLoc(props.deliveryLocation)
       ? props.deliveryLocation
       : undefined,
-    payload.deliveryLocation,
-    basics.deliveryLocation,
-    basics.location,
-    internal.deliveryAddress,
-    internal.location,
-    tender.deliveryAddress,
-    tender.deliveryLocation,
+    payload.deliveryLocation && !isGenericLoc(payload.deliveryLocation) ? payload.deliveryLocation : undefined,
+    basics.deliveryLocation && !isGenericLoc(basics.deliveryLocation) ? basics.deliveryLocation : undefined,
+    basics.location && !isGenericLoc(basics.location) ? basics.location : undefined,
+    (Array.isArray(payload.consigneeDetails) && payload.consigneeDetails[0]?.location && !isGenericLoc(payload.consigneeDetails[0].location)) ? payload.consigneeDetails[0].location : undefined,
+    internal.deliveryAddress && !isGenericLoc(internal.deliveryAddress) ? internal.deliveryAddress : undefined,
+    internal.location && !isGenericLoc(internal.location) ? internal.location : undefined,
+    tender.deliveryAddress && !isGenericLoc(tender.deliveryAddress) ? tender.deliveryAddress : undefined,
+    tender.deliveryLocation && !isGenericLoc(tender.deliveryLocation) ? tender.deliveryLocation : undefined,
+    buyerOrg.registeredAddress && !isGenericLoc(buyerOrg.registeredAddress) ? buyerOrg.registeredAddress : undefined,
+    props.buyerAddress && !isGenericLoc(props.buyerAddress) ? props.buyerAddress : undefined,
+    props.deliveryLocation && props.deliveryLocation !== "—" && props.deliveryLocation !== "N/A" ? props.deliveryLocation : undefined,
     buyerOrg.city ? `${buyerOrg.city}, ${buyerOrg.state || ""}` : undefined,
     buyerProfile.city
       ? `${buyerProfile.city}, ${buyerProfile.state || ""}`
@@ -10126,6 +10133,10 @@ export function ProcurementDetailUnifiedView(
     isPostBiddingStage ||
     Boolean(props.isSubmitDisabled) ||
     isDeadlinePassed;
+
+  const isConcludedNonParticipant = Boolean(
+    isNonParticipant && (isBiddingClosed || isDeadlinePassed || isConcludedOrCancelled)
+  );
 
   const effectiveStatusLabel = useMemo(() => {
     if (isBeforeSubmissionStart) {
@@ -11650,7 +11661,7 @@ export function ProcurementDetailUnifiedView(
             isDisqualified={isDisqualified}
             disqualificationReason={disqualificationReason}
             isLosingBidder={isLosingBidder}
-            isNonParticipant={isNonParticipant}
+            isNonParticipant={isConcludedNonParticipant}
             canSubmitBid={
               !isSellerParticipated &&
               !isBiddingClosed &&
@@ -11999,7 +12010,7 @@ export function ProcurementDetailUnifiedView(
                 );
               }
 
-              if (!isBuyerSide && isNonParticipant) {
+              if (!isBuyerSide && isConcludedNonParticipant) {
                 return (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
@@ -12119,7 +12130,7 @@ export function ProcurementDetailUnifiedView(
                 );
               }
 
-              if (!isBuyerSide && isNonParticipant) {
+              if (!isBuyerSide && isConcludedNonParticipant) {
                 return (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
@@ -12136,10 +12147,12 @@ export function ProcurementDetailUnifiedView(
                           </span>
                         </div>
                         <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
-                          Stage 2 Dynamic Auction in Progress
+                          {isDirectReverseAuction ? "Dynamic Reverse Auction in Progress" : "Stage 2 Dynamic Auction in Progress"}
                         </h4>
                         <p className="text-xs font-medium text-slate-600 mt-0.5">
-                          Stage 2 reverse auction dynamic decrement bidding is currently in progress for qualified participating suppliers who submitted compliant Stage 1 bids.
+                          {isDirectReverseAuction
+                            ? "Reverse auction dynamic decrement bidding is currently in progress."
+                            : "Stage 2 reverse auction dynamic decrement bidding is currently in progress for qualified participating suppliers who submitted compliant Stage 1 bids."}
                         </p>
                       </div>
                     </div>
@@ -12233,7 +12246,7 @@ export function ProcurementDetailUnifiedView(
                 );
               }
 
-              if (!isBuyerSide && isNonParticipant) {
+              if (!isBuyerSide && isConcludedNonParticipant) {
                 return (
                   <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                     <div className="flex items-start gap-3">
@@ -12250,10 +12263,12 @@ export function ProcurementDetailUnifiedView(
                           </span>
                         </div>
                         <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-900 mt-1">
-                          Stage 2 Dynamic Auction Scheduled
+                          {isDirectReverseAuction ? "Reverse Auction Scheduled" : "Stage 2 Dynamic Auction Scheduled"}
                         </h4>
                         <p className="text-xs font-medium text-slate-600 mt-0.5">
-                          Stage 2 reverse auction dynamic decrement bidding will begin at the scheduled window start time for qualified suppliers who submitted Stage 1 bids.
+                          {isDirectReverseAuction
+                            ? "Dynamic decrement bidding will begin at the scheduled window start time for participating suppliers."
+                            : "Stage 2 reverse auction dynamic decrement bidding will begin at the scheduled window start time for qualified suppliers who submitted Stage 1 bids."}
                         </p>
                       </div>
                     </div>
@@ -12282,7 +12297,9 @@ export function ProcurementDetailUnifiedView(
                         </span>
                       </div>
                       <p className="text-xs font-medium text-slate-800 mt-1">
-                        Stage 2 dynamic decrement bidding will begin at the scheduled window start time.
+                        {isDirectReverseAuction
+                          ? "Dynamic decrement bidding will begin at the scheduled window start time."
+                          : "Stage 2 dynamic decrement bidding will begin at the scheduled window start time."}
                       </p>
                     </div>
                   </div>
@@ -14368,15 +14385,7 @@ export function ProcurementDetailUnifiedView(
                           Quotation Recorded
                         </span>
                       )
-                    ) : isBeforeSubmissionStart ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-sky-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-sky-900 shadow-2xs">
-                        <Clock
-                          className="h-3 w-3 text-sky-700"
-                          aria-hidden="true"
-                        />
-                        Submission Opens Soon
-                      </span>
-                    ) : isBiddingClosed || isDeadlinePassed ? (
+                    ) : isBeforeSubmissionStart ? null : isBiddingClosed || isDeadlinePassed ? (
                       <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-800 shadow-2xs">
                         <Lock
                           className="h-3 w-3 text-rose-600"

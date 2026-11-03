@@ -14,6 +14,7 @@ import {
   INSPECTION_OPTIONS
 } from '../../hooks/useInPlaceProcurementEdit';
 import { PAYMENT_TERM_OPTIONS } from '../../../procurementWizard/procurementOptions';
+import { SearchableSelect } from '../../../../components/ui/SearchableSelect';
 
 export interface InPlaceTermsEditCardProps {
   draft: InPlaceProcurementDraft;
@@ -53,18 +54,16 @@ export function InPlaceTermsEditCard({
             <Truck className="h-3.5 w-3.5 text-indigo-600" />
             Delivery Incoterms <span className="text-rose-500">*</span>
           </label>
-          <select
+          <SearchableSelect
             id="proc-edit-incoterms"
+            aria-label="Delivery Incoterms"
+            placeholder="Select Incoterms..."
+            searchPlaceholder="Search incoterms..."
             value={draft.deliveryTerms}
-            onChange={(e) => updateDraft('deliveryTerms', e.target.value)}
-            className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition shadow-xs outline-none cursor-pointer"
-          >
-            {INCOTERMS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            options={INCOTERMS_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+            onChange={(val) => updateDraft('deliveryTerms', String(val || 'FOR_DESTINATION'))}
+            buttonClassName="h-10 px-3 text-xs font-bold rounded-xl border-slate-300 focus:border-indigo-600 focus:ring-indigo-100"
+          />
           <p className="text-[10px] text-slate-400">Specifies transportation and transit risk allocation.</p>
         </div>
 
@@ -74,18 +73,16 @@ export function InPlaceTermsEditCard({
             <ShieldCheck className="h-3.5 w-3.5 text-indigo-600" />
             Quality Inspection Mode <span className="text-rose-500">*</span>
           </label>
-          <select
+          <SearchableSelect
             id="proc-edit-inspection"
+            aria-label="Quality Inspection Mode"
+            placeholder="Select Inspection Mode..."
+            searchPlaceholder="Search inspection mode..."
             value={draft.inspectionMode}
-            onChange={(e) => updateDraft('inspectionMode', e.target.value)}
-            className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition shadow-xs outline-none cursor-pointer"
-          >
-            {INSPECTION_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            options={INSPECTION_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+            onChange={(val) => updateDraft('inspectionMode', String(val || 'STAGE_WISE'))}
+            buttonClassName="h-10 px-3 text-xs font-bold rounded-xl border-slate-300 focus:border-indigo-600 focus:ring-indigo-100"
+          />
           <p className="text-[10px] text-slate-400">Specifies pre-dispatch or consignee receipt inspection.</p>
         </div>
 
@@ -95,18 +92,16 @@ export function InPlaceTermsEditCard({
             <CreditCard className="h-3.5 w-3.5 text-indigo-600" />
             Payment Terms &amp; Settlement <span className="text-rose-500">*</span>
           </label>
-          <select
+          <SearchableSelect
             id="proc-edit-payment"
+            aria-label="Payment Terms & Settlement"
+            placeholder="Select Payment Terms..."
+            searchPlaceholder="Search payment terms..."
             value={draft.paymentTerms}
-            onChange={(e) => updateDraft('paymentTerms', e.target.value)}
-            className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition shadow-xs outline-none cursor-pointer"
-          >
-            {PAYMENT_TERM_OPTIONS.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
-              </option>
-            ))}
-          </select>
+            options={PAYMENT_TERM_OPTIONS.map((opt) => ({ value: opt, label: opt }))}
+            onChange={(val) => updateDraft('paymentTerms', String(val || '100% on CRAC Acceptance'))}
+            buttonClassName="h-10 px-3 text-xs font-bold rounded-xl border-slate-300 focus:border-indigo-600 focus:ring-indigo-100"
+          />
           <p className="text-[10px] text-slate-400">Statutory payment settlement timeline against CRAC / GRN.</p>
         </div>
 

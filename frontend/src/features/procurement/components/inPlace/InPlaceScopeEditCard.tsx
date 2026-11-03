@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { InPlaceProcurementDraft, BoqLineItem } from '../../hooks/useInPlaceProcurementEdit';
+import { SearchableSelect } from '../../../../components/ui/SearchableSelect';
 import { UNIT_OPTIONS } from '../../../procurementWizard/procurementOptions';
 
 export interface InPlaceScopeEditCardProps {
@@ -88,18 +89,16 @@ export function InPlaceScopeEditCard({
             <label htmlFor="proc-edit-unit" className="text-xs font-bold text-slate-700">
               Unit of Measure <span className="text-rose-500">*</span>
             </label>
-            <select
+            <SearchableSelect
               id="proc-edit-unit"
+              aria-label="Unit of Measure"
+              placeholder="Select UOM..."
+              searchPlaceholder="Search unit..."
               value={draft.unit}
-              onChange={(e) => updateDraft('unit', e.target.value)}
-              className="w-full h-10 px-3 text-xs font-bold rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-indigo-600 focus:ring-2 focus:ring-indigo-100 transition shadow-xs outline-none cursor-pointer"
-            >
-              {UNIT_OPTIONS.map((u) => (
-                <option key={u.value} value={u.value}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
+              options={UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.label }))}
+              onChange={(val) => updateDraft('unit', String(val || 'Nos'))}
+              buttonClassName="h-10 px-3 text-xs font-bold rounded-xl border-slate-300 focus:border-indigo-600 focus:ring-indigo-100"
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -206,17 +205,16 @@ export function InPlaceScopeEditCard({
                       />
                     </td>
                     <td className="py-2.5 px-3">
-                      <select
+                      <SearchableSelect
+                        id={`proc-edit-boq-uom-${idx}`}
+                        aria-label={`Unit of measure for item ${idx + 1}`}
+                        placeholder="UOM"
+                        searchPlaceholder="Search unit..."
                         value={item.unitOfMeasure}
-                        onChange={(e) => updateBoqItem(idx, 'unitOfMeasure', e.target.value)}
-                        className="w-full h-8 px-2 text-xs font-bold rounded-lg border border-slate-200 bg-white text-slate-800 outline-none cursor-pointer"
-                      >
-                        {UNIT_OPTIONS.map((u) => (
-                          <option key={u.value} value={u.value}>
-                            {u.value}
-                          </option>
-                        ))}
-                      </select>
+                        options={UNIT_OPTIONS.map((u) => ({ value: u.value, label: u.value }))}
+                        onChange={(val) => updateBoqItem(idx, 'unitOfMeasure', String(val || 'NOS'))}
+                        buttonClassName="h-8 px-2 text-xs font-bold rounded-lg border-slate-200"
+                      />
                     </td>
                     <td className="py-2.5 px-3">
                       <input

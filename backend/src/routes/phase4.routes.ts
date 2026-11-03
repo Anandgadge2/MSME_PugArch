@@ -14449,7 +14449,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const matchedBid = procurementBids.find((pb: any) =>
       (auc.linkedBidId && pb.id === Number(auc.linkedBidId)) ||
       (parentId && (pb.id === Number(parentId) || pb.bidNumber === String(parentId))) ||
-      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef)))
+      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef))) ||
+      (auc.auctionCode && (pb.bidNumber === auc.auctionCode || auc.auctionCode.includes(pb.bidNumber) || pb.bidNumber.includes(auc.auctionCode)))
     );
     if (matchedBid) {
       acc[matchedBid.id] = auc;
@@ -14729,7 +14730,16 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
       method: methodSlug,
       methodLabel: METHOD_LABEL_MAP[methodSlug] || methodCanonical.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
 
-      estimatedValue: Number(b.estimatedValue || 0),
+      estimatedValue: Number(
+        b.estimatedValue ||
+        auctionsByBidId[b.id]?.startPrice ||
+        auctionsByBidId[b.id]?.basePrice ||
+        basics.estimatedValue ||
+        basics.totalBudget ||
+        technicalPacket.auctionConfig?.startingBidPrice ||
+        technicalPacket.auctionConfig?.basePrice ||
+        0
+      ),
       category: b.category || '',
       description: cleanOpportunitySummary(b.description || ''),
       deliveryLocation: b.deliveryLocation || '',
@@ -15412,7 +15422,8 @@ async function fetchFreshBuyerProcurementsData(buyerId: number, buyerOrgId: numb
     const isLinkedToProcurementBid = procurementBids.some((pb: any) =>
       (a.linkedBidId && pb.id === Number(a.linkedBidId)) ||
       (parentId && (pb.id === Number(parentId) || pb.bidNumber === String(parentId))) ||
-      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef)))
+      (parentRef && (pb.bidNumber === parentRef || parentRef.includes(pb.bidNumber) || pb.bidNumber.includes(parentRef))) ||
+      (a.auctionCode && (pb.bidNumber === a.auctionCode || a.auctionCode.includes(pb.bidNumber) || pb.bidNumber.includes(a.auctionCode)))
     );
     if (isLinkedToProcurementBid) continue;
 

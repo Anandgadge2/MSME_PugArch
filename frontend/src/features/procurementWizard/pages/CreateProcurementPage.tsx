@@ -3355,14 +3355,18 @@ function BasicsStepForm({
 
         {draft.type === 'RFQ' && (
           <Field label="RFQ Type" required>
-            <select
+            <SearchableSelect
+              id="basics-rfq-type"
+              aria-label="RFQ Type"
               value={draft.rfqType === 'LIMITED' ? 'LIMITED' : 'OPEN'}
-              onChange={e => updateDraft(c => ({ ...c, rfqType: e.target.value as 'OPEN' | 'LIMITED' }))}
-              className={inputClass}
-            >
-              <option value="OPEN">Open RFQ (All registered sellers can quote)</option>
-              <option value="LIMITED">Limited RFQ (Only invited/selected sellers can quote)</option>
-            </select>
+              options={[
+                { value: 'OPEN', label: 'Open RFQ (All registered sellers can quote)' },
+                { value: 'LIMITED', label: 'Limited RFQ (Only invited/selected sellers can quote)' },
+              ]}
+              onChange={val => updateDraft(c => ({ ...c, rfqType: (val as 'OPEN' | 'LIMITED') || 'OPEN' }))}
+              buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+              searchPlaceholder="Search RFQ type..."
+            />
             <p className="text-[10px] text-slate-500 font-medium mt-1">
               {draft.rfqType === 'LIMITED'
                 ? 'Limited RFQ restricts bidding to invited/selected suppliers (requires internal audit justification).'
@@ -3461,35 +3465,34 @@ function BasicsStepForm({
         </Field>
 
         <Field label="Procurement Type (Goods / Services / Works)" required>
-          <select
+          <SearchableSelect
             id="procurement-category-select"
+            aria-label="Procurement Type"
             value={draft.basics.procurementCategory || 'GOODS'}
-            onChange={e => {
-              const val = e.target.value as ProcurementCategoryValue;
+            options={allowedCategories.map(opt => ({
+              value: opt.value,
+              label: opt.label
+            }))}
+            onChange={val => {
+              const selectedVal = (val as ProcurementCategoryValue) || 'GOODS';
               let suggestedFormat = draft.basics.pricingFormat;
-              if (val === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
+              if (selectedVal === 'WORKS' && allowedFormats.some(f => f.value === 'BOQ')) {
                 suggestedFormat = 'BOQ';
-              } else if (val === 'SERVICES' && allowedFormats.some(f => f.value === 'SINGLE_ITEM')) {
+              } else if (selectedVal === 'SERVICES' && allowedFormats.some(f => f.value === 'SINGLE_ITEM')) {
                 suggestedFormat = 'SINGLE_ITEM';
               }
               updateDraft(c => ({
                 ...c,
                 basics: {
                   ...c.basics,
-                  procurementCategory: val,
+                  procurementCategory: selectedVal,
                   pricingFormat: suggestedFormat
                 }
               }));
             }}
-            className={inputClass}
-            aria-label="Procurement Type"
-          >
-            {allowedCategories.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
+            buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+            searchPlaceholder="Search procurement type..."
+          />
           <p className="text-[10px] text-slate-500 font-semibold mt-1">
             Primary category of what is being procured (Goods, Services, or Works).
           </p>
@@ -3627,32 +3630,34 @@ function BasicsStepForm({
           required
           error={fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.')}
         >
-          <select
+          <SearchableSelect
             id="basics-category"
+            aria-label="Procurement Category"
+            placeholder={loadingCategories ? 'Loading categories...' : '-- Select Procurement Category --'}
+            searchPlaceholder="Search procurement category..."
             value={
               categoriesList.some(c => c.name === draft.basics.category)
                 ? draft.basics.category
-                : (isCustomCategory || draft.basics.category === 'Other' || (Boolean(draft.basics.category) && !loadingCategories && categoriesList.length > 0) ? 'Other' : '')
+                : (isCustomCategory || draft.basics.category === 'Other' || (Boolean(draft.basics.category) && !loadingCategories && categoriesList.length > 0) ? 'OTHER' : '')
             }
-            onChange={e => {
-              const newCat = e.target.value;
-              setIsCustomCategory(newCat === 'Other');
+            allowOther
+            options={categoriesList.map(opt => ({
+              value: opt.name,
+              label: opt.name
+            }))}
+            onChange={val => {
+              const newCat = String(val || '');
+              const isOther = newCat === 'OTHER' || (!categoriesList.some(c => c.name === newCat) && Boolean(newCat));
+              setIsCustomCategory(isOther);
               updateDraft(c => ({
                 ...c,
-                basics: { ...c.basics, category: newCat === 'Other' ? 'Other' : newCat },
-                boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: newCat === 'Other' ? '' : newCat } : row)
+                basics: { ...c.basics, category: isOther ? 'Other' : newCat },
+                boqTable: c.boqTable.map(row => (!row.category || row.category === 'General' || row.category === c.basics.category) ? { ...row, category: isOther ? '' : newCat } : row)
               }));
             }}
-            className={controlClass(fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.'))}
-          >
-            <option value="">{loadingCategories ? 'Loading categories...' : '-- Select Procurement Category --'}</option>
-            {categoriesList.map(opt => (
-              <option key={opt.id || opt.name} value={opt.name}>
-                {opt.name}
-              </option>
-            ))}
-            <option value="Other">Other / Custom Category</option>
-          </select>
+            error={Boolean(fieldError(showErrors && (!draft.basics.category || draft.basics.category === 'Other'), 'Procurement category is required.'))}
+            buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+          />
           {(isCustomCategory || draft.basics.category === 'Other' || (Boolean(draft.basics.category) && !loadingCategories && categoriesList.length > 0 && !categoriesList.some(c => c.name === draft.basics.category))) && (
             <input
               type="text"
@@ -3674,10 +3679,17 @@ function BasicsStepForm({
         </Field>
 
         <Field label="Urgency priority">
-          <select
+          <SearchableSelect
+            id="basics-priority"
+            aria-label="Urgency priority"
             value={draft.basics.priority}
-            onChange={e => {
-              const newPriority = e.target.value as any;
+            options={[
+              { value: 'Normal', label: 'Normal — Routine lead time' },
+              { value: 'Urgent', label: 'Urgent — Fast-track operational requirement' },
+              { value: 'Emergency', label: 'Emergency — Critical breakdown / Immediate need' },
+            ]}
+            onChange={val => {
+              const newPriority = val as any;
               updateDraft(c => {
                 let updatedDocs = c.requiredDocs;
                 if (newPriority === 'Emergency') {
@@ -3705,12 +3717,9 @@ function BasicsStepForm({
                 };
               });
             }}
-            className={inputClass}
-          >
-            <option value="Normal">Normal</option>
-            <option value="Urgent">Urgent</option>
-            <option value="Emergency">Emergency</option>
-          </select>
+            buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+            searchPlaceholder="Search priority..."
+          />
         </Field>
 
         <Field
@@ -3941,20 +3950,24 @@ function BasicsStepForm({
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  <label htmlFor="address-type-select" className="text-xs font-black uppercase tracking-wider text-slate-700">
                     Address Type *
                   </label>
-                  <select
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  <SearchableSelect
+                    id="address-type-select"
+                    aria-label="Address Type"
                     value={['OFFICE', 'WAREHOUSE', 'PROJECT_SITE', 'FACTORY'].includes(addressType) ? addressType : 'OTHER'}
-                    onChange={e => setAddressType(e.target.value)}
-                  >
-                    <option value="OFFICE">Office</option>
-                    <option value="WAREHOUSE">Warehouse</option>
-                    <option value="PROJECT_SITE">Project Site</option>
-                    <option value="FACTORY">Factory</option>
-                    <option value="OTHER">Other</option>
-                  </select>
+                    options={[
+                      { value: 'OFFICE', label: 'Office' },
+                      { value: 'WAREHOUSE', label: 'Warehouse' },
+                      { value: 'PROJECT_SITE', label: 'Project Site' },
+                      { value: 'FACTORY', label: 'Factory' },
+                      { value: 'OTHER', label: 'Other' },
+                    ]}
+                    onChange={val => setAddressType(String(val || 'OFFICE'))}
+                    buttonClassName="h-10 text-xs font-semibold"
+                    searchPlaceholder="Search address type..."
+                  />
                 </div>
 
                 {!['OFFICE', 'WAREHOUSE', 'PROJECT_SITE', 'FACTORY'].includes(addressType) && (
@@ -4053,38 +4066,44 @@ function BasicsStepForm({
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="space-y-1.5">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  <label htmlFor="consignee-state-select" className="text-xs font-black uppercase tracking-wider text-slate-700">
                     State *
                   </label>
-                  <select
-                    required
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
+                  <SearchableSelect
+                    id="consignee-state-select"
+                    aria-label="State"
+                    placeholder="Select State"
+                    searchPlaceholder="Search 36 States & UTs..."
                     value={state}
-                    onChange={e => handleStateChange(e.target.value)}
-                  >
-                    <option value="">Select State</option>
-                    {STATE_OPTIONS.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    options={STATE_OPTIONS.map(opt => ({
+                      value: opt.value,
+                      label: opt.label
+                    }))}
+                    onChange={val => handleStateChange(String(val || ''))}
+                    buttonClassName="h-10 text-xs font-semibold"
+                    required
+                  />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-black uppercase tracking-wider text-slate-700">
+                  <label htmlFor="consignee-district-select" className="text-xs font-black uppercase tracking-wider text-slate-700">
                     District *
                   </label>
-                  <select
-                    required
+                  <SearchableSelect
+                    id="consignee-district-select"
+                    aria-label="District"
+                    placeholder={state ? "Select District" : "Select State First"}
+                    searchPlaceholder="Search District..."
                     disabled={!state}
-                    className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15 disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-400"
                     value={district}
-                    onChange={e => handleDistrictChange(e.target.value)}
-                  >
-                    <option value="">Select District</option>
-                    {getDistrictOptions(state).map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
+                    options={getDistrictOptions(state).map(opt => ({
+                      value: opt.value,
+                      label: opt.label
+                    }))}
+                    onChange={val => handleDistrictChange(String(val || ''))}
+                    buttonClassName="h-10 text-xs font-semibold"
+                    required
+                  />
                 </div>
 
                 <div className="space-y-1.5">
@@ -4560,18 +4579,21 @@ function EnterpriseDocumentDropzone({
         {/* Category selector & optional custom label */}
         <div className="grid grid-cols-1 gap-2">
           <div>
-            <label className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
+            <label htmlFor="line-item-doc-type" className="block text-[10px] font-bold uppercase text-slate-500 tracking-wider mb-1">
               Document Type
             </label>
-            <select
+            <SearchableSelect
+              id="line-item-doc-type"
+              aria-label="Document Type"
               value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className="w-full h-8.5 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-semibold text-slate-800 shadow-2xs focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f] transition-all"
-            >
-              {DOCUMENT_CATEGORIES.map(cat => (
-                <option key={cat.id} value={cat.id}>{cat.label}</option>
-              ))}
-            </select>
+              options={DOCUMENT_CATEGORIES.map(cat => ({
+                value: cat.id,
+                label: cat.label
+              }))}
+              onChange={val => setSelectedCategory(String(val || 'technical_spec'))}
+              buttonClassName="h-8.5 text-xs font-semibold"
+              searchPlaceholder="Search document type..."
+            />
           </div>
           <div>
             <input
@@ -5177,28 +5199,31 @@ function ItemDrawerOrModal({
             {/* Row 3.5: Category Classification */}
             {categoriesList && categoriesList.length > 0 && (
               <Field label="Category / Classification (Optional)">
-                <select
+                <SearchableSelect
                   id="line-item-category-select"
                   aria-label="Item Category Classification"
-                  value={formData.category || defaultCategory || ''}
-                  onChange={e => {
-                    const selName = e.target.value;
-                    const matched = categoriesList.find(c => c.name === selName);
+                  placeholder={defaultCategory ? `Default (${defaultCategory})` : '-- Select Category --'}
+                  searchPlaceholder="Search categories..."
+                  value={formData.category || ''}
+                  allowClear
+                  options={[
+                    { value: '', label: defaultCategory ? `Default (${defaultCategory})` : '-- Select Category --' },
+                    ...categoriesList.map(cat => ({
+                      value: cat.name,
+                      label: cat.name,
+                    }))
+                  ]}
+                  onChange={selName => {
+                    const strVal = String(selName || '');
+                    const matched = categoriesList.find(c => c.name === strVal);
                     setFormData({
                       ...formData,
-                      category: selName,
+                      category: strVal,
                       categoryId: matched ? matched.id : null,
                     });
                   }}
-                  className={cn(inputClass, "cursor-pointer font-medium")}
-                >
-                  <option value="">{defaultCategory ? `Default (${defaultCategory})` : '-- Select Category --'}</option>
-                  {categoriesList.map(cat => (
-                    <option key={cat.id || cat.name} value={cat.name}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
+                  buttonClassName="h-10 text-xs font-semibold"
+                />
               </Field>
             )}
 
@@ -5265,18 +5290,24 @@ function ItemDrawerOrModal({
                 </Field>
 
                 <Field label="UOM" required>
-                  <select
+                  <SearchableSelect
+                    id="line-item-uom-select"
+                    aria-label="Unit of measure"
+                    placeholder="Select UOM..."
+                    searchPlaceholder="Search UOM (e.g. Nos, Kg, Set)..."
                     value={formData.unit}
-                    onChange={e => {
-                      setFormData({ ...formData, unit: e.target.value });
+                    options={QUANTITY_UNITS.map((u: any) => ({
+                      value: u.value,
+                      label: u.label,
+                    }))}
+                    onChange={val => {
+                      const strVal = String(val || 'Nos');
+                      setFormData({ ...formData, unit: strVal });
                       if (validationErrors.unit) setValidationErrors(prev => ({ ...prev, unit: '' }));
                     }}
-                    className={cn(inputClass, "font-semibold", validationErrors.unit && "border-rose-500")}
-                  >
-                    {QUANTITY_UNITS.map((u: any) => (
-                      <option key={u.value} value={u.value}>{u.label}</option>
-                    ))}
-                  </select>
+                    error={Boolean(validationErrors.unit)}
+                    buttonClassName="h-10 text-xs font-semibold"
+                  />
                   {validationErrors.unit && (
                     <p className="text-[10px] font-bold text-rose-600 mt-1">{validationErrors.unit}</p>
                   )}
@@ -5329,17 +5360,22 @@ function ItemDrawerOrModal({
                 </Field>
 
                 <Field label="GST Rate">
-                  <select
-                    value={formData.gst}
-                    onChange={e => setFormData({ ...formData, gst: parseFloat(e.target.value) || 0 })}
-                    className={cn(inputClass, "font-semibold")}
-                  >
-                    <option value={0}>0% (Exempt)</option>
-                    <option value={5}>5%</option>
-                    <option value={12}>12%</option>
-                    <option value={18}>18% (Standard)</option>
-                    <option value={28}>28%</option>
-                  </select>
+                  <SearchableSelect
+                    id="line-item-gst-select"
+                    aria-label="GST Rate"
+                    placeholder="Select GST..."
+                    searchPlaceholder="Search GST slab..."
+                    value={formData.gst ?? 0}
+                    options={[
+                      { value: 0, label: '0% (Exempt)' },
+                      { value: 5, label: '5%' },
+                      { value: 12, label: '12%' },
+                      { value: 18, label: '18% (Standard)' },
+                      { value: 28, label: '28%' },
+                    ]}
+                    onChange={val => setFormData({ ...formData, gst: Number(val ?? 0) })}
+                    buttonClassName="h-10 text-xs font-semibold"
+                  />
                 </Field>
               </div>
 
@@ -8772,16 +8808,19 @@ function VendorsStepForm({
               Invite selected verified suppliers pool (Locked for Limited methods)
             </div>
           ) : (
-            <select
+            <SearchableSelect
+              id="vendors-selection-mode"
+              aria-label="Supplier Sourcing Strategy"
               value={draft.vendors.selection}
-              onChange={e => handleSelectionModeChange(e.target.value as any)}
-              className={inputClass}
-            >
-              <option value="Open">Open Advertised / Public Sourcing</option>
-              <option value="Selected">Invite selected verified suppliers pool</option>
-              <option value="Category">Invite category-matched registered vendors</option>
-              {/* <option value="Past">Invite prior order vendors</option> */}
-            </select>
+              options={[
+                { value: 'Open', label: 'Open Advertised / Public Sourcing' },
+                { value: 'Selected', label: 'Invite selected verified suppliers pool' },
+                { value: 'Category', label: 'Invite category-matched registered vendors' },
+              ]}
+              onChange={val => handleSelectionModeChange(val as any)}
+              buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+              searchPlaceholder="Search sourcing strategy..."
+            />
           )}
         </Field>
 
@@ -9989,14 +10028,18 @@ function ScheduleStepForm({
       <div className="grid gap-4 sm:grid-cols-2">
         {!isReverseAuctionMethod(draft.type) && (
           <Field label="Packet envelope configuration" required>
-            <select
+            <SearchableSelect
+              id="packet-envelope-type"
+              aria-label="Packet envelope configuration"
               value={draft.schedule.packetType}
-              onChange={e => updateSchedule('packetType', e.target.value as any)}
-              className={inputClass}
-            >
-              <option value="Single">Single Packet Envelope (Commercial Only)</option>
-              <option value="Two">Two Packet Envelope (Technical + Commercial Separated)</option>
-            </select>
+              options={[
+                { value: 'Single', label: 'Single Packet Envelope (Commercial Only)' },
+                { value: 'Two', label: 'Two Packet Envelope (Technical + Commercial Separated)' },
+              ]}
+              onChange={val => updateSchedule('packetType', val as any)}
+              buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+              searchPlaceholder="Search packet type..."
+            />
             <p className="text-[10px] text-slate-500 font-semibold mt-1">
               Single packet evaluates technical/commercial together. Two packet evaluates technical first, then opens commercial quotes for qualified bidders.
             </p>
@@ -10416,19 +10459,22 @@ function ScheduleStepForm({
                 </div>
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Auction Trigger Eligibility" required>
-                    <select
+                    <SearchableSelect
                       id="auction-trigger-eligibility"
+                      aria-label="Auction Trigger Eligibility"
                       value={draft.auctionConfig.triggerConfiguration?.auctionAmongTopNBidders ? 'TOP_N_BIDDERS' : 'ALL_QUALIFIED'}
-                      onChange={e => {
-                        const isTopN = e.target.value === 'TOP_N_BIDDERS';
+                      options={[
+                        { value: 'ALL_QUALIFIED', label: 'All Technically Qualified Bidders (Standard)' },
+                        { value: 'TOP_N_BIDDERS', label: 'Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)' },
+                      ]}
+                      onChange={val => {
+                        const isTopN = val === 'TOP_N_BIDDERS';
                         updateTrigger('auctionAmongTopNBidders', isTopN ? 3 : null);
                         updateTrigger('auctionAmongAllTechnicallyQualified', !isTopN);
                       }}
-                      className={inputClass}
-                    >
-                      <option value="ALL_QUALIFIED">All Technically Qualified Bidders (Standard)</option>
-                      <option value="TOP_N_BIDDERS">Top Qualified Initial Bidders Only (e.g. Top 3 or Top 5)</option>
-                    </select>
+                      buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+                      searchPlaceholder="Search eligibility mode..."
+                    />
                     <p className="text-[10px] text-slate-500 font-semibold mt-1">
                       Determines which shortlisted vendors qualify into the live reverse auction room.
                     </p>
@@ -10563,19 +10609,19 @@ function ScheduleStepForm({
                   <span>Participant Console Display &amp; Privacy</span>
                 </div>
                 <Field label="Supplier Rank & Competitor Visibility" required>
-                  <select
+                  <SearchableSelect
                     id="auction-rank-visibility"
-                    name="rankVisibility"
-                    aria-required="true"
                     aria-label="Supplier Rank & Competitor Visibility"
                     value={draft.auctionConfig.rankVisibility}
-                    onChange={e => updateAuction('rankVisibility', e.target.value as AuctionConfig['rankVisibility'])}
-                    className={inputClass}
-                  >
-                    <option value="SHOW_RANK_ONLY">Show Rank Only (Mask competitor names & prices — Recommended)</option>
-                    <option value="SHOW_LOWEST_PRICE">Show Lowest Bid (L1) & Rank</option>
-                    <option value="HIDDEN">Hidden (Blind Bidding)</option>
-                  </select>
+                    options={[
+                      { value: 'SHOW_RANK_ONLY', label: 'Show Rank Only (Mask competitor names & prices — Recommended)' },
+                      { value: 'SHOW_LOWEST_PRICE', label: 'Show Lowest Bid (L1) & Rank' },
+                      { value: 'HIDDEN', label: 'Hidden (Blind Bidding)' },
+                    ]}
+                    onChange={val => updateAuction('rankVisibility', val as AuctionConfig['rankVisibility'])}
+                    buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+                    searchPlaceholder="Search visibility option..."
+                  />
                   <p className="text-[10px] text-slate-500 font-semibold mt-1">
                     {draft.auctionConfig.rankVisibility === 'SHOW_RANK_ONLY' && 'Suppliers only see their own rank (L1, L2, etc.). Competitor identities and commercial prices remain strictly confidential.'}
                     {draft.auctionConfig.rankVisibility === 'SHOW_LOWEST_PRICE' && 'Suppliers see the current lowest commercial offer (L1) and their own rank. Competitor company names remain anonymized.'}
@@ -10938,15 +10984,19 @@ function CommercialTermsForm({
             {/* Price Variation Clause (PVC) */}
             <div className="space-y-3">
               <Field label="Price Variation Clause (PVC / Indexation)">
-                <select
+                <SearchableSelect
+                  id="rate-contract-pvc-select"
+                  aria-label="Price Variation Clause"
                   value={draft.rateContractConfig.priceVariationClause || 'FIXED_PRICE'}
-                  onChange={e => updateRateContract('priceVariationClause', e.target.value as any)}
-                  className={inputClass}
-                >
-                  <option value="FIXED_PRICE">Fixed Firm Price — No Escalation Permitted</option>
-                  <option value="INDEX_BASED_VARIATION">Index-Linked Price Variation (PVC / WPI / CPI)</option>
-                  <option value="MUTUALLY_AGREED_REVISION">Periodic Joint Review / Mutual Agreement</option>
-                </select>
+                  options={[
+                    { value: 'FIXED_PRICE', label: 'Fixed Firm Price — No Escalation Permitted' },
+                    { value: 'INDEX_BASED_VARIATION', label: 'Index-Linked Price Variation (PVC / WPI / CPI)' },
+                    { value: 'MUTUALLY_AGREED_REVISION', label: 'Periodic Joint Review / Mutual Agreement' },
+                  ]}
+                  onChange={val => updateRateContract('priceVariationClause', val as any)}
+                  buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+                  searchPlaceholder="Search price variation clause..."
+                />
               </Field>
 
               {draft.rateContractConfig.priceVariationClause === 'INDEX_BASED_VARIATION' && (
@@ -11036,25 +11086,29 @@ function CommercialTermsForm({
           </div>
 
           <Field label="Payment terms" required error={fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.')}>
-            <select
+            <SearchableSelect
               id="terms-payment-terms"
+              aria-label="Payment terms"
               value={matchPaymentTerms(draft.terms.paymentTerms)}
-              onChange={e => {
-                const val = e.target.value;
+              options={[
+                ...PAYMENT_TERMS.map((t: any) => ({ value: t.value, label: t.label })),
+                { value: 'Other', label: 'Other / Custom Payment Terms...' }
+              ]}
+              onChange={val => {
+                const strVal = String(val || '');
                 updateDraft(c => ({
                   ...c,
                   terms: {
                     ...c.terms,
-                    paymentTerms: val,
-                    advanceAllowed: val.toLowerCase().includes('advance'),
+                    paymentTerms: strVal,
+                    advanceAllowed: strVal.toLowerCase().includes('advance'),
                   }
                 }));
               }}
-              className={controlClass(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
-            >
-              {PAYMENT_TERMS.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              <option value="Other">Other / Custom Payment Terms...</option>
-            </select>
+              error={Boolean(fieldError(showErrors && !draft.terms.paymentTerms, 'Payment terms is required.'))}
+              buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+              searchPlaceholder="Search payment terms..."
+            />
             {matchPaymentTerms(draft.terms.paymentTerms) === 'Other' && (
               <input
                 type="text"
@@ -11077,27 +11131,31 @@ function CommercialTermsForm({
           </Field>
 
           <Field label="Delivery Terms" required error={fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.')}>
-            <select
+            <SearchableSelect
               id="terms-delivery-terms"
+              aria-label="Delivery terms"
               value={draft.terms.deliveryTerms}
-              onChange={e => {
-                const val = e.target.value;
+              options={[
+                ...DELIVERY_TYPES.map((t: any) => ({ value: t.value, label: t.label })),
+                ...(draft.terms.deliveryTerms && !DELIVERY_TYPES.some((t: any) => t.value === draft.terms.deliveryTerms)
+                  ? [{ value: draft.terms.deliveryTerms, label: draft.terms.deliveryTerms }]
+                  : [])
+              ]}
+              onChange={val => {
+                const strVal = String(val || '');
                 updateDraft(c => ({
                   ...c,
                   terms: {
                     ...c.terms,
-                    deliveryTerms: val,
-                    ...(val === 'Buyer pickup' ? { freightIncluded: false } : {})
+                    deliveryTerms: strVal,
+                    ...(strVal === 'Buyer pickup' ? { freightIncluded: false } : {})
                   }
                 }));
               }}
-              className={controlClass(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
-            >
-              {DELIVERY_TYPES.map((t: any) => <option key={t.value} value={t.value}>{t.label}</option>)}
-              {draft.terms.deliveryTerms && !DELIVERY_TYPES.some((t: any) => t.value === draft.terms.deliveryTerms) && (
-                <option value={draft.terms.deliveryTerms}>{draft.terms.deliveryTerms}</option>
-              )}
-            </select>
+              error={Boolean(fieldError(showErrors && !draft.terms.deliveryTerms, 'Delivery terms are required.'))}
+              buttonClassName="h-11 text-xs sm:text-sm font-semibold"
+              searchPlaceholder="Search delivery terms..."
+            />
             <span className="block text-[11px] font-medium text-slate-500 pt-0.5">
               {draft.terms.deliveryTerms === 'Buyer pickup'
                 ? 'Ex-Works: Buyer arranges transport and bears transit risk from seller facility.'

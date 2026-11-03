@@ -288,12 +288,11 @@ const withEffectiveStatus = async (auction: any) => {
   let evaluationPending = false;
 
   // Check if qualification is required and pending
-  const hasPreBidStage = Boolean(
+  const isDirectAuction = String(auction.procurementMethod || '').toUpperCase() === 'REVERSE_AUCTION';
+  const hasPreBidStage = !isDirectAuction && Boolean(
     auction.preBidStage ||
     auction.procurementMethod === 'BID_WITH_REVERSE_AUCTION' ||
-    auction.visibilityMode === 'TECHNICALLY_QUALIFIED_ONLY' ||
-    auction.linkedBidId ||
-    auction.linkedRequirementId
+    auction.visibilityMode === 'TECHNICALLY_QUALIFIED_ONLY'
   );
 
   if (hasPreBidStage && ['SCHEDULED', 'LIVE', 'ACTIVE'].includes(current)) {
@@ -422,6 +421,35 @@ const linkedRequirementSummary = async (auction: any) => {
         ? pBid.eligibilityCriteria
         : (Array.isArray(basics.eligibilityCriteria) ? basics.eligibilityCriteria : []);
 
+      const isGenericLoc = (loc?: string | null) => {
+        if (!loc) return true;
+        const s = loc.trim().toLowerCase();
+        return !s || s === 'india' || s === 'pan-india' || s === 'all india' || s === 'location not specified' || s === 'not specified' || s === '—' || s === 'n/a';
+      };
+
+      let resolvedDeliveryLocation = (!isGenericLoc(basics.deliveryLocation) ? basics.deliveryLocation : null) ||
+        (Array.isArray(techPacket.consigneeDetails) && techPacket.consigneeDetails[0]?.location && !isGenericLoc(techPacket.consigneeDetails[0].location) ? techPacket.consigneeDetails[0].location : null) ||
+        (!isGenericLoc(pBid.deliveryLocation) ? pBid.deliveryLocation : null);
+
+      if (isGenericLoc(resolvedDeliveryLocation) && (linkedReqId || techPacket.requirementId || techPacket.sourceRequirementId)) {
+        const reqLookupId = linkedReqId || techPacket.requirementId || techPacket.sourceRequirementId;
+        const srcReq = await db.requirement.findUnique({
+          where: { id: Number(reqLookupId) },
+          include: { organization: true }
+        }).catch(() => null);
+        if (srcReq) {
+          const srcPayload = (srcReq.payload || {}) as any;
+          resolvedDeliveryLocation = srcPayload.basics?.deliveryLocation ||
+            (Array.isArray(srcPayload.consigneeDetails) && srcPayload.consigneeDetails[0]?.location ? srcPayload.consigneeDetails[0].location : null) ||
+            srcPayload.tender?.deliveryLocation ||
+            (srcReq.organization ? [srcReq.organization.addressLine1, srcReq.organization.city, srcReq.organization.state, srcReq.organization.pincode].filter(Boolean).join(', ') : null);
+        }
+      }
+
+      if (isGenericLoc(resolvedDeliveryLocation)) {
+        resolvedDeliveryLocation = regAddr || (!isGenericLoc(pBid.deliveryLocation) ? pBid.deliveryLocation : null) || null;
+      }
+
       return {
         id: pBid.id,
         bidNumber: pBid.bidNumber,
@@ -433,7 +461,7 @@ const linkedRequirementSummary = async (auction: any) => {
         status: pBid.status,
         estimatedValue: pBid.estimatedValue,
         category: pBid.category || basics.category || null,
-        deliveryLocation: pBid.deliveryLocation || basics.deliveryLocation || null,
+        deliveryLocation: resolvedDeliveryLocation,
         paymentTerms: pBid.paymentTerms || terms.paymentTerms || basics.paymentTerms || null,
         deliveryTerms: pBid.deliveryTerms || terms.deliveryTerms || basics.deliveryTerms || null,
         items,
@@ -686,7 +714,11 @@ const linkedRequirementSummary = async (auction: any) => {
     currency: requirement.currency || 'INR',
     requiredBy: effectiveRequiredBy,
     category: requirement.category?.name || basics.category || auction.category || null,
-    deliveryLocation: basics.deliveryLocation || tender.deliveryLocation || null,
+    deliveryLocation: basics.deliveryLocation ||
+      (Array.isArray(payload.consigneeDetails) && payload.consigneeDetails[0]?.location ? payload.consigneeDetails[0].location : null) ||
+      tender.deliveryLocation ||
+      registeredAddress ||
+      null,
     items,
     boqTable,
     documents: documents.map((doc: any, idx: number) => ({
@@ -2048,7 +2080,9 @@ const enrichAuctions = async (auctions: any[]) => {
       || reqItem?.organization?.state
       || null;
 
-    const deliveryLocation = reqPayload?.deliveryLocation
+    const deliveryLocation = reqPayload?.basics?.deliveryLocation
+      || (Array.isArray(reqPayload?.consigneeDetails) && reqPayload?.consigneeDetails[0]?.location ? reqPayload.consigneeDetails[0].location : null)
+      || reqPayload?.deliveryLocation
       || reqPayload?.deliveryAddress
       || bidItem?.deliveryLocation
       || (district && state ? `${district}, ${state}` : district || state || null);
@@ -2182,6 +2216,10 @@ router.patch('/reverse-auctions/:id', requirePermission('reverse_auction.update'
 // Before an auction can go LIVE, enough sellers must have cleared the pre-bid
 // qualification stage — otherwise the auction opens with no eligible bidders.
 const assertEnoughQualifiedBidders = async (auction: any) => {
+  const isDirectRA = String(auction.procurementMethod || '').toUpperCase() === 'REVERSE_AUCTION';
+  if (isDirectRA) {
+    return;
+  }
   const isPublic = await isAuctionPublic(auction);
   const qualified = await db.auctionParticipant.count({
     where: {

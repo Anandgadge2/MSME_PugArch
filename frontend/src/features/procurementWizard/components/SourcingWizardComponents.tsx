@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Button } from '../../../components/ui/button';
+import { SearchableSelect } from '../../../components/ui/SearchableSelect';
 import { ProcurementGlossaryTooltip } from '../../../components/common/ProcurementGlossaryTooltip';
 
 // Helper to format currency
@@ -713,25 +714,27 @@ export function BOQTable({
                   {showCategory && (
                     <td className="px-3 py-2">
                       <div className="space-y-1">
-                        <select
+                        <SearchableSelect
+                          id={`boq-row-cat-${row.srNo}`}
+                          aria-label={`Category for row ${row.srNo}`}
+                          placeholder={loadingCategories ? 'Loading...' : '-- Category --'}
+                          searchPlaceholder="Search category..."
                           value={resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase()) ? rowCat : (rowCat ? 'Other' : '')}
-                          onChange={e => {
-                            const val = e.target.value;
-                            if (val === 'Other') {
+                          options={[
+                            { value: '', label: '-- Category --' },
+                            ...resolvedCategoryNames.map(cat => ({ value: cat, label: cat })),
+                            { value: 'Other', label: 'Other / Custom...' }
+                          ]}
+                          onChange={val => {
+                            const str = String(val || '');
+                            if (str === 'Other') {
                               onChange(idx, 'category', 'Other');
                             } else {
-                              onChange(idx, 'category', val);
+                              onChange(idx, 'category', str);
                             }
                           }}
-                          className={cn(tableInput, 'cursor-pointer')}
-                          aria-label={`Category for row ${row.srNo}`}
-                        >
-                          <option value="">{loadingCategories ? 'Loading...' : '-- Category --'}</option>
-                          {resolvedCategoryNames.map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                          ))}
-                          <option value="Other">Other / Custom...</option>
-                        </select>
+                          buttonClassName="h-9 px-2 text-xs font-semibold"
+                        />
                         {(rowCat === 'Other' || isCustomCat) && (
                           <input
                             type="text"
@@ -749,24 +752,26 @@ export function BOQTable({
                   {/* UOM Dropdown (Database + Standard + Custom) */}
                   <td className="px-3 py-2">
                     <div className="space-y-1">
-                      <select
+                      <SearchableSelect
+                        id={`boq-row-uom-${row.srNo}`}
+                        aria-label={`Unit of measure for row ${row.srNo}`}
+                        placeholder="UOM"
+                        searchPlaceholder="Search UOM..."
                         value={resolvedUoms.some(u => u.value.toLowerCase() === rowUom.toLowerCase()) ? (resolvedUoms.find(u => u.value.toLowerCase() === rowUom.toLowerCase())?.value) : (rowUom ? 'Other' : 'NOS')}
-                        onChange={e => {
-                          const val = e.target.value;
-                          if (val === 'Other') {
+                        options={[
+                          ...resolvedUoms.map(u => ({ value: u.value, label: u.label || u.value })),
+                          { value: 'Other', label: 'Other / Custom...' }
+                        ]}
+                        onChange={val => {
+                          const str = String(val || 'NOS');
+                          if (str === 'Other') {
                             onChange(idx, 'uom', 'Other');
                           } else {
-                            onChange(idx, 'uom', val);
+                            onChange(idx, 'uom', str);
                           }
                         }}
-                        className={cn(tableInput, 'cursor-pointer uppercase')}
-                        aria-label={`Unit of measure for row ${row.srNo}`}
-                      >
-                        {resolvedUoms.map(u => (
-                          <option key={u.value} value={u.value}>{u.label || u.value}</option>
-                        ))}
-                        <option value="Other">Other / Custom...</option>
-                      </select>
+                        buttonClassName="h-9 px-2 text-xs font-semibold uppercase"
+                      />
                       {(rowUom === 'Other' || isCustomUom) && (
                         <input
                           type="text"
@@ -807,16 +812,19 @@ export function BOQTable({
 
                   {/* Tax % Dropdown */}
                   <td className="px-3 py-2">
-                    <select
-                      value={row.taxPercent ?? 18}
-                      onChange={e => onChange(idx, 'taxPercent', Number(e.target.value || 0))}
-                      className={cn(tableInput, 'cursor-pointer text-center')}
+                    <SearchableSelect
+                      id={`boq-row-tax-${row.srNo}`}
                       aria-label={`GST Slab for row ${row.srNo}`}
-                    >
-                      {resolvedTaxSlabs.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
-                      ))}
-                    </select>
+                      placeholder="GST"
+                      searchPlaceholder="Search GST..."
+                      value={row.taxPercent ?? 18}
+                      options={resolvedTaxSlabs.map(t => ({
+                        value: t.value,
+                        label: t.label
+                      }))}
+                      onChange={val => onChange(idx, 'taxPercent', Number(val ?? 0))}
+                      buttonClassName="h-9 px-2 text-xs font-semibold text-center"
+                    />
                   </td>
 
                   {/* HSN/SAC Code (Optional) */}

@@ -54,7 +54,7 @@ import {
   ProcurementDetailSkeleton,
   type DisplayDocument,
 } from '../../rfq/components/ProcurementDetailUnifiedView';
-import { formatCurrency, formatDate, formatDateTime, formatNumber } from '../../shared/format';
+import { formatCurrency, formatDate, formatDateTime, formatNumber, cleanDeliveryAddress } from '../../shared/format';
 import { reverseAuctionApi } from '../api';
 import { useReverseAuctionRealtime } from '../hooks/useReverseAuctionRealtime';
 import { useUserRealtime } from '../../../hooks/useUserRealtime';
@@ -572,12 +572,26 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       ? auctionData.title
       : (reqData.title || linkedBidData.title || auctionData.title || 'Reverse Auction Sourcing');
 
+  const isGenericLoc = (loc?: string | null) => {
+    if (!loc) return true;
+    const s = String(loc).trim().toLowerCase();
+    return !s || s === 'india' || s === 'pan-india' || s === 'all india' || s === 'location not specified' || s === 'as specified in auction terms' || s === '—' || s === 'n/a';
+  };
+
   // Resolved Delivery & Commercial Terms
-  const resolvedDeliveryLocation =
+  const candidateLocation =
+    (!isGenericLoc(reqData.deliveryLocation) ? reqData.deliveryLocation : null) ||
+    (!isGenericLoc((linkedBidData.technicalPacket as any)?.basics?.deliveryLocation) ? (linkedBidData.technicalPacket as any).basics.deliveryLocation : null) ||
+    (!isGenericLoc((reqData.payload as any)?.basics?.deliveryLocation) ? (reqData.payload as any).basics.deliveryLocation : null) ||
+    (!isGenericLoc(reqData.consigneeDetails?.[0]?.location) ? reqData.consigneeDetails[0].location : null) ||
+    (!isGenericLoc((linkedBidData.technicalPacket as any)?.consigneeDetails?.[0]?.location) ? (linkedBidData.technicalPacket as any).consigneeDetails[0].location : null) ||
+    (!isGenericLoc(linkedBidData.deliveryLocation) ? linkedBidData.deliveryLocation : null) ||
+    buyerRegisteredAddress ||
     reqData.deliveryLocation ||
     linkedBidData.deliveryLocation ||
-    (linkedBidData.technicalPacket as any)?.basics?.deliveryLocation ||
     'As specified in auction terms';
+
+  const resolvedDeliveryLocation = cleanDeliveryAddress(candidateLocation) || candidateLocation;
 
   const resolvedPaymentTerms =
     reqData.paymentTerms ||
@@ -821,8 +835,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
         </div>
       )}
 
-      {/* 4b. Non-Participant Observer Alert */}
-      {!hasJoined && !isAuctionClosed && !isAuctionCancelled && (
+      {/* 4b. Non-Participant Observer Alert (Only when auction is private and user is not invited) */}
+      {!hasJoined && !isPublicAuction && !isAuctionClosed && !isAuctionCancelled && (!user?.organizationId || !invitedOrgIds.has(Number(user.organizationId))) && (
         <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4.5 shadow-sm flex items-start gap-3">
           <div className="h-9 w-9 rounded-xl bg-slate-700 text-white flex items-center justify-center shrink-0 shadow-sm">
             <Lock className="h-5 w-5" aria-hidden="true" />
@@ -927,7 +941,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           <span>Schedule</span>
         </Button>
       )}
-      {['DRAFT', 'SCHEDULED', 'PAUSED'].includes(status) && (
+      {(['DRAFT', 'PAUSED'].includes(status) || (status === 'SCHEDULED' && (!auctionData.startTime || new Date(auctionData.startTime).getTime() > Date.now()))) && (
         <Button
           type="button"
           size="sm"
@@ -935,7 +949,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           className="h-9 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
         >
           <Play className="h-3.5 w-3.5" />
-          <span>Start</span>
+          <span>{status === 'PAUSED' ? 'Resume' : 'Start'}</span>
         </Button>
       )}
       {status === 'LIVE' && (
