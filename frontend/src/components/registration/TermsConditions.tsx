@@ -32,6 +32,7 @@ type DocTab = 'gtc' | 'supplier' | 'consent' | 'verification';
 
 export default function TermsConditions({ onAccept, onBack, role }: TermsConditionsProps) {
   const [activeTab, setActiveTab] = useState<DocTab>('gtc');
+  const [consentLang, setConsentLang] = useState<'en' | 'or' | 'hi'>('en');
   const [accepted, setAccepted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [transitionState, setTransitionState] = useState<'idle' | 'back' | 'accept'>('idle');
@@ -64,6 +65,28 @@ export default function TermsConditions({ onAccept, onBack, role }: TermsConditi
         hasAutoScrolledRef.current = true;
         window.setTimeout(scrollToAcceptance, 250);
       }
+    }
+  };
+
+
+  const statutoryTranslations = {
+    en: {
+      title: 'I accept the General Terms, Conditions & Participation Agreement',
+      subtitle: 'I have read, understood, and agree to comply with the General Terms & Conditions, Participation Policy, and Data Consent Rules of the JsgSmile Portal.',
+      affirmation: 'Statutory Affirmation (DPDPA 2023 Section 9): I hereby confirm that I am at least 18 years of age and legally authorized to enter into procurement commitments.',
+      badge: 'Section 5(3) Compliant (English)'
+    },
+    or: {
+      title: 'ମୁଁ ସାଧାରଣ ନିୟମ, ସର୍ତ୍ତାବଳୀ ଏବଂ ଅଂଶଗ୍ରହଣ ଚୁକ୍ତିପତ୍ର ଗ୍ରହଣ କରୁଛି',
+      subtitle: 'ମୁଁ JsgSmile ପୋର୍ଟାଲର ସାଧାରଣ ନିୟମ ଓ ସର୍ତ୍ତାବଳୀ, ଅଂଶଗ୍ରହଣ ନୀତି ଏବଂ ଡାଟା ସମ୍ମତି ନିୟମାବଳୀ ପଢିଛି, ବୁଝିଛି ଏବଂ ପାଳନ କରିବାକୁ ରାଜି ଅଛି।',
+      affirmation: 'ବିଧିବଦ୍ଧ ଘୋଷଣା (ଡିପିଡିପି ଅଧିନିୟମ ୨୦୨୩ ଧାରା ୯): ମୁଁ ଏତଦ୍ୱାରା ନିଶ୍ଚିତ କରୁଛି ଯେ ମୋର ବୟସ ଅତି କମରେ ୧୮ ବର୍ଷ ଏବଂ ମୁଁ କ୍ରୟ ପ୍ରତିବଦ୍ଧତାରେ ପ୍ରବେଶ କରିବାକୁ ଆଇନଗତ ଭାବେ ଅଧିକୃତ।',
+      badge: 'ଧାରା ୫(୩) ଅନୁପାଳିତ (ଓଡ଼ିଆ)'
+    },
+    hi: {
+      title: 'मैं सामान्य नियम, शर्तें और सहभागिता समझौते को स्वीकार करता/करती हूँ',
+      subtitle: 'मैंने JsgSmile पोर्टल के सामान्य नियमों और शर्तों, सहभागिता नीति और डेटा सहमति नियमों को पढ़, समझ लिया है और उनका पालन करने के लिए सहमत हूँ।',
+      affirmation: 'सांविधिक अभिपुष्टि (डीपीडीपी अधिनियम 2023 धारा 9): मैं एतद्द्वारा पुष्टि करता/करती हूँ कि मेरी आयु कम से कम 18 वर्ष है और मैं खरीद प्रतिबद्धताओं में प्रवेश करने के लिए कानूनी रूप से अधिकृत हूँ।',
+      badge: 'धारा 5(3) अनुपालित (हिन्दी)'
     }
   };
 
