@@ -1,5 +1,6 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
+import { AuctionStatus } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { authenticate, optionalAuthenticate, type AuthRequest } from '../middleware/authenticate.js';
 import { requirePermission } from '../middleware/auth.js';
@@ -2133,6 +2134,7 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
     const status = req.query.status ? String(req.query.status) : undefined;
     const where: any = status ? { status } : {};
     if (req.user?.role === 'seller' || req.user?.role === 'shg') {
+      delete where.status;
       where.participants = undefined;
       const orConditions: any[] = [];
       if (req.user.organizationId) {
@@ -2151,11 +2153,42 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
         'pending', 'scheduled', 'live', 'open', 'paused', 'completed', 'active',
         'PENDING', 'SCHEDULED', 'LIVE', 'OPEN', 'PAUSED', 'COMPLETED', 'ACTIVE'
       ];
-      const activeStatusEnums = ['SCHEDULED', 'LIVE', 'PAUSED', 'ENDED'];
+      const activeStatusEnums: AuctionStatus[] = [
+        AuctionStatus.SCHEDULED,
+        AuctionStatus.LIVE,
+        AuctionStatus.PAUSED,
+        AuctionStatus.CLOSED,
+        AuctionStatus.FINALIZED,
+        AuctionStatus.AWARD_RECOMMENDED,
+        AuctionStatus.AWARDED
+      ];
+
+      const statusUpper = status ? status.toUpperCase() : undefined;
+      const validEnum = statusUpper && (Object.values(AuctionStatus) as string[]).includes(statusUpper)
+        ? (statusUpper as AuctionStatus)
+        : null;
+      const statusCondition = status && statusUpper !== 'ALL'
+        ? {
+            OR: [
+              { status: { equals: status, mode: 'insensitive' as const } },
+              ...(validEnum ? [{ statusEnum: validEnum }] : [])
+            ]
+          }
+        : {
+            OR: [
+              { status: { in: activeStatuses } },
+              { statusEnum: { in: activeStatusEnums } }
+            ]
+          };
 
       const sellerOrList: any[] = [];
       if (participatingAuctionIds.length > 0) {
-        sellerOrList.push({ id: { in: participatingAuctionIds } });
+        sellerOrList.push({
+          AND: [
+            { id: { in: participatingAuctionIds } },
+            statusCondition
+          ]
+        });
       }
       sellerOrList.push({
         AND: [
@@ -2167,12 +2200,7 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
               { procurementMethod: 'REVERSE_AUCTION' }
             ]
           },
-          status ? { status } : {
-            OR: [
-              { status: { in: activeStatuses } },
-              { statusEnum: { in: activeStatusEnums } }
-            ]
-          }
+          statusCondition
         ]
       });
       where.OR = sellerOrList;

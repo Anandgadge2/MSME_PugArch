@@ -2345,6 +2345,7 @@ const bidBackedMethodSlugs = new Set([
   'two-packet-bid',
   'boq-based-bid',
   'bid-with-reverse-auction',
+  'reverse-auction',
   'rate-contract'
 ]);
 
