@@ -113,3 +113,4 @@ export const useAccessibility = (): AccessibilityContextType => {
   }
   return context;
 };
+
