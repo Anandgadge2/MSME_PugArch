@@ -2006,11 +2006,11 @@ function PolicyRulesMatrix({
                 )}
               />
               <div className="min-w-0 flex flex-col">
-                <span className="text-[11px] font-semibold truncate text-slate-800">
+                <span className="text-[11px] font-semibold text-slate-800">
                   {rule.label}
                 </span>
                 {rule.subtext && (
-                  <span className="text-[9.5px] text-slate-500 font-medium truncate leading-tight">
+                  <span className="text-[9.5px] text-slate-500 font-medium leading-tight">
                     {rule.subtext}
                   </span>
                 )}
