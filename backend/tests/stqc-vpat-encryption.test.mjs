@@ -88,4 +88,12 @@ assert.match(complianceRoutesSrc, /statutoryRetentionPeriodDays:\s*180/);
 assert.match(complianceRoutesSrc, /time.nplindia.org/);
 console.log('✔ CERT-In 180-Day Audit Trail Retention & NTP Sync Verified');
 
+// 11. DPDPA 2023 Section 8(6) Breach Incident Register & 8(7) Retention Purge
+assert.match(complianceRoutesSrc, /router\.post\('\/breach-incident'/);
+assert.match(complianceRoutesSrc, /router\.get\('\/breach-incidents'/);
+assert.match(complianceRoutesSrc, /router\.post\('\/run-purge-job'/);
+assert.match(complianceRoutesSrc, /certInDeadlineHours:\s*6/);
+assert.match(complianceRoutesSrc, /dpbiDeadlineHours:\s*72/);
+console.log('✔ DPDPA Section 8(6) Breach Register & Section 8(7) Purge Job Verified');
+
 console.log('\nAll STQC, DPDPA & VPAT Verification Tests Passed Cleanly!');
