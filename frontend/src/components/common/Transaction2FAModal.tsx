@@ -113,7 +113,7 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-md overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl transition-all">
+      <div role="dialog" aria-modal="true" aria-labelledby="twofa-dialog-title" aria-describedby="twofa-dialog-desc" className="relative w-full max-w-md overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl transition-all">
         {/* Top Header Banner */}
         <div className="bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-900 px-6 py-5 text-white">
           <div className="flex items-center justify-between">
@@ -122,16 +122,17 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
                 <ShieldCheck className="h-6 w-6" />
               </span>
               <div>
-                <h3 className="text-base font-black uppercase tracking-wider text-white">
+                <h3 id="twofa-dialog-title" className="text-base font-black uppercase tracking-wider text-white">
                   2-Factor Authorization
                 </h3>
-                <p className="text-xs font-medium text-emerald-200/80">
+                <p id="twofa-dialog-desc" className="text-xs font-medium text-emerald-200/80">
                   Step-up security for transaction approval
                 </p>
               </div>
             </div>
             <button
               onClick={onClose}
+              aria-label="Close two-factor authorization dialog"
               className="rounded-lg p-1.5 text-white/70 hover:bg-white/10 hover:text-white transition-colors"
             >
               <X className="h-5 w-5" />
@@ -174,7 +175,7 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
 
           {/* Error Message */}
           {errorMsg && (
-            <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
+            <div role="alert" className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-800">
               <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 mt-0.5" />
               <span>{errorMsg}</span>
             </div>
@@ -183,7 +184,10 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
           {/* Form */}
           <form onSubmit={handleVerify} className="space-y-4">
             <div>
+              <label htmlFor="twofa-otp-input" className="sr-only">Enter 6-digit verification code</label>
               <input
+                id="twofa-otp-input"
+                aria-invalid={!!errorMsg}
                 ref={inputRef}
                 type="text"
                 maxLength={6}

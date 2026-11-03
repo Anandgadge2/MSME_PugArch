@@ -132,3 +132,37 @@ export const runDataRetentionPurgeJob = async (): Promise<PurgeExecutionSummary>
   return summary;
 };
 
+let isRetentionJobRunning = false;
+
+/**
+ * Initializes automated background scheduler for DPDPA Section 8(7) Storage Limitation
+ */
+export const startDataRetentionCronJobs = () => {
+  if (isRetentionJobRunning) return;
+  isRetentionJobRunning = true;
+
+  logger.info('[DataRetentionJob] Initializing automated DPDPA Section 8(7) retention background scheduler...');
+
+  // Run initial retention sweep 60 seconds after server boot
+  setTimeout(async () => {
+    try {
+      const summary = await runDataRetentionPurgeJob();
+      logger.info({ summary }, '[DataRetentionJob] Initial retention sweep completed');
+    } catch (err: any) {
+      logger.error({ err: err?.message }, '[DataRetentionJob] Initial retention sweep failed');
+    }
+  }, 60_000);
+
+  // Periodic statutory retention purge: Runs every 24 hours (86,400,000 ms)
+  const retentionInterval = setInterval(async () => {
+    try {
+      const summary = await runDataRetentionPurgeJob();
+      logger.info({ summary }, '[DataRetentionJob] Automated daily retention sweep completed');
+    } catch (err: any) {
+      logger.error({ err: err?.message }, '[DataRetentionJob] Automated daily retention sweep failed');
+    }
+  }, 24 * 60 * 60 * 1000);
+
+  retentionInterval.unref?.();
+};
+

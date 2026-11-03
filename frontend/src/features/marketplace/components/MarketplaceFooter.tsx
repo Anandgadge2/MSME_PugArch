@@ -32,7 +32,8 @@ export function MarketplaceFooter() {
         // Safe fallback for static rendering
     }
 
-    if (user) return null;
+    // GIGW 3.0 § 5.2.1: Statutory footer must remain visible across all marketplace and policy views
+    // if (user) return null;
 
     return (
         <footer className="relative overflow-hidden bg-[#030d1c] text-white border-t border-slate-800/80" id="help">

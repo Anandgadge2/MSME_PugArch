@@ -193,4 +193,93 @@ router.get('/breach-incidents', authenticate, async (req: AuthRequest, res: Resp
   }
 });
 
+/**
+ * GET /api/compliance/user-data-summary
+ * DPDPA 2023 Section 11 - Right to Access Information about Personal Data (SAR)
+ */
+router.get('/user-data-summary', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return apiResponse.error(res, 401, 'Unauthorized', 'UNAUTHORIZED');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        mobile: true,
+        role: true,
+        createdAt: true,
+        updatedAt: true,
+        emailVerified: true,
+        mobileVerified: true,
+        twoFactorEnabled: true,
+        lastLoginAt: true,
+        sellerProfile: {
+          select: {
+            id: true,
+            businessName: true,
+            msmeCategory: true,
+          }
+        },
+        buyerProfile: {
+          select: {
+            id: true,
+            organizationName: true,
+            businessType: true,
+            industry: true,
+          }
+        }
+      }
+    });
+
+    if (!user) {
+      return apiResponse.error(res, 404, 'User not found', 'NOT_FOUND');
+    }
+
+    const maskedMobile = user.mobile
+      ? `${user.mobile.slice(0, 2)}XXXXXX${user.mobile.slice(-2)}`
+      : null;
+
+    // Record access request in immutable audit log (DPDPA Section 11)
+    await prisma.auditLog.create({
+      data: {
+        userId,
+        action: 'DATA_PRINCIPAL_ACCESS_REQUEST',
+        entityType: 'COMPLIANCE',
+        details: {
+          requestedAt: new Date().toISOString(),
+          statutorySection: 'DPDPA 2023 Section 11',
+        },
+        ipAddress: req.ip || null,
+        userAgent: req.get('user-agent') || null,
+      }
+    });
+
+    return apiResponse.success(res, {
+      complianceStandard: 'Digital Personal Data Protection Act (DPDPA) 2023 Section 11',
+      dataPrincipal: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        maskedMobile,
+        role: user.role,
+        memberSince: user.createdAt,
+        twoFactorEnabled: user.twoFactorEnabled,
+        lastLoginAt: user.lastLoginAt,
+        sellerDetails: user.sellerProfile || null,
+        buyerDetails: user.buyerProfile || null,
+      },
+      retentionPolicy: '8 years for statutory GFR/GST records; 30 days post-closure for non-statutory records',
+      grievanceOfficer: 'grievance@jsgsmile.gov.in',
+      appellateBoard: 'Data Protection Board of India (DPBI)',
+    });
+  } catch (err: any) {
+    return handleSecureRouteError(res, err);
+  }
+});
+
 export default router;

@@ -92,8 +92,26 @@ console.log('✔ CERT-In 180-Day Audit Trail Retention & NTP Sync Verified');
 assert.match(complianceRoutesSrc, /router\.post\('\/breach-incident'/);
 assert.match(complianceRoutesSrc, /router\.get\('\/breach-incidents'/);
 assert.match(complianceRoutesSrc, /router\.post\('\/run-purge-job'/);
+assert.match(complianceRoutesSrc, /router\.get\('\/user-data-summary'/);
 assert.match(complianceRoutesSrc, /certInDeadlineHours:\s*6/);
 assert.match(complianceRoutesSrc, /dpbiDeadlineHours:\s*72/);
 console.log('✔ DPDPA Section 8(6) Breach Register & Section 8(7) Purge Job Verified');
+
+// 12. Automated DPDPA Retention Worker Daemon
+const workersSrc = readFileSync(new URL('../src/jobs/workers.ts', import.meta.url), 'utf8');
+const retentionJobSrc = readFileSync(new URL('../src/jobs/data-retention-purge.job.ts', import.meta.url), 'utf8');
+assert.match(workersSrc, /startDataRetentionCronJobs/);
+assert.match(retentionJobSrc, /startDataRetentionCronJobs/);
+assert.match(retentionJobSrc, /24 \* 60 \* 60 \* 1000/);
+console.log('✔ DPDPA Section 8(7) 24-Hour Autonomous Retention Worker Daemon Verified');
+
+// 13. Sovereign CSP Font-src & Frontend HTTP Security Headers
+const secHeadersSrc = readFileSync(new URL('../src/middleware/securityHeaders.ts', import.meta.url), 'utf8');
+assert.match(secHeadersSrc, /"font-src":\s*\["'self'",\s*"data:"\]/);
+const nextConfigSrc = readFileSync(new URL('../../frontend/next.config.ts', import.meta.url), 'utf8');
+assert.match(nextConfigSrc, /X-Frame-Options/);
+assert.match(nextConfigSrc, /Strict-Transport-Security/);
+assert.match(nextConfigSrc, /X-Content-Type-Options/);
+console.log('✔ Sovereign Font-src CSP & Next.js Global Security Headers Verified');
 
 console.log('\nAll STQC, DPDPA & VPAT Verification Tests Passed Cleanly!');

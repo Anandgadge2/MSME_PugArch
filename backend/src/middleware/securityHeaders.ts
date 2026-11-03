@@ -11,7 +11,7 @@ export const securityHeaders = helmet({
       "img-src": ["'self'", "data:", "blob:", "https:"],
       "script-src": ["'self'"],
       "style-src": ["'self'", "'unsafe-inline'"],
-      "font-src": ["'self'", "data:", "https:"],
+      "font-src": ["'self'", "data:"],
       "connect-src": ["'self'", "https:", "wss:"],
       "form-action": ["'self'"],
       "upgrade-insecure-requests": []
