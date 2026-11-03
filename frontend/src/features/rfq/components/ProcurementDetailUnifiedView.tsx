@@ -47,6 +47,7 @@ import {
   AlertTriangle,
   HelpCircle,
   Gavel,
+  Pause,
   Ban,
   Lock,
   Truck,
@@ -988,15 +989,16 @@ export function ProcurementLifecycleCountdown({
 
   const [currentMs, setCurrentMs] = useState<number>(() => Date.now());
   const lastPhaseRef = useRef<string | null>(null);
+  const statusUpper = String(status || "").toUpperCase();
 
   useEffect(() => {
+    if (statusUpper === 'PAUSED') return;
     const timer = setInterval(() => {
       setCurrentMs(Date.now());
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [statusUpper]);
 
-  const statusUpper = String(status || "").toUpperCase();
   const isConcludedOrCancelled = [
     "CANCELLED",
     "WITHDRAWN",
@@ -1008,6 +1010,17 @@ export function ProcurementLifecycleCountdown({
 
   // Determine current active phase and countdown target
   type PhaseInfo =
+    | {
+        phase: "AUCTION_PAUSED";
+        targetMs: null;
+        label: string;
+        colorClass: string;
+        borderClass: string;
+        bgClass: string;
+        textClass: string;
+        iconClass: string;
+        isInProgress: true;
+      }
     | {
         phase: "SUBMISSION_STARTS_SOON";
         targetMs: number;
@@ -1079,6 +1092,30 @@ export function ProcurementLifecycleCountdown({
   const currentPhaseInfo: PhaseInfo = (() => {
     if (isConcludedOrCancelled) {
       return null;
+    }
+
+    if (statusUpper === 'PAUSED') {
+      const remainingMs = subCloseObj ? Math.max(0, subCloseObj.getTime() - currentMs) : 0;
+      const days = Math.floor(remainingMs / 86_400_000);
+      const hours = Math.floor((remainingMs % 86_400_000) / 3_600_000);
+      const minutes = Math.floor((remainingMs % 3_600_000) / 60_000);
+      const seconds = Math.floor((remainingMs % 60_000) / 1000);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const timeStr = days > 0
+        ? `${days}D ${pad(hours)}H ${pad(minutes)}M`
+        : `${pad(hours)}H ${pad(minutes)}M ${pad(seconds)}S`;
+
+      return {
+        phase: "AUCTION_PAUSED",
+        targetMs: null,
+        label: `AUCTION PAUSED • CLOCK FROZEN AT ${timeStr}`,
+        colorClass: "text-amber-900",
+        borderClass: "border-amber-300",
+        bgClass: "bg-amber-100/90",
+        textClass: "text-amber-950 font-black",
+        iconClass: "text-amber-700",
+        isInProgress: true,
+      };
     }
 
     // 1. Before Submission Starts
@@ -11925,7 +11962,8 @@ export function ProcurementDetailUnifiedView(
           {linkedAuction && (() => {
             const auctionStatus = String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase();
             const raCode = (linkedAuction as any).auctionCode || linkedAuction.id;
-            const isLive = ["LIVE", "RUNNING", "ACTIVE", "PAUSED"].includes(auctionStatus);
+            const isLive = ["LIVE", "RUNNING", "ACTIVE"].includes(auctionStatus);
+            const isPaused = auctionStatus === "PAUSED";
             const isScheduled = ["SCHEDULED", "UPCOMING", "OPEN"].includes(auctionStatus) && !(linkedAuction as any).auctionPlanned;
             const isConcluded = ["CLOSED", "CONCLUDED", "ENDED", "COMPLETED", "AWARDED", "FINANCIAL_EVALUATION"].includes(auctionStatus) || isBidAwarded;
 
@@ -12080,6 +12118,45 @@ export function ProcurementDetailUnifiedView(
                     >
                       <Trophy className="h-3.5 w-3.5 mr-1 text-amber-400" />
                       View Auction Results
+                    </Button>
+                  </div>
+                </div>
+              );
+            }
+
+            // If Paused:
+            if (isPaused) {
+              return (
+                <div className="rounded-2xl border border-amber-200 bg-gradient-to-r from-amber-50/90 via-orange-50/50 to-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-600 text-white shadow-sm">
+                      <Pause className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="rounded-md bg-amber-100 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-amber-900 border border-amber-200">
+                          ⏸️ Reverse Auction Paused
+                        </span>
+                        <span className="text-xs font-semibold text-slate-500 font-mono">
+                          RA Code: {linkedAuction.auctionCode || `RA-${linkedAuction.id}`}
+                        </span>
+                      </div>
+                      <p className="text-xs font-medium text-slate-800 mt-1">
+                        Dynamic bidding is currently paused by the buyer. Supplier decrement tools and the countdown timer are frozen until resumed.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        const rolePrefix = isBuyerSide ? '/buyer' : '/seller';
+                        router.push(`${rolePrefix}/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
+                      }}
+                      className="h-9 px-4 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs gap-1.5 shadow-sm cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <span>{isBuyerSide ? "Monitor Auction Floor →" : "View Auction Floor (Paused) →"}</span>
                     </Button>
                   </div>
                 </div>
@@ -14510,37 +14587,6 @@ export function ProcurementDetailUnifiedView(
                   )}
                   {isDownloadingPdf ? "Downloading..." : "Download Notice (PDF)"}
                 </Button>
-
-                {/* Direct Header Action for Linked Reverse Auction (Results or Live Room) */}
-                {linkedAuction && (() => {
-                  const auctionStatus = String(linkedAuction.statusEnum || linkedAuction.status || '').toUpperCase();
-                  const raCode = (linkedAuction as any).auctionCode || linkedAuction.id;
-                  const isConcluded = ["CLOSED", "CONCLUDED", "ENDED", "COMPLETED", "AWARDED", "FINANCIAL_EVALUATION"].includes(auctionStatus) || isBidAwarded;
-                  const isLive = ["LIVE", "RUNNING", "ACTIVE", "PAUSED"].includes(auctionStatus);
-
-
-
-                  // For buyers, provide a dedicated live console shortcut button in header.
-                  // For sellers, primaryHighwayAction (SSOT) already provides the primary action button to enter/join the live room, eliminating duplicate buttons.
-                  if (isLive && isBuyerSide) {
-                    return (
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={() => {
-                          router.push(`/buyer/procurement/reverse-auction/${encodeURIComponent(String(raCode))}/live`);
-                        }}
-                        className="h-8 px-3 text-xs font-bold rounded-lg bg-red-600 hover:bg-red-700 text-white shadow-sm gap-1.5 flex items-center cursor-pointer transition-all active:scale-95 animate-pulse"
-                        title="Enter Live Reverse Auction Console"
-                      >
-                        <Gavel className="h-3.5 w-3.5 text-white" aria-hidden="true" />
-                        <span>Live Bid Console</span>
-                      </Button>
-                    );
-                  }
-
-                  return null;
-                })()}
                 {props.invoiceStatus &&
                   (props.invoiceStatus.exists ? (
                     <Button
@@ -14706,7 +14752,7 @@ export function ProcurementDetailUnifiedView(
                     <span>{primaryHighwayAction.label}</span>
                   </Button>
                 )}
-                {primaryHighwayAction.type === 'BUYER_SEALED_AWAITING_CLOSING' && (
+                {primaryHighwayAction.type === 'BUYER_SEALED_AWAITING_CLOSING' && !isReverseAuctionType && !linkedAuction && (
                   <div
                     role="status"
                     title={`Quotations remain strictly sealed until ${displaySealedClosingDate}. Bid opening and proposal evaluation will automatically unlock then.`}

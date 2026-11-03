@@ -941,15 +941,26 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           <span>Schedule</span>
         </Button>
       )}
-      {(['DRAFT', 'PAUSED'].includes(status) || (status === 'SCHEDULED' && (!auctionData.startTime || new Date(auctionData.startTime).getTime() > Date.now()))) && (
+      {(status === 'DRAFT' || (status === 'SCHEDULED' && (!auctionData.startTime || new Date(auctionData.startTime).getTime() > Date.now()))) && (
         <Button
           type="button"
           size="sm"
           onClick={() => transition.mutate('start')}
-          className="h-9 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5"
+          className="h-9 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
         >
           <Play className="h-3.5 w-3.5" />
-          <span>{status === 'PAUSED' ? 'Resume' : 'Start'}</span>
+          <span>Start Auction</span>
+        </Button>
+      )}
+      {status === 'PAUSED' && (
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => transition.mutate('resume')}
+          className="h-9 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white flex items-center gap-1.5 shadow-sm"
+        >
+          <Play className="h-3.5 w-3.5" />
+          <span>Resume Auction</span>
         </Button>
       )}
       {status === 'LIVE' && (
@@ -958,10 +969,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           variant="secondary"
           size="sm"
           onClick={() => transition.mutate('pause')}
-          className="h-9 rounded-xl font-bold text-xs flex items-center gap-1.5"
+          className="h-9 rounded-xl font-bold text-xs bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 flex items-center gap-1.5 shadow-sm"
         >
-          <Pause className="h-3.5 w-3.5" />
-          <span>Pause</span>
+          <Pause className="h-3.5 w-3.5 text-amber-700" />
+          <span>Pause Auction</span>
         </Button>
       )}
       {['LIVE', 'PAUSED'].includes(status) && (
@@ -969,10 +980,10 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
           type="button"
           size="sm"
           onClick={() => transition.mutate('close')}
-          className="h-9 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5"
+          className="h-9 rounded-xl font-bold text-xs bg-red-600 hover:bg-red-700 text-white flex items-center gap-1.5 shadow-sm"
         >
           <Ban className="h-3.5 w-3.5" />
-          <span>Close</span>
+          <span>Close Auction</span>
         </Button>
       )}
     </div>

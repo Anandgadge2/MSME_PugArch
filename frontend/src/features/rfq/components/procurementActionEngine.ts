@@ -152,6 +152,16 @@ export function deriveProcurementPrimaryAction(
 
     // 2.2 Sealed State: Bidding window is open or technical opening date has not elapsed
     if (!isEvaluationReady) {
+      if (isReverseAuction) {
+        return {
+          type: 'BUYER_VIEW_RESULTS',
+          label: 'Reverse Auction Floor',
+          subtext: 'Dynamic bidding floor is active — real-time decrements monitored via live console.',
+          isExecutable: false,
+          isSealedLock: false,
+          badgeTone: 'sky'
+        };
+      }
       const targetOpening = technicalOpeningDate || closingDate;
       const displayOpeningTime = technicalDateFormatted || closingDateFormatted || 'the scheduled closing';
       return {

@@ -254,21 +254,40 @@ const resolveAuctionId = async (rawId: number | string): Promise<number | null> 
 };
 
 /**
- * True when the auction's linked requirement is publicly visible (open to all sellers).
- * The Requirement model has NO visibility column — selecting it throws, which used to
- * 500 every reverse-auction detail request. Openness lives in the wizard payload:
- * payload.vendors.selection === 'Open' (with payload.visibility as an explicit override).
+ * True when the auction is publicly visible (open to all sellers to discover and join).
+ * The Requirement model has NO visibility column — selecting it throws.
+ * Checks visibilityMode, auctionType, linked requirement payload, and linked procurement bid.
  */
 const isAuctionPublic = async (auction: any): Promise<boolean> => {
-  if (!auction?.linkedRequirementId) return false;
-  const requirement = await db.requirement.findUnique({
-    where: { id: auction.linkedRequirementId },
-    select: { payload: true }
-  });
-  const payload = (requirement?.payload || {}) as any;
-  const explicit = String(payload.visibility || payload.basics?.visibility || '').toUpperCase();
-  if (explicit) return explicit === 'PUBLIC';
-  return String(payload.vendors?.selection || '').toLowerCase() === 'open';
+  if (!auction) return false;
+  if (auction.visibilityMode === 'TECHNICALLY_QUALIFIED_ONLY') return true;
+  if (auction.auctionType === 'OPEN' || auction.auctionType === 'ENGLISH_REVERSE') return true;
+  if (auction.procurementMethod === 'REVERSE_AUCTION' && auction.visibilityMode !== 'INVITED_SELLERS_ONLY') return true;
+
+  if (auction.linkedRequirementId) {
+    const requirement = await db.requirement.findUnique({
+      where: { id: auction.linkedRequirementId },
+      select: { payload: true }
+    });
+    const payload = (requirement?.payload || {}) as any;
+    const explicit = String(payload.visibility || payload.basics?.visibility || '').toUpperCase();
+    if (explicit) return explicit === 'PUBLIC';
+    if (String(payload.vendors?.selection || '').toLowerCase() === 'open') return true;
+  }
+
+  if (auction.linkedBidId) {
+    const bid = await db.procurementBid.findUnique({
+      where: { id: auction.linkedBidId },
+      select: { technicalPacket: true, bidType: true }
+    });
+    const packet = (bid?.technicalPacket && typeof bid.technicalPacket === 'object') ? bid.technicalPacket as any : {};
+    const explicit = String(packet.visibility || packet.basics?.visibility || '').toUpperCase();
+    if (explicit) return explicit === 'PUBLIC';
+    if (String(packet.vendors?.selection || '').toLowerCase() === 'open') return true;
+    if (bid?.bidType === 'OPEN' || bid?.bidType === 'PUBLIC') return true;
+  }
+
+  return false;
 };
 
 /**
@@ -316,6 +335,10 @@ const withEffectiveStatus = async (auction: any) => {
     if (pendingSubmissions > 0 || qualifiedCount < minimumRequired) {
       evaluationPending = true;
     }
+  }
+
+  if (current === 'PAUSED') {
+    return { ...auction, evaluationPending };
   }
 
   if (Number.isFinite(end) && end <= now) {
@@ -2124,13 +2147,33 @@ router.get('/reverse-auctions', requirePermission('reverse_auction.view', orgSco
       }).catch(() => []) : [];
       const participatingAuctionIds = participantRows.map((row: any) => row.auctionId);
 
+      const activeStatuses = [
+        'pending', 'scheduled', 'live', 'open', 'paused', 'completed', 'active',
+        'PENDING', 'SCHEDULED', 'LIVE', 'OPEN', 'PAUSED', 'COMPLETED', 'ACTIVE'
+      ];
+      const activeStatusEnums = ['SCHEDULED', 'LIVE', 'PAUSED', 'ENDED'];
+
       const sellerOrList: any[] = [];
       if (participatingAuctionIds.length > 0) {
         sellerOrList.push({ id: { in: participatingAuctionIds } });
       }
       sellerOrList.push({
-        visibilityMode: 'TECHNICALLY_QUALIFIED_ONLY',
-        status: { in: ['scheduled', 'live', 'open', 'paused', 'completed', 'active', 'SCHEDULED', 'LIVE', 'OPEN', 'PAUSED', 'COMPLETED', 'ACTIVE'] }
+        AND: [
+          {
+            OR: [
+              { visibilityMode: 'TECHNICALLY_QUALIFIED_ONLY' },
+              { auctionType: 'OPEN' },
+              { auctionType: 'ENGLISH_REVERSE' },
+              { procurementMethod: 'REVERSE_AUCTION' }
+            ]
+          },
+          status ? { status } : {
+            OR: [
+              { status: { in: activeStatuses } },
+              { statusEnum: { in: activeStatusEnums } }
+            ]
+          }
+        ]
       });
       where.OR = sellerOrList;
     } else if (!isAdmin(req)) {
@@ -2333,8 +2376,34 @@ router.post('/reverse-auctions/:id/start', requirePermission('reverse_auction.pu
   }
   return { actualStartedAt: now, startTime: now, endTime };
 }, assertEnoughQualifiedBidders));
-router.post('/reverse-auctions/:id/pause', requirePermission('reverse_auction.update', orgScope), transition('PAUSED', 'PAUSED'));
-router.post('/reverse-auctions/:id/resume', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE'));
+router.post('/reverse-auctions/:id/pause', requirePermission('reverse_auction.update', orgScope), transition('PAUSED', 'PAUSED', (req, auction) => {
+  const now = Date.now();
+  const currentEnd = auction?.endTime ? new Date(auction.endTime).getTime() : 0;
+  const remainingMs = currentEnd > now ? currentEnd - now : 0;
+  const config = (auction?.auctionConfig || {}) as any;
+  return {
+    auctionConfig: {
+      ...config,
+      pausedAt: new Date().toISOString(),
+      remainingDurationMs: remainingMs
+    }
+  };
+}));
+router.post('/reverse-auctions/:id/resume', requirePermission('reverse_auction.publish', orgScope), transition('LIVE', 'LIVE', (req, auction) => {
+  const now = Date.now();
+  const config = (auction?.auctionConfig || {}) as any;
+  const remainingMs = Number(config?.remainingDurationMs) || 0;
+  const newEndTime = remainingMs > 0 ? new Date(now + remainingMs) : (auction?.endTime || new Date(now + 15 * 60_000));
+  return {
+    endTime: newEndTime,
+    auctionConfig: {
+      ...config,
+      pausedAt: null,
+      resumedAt: new Date().toISOString(),
+      remainingDurationMs: null
+    }
+  };
+}));
 router.post('/reverse-auctions/:id/close', requirePermission('reverse_auction.close', orgScope), transition('CLOSED', 'CLOSED', () => ({ actualClosedAt: new Date() })));
 router.post('/reverse-auctions/:id/cancel', requirePermission('reverse_auction.close', orgScope), async (req: AuthRequest, res: Response) => {
   req.body = { ...req.body, reason: cancelSchema.parse(req.body).reason };
