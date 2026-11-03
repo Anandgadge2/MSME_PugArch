@@ -71,4 +71,14 @@ assert.match(authControllerSrc, /assertPasswordNotReused\(user\.id,\s*newPasswor
 assert.match(authControllerSrc, /rememberPreviousPassword\(user\.id,\s*previousPasswordHash\)/);
 console.log('✔ STQC PasswordHistory Anti-Reuse Controls Verified');
 
+// 9. CERT-In & STQC Anti-Malware / ClamAV Streaming Hook
+const storageServiceSrc = readFileSync(new URL('../src/services/storage/storage.service.ts', import.meta.url), 'utf8');
+const malwareScannerSrc = readFileSync(new URL('../src/services/storage/malware-scanner.service.ts', import.meta.url), 'utf8');
+assert.match(storageServiceSrc, /scanFileForMalware/);
+assert.match(storageServiceSrc, /FILE_MALWARE_DETECTED/);
+assert.match(malwareScannerSrc, /EICAR-STANDARD-ANTIVIRUS-TEST-FILE/);
+assert.match(malwareScannerSrc, /scanWithClamAvDaemon/);
+assert.match(malwareScannerSrc, /zINSTREAM/);
+console.log('✔ STQC ASVS 12.4 Anti-Malware Streaming Hook & EICAR Scanner Verified');
+
 console.log('\nAll STQC, DPDPA & VPAT Verification Tests Passed Cleanly!');

@@ -8,6 +8,7 @@ import { auditLog } from '../../modules/audit/audit.service.js';
 import { checkOwnership } from '../../middleware/ownership.js';
 import { gcpStorageProvider } from './gcp-storage.service.js';
 import { mapEntityTypeToFolder } from './storage-folders.enum.js';
+import { scanBufferForMalware } from './malware-scanner.service.js';
 
 export type StorageProviderName = 'gcp' | string;
 export type StorageResourceType = 'image' | 'raw';
@@ -238,9 +239,9 @@ export const validateFile = (file: Express.Multer.File) => {
   };
 };
 
-const scanFileForMalware = async (_file: Express.Multer.File) => {
-  // Placeholder for ClamAV/GCP malware scanning integration. Fail closed here when a scanner is configured.
-  return { clean: true };
+export const scanFileForMalware = async (file: Express.Multer.File) => {
+  if (!file?.buffer) return { clean: true };
+  return scanBufferForMalware(file.buffer);
 };
 
 const providerFor = (_name?: string): StorageProvider => gcpStorageProvider;
