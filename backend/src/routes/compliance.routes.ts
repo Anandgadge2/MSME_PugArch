@@ -1,4 +1,5 @@
 import { Router, type Response } from 'express';
+import { runDataRetentionPurgeJob } from '../jobs/data-retention-purge.job.js';
 import prisma from '../lib/prisma.js';
 import { apiResponse } from '../utils/apiResponse.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
@@ -60,6 +61,28 @@ router.get('/audit-log-status', authenticate, async (req: AuthRequest, res: Resp
     };
 
     return apiResponse.success(res, responsePayload);
+  } catch (err: any) {
+    return handleSecureRouteError(res, err);
+  }
+});
+
+
+/**
+ * POST /api/compliance/run-purge-job
+ * DPDPA 2023 Section 8(7) - Manual / Cron Trigger for Automated Data Retention Purging
+ */
+router.post('/run-purge-job', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const userRole = req.user?.role;
+    if (!['admin', 'master_admin', 'super_admin'].includes(String(userRole))) {
+      return apiResponse.error(res, 403, 'Administrative privilege required to execute retention purge', 'FORBIDDEN');
+    }
+
+    const summary = await runDataRetentionPurgeJob();
+    return apiResponse.success(res, {
+      message: 'DPDPA Section 8(7) retention purge job executed successfully',
+      summary,
+    });
   } catch (err: any) {
     return handleSecureRouteError(res, err);
   }
