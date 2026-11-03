@@ -43,27 +43,9 @@ export function CookieConsentBanner() {
   const [isOpen, setIsOpen] = useState(false);
   const [isCustomizeOpen, setIsCustomizeOpen] = useState(false);
 
-  // Language for DPDPA statutory notice (Section 5(3))
-  const [noticeLang, setNoticeLang] = useState<'en' | 'or' | 'hi'>('en');
-
   // Preference switches
   const [analyticsEnabled, setAnalyticsEnabled] = useState(false);
   const [functionalEnabled, setFunctionalEnabled] = useState(false);
-
-  const NOTICE_TEXTS = {
-    en: {
-      title: "Data Collection & Cookie Preferences",
-      body: "JSG SMILE uses strictly necessary cookies to safeguard sessions, prevent CSRF attacks, and ensure platform security. With your consent, we also collect anonymized performance telemetry to improve portal reliability. No advertising or third-party trackers are used.",
-    },
-    or: {
-      title: "ତଥ୍ୟ ସଂଗ୍ରହ ଏବଂ କୁକି ପସନ୍ଦ (DPDPA 2023)",
-      body: "ଜେଏସଜି ସ୍ମାଇଲ୍ ପୋର୍ଟାଲ୍ ସୁରକ୍ଷା, ଅଧିବେଶନ ସୁରକ୍ଷା ଏବଂ ସାଇବର ଆକ୍ରମଣ ରୋକିବା ପାଇଁ ଅତ୍ୟାବଶ୍ୟକ କୁକିଜ୍ ବ୍ୟବହାର କରେ। କୌଣସି ତୃତୀୟ ପକ୍ଷ କିମ୍ବା ବିଜ୍ଞାପନ ଟ୍ରାକର୍ ବ୍ୟବହାର କରାଯାଏ ନାହିଁ। ଆପଣଙ୍କ ସମ୍ମତି ସହିତ କେବଳ ସିଷ୍ଟମ୍ ଉନ୍ନତିକରଣ ତଥ୍ୟ ସଂଗ୍ରହ କରାଯାଏ।",
-    },
-    hi: {
-      title: "डेटा संग्रह एवं कुकी प्राथमिकताएं (DPDPA 2023)",
-      body: "JSG SMILE पोर्टल सत्र सुरक्षा, CSRF सुरक्षा और प्लेटफ़ॉर्म सुरक्षा सुनिश्चित करने के लिए केवल आवश्यक कुकीज़ का उपयोग करता है। कोई विज्ञापन या तृतीय-पक्ष ट्रैकर उपयोग नहीं किया जाता है। आपकी सहमति से केवल प्रदर्शन मेट्रिक्स एकत्र किए जाते हैं।",
-    }
-  };
 
   const customizeTriggerRef = useRef<HTMLButtonElement | null>(null);
 
@@ -162,42 +144,16 @@ export function CookieConsentBanner() {
                 <Cookie className="h-5 w-5" aria-hidden="true" />
               </div>
               <div className="space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-2">
                   <h2 className="text-sm font-black uppercase tracking-wider text-white">
-                    {NOTICE_TEXTS[noticeLang].title}
+                    Data Collection & Cookie Preferences
                   </h2>
                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    DPDPA 2023 Compliant
+                    DPDP Act 2023 Compliant
                   </span>
-                  {/* Language Selector for DPDPA 5(3) Multi-Lingual Notice */}
-                  <div className="flex items-center gap-1 ml-auto text-[10px] bg-slate-800/80 px-2 py-0.5 rounded-md border border-slate-700">
-                    <button
-                      type="button"
-                      onClick={() => setNoticeLang('en')}
-                      className={`px-1 rounded ${noticeLang === 'en' ? 'font-black text-[#c8a45c]' : 'text-slate-400 hover:text-white'}`}
-                    >
-                      English
-                    </button>
-                    <span className="text-slate-600">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setNoticeLang('or')}
-                      className={`px-1 rounded ${noticeLang === 'or' ? 'font-black text-[#c8a45c]' : 'text-slate-400 hover:text-white'}`}
-                    >
-                      ଓଡ଼ିଆ
-                    </button>
-                    <span className="text-slate-600">|</span>
-                    <button
-                      type="button"
-                      onClick={() => setNoticeLang('hi')}
-                      className={`px-1 rounded ${noticeLang === 'hi' ? 'font-black text-[#c8a45c]' : 'text-slate-400 hover:text-white'}`}
-                    >
-                      हिन्दी
-                    </button>
-                  </div>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed font-normal">
-                  {NOTICE_TEXTS[noticeLang].body}
+                  JSG SMILE uses strictly necessary cookies to safeguard sessions, prevent CSRF attacks, and ensure platform security. With your consent, we also collect anonymized performance telemetry to improve portal reliability. No advertising or third-party trackers are used.
                 </p>
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] pt-0.5">
                   <a
@@ -375,26 +331,16 @@ export function CookieConsentBanner() {
                 </div>
               </div>
 
-              {/* DPDP Legal Rights Disclosure & Grievance Redressal (Section 8(9) & Section 6(6)) */}
-              <div className="pt-4 space-y-3">
-                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs space-y-2">
+              {/* DPDP Legal Rights Disclosure */}
+              <div className="pt-4">
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-3.5 text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 font-bold text-slate-900">
                     <Info className="h-4 w-4 text-[#0b2447]" aria-hidden="true" />
-                    <span>Statutory Data Principal Rights (DPDPA 2023)</span>
+                    <span>Statutory Data Principal Rights</span>
                   </div>
                   <p className="text-slate-600 text-[11px] leading-relaxed">
-                    Under Sections 6(4) and 11-13 of the Digital Personal Data Protection Act 2023, you have the statutory rights to access summary of personal data, request correction or erasure, and withdraw consent at any time without punitive consequences to lawful core operations.
+                    Under Section 6(6) of the DPDP Act 2023, you have the statutory right to withdraw consent at any time without negative consequence to essential platform security. You may also manage KYC and transactional data sharing via your account's Consent Center.
                   </p>
-                  <div className="pt-2 border-t border-slate-200/80 text-[11px] text-slate-700 space-y-1">
-                    <p className="font-bold text-[#0b2447]">Designated Grievance Redressal Officer (Section 8(9)):</p>
-                    <p className="text-slate-600">Nodal IT & Grievance Cell, District Collectorate, Jharsuguda, Odisha 768204</p>
-                    <p className="text-slate-600">
-                      Grievance Contact: <a href="mailto:grievance@jsgsmile.in" className="text-sky-700 font-semibold underline">grievance@jsgsmile.in</a> (Acknowledged within 48h, resolved within 30 days)
-                    </p>
-                    <p className="text-[10px] text-slate-500 italic">
-                      If unresolved within 30 days, Data Principals may register a complaint before the Data Protection Board of India.
-                    </p>
-                  </div>
                 </div>
               </div>
             </div>
