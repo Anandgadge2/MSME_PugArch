@@ -72,7 +72,8 @@ type PageKey =
   | 'contact'
   | 'feedback'
   | 'faqs'
-  | 'sitemap';
+  | 'sitemap'
+  | 'screen-reader';
 
 const routeToPage: Record<string, PageKey> = {
   '/contact-us': 'contact',
@@ -103,6 +104,8 @@ const routeToPage: Record<string, PageKey> = {
   '/disclaimer': 'disclaimer',
   '/caution-notice': 'caution',
   '/caution-notices': 'caution',
+  '/screen-reader-access': 'screen-reader',
+  '/screen-reader': 'screen-reader',
 };
 
 interface OfficialDocumentMeta {
@@ -249,6 +252,19 @@ const OFFICIAL_DOCS: Record<string, OfficialDocumentMeta> = {
     pdfHref: '/docs/Terms_and_Conditions.pdf',
     fileSize: '122 KB',
     description: 'Guidelines on external links, inbound deep-linking, framing restrictions, and security under Indian Government Web Standards.',
+  },
+  'screen-reader': {
+    key: 'screen-reader',
+    title: 'Screen Reader Access & Digital Accessibility Statement',
+    shortTitle: 'Screen Reader Access',
+    badge: 'VPAT / GIGW 3.0',
+    category: 'Universal Accessibility',
+    refNo: 'JSG-DIC-ACC-2026/12',
+    effectiveDate: '30 July 2026',
+    pdfFilename: 'Accessibility_Conformance_Report_VPAT.pdf',
+    pdfHref: '/docs/Terms_and_Conditions.pdf',
+    fileSize: '115 KB',
+    description: 'Comprehensive guidelines for visually impaired users operating assistive technologies (NVDA, JAWS, Narrator, VoiceOver) on the portal.',
   },
   caution: {
     key: 'caution',
@@ -634,6 +650,7 @@ function LegalDocumentReader({ activeKey }: { activeKey: PageKey }) {
             {activeKey === 'copyright' && <CopyrightPolicyText />}
             {activeKey === 'hyperlinks' && <HyperlinkPolicyText />}
             {activeKey === 'caution' && <CautionNoticeText />}
+            {activeKey === 'screen-reader' && <ScreenReaderAccessText />}
           </div>
 
           {/* Official Seal & Authentication Block */}
@@ -2010,6 +2027,131 @@ function EnterpriseSitemapView() {
             </ul>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+
+function ScreenReaderAccessText() {
+  return (
+    <div className="space-y-6 font-sans text-xs sm:text-sm text-slate-700 leading-relaxed">
+      <div className="text-center border-b border-slate-200 pb-4 mb-4">
+        <h2 className="text-lg sm:text-xl font-black text-slate-900 uppercase tracking-tight">
+          SCREEN READER ACCESS &amp; DIGITAL ACCESSIBILITY STATEMENT
+        </h2>
+        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mt-1">
+          Conformance to GIGW 3.0 and WCAG 2.1 / 2.2 Level AA Standards
+        </p>
+      </div>
+
+      <div className="p-4 rounded-xl bg-blue-50/70 border border-blue-200 text-slate-800 space-y-2">
+        <h3 className="font-extrabold text-[#0b2447] text-sm uppercase tracking-wide">
+          Universal Accessibility Commitment
+        </h3>
+        <p>
+          The JsgSmile Portal is designed and developed to be fully accessible to all individuals, including persons
+          with disabilities, in compliance with the Rights of Persons with Disabilities Act (RPwD Act) 2016, Guidelines
+          for Indian Government Websites (GIGW 3.0), and the World Wide Web Consortium (W3C) Web Content Accessibility
+          Guidelines (WCAG 2.1 &amp; 2.2 Level AA).
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          1. Compatible Screen Readers
+        </h3>
+        <p>
+          The portal has been verified for compatibility with industry-standard assistive technologies:
+        </p>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-xs text-left border border-slate-200 rounded-lg">
+            <thead className="bg-slate-100 font-bold text-slate-900">
+              <tr>
+                <th scope="col" className="p-2.5 border-b">Assistive Software</th>
+                <th scope="col" className="p-2.5 border-b">Operating System</th>
+                <th scope="col" className="p-2.5 border-b">Supported Browser</th>
+                <th scope="col" className="p-2.5 border-b">Licensing Type</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              <tr>
+                <td className="p-2.5 font-bold">NVDA (NonVisual Desktop Access)</td>
+                <td className="p-2.5">Microsoft Windows</td>
+                <td className="p-2.5">Google Chrome, Mozilla Firefox, Microsoft Edge</td>
+                <td className="p-2.5 text-emerald-700 font-semibold">Free / Open Source</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold">JAWS (Job Access With Speech)</td>
+                <td className="p-2.5">Microsoft Windows</td>
+                <td className="p-2.5">Google Chrome, Microsoft Edge</td>
+                <td className="p-2.5">Commercial</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold">Windows Narrator</td>
+                <td className="p-2.5">Microsoft Windows 10 &amp; 11</td>
+                <td className="p-2.5">Microsoft Edge, Google Chrome</td>
+                <td className="p-2.5 text-emerald-700 font-semibold">Built-in Windows Utility</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold">TalkBack</td>
+                <td className="p-2.5">Android OS</td>
+                <td className="p-2.5">Google Chrome Mobile</td>
+                <td className="p-2.5 text-emerald-700 font-semibold">Built-in Android Utility</td>
+              </tr>
+              <tr>
+                <td className="p-2.5 font-bold">VoiceOver</td>
+                <td className="p-2.5">Apple macOS &amp; iOS</td>
+                <td className="p-2.5">Safari, Chrome</td>
+                <td className="p-2.5 text-emerald-700 font-semibold">Built-in Apple Utility</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          2. Built-in Accessibility Features
+        </h3>
+        <ul className="space-y-2 pl-2">
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Skip to Main Content:</strong> A dedicated skip navigation link is positioned at the top of every page, allowing keyboard and screen reader users to bypass header navigation directly to the primary workspace.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Dynamic Text Sizing:</strong> Users can scale the portal typography using the A-, A, and A+ toggles in the top accessibility bar without losing page structure or readability.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>High Contrast Visuals:</strong> The high-contrast toggle enforces crisp high-contrast outlines and yellow accents conforming to the 4.5:1 minimum contrast requirement.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Form Semantics &amp; ARIA:</strong> All input controls, dropdowns, and file upload zones include programmatically linked labels, required field flags, and live error descriptions.</span>
+          </li>
+          <li className="flex items-start gap-2">
+            <span className="text-[#0b2447] font-bold shrink-0">•</span>
+            <span><strong>Keyboard Navigation:</strong> All interactive components, including tabs, modals, pagination, and tables, can be operated exclusively via standard keyboard inputs (Tab, Shift+Tab, Enter, Space, Escape, and Arrow keys).</span>
+          </li>
+        </ul>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="text-sm font-black text-[#0b2447] border-l-4 border-[#0b2447] pl-3 uppercase tracking-wide">
+          3. Accessibility Feedback &amp; Grievance
+        </h3>
+        <p>
+          If you encounter any difficulty accessing content or operating any feature using assistive technologies,
+          please notify the Web Information Manager and Nodal Accessibility Officer:
+        </p>
+        <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1">
+          <p className="font-bold text-[#0b2447]">District Industries Centre (DIC), Jharsuguda</p>
+          <p className="text-slate-600">Email: <a href="mailto:jsgsmileportal@gmail.com" className="text-blue-700 underline font-semibold">jsgsmileportal@gmail.com</a></p>
+          <p className="text-slate-600">Toll Free Helpline: 1800-345-7111 / +91 (06645) 272-100</p>
+          <p className="text-slate-500 pt-1">All accessibility grievances are addressed within 7 working days.</p>
+        </div>
       </div>
     </div>
   );

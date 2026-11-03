@@ -19,6 +19,8 @@ import {
   Building2,
   Mail,
   Phone,
+  UserPlus,
+  Trash2,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent } from '../ui/card';
@@ -52,6 +54,101 @@ export function ConsentManagementCard() {
   const [activeWithdrawConsent, setActiveWithdrawConsent] = useState<ConsentItem | null>(null);
   const [withdrawReason, setWithdrawReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [nominee, setNominee] = useState<any>(null);
+  const [isNomineeModalOpen, setIsNomineeModalOpen] = useState(false);
+  const [nomineeForm, setNomineeForm] = useState({ nomineeName: '', nomineeRelationship: '', nomineeEmail: '', nomineePhone: '', nomineeAddress: '' });
+  const [isSavingNominee, setIsSavingNominee] = useState(false);
+  const [isErasureModalOpen, setIsErasureModalOpen] = useState(false);
+  const [erasureReason, setErasureReason] = useState('');
+  const [erasureConfirmed, setErasureConfirmed] = useState(false);
+  const [isRequestingErasure, setIsRequestingErasure] = useState(false);
+
+  const fetchNominee = async () => {
+    try {
+      const res = await api.get('/api/consent/nominee');
+      if (res.ok) {
+        const body = await res.json();
+        if (body?.data?.nominee) setNominee(body.data.nominee);
+      }
+    } catch {}
+  };
+
+  const handleExportPersonalData = async () => {
+    try {
+      setIsExporting(true);
+      const res = await api.get('/api/consent/export-personal-data');
+      if (res.ok) {
+        const body = await res.json();
+        const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(body?.data || body, null, 2));
+        const downloadAnchor = document.createElement('a');
+        downloadAnchor.setAttribute('href', dataStr);
+        downloadAnchor.setAttribute('download', 'JSG_Smile_Personal_Data_Export_' + new Date().toISOString().slice(0, 10) + '.json');
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        toast.success('Personal data archive exported successfully as per DPDPA Section 11');
+      } else {
+        toast.error('Failed to export personal data archive');
+      }
+    } catch {
+      toast.error('Network error during data export');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleSaveNominee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nomineeForm.nomineeName.trim() || !nomineeForm.nomineeRelationship.trim()) {
+      toast.error('Nominee name and relationship are required');
+      return;
+    }
+    try {
+      setIsSavingNominee(true);
+      const res = await api.post('/api/consent/nominee', nomineeForm);
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        toast.success('Nominee registered successfully under DPDPA Section 14');
+        setIsNomineeModalOpen(false);
+        fetchNominee();
+      } else {
+        toast.error(body?.message || 'Failed to save nominee');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
+    } finally {
+      setIsSavingNominee(false);
+    }
+  };
+
+  const handleRequestErasure = async () => {
+    if (!erasureConfirmed) {
+      toast.error('Please confirm acknowledgement of statutory retention');
+      return;
+    }
+    try {
+      setIsRequestingErasure(true);
+      const res = await api.post('/api/consent/request-erasure', {
+        reason: erasureReason.trim() || undefined,
+        confirmUnderstandStatutoryRetention: true,
+      });
+      const body = await res.json().catch(() => null);
+      if (res.ok) {
+        toast.success(body?.data?.message || 'Personal data erasure request recorded');
+        setIsErasureModalOpen(false);
+        setTimeout(() => {
+          window.location.href = '/login?reason=erasure_requested';
+        }, 2000);
+      } else {
+        toast.error(body?.message || 'Failed to submit erasure request');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Network error');
+    } finally {
+      setIsRequestingErasure(false);
+    }
+  };
 
   const fetchConsents = async () => {
     try {
@@ -74,6 +171,7 @@ export function ConsentManagementCard() {
 
   useEffect(() => {
     fetchConsents();
+    fetchNominee();
   }, []);
 
   const handleConfirmWithdraw = async () => {
@@ -301,6 +399,111 @@ export function ConsentManagementCard() {
               </div>
             </div>
           ))}
+        </div>
+      </div>
+
+      {/* Data Principal Rights Section under DPDP Act 2023 */}
+      <div className="p-5 sm:p-6 rounded-2xl border border-slate-200 bg-white space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+          <div>
+            <h4 className="text-xs font-black text-slate-900 uppercase tracking-wide flex items-center gap-2">
+              <Scale className="h-4 w-4 text-[#12335f]" aria-hidden="true" />
+              Data Principal Statutory Rights (DPDP Act 2023)
+            </h4>
+            <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+              Statutory self-service mechanisms for data access, nomination, and account erasure.
+            </p>
+          </div>
+          <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-md border border-emerald-200 self-start sm:self-auto">
+            DPDP Compliant
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+          {/* Right to Access / SAR */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-[#12335f]">
+                <FileText className="h-4 w-4" aria-hidden="true" />
+                <h5 className="text-xs font-extrabold text-slate-900">Right to Access (Section 11)</h5>
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
+                Download an export archive of your personal profile, consents history, and third-party fiduciary disclosures.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleExportPersonalData}
+              disabled={isExporting}
+              className="w-full text-xs font-bold border-slate-300 hover:bg-slate-100 rounded-xl"
+            >
+              {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" aria-hidden="true" /> : <Download className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />}
+              Export My Data (JSON)
+            </Button>
+          </div>
+
+          {/* Right to Nominate */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-[#12335f]">
+                <UserCheck className="h-4 w-4" aria-hidden="true" />
+                <h5 className="text-xs font-extrabold text-slate-900">Right to Nominate (Section 14)</h5>
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
+                {nominee ? (
+                  <span>Registered Nominee: <strong className="text-slate-900">{nominee.nomineeName}</strong> ({nominee.nomineeRelationship})</span>
+                ) : (
+                  'Designate an individual to exercise your rights in the event of death or incapacity.'
+                )}
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                if (nominee) {
+                  setNomineeForm({
+                    nomineeName: nominee.nomineeName || '',
+                    nomineeRelationship: nominee.nomineeRelationship || '',
+                    nomineeEmail: nominee.nomineeEmail || '',
+                    nomineePhone: nominee.nomineePhone || '',
+                    nomineeAddress: nominee.nomineeAddress || '',
+                  });
+                }
+                setIsNomineeModalOpen(true);
+              }}
+              className="w-full text-xs font-bold border-slate-300 hover:bg-slate-100 rounded-xl"
+            >
+              <UserPlus className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+              {nominee ? 'Update Nominee' : 'Register Nominee'}
+            </Button>
+          </div>
+
+          {/* Right to Erasure */}
+          <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2.5 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-2 text-red-600">
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                <h5 className="text-xs font-extrabold text-slate-900">Right to Erasure (Section 12)</h5>
+              </div>
+              <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
+                Request account deactivation and personal data erasure with statutory GFR/GST retention audit safeguards.
+              </p>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setIsErasureModalOpen(true)}
+              className="w-full text-xs font-bold text-red-600 border-red-200 hover:bg-red-50 rounded-xl"
+            >
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
+              Request Data Erasure
+            </Button>
+          </div>
         </div>
       </div>
 

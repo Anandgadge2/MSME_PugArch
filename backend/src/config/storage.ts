@@ -1,5 +1,12 @@
+import path from 'path';
 import multer from 'multer';
 import { ApiError } from '../utils/ApiError.js';
+
+const blockedExtensions = new Set([
+  '.exe', '.dll', '.bat', '.cmd', '.com', '.scr', '.ps1', '.vbs', '.js', '.jar',
+  '.msi', '.sh', '.php', '.php3', '.php4', '.phtml', '.phps', '.html', '.htm',
+  '.svg', '.jsp', '.asp', '.aspx', '.cgi', '.pl'
+]);
 
 const allowedMimeTypes = new Set([
   'application/pdf',
@@ -33,6 +40,14 @@ export const upload = multer({
     fileSize: 20 * 1024 * 1024
   },
   fileFilter: (_req, file, callback) => {
+    const originalName = String(file.originalname || '');
+    if (originalName.includes('\0') || originalName.includes('%00')) {
+      return callback(new ApiError(400, 'Invalid filename signature detected'));
+    }
+    const ext = path.extname(originalName).toLowerCase();
+    if (blockedExtensions.has(ext) || Boolean(originalName.toLowerCase().match(/\.(php|exe|sh|jsp|asp|bat)\./))) {
+      return callback(new ApiError(400, 'File extension is blocked by security policy'));
+    }
     if (!allowedMimeTypes.has(file.mimetype)) {
       return callback(new ApiError(400, 'Unsupported file type'));
     }

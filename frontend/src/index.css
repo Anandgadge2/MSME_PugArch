@@ -33,7 +33,34 @@
 
 :root,
 html {
+  font-size: 13.2px;
+}
+
+html.font-size-small {
+  font-size: 11.5px !important;
+}
+
+html.font-size-normal {
   font-size: 13.2px !important;
+}
+
+html.font-size-large {
+  font-size: 15.5px !important;
+}
+
+/* GIGW 3.0 & VPAT High Contrast Accessibility */
+html.high-contrast {
+  filter: contrast(115%);
+}
+
+html.high-contrast body {
+  background-color: #020617 !important;
+  color: #f8fafc !important;
+}
+
+html.high-contrast a {
+  color: #facc15 !important;
+  text-decoration: underline !important;
 }
 
 /* Expand page content container max-widths to use more screen real estate and reduce gaps */

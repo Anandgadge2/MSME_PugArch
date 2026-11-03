@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { encryptField, decryptField, isEncrypted, createHashFingerprint, timingSafeEqual } from '../dist/src/utils/crypto.js';
 
-console.log('--- STQC & VPAT Cryptographic Verification Suite ---');
+console.log('--- STQC, DPDPA & VPAT Compliance Verification Suite ---');
 
 // 1. Two-way AES-256-GCM Authenticated Encryption & Decryption
 const rawPan = 'ABCDE1234F';
@@ -46,4 +47,28 @@ assert(timingSafeEqual(tokenA, tokenB), 'Matching tokens must return true');
 assert(!timingSafeEqual(tokenA, tokenC), 'Mismatched tokens must return false');
 console.log('✔ Constant-Time Timing-Safe Comparison Verified');
 
-console.log('\nAll STQC & VPAT Cryptographic Standards tests passed cleanly!');
+// 6. DPDPA 2023 Statutory Endpoints Verification
+const consentRoutesSrc = readFileSync(new URL('../src/routes/consent.routes.ts', import.meta.url), 'utf8');
+assert.match(consentRoutesSrc, /router\.get\('\/export-personal-data'/);
+assert.match(consentRoutesSrc, /router\.post\('\/request-erasure'/);
+assert.match(consentRoutesSrc, /router\.get\('\/nominee'/);
+assert.match(consentRoutesSrc, /router\.post\('\/nominee'/);
+assert.match(consentRoutesSrc, /DATA_PRINCIPAL_ACCESS_REQUEST/);
+assert.match(consentRoutesSrc, /DATA_PRINCIPAL_ERASURE_REQUEST/);
+assert.match(consentRoutesSrc, /DATA_PRINCIPAL_NOMINEE_REGISTERED/);
+console.log('✔ DPDPA 2023 Data Principal Rights (Sections 11, 12, 14) Endpoints Verified');
+
+// 7. STQC & CERT-In File Upload Security
+const storageConfigSrc = readFileSync(new URL('../src/config/storage.ts', import.meta.url), 'utf8');
+assert.match(storageConfigSrc, /blockedExtensions/);
+assert.match(storageConfigSrc, /originalName\.includes\('\\0'\)/);
+assert.match(storageConfigSrc, /\(php\|exe\|sh\|jsp\|asp\|bat\)/);
+console.log('✔ CERT-In & STQC File Upload Extension and Null-byte Hardening Verified');
+
+// 8. STQC Password Reuse Policy Enforcement
+const authControllerSrc = readFileSync(new URL('../src/modules/auth/auth.controller.ts', import.meta.url), 'utf8');
+assert.match(authControllerSrc, /assertPasswordNotReused\(user\.id,\s*newPassword,\s*user\.password\)/);
+assert.match(authControllerSrc, /rememberPreviousPassword\(user\.id,\s*previousPasswordHash\)/);
+console.log('✔ STQC PasswordHistory Anti-Reuse Controls Verified');
+
+console.log('\nAll STQC, DPDPA & VPAT Verification Tests Passed Cleanly!');

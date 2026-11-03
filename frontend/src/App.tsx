@@ -379,6 +379,8 @@ const publicInfoRoutes = [
   '/terms-and-conditions',
   '/website-policies',
   '/privacy-policy',
+  '/screen-reader-access',
+  '/screen-reader',
   '/vendor-verification-policy',
   '/verification-policy',
   '/order-placement-policy',

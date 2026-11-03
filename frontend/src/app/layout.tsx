@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next';
 import { Plus_Jakarta_Sans, Inter } from 'next/font/google';
 import '../index.css';
+import { Providers } from '@/providers/Providers';
+import { AccessibilityBar } from '@/components/layout/AccessibilityBar';
+import { DevelopmentAgentation } from '@/components/DevelopmentAgentation';
 
 const plusJakarta = Plus_Jakarta_Sans({
   subsets: ['latin'],
@@ -15,8 +18,6 @@ const inter = Inter({
   display: 'swap',
   variable: '--font-inter',
 });
-import { Providers } from '@/providers/Providers';
-import { DevelopmentAgentation } from '@/components/DevelopmentAgentation';
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -34,6 +35,13 @@ export const metadata: Metadata = {
     icon: '/favicon.png',
     apple: '/logoo.png',
   },
+  other: {
+    'DC.Title': 'JsgSmile - MSME & Industry Linkage Procurement Portal',
+    'DC.Creator': 'District Industries Centre (DIC) Jharsuguda, Government of Odisha',
+    'DC.Language': 'en',
+    'DC.Coverage': 'Jharsuguda, Odisha, India',
+    'DC.Format': 'text/html',
+  }
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -53,6 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Skip to Main Content
         </a>
         <Providers>
+          <AccessibilityBar />
           {children}
           <DevelopmentAgentation />
         </Providers>
