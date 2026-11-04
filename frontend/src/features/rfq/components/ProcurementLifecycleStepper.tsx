@@ -764,7 +764,7 @@ export function ProcurementLifecycleStepper({
         } else if (!isBuyer && (isNonParticipant || (!isSellerParticipated && (isDeadlinePassed || currentStageId >= 2)))) {
           return {
             hasAction: false,
-            idleStatusText: 'Award Finalized'
+            idleStatusText: isBidAwarded || currentStageId >= 2 ? 'Award Finalized' : 'Awaiting Award'
           };
         } else if (!isBuyer && isAwardedToSeller === false) {
           return {

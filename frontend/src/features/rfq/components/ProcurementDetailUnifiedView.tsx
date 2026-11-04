@@ -7767,7 +7767,7 @@ export function ProcurementDetailUnifiedView(
     isBuyerSide ||
     isBuyerOrAdmin ||
     discloseEstimatedCost ||
-    isPostBiddingStage,
+    isReverseAuctionType,
   );
 
   const upperRefToken = String(
@@ -10417,6 +10417,25 @@ export function ProcurementDetailUnifiedView(
     );
   }, [awardedParticipation, props]);
 
+  const awardedContractAmount = useMemo(() => {
+    return Number(
+      activeAward?.awardedAmount ||
+      activeAward?.finalAmount ||
+      activeAward?.amount ||
+      activeAward?.counterOfferAmount ||
+      awardedParticipation?.awardedAmount ||
+      awardedParticipation?.finalAmount ||
+      awardedParticipation?.totalAmount ||
+      awardedParticipation?.quoteAmount ||
+      awardedParticipation?.quotedAmount ||
+      (props as any)?.awardedAmount ||
+      (props as any)?.contractAmount ||
+      (props as any)?.awardDetails?.amount ||
+      (props as any)?.bid?.awardedAmount ||
+      0
+    );
+  }, [activeAward, awardedParticipation, props]);
+
   const quotationListColumns = useMemo<ColumnDef<any>[]>(
     () => [
       {
@@ -11015,26 +11034,41 @@ export function ProcurementDetailUnifiedView(
           ? "Stage 1 initial quotation cutoff"
           : "Bidding window closing",
     },
-    shouldShowEstimatedCost
+    isBidAwarded && awardedContractAmount > 0
       ? {
-          label: "Estimated Value",
-          value: formatCurrency(props.estimatedValue),
-          icon: IndianRupee,
+          label: "Awarded Value",
+          value: formatCurrency(awardedContractAmount),
+          icon: Award,
           tone: "emerald" as Tone,
-          subtext: "Total budget estimate",
+          subtext: awardedVendorName
+            ? `Awarded to ${awardedVendorName}`
+            : "Final contract value",
         }
-      : {
-          label: "Estimated Value",
-          value: (
-            <span className="inline-flex items-center gap-1.5 text-slate-700 font-bold">
-              <span>Confidential</span>
-              <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
-            </span>
-          ),
-          icon: Lock,
-          tone: "slate" as Tone,
-          subtext: "(sealed)",
-        },
+      : shouldShowEstimatedCost
+        ? {
+            label: "Estimated Value",
+            value: formatCurrency(props.estimatedValue),
+            icon: IndianRupee,
+            tone: "emerald" as Tone,
+            subtext: discloseEstimatedCost
+              ? "Published tender budget"
+              : "Total budget estimate",
+          }
+        : {
+            label: "Estimated Value",
+            value: (
+              <span className="inline-flex items-center gap-1.5 text-slate-700 font-bold">
+                <span>Confidential</span>
+                <Lock className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
+              </span>
+            ),
+            icon: Lock,
+            tone: "slate" as Tone,
+            subtext:
+              isBiddingClosed || isDeadlinePassed || statusUpper === "CLOSED"
+                ? "Sealed during evaluation"
+                : "(sealed)",
+          },
     {
       label: "Buyer Contact",
       value: formatPrimitiveValue(buyerContactPerson, "buyerContact"),
