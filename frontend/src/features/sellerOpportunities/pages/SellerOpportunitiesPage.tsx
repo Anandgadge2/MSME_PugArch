@@ -166,7 +166,10 @@ const isClosedStatus = (status?: string) => {
     s.includes('ordered') ||
     s.includes('fulfilled') ||
     s.includes('terminated') ||
-    s.includes('disqualified')
+    s.includes('disqualified') ||
+    s.includes('ended') ||
+    s.includes('concluded') ||
+    s.includes('finalized')
   );
 };
 
@@ -448,32 +451,68 @@ const formatLocation = (loc?: string): string => {
   return cleaned || 'Location not specified';
 };
 
-function CountdownTimer({ endDate }: { endDate?: string }) {
-  const [timeLeft, setTimeLeft] = useState('');
+function LiveAuctionCountdown({ closingDate }: { closingDate?: string }) {
+  const [diff, setDiff] = useState<number | null>(() => {
+    if (!closingDate) return null;
+    const ts = getClosingTimestamp(closingDate);
+    return ts !== null ? ts - Date.now() : null;
+  });
 
   useEffect(() => {
-    if (!endDate) return;
-    const calculateTime = () => {
-      const diff = new Date(endDate).getTime() - Date.now();
-      if (diff <= 0) {
-        setTimeLeft('Ended');
-        return;
-      }
-      const days = Math.floor(diff / 86400000);
-      const hrs = Math.floor((diff % 86400000) / 3600000);
-      const mins = Math.floor((diff % 3600000) / 60000);
-      const secs = Math.floor((diff % 60000) / 1000);
-      
-      const pad = (n: number) => String(n).padStart(2, '0');
-      setTimeLeft(days > 0 ? `${days}d ${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s` : `${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`);
+    if (!closingDate) return;
+    const update = () => {
+      const ts = getClosingTimestamp(closingDate);
+      if (ts === null) return;
+      setDiff(ts - Date.now());
     };
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [closingDate]);
 
-    calculateTime();
-    const interval = setInterval(calculateTime, 1000);
-    return () => clearInterval(interval);
-  }, [endDate]);
+  const raw = closingDate;
+  if (!raw) return <span className="text-xs font-semibold text-slate-400">—</span>;
 
-  return <span className="font-mono text-xs font-black text-red-600 animate-pulse">{timeLeft}</span>;
+  if (diff === null || diff <= 0) {
+    return (
+      <div className="flex flex-col whitespace-nowrap leading-tight space-y-0.5">
+        <span className="text-xs font-bold text-slate-700">
+          {formatPureDate(raw)}
+        </span>
+        {hasExplicitTime(raw) && (
+          <span className="text-[10px] font-semibold text-slate-400">
+            {formatTime(raw)}
+          </span>
+        )}
+        <span className="text-[9px] font-black uppercase tracking-wider block mt-0.5 text-rose-600">
+          CLOSED
+        </span>
+      </div>
+    );
+  }
+
+  const days = Math.floor(diff / 86400000);
+  const hrs = Math.floor((diff % 86400000) / 3600000);
+  const mins = Math.floor((diff % 3600000) / 60000);
+  const secs = Math.floor((diff % 60000) / 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const timeStr = days > 0 ? `${days}d ${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s` : `${pad(hrs)}h : ${pad(mins)}m : ${pad(secs)}s`;
+
+  return (
+    <div className="space-y-1 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
+        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+        Live
+      </span>
+      <div className="block leading-none font-mono text-xs font-black text-rose-600">
+        <span className="font-mono text-xs font-black text-rose-600 animate-pulse">{timeStr}</span>
+      </div>
+    </div>
+  );
+}
+
+function CountdownTimer({ endDate }: { endDate?: string }) {
+  return <LiveAuctionCountdown closingDate={endDate} />;
 }
 
 export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRouteType?: OpportunityType | '' }) {
@@ -714,9 +753,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             : ((isMergedParticipated && isParticipatedOpportunity(existing)) ? existing.href : (parentOpp?.href || existing.href || opportunity.href));
           let bestDetailsHref = parentOpp?.detailsHref || existing.detailsHref || opportunity.detailsHref;
 
+          const auctionClosingTime = auctionOpp?.closingDate ? getClosingTimestamp(auctionOpp.closingDate) : null;
+          const isAuctionOppEnded = auctionClosingTime !== null && auctionClosingTime <= Date.now();
+
           if (auctionOpp) {
             const auctionStatusUpper = String(auctionOpp.status).toUpperCase();
-            const isAuctionActive = auctionStatusUpper === 'OPEN' || auctionStatusUpper === 'SCHEDULED' || auctionStatusUpper === 'LIVE';
+            const isAuctionActive = !isAuctionOppEnded && !isClosedStatus(auctionOpp.status) && (auctionStatusUpper === 'OPEN' || auctionStatusUpper === 'SCHEDULED' || auctionStatusUpper === 'LIVE' || auctionStatusUpper === 'E-RA LIVE');
             if (isAuctionActive) {
               bestActionLabel = 'Enter Live Auction Floor →';
               bestHref = auctionOpp.href;
@@ -729,9 +771,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             ? `${parentRef} • ${auctionRef}`
             : (parentRef || existing.sourceRef);
 
-          const mergedStatus = auctionOpp && ['LIVE', 'SCHEDULED', 'OPEN'].includes(String(auctionOpp.status).toUpperCase())
-            ? (String(auctionOpp.status).toUpperCase() === 'LIVE' ? 'e-RA Live' : 'e-RA Scheduled')
-            : (parentOpp?.status || existing.status);
+          const mergedStatus = auctionOpp && !isAuctionOppEnded && !isClosedStatus(auctionOpp.status) && ['LIVE', 'SCHEDULED', 'OPEN', 'E-RA LIVE'].includes(String(auctionOpp.status).toUpperCase())
+            ? (['LIVE', 'E-RA LIVE'].includes(String(auctionOpp.status).toUpperCase()) ? 'e-RA Live' : 'e-RA Scheduled')
+            : (isAuctionOppEnded ? 'Closed' : (parentOpp?.status || existing.status));
 
           deduped[existingIndex] = {
             ...existing,
@@ -936,6 +978,17 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           ? 'Already participated'
           : 'Check documents';
 
+        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
+        const effectiveClosingDate = bidSchedule.submissionDate
+          || bidSchedule.submissionDeadline
+          || bidSchedule.submissionEndDate
+          || bidSchedule.bidClosingDate
+          || bid.rawEndDate
+          || bid.endDate;
+        const bidCloseTs = effectiveClosingDate ? getClosingTimestamp(effectiveClosingDate) : null;
+        const isBidExpired = bidCloseTs !== null && bidCloseTs <= Date.now();
+        const isBidClosed = isClosedStatus(bid.status) || isBidExpired;
+
         let actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
         let href = `/bids/${canonicalBidId}/participate`;
         let detailsHref = `/bids/${canonicalBidId}`;
@@ -961,9 +1014,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           detailsHref = sellerRoutes.detail('LIMITED_TENDER', canonicalBidId);
           actionLabel = isBidParticipated ? 'Track Status' : 'Submit Bid';
         } else if (opportunityType === 'Reverse Auction') {
-          href = sellerRoutes.auctionLive(bid.id);
+          href = isBidClosed ? sellerRoutes.detail('REVERSE_AUCTION', bid.id) : sellerRoutes.auctionLive(bid.id);
           detailsHref = sellerRoutes.detail('REVERSE_AUCTION', bid.id);
-          actionLabel = 'Join Auction';
+          actionLabel = isBidClosed ? 'View Auction' : 'Join Auction';
         } else if (opportunityType === 'Direct Purchase') {
           href = `/bids/${canonicalBidId}`;
           detailsHref = `/bids/${canonicalBidId}`;
@@ -973,14 +1026,6 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           detailsHref = sellerRoutes.detail('RFQ', canonicalBidId);
           actionLabel = isBidParticipated ? 'Track Status' : 'Submit Quote';
         }
-
-        const bidSchedule = bid.technicalPacket?.schedule || (bid as any).schedule || {};
-        const effectiveClosingDate = bidSchedule.submissionDate
-          || bidSchedule.submissionDeadline
-          || bidSchedule.submissionEndDate
-          || bidSchedule.bidClosingDate
-          || bid.rawEndDate
-          || bid.endDate;
 
         const opportunity: SellerOpportunity = {
           id: `bid-${bid.id}`,
@@ -993,7 +1038,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           estimatedValue: toNumber(bid.estimatedValue),
           discloseEstimatedCost: Boolean(bid.discloseEstimatedCost ?? bid.payload?.discloseEstimatedCost ?? bid.payload?.basics?.discloseEstimatedCost ?? false),
           eligibility: bidEligibility,
-          status: bid.status || 'Open',
+          status: (opportunityType === 'Reverse Auction' && isBidClosed) ? 'Closed' : (bid.status || 'Open'),
           actionLabel,
           href,
           detailsHref,
@@ -1333,7 +1378,11 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           : (refNumber ? `${refNumber} — Live Reverse Auction` : 'Reverse Auction Opportunity');
         const sourceRef = refNumber ? `${refNumber} • ${auction.auctionCode || `RA-${auction.id}`}` : (auction.auctionCode || `RA-${auction.id}`);
         const auctionStatus = String(auction.statusEnum || auction.status || 'Scheduled').toUpperCase();
-        const isLive = auctionStatus === 'LIVE' || auctionStatus === 'OPEN';
+        const closingTime = auction.endTime ? getClosingTimestamp(auction.endTime) : null;
+        const isTimeExpired = closingTime !== null && closingTime <= Date.now();
+        const isClosedInStatus = isClosedStatus(auctionStatus) || auctionStatus === 'CLOSED' || auctionStatus === 'ENDED' || auctionStatus === 'COMPLETED';
+        const isLive = !isTimeExpired && !isClosedInStatus && (auctionStatus === 'LIVE' || auctionStatus === 'OPEN');
+        const isEnded = isTimeExpired || isClosedInStatus;
 
         let resolvedOppType: OpportunityType = 'Reverse Auction';
         const upperRef = String(refNumber || '').toUpperCase();
@@ -1364,9 +1413,9 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
           estimatedValue: benchmarkVal,
           discloseEstimatedCost: Boolean(auction.discloseEstimatedCost ?? true),
           eligibility: 'Check invitation',
-          status: isLive ? 'e-RA Live' : (auction.statusEnum || auction.status || 'Scheduled'),
+          status: isLive ? 'e-RA Live' : (isEnded ? 'Closed' : (auction.statusEnum || auction.status || 'Scheduled')),
           actionLabel: isLive ? 'Enter Live Auction Floor →' : 'View Auction Details',
-          href: sellerRoutes.auctionLive(auction.id),
+          href: isLive ? sellerRoutes.auctionLive(auction.id) : sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           detailsHref: sellerRoutes.detail('REVERSE_AUCTION', auction.id),
           sourceRef,
           publishedAt: auction.createdAt || auction.publishedAt || auction.startTime,
@@ -1789,18 +1838,13 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       sortKey: 'closingDate',
       width: 'w-[11.5%]',
       cell: (item) => {
-        const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
+        const isClosed = isClosedStatus(item.status) || !isOpenOpportunity(item, nowMs);
+        const isLiveAuction = (item.type === 'Reverse Auction' || item.type.includes('+ RA')) &&
+          ['OPEN', 'LIVE', 'E-RA LIVE'].includes(String(item.status).toUpperCase()) &&
+          !isClosed;
         if (isLiveAuction) {
           return (
-            <div className="space-y-1 whitespace-nowrap">
-              <span className="inline-flex items-center gap-1 text-[9px] font-black uppercase text-emerald-600 tracking-wider">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                Live
-              </span>
-              <div className="block leading-none font-mono text-xs font-black text-rose-600">
-                <CountdownTimer endDate={item.closingDate} />
-              </div>
-            </div>
+            <LiveAuctionCountdown closingDate={item.closingDate} />
           );
         }
 
@@ -1808,7 +1852,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         if (!raw) return <span className="text-xs font-semibold text-slate-400">—</span>;
         const hasTime = hasExplicitTime(raw);
         const daysLeft = getDaysLeftText(raw);
-        const isClosed = daysLeft.toLowerCase().includes('closed') || isClosedStatus(item.status);
+        const isClosedDeadline = isClosed || daysLeft.toLowerCase().includes('closed');
 
         return (
           <div className="flex flex-col whitespace-nowrap leading-tight space-y-0.5">
@@ -1823,7 +1867,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             {daysLeft && (
               <span className={cn(
                 "text-[9px] font-black uppercase tracking-wider block mt-0.5",
-                isClosed ? "text-rose-600" : "text-amber-600"
+                isClosedDeadline ? "text-rose-600" : "text-amber-600"
               )}>
                 {daysLeft}
               </span>
@@ -1912,7 +1956,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         );
       }
     }
-  ], []);
+  ], [nowMs]);
 
   const reset = () => {
     setQuery('');
@@ -2328,10 +2372,12 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
             <div className="space-y-4">
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {pageRows.map((item, index) => {
-                const isLiveAuction = item.type === 'Reverse Auction' && String(item.status).toUpperCase() === 'OPEN';
                 const closingTime = item.closingDate ? getClosingTimestamp(item.closingDate) : null;
-                const isClosingSoon = closingTime !== null && (closingTime - nowMs) <= 2 * 86400000 && (closingTime - nowMs) >= 0;
                 const closed = isClosedStatus(item.status) || (!isOpenOpportunity(item, nowMs));
+                const isLiveAuction = (item.type === 'Reverse Auction' || item.type.includes('+ RA')) &&
+                  ['OPEN', 'LIVE', 'E-RA LIVE'].includes(String(item.status).toUpperCase()) &&
+                  !closed;
+                const isClosingSoon = closingTime !== null && (closingTime - nowMs) <= 2 * 86400000 && (closingTime - nowMs) >= 0;
                 const participated = isParticipatedOpportunity(item);
                 return (
                   <div
@@ -2382,12 +2428,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                         <div>
                           <p className="text-[9px] text-slate-400 font-bold uppercase tracking-wider leading-none">Closing Date</p>
                           {isLiveAuction ? (
-                            <div className="mt-1 space-y-1">
-                              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase text-emerald-600 tracking-wider">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                Live
-                              </span>
-                              <CountdownTimer endDate={item.closingDate} />
+                            <div className="mt-1">
+                              <LiveAuctionCountdown closingDate={item.closingDate} />
                             </div>
                           ) : (
                             <div className="mt-1">
