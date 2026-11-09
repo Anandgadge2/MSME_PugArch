@@ -20,7 +20,7 @@ test('2. canAccessFileAsset validates offlinePaymentProof access for PO and invo
   
   assert.match(storageService, /offlinePaymentProof\.findFirst/);
   assert.match(storageService, /receiptFileId:\s*asset\.id/);
-  assert.match(storageService, /receiptFileUrl:\s*\{\s*contains:\s*`\/files\/\$\{asset\.id\}\/`\s*\}/);
+  assert.match(storageService, /receiptFileUrl:\s*\{\s*contains:\s*`\/files\/\$\{asset\.id\}`\s*\}/);
   assert.match(storageService, /po\s*&&\s*\(po\.buyerId === user\.id \|\| po\.sellerId === user\.id\)/);
   assert.match(storageService, /offlineProof\.uploadedByUserId === user\.id/);
 });
@@ -52,7 +52,7 @@ test('6. Frontend PaymentReceiptViewModal uses openFileAsset instead of unauthen
   const modalTsx = readFrontend('src/features/payments/components/PaymentReceiptViewModal.tsx');
   
   assert.match(modalTsx, /import\s*\{[^}]*openFileAsset[^}]*\}\s*from\s*'\.\.\/\.\.\/\.\.\/lib\/files'/);
-  assert.match(modalTsx, /openFileAsset\(\s*\{\s*id:\s*proof\.receiptFileId,\s*fileUrl:\s*proof\.receiptFileUrl/);
+  assert.match(modalTsx, /openFileAsset\(\s*\{\s*id:\s*proof(?:\?\.|\.)receiptFileId(?:\s*\|\|\s*[^,]+)?,\s*fileUrl:\s*proof(?:\?\.|\.)receiptFileUrl/);
   // Ensure unauthenticated plain anchor tag is not used for opening the proof
   assert.doesNotMatch(modalTsx, /<a\s+href=\{proof\.receiptFileUrl\}/);
 });
@@ -60,7 +60,7 @@ test('6. Frontend PaymentReceiptViewModal uses openFileAsset instead of unauthen
 test('7. Frontend pdfEngine injects auth token into fetch and canvas fallback for authenticated file loads', () => {
   const pdfEngine = readFrontend('src/lib/pdfEngine.ts');
   
-  assert.match(pdfEngine, /token\s*=\s*typeof window !== 'undefined' \? localStorage\.getItem\('token'\) : null/);
+  assert.match(pdfEngine, /(?:rawToken|token)\s*=\s*typeof window !== 'undefined' \? localStorage\.getItem\('token'\) : null/);
   assert.match(pdfEngine, /Authorization.*Bearer/);
   assert.match(pdfEngine, /credentials:\s*'include'/);
 });

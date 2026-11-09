@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { env } from '../config/env.js';
 
@@ -13,6 +14,12 @@ const weakPasswords = new Set([
   'jsgsmile123',
   'msme123456'
 ]);
+
+const SERVER_PEPPER = process.env.PASSWORD_PEPPER || env.FIELD_ENCRYPTION_KEY || 'msme_auth_pepper_default_2026';
+
+export const preHashWithPepper = (password: string): string => {
+  return crypto.createHmac('sha256', SERVER_PEPPER).update(password).digest('hex');
+};
 
 export const validatePasswordStrength = (password: string) => {
   const errors: string[] = [];
@@ -32,6 +39,12 @@ export const validatePasswordStrength = (password: string) => {
   };
 };
 
-export const hashPassword = (password: string) => bcrypt.hash(password, env.BCRYPT_COST);
+export const hashPassword = (password: string) => bcrypt.hash(preHashWithPepper(password), env.BCRYPT_COST);
 
-export const verifyPassword = (password: string, hash: string) => bcrypt.compare(password, hash);
+export const verifyPassword = async (password: string, hash: string): Promise<boolean> => {
+  // Primary check: against modern peppered hash (anti-GPU rainbow table)
+  const matchesPeppered = await bcrypt.compare(preHashWithPepper(password), hash);
+  if (matchesPeppered) return true;
+  // Fallback check: transparently verify legacy unpeppered bcrypt hash
+  return bcrypt.compare(password, hash);
+};

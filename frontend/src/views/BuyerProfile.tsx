@@ -3394,17 +3394,18 @@ export default function BuyerProfile() {
                   </div>
                 </div>
 
-                <div className="bg-slate-50 p-6 rounded-2xl flex items-start gap-4 group cursor-pointer" onClick={() => setFormData({ ...formData, gstNotLiable: !formData.gstNotLiable })}>
+                <label htmlFor="gstNotLiable" className="bg-slate-50 p-6 rounded-2xl flex items-start gap-4 group cursor-pointer">
                   <input
+                    id="gstNotLiable"
                     type="checkbox"
-                    checked={formData.gstNotLiable}
-                    onChange={() => { }}
-                    className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300"
+                    checked={Boolean(formData.gstNotLiable)}
+                    onChange={(e) => setFormData({ ...formData, gstNotLiable: e.target.checked })}
+                    className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300 focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer"
                   />
-                  <p className="text-xs font-medium text-slate-600 leading-relaxed  group-hover:text-slate-900 transition-colors">
+                  <span className="text-xs font-medium text-slate-600 leading-relaxed group-hover:text-slate-900 transition-colors">
                     I hereby declare that I am not liable to be registered under the ambit of GST.
-                  </p>
-                </div>
+                  </span>
+                </label>
 
                 <div className="bg-[#12335f]/5 border border-[#12335f]/10 p-6 rounded-3xl flex items-start gap-4">
                   <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center text-[#12335f] shadow-sm shrink-0">
@@ -3437,7 +3438,7 @@ export default function BuyerProfile() {
                       error={formErrors.personalOtp}
                       className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
                     />
-                    <p className="text-[11px] text-slate-400 font-medium mt-2 ml-1">
+                    <p className="text-[11px] text-slate-600 font-medium mt-2 ml-1">
                       Enter the 6-digit OTP sent to your registered email to automatically verify and save your changes.
                     </p>
                   </div>
@@ -3517,7 +3518,7 @@ export default function BuyerProfile() {
                         error={formErrors.verifyingEmail}
                         className="h-12 text-sm font-bold bg-slate-50/50 border-slate-200 rounded-xl"
                       />
-                      <p className="text-[10px] text-slate-400 font-medium  ml-1">Secondary email must be registered with your official organization domain.</p>
+                      <p className="text-[10px] text-slate-600 font-medium  ml-1">Secondary email must be registered with your official organization domain.</p>
                     </div>
                     <Input
                       label="Mobile (Official) *"
@@ -3564,11 +3565,11 @@ export default function BuyerProfile() {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">User Id</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">User Id</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.pan || user?.id}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mobile</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Mobile</p>
                       <p className="text-sm font-bold text-slate-700">******{profile?.mobile?.slice(-4) || 'XXXX'}</p>
                     </div>
                   </div>
@@ -3594,22 +3595,23 @@ export default function BuyerProfile() {
                       />
                     </div>
 
-                    <div className="bg-slate-50 p-6 rounded-3xl flex items-start gap-4 group cursor-pointer" onClick={() => setFormData({ ...formData, aadhaarConsent: !formData.aadhaarConsent })}>
+                    <label htmlFor="aadhaarConsent" className="bg-slate-50 p-6 rounded-3xl flex items-start gap-4 group cursor-pointer">
                       <input
+                        id="aadhaarConsent"
                         type="checkbox"
-                        checked={formData.aadhaarConsent}
-                        onChange={() => { }}
-                        className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300"
+                        checked={Boolean(formData.aadhaarConsent)}
+                        onChange={(e) => setFormData({ ...formData, aadhaarConsent: e.target.checked })}
+                        className="mt-1 w-4 h-4 text-[#12335f] rounded border-slate-300 focus:ring-2 focus:ring-[#12335f]/20 cursor-pointer"
                       />
                       <div className="space-y-3">
-                        <p className="text-[11px] font-medium text-slate-600 leading-relaxed  group-hover:text-slate-900 transition-colors">
+                        <span className="block text-[11px] font-medium text-slate-600 leading-relaxed group-hover:text-slate-900 transition-colors">
                           I, the holder of Aadhaar, hereby give my consent to JsgSmile Portal, for using my Aadhaar number as allotted by UIDAI for registration. JsgSmile Portal has informed me that my Aadhaar data will not be stored/shared.
-                        </p>
-                        <p className="text-[11px] font-medium text-slate-400 leading-relaxed ">
+                        </span>
+                        <span className="block text-[11px] font-medium text-slate-600 leading-relaxed">
                           मैं, आधार का धारक, एतदद्वारा अपनी पहचान प्राधिकरण द्वारा आवंटित अपने आधार नंबर को पंजीकरण हेतु प्रयोग में लाने हेतु JsgSmile Portal को अपनी सहमति प्रदान करता हूँ। JsgSmile Portal ने मुझे अवगत कराया है कि मेरे आधार डेटा को संग्रहीत/साझा नहीं किया जाएगा।
-                        </p>
+                        </span>
                       </div>
-                    </div>
+                    </label>
 
 
                   </div>
@@ -3637,31 +3639,31 @@ export default function BuyerProfile() {
                 <div className="space-y-12">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-y-8 gap-x-16">
                     <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organisation Type</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Organisation Type</p>
                       <p className="text-sm font-bold text-slate-700">
                         {getBusinessTypeLabel(profile?.businessType || (user as any)?.organization?.organizationType || (user as any)?.buyerProfile?.businessType)}
                       </p>
                     </div>
                     {profile?.msmeType && (
                       <div className="space-y-1">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">MSME Type</p>
+                        <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">MSME Type</p>
                         <p className="text-sm font-bold text-slate-700">{profile.msmeType.replace(/_/g, ' ')}</p>
                       </div>
                     )}
                     <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Ministry</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Ministry</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.ministry || 'Ministry of Education'}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Department</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Department</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.department || 'Department of Higher Education'}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Organisation</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Organisation</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.organizationName || 'National Institute of Technology (NIT)'}</p>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Office / Zone</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest">Office / Zone</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.officeZoneName || 'National institute of technology'}</p>
                     </div>
                   </div>
@@ -3692,15 +3694,15 @@ export default function BuyerProfile() {
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">User Id</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">User Id</p>
                       <p className="text-sm font-bold text-slate-700">{profile?.pan || user?.id}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Email</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Email</p>
                       <p className="text-sm font-bold text-slate-700">{user?.email}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Mobile</p>
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-widest mb-1">Mobile</p>
                       <p className="text-sm font-bold text-slate-700">******{profile?.mobile?.slice(-4) || 'XXXX'}</p>
                     </div>
                   </div>
@@ -3812,7 +3814,7 @@ export default function BuyerProfile() {
                       </div>
                       <div className="space-y-1">
                         <p className="text-xs font-black text-slate-900 uppercase ">I understand the consequences of deactivation</p>
-                        <p className="text-[10px] font-bold text-slate-400 ">I confirm that I am authorized to deactivate this organizational profile.</p>
+                        <p className="text-[10px] font-bold text-slate-600 ">I confirm that I am authorized to deactivate this organizational profile.</p>
                       </div>
                     </label>
 

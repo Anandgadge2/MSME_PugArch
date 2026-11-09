@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button } from '../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { AlertCircle, CheckCircle2, FileText, XCircle, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '../../lib/api';
@@ -89,12 +90,15 @@ export function RequestGstUpdateModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="gst-modal-title"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 p-0 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150"
     >
-      <div className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-150">
+      <FocusTrap onEscape={onClose} className="w-full sm:max-w-lg max-h-[92dvh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="gst-modal-title"
+          className="w-full sm:max-w-lg max-h-[92dvh] flex flex-col overflow-y-auto rounded-t-2xl sm:rounded-2xl bg-white p-5 sm:p-6 shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-150"
+        >
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-2.5">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-50 text-[#0c2340]">
@@ -112,7 +116,7 @@ export function RequestGstUpdateModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center text-slate-400 hover:bg-slate-100 hover:text-slate-600 active:scale-95"
+            className="rounded-lg p-2 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center text-slate-600 hover:bg-slate-100 hover:text-slate-900 active:scale-95"
             aria-label="Close dialog"
           >
             <XCircle className="h-5 w-5" />
@@ -156,7 +160,7 @@ export function RequestGstUpdateModal({
               value={newGstin}
               onChange={(e) => setNewGstin(e.target.value.toUpperCase())}
               placeholder="e.g. 21ABCDE1234F1Z5"
-              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-mono text-sm uppercase text-slate-900 placeholder:text-slate-400 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
+              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 font-mono text-sm uppercase text-slate-900 placeholder:text-slate-500 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
             />
             {cleanGst.length > 0 && (
               <div className="mt-1 flex items-center gap-1.5 text-[11px]">
@@ -197,9 +201,9 @@ export function RequestGstUpdateModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Explain the reason for amending or updating your GST registration (e.g. principal place change, conversion from composition, new state GST)..."
-              className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
+              className="w-full rounded-xl border border-slate-300 p-3 text-xs text-slate-900 placeholder:text-slate-500 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
             />
-            <span className="mt-1 block text-[10px] text-slate-400">
+            <span className="mt-1 block text-[10px] text-slate-600">
               Minimum 10 characters.
             </span>
           </div>
@@ -219,9 +223,9 @@ export function RequestGstUpdateModal({
               value={certificateUrl}
               onChange={(e) => setCertificateUrl(e.target.value)}
               placeholder="https://... or uploaded GST REG-06 document link"
-              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
+              className="w-full rounded-xl border border-slate-300 px-3.5 py-2.5 text-xs text-slate-900 placeholder:text-slate-500 focus:border-[#0c2340] focus:ring-1 focus:ring-[#0c2340] outline-none"
             />
-            <span className="mt-1 block text-[10px] text-slate-400">
+            <span className="mt-1 block text-[10px] text-slate-600">
               Provide link to your official Form GST REG-06 certificate for verification.
             </span>
           </div>
@@ -245,6 +249,7 @@ export function RequestGstUpdateModal({
           </div>
         </form>
       </div>
+      </FocusTrap>
     </div>
   );
 }

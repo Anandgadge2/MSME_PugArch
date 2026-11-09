@@ -356,7 +356,7 @@ const SidebarNavGroup = memo(function SidebarNavGroup({
         <div id={groupId} className={cn("space-y-1", !isCollapsed && "pl-3")}>
           {children.map(child => (
             <SidebarNavLink
-              key={`${item.label}-${child.label}`}
+              key={`${item.label}-${child.label}-${child.path || ''}`}
               item={child}
               isActive={isSidebarRouteActive(child.path, pathname, currentPathWithQuery)}
               isCollapsed={isCollapsed}
@@ -620,8 +620,8 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Disputes', path: '/seller/disputes', icon: AlertTriangle, roles: ['seller'], permission: 'dispute.view' },
 
     // Common items
-    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
-    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg'], permission: 'dashboard.view' },
+    { label: 'Notifications', path: '/settings/notifications', icon: Bell, roles: ['buyer', 'seller', 'admin', 'shg', 'master_admin'], permission: 'dashboard.view' },
+    { label: 'Help', path: '/help', icon: BookOpen, roles: ['buyer', 'seller', 'admin', 'shg', 'master_admin'], permission: 'dashboard.view' },
     { label: 'Onboarding Hub', path: isShgAccount ? '/shg/onboarding' : (user ? getSellerPortalPath(user) : '/seller/onboarding'), icon: Store, roles: ['seller', 'shg'] },
     { label: 'Onboarding Hub', path: '/buyer/onboarding', icon: Building2, roles: ['buyer'] },
     // { label: 'User Guide', path: '/user-guide', icon: BookOpen, roles: ['admin'] },
@@ -630,7 +630,6 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
   const isAllowed = useCallback((item: SidebarItem) => {
     if (!user) return false;
     const hasRole = item.roles.includes(user.role)
-      || (user.role === 'master_admin' && item.roles.includes('admin'))
       || (isShgAccount && (item.roles.includes('shg') || item.roles.includes('seller')));
     if (!hasRole) return false;
     if (item.featureCode && user.role !== 'master_admin' && Array.isArray(user.enabledFeatures) && user.enabledFeatures.length > 0) {
@@ -766,7 +765,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
             const isGroupActive = Boolean(item.children?.some(child => isSidebarRouteActive(child.path, pathname, currentPathWithQuery)));
             return (
               <SidebarNavGroup
-                key={item.label}
+                key={item.path ? `${item.label}-${item.path}` : `${item.label}-${item.roles?.join('-') || 'group'}`}
                 item={item}
                 pathname={pathname}
                 currentPathWithQuery={currentPathWithQuery}

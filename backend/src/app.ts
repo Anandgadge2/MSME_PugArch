@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { corsOptions, preflightCors } from './config/cors.js';
 import { applySecurityMiddleware } from './config/security.js';
+import { globalEgressSanitizer } from './middleware/egress-sanitizer.js';
 import apiRouter from './routes/index.js';
 
 export const createApp = () => {
@@ -13,17 +14,6 @@ export const createApp = () => {
   app.use(cors(corsOptions));
   applySecurityMiddleware(app);
 
-  // Explicitly block direct unauthenticated access to sensitive documents and private uploads
-  app.use(['/uploads/documents', '/uploads/private'], (_req, res) => {
-    res.status(401).json({
-      success: false,
-      error: {
-        code: 'UNAUTHORIZED_ACCESS',
-        message: 'Direct static access to sensitive documents is prohibited. Please access files via authenticated /api/files endpoints.'
-      }
-    });
-  });
-
   const staticAssetOptions = {
     maxAge: '1d',
     setHeaders: (res: express.Response) => {
@@ -31,6 +21,25 @@ export const createApp = () => {
       res.setHeader('Cache-Control', 'public, max-age=86400');
     }
   };
+
+  // STQC ASVS 12.3: Restrict direct static file serving to strictly public asset folders.
+  // Sensitive documents (KYC, PAN, invoices, private uploads) MUST go through authenticated /api/files.
+  const PUBLIC_UPLOAD_SUBDIRS = ['org-logos', 'banners', 'products', 'company-logos', 'category-photos'];
+
+  app.use('/uploads', (req, res, next) => {
+    const cleanPath = req.path.replace(/^\/+/, '');
+    const isPublic = PUBLIC_UPLOAD_SUBDIRS.some(dir => cleanPath.startsWith(dir));
+    if (!isPublic) {
+      return res.status(401).json({
+        success: false,
+        error: {
+          code: 'UNAUTHORIZED_ACCESS',
+          message: 'Direct static access to sensitive uploads is prohibited. Please access files via authenticated /api/files endpoints.'
+        }
+      });
+    }
+    next();
+  });
 
   // Serve static public uploads directory for local storage fallback
   app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads'), staticAssetOptions));
@@ -67,12 +76,11 @@ export const createApp = () => {
     res.end(faviconBuffer);
   });
 
-  // Static uploads directory
-  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+  // STQC GIGW 3.0 & UIDAI Global Outbound Egress Sanitizer
+  app.use(globalEgressSanitizer);
 
   // Unified API Routing layer
   app.use('/api', apiRouter);
 
   return app;
 };
-

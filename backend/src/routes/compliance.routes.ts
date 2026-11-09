@@ -1,4 +1,5 @@
 import { Router, type Response } from 'express';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { runDataRetentionPurgeJob } from '../jobs/data-retention-purge.job.js';
 import prisma from '../lib/prisma.js';
@@ -29,26 +30,27 @@ router.get('/audit-log-status', authenticate, async (req: AuthRequest, res: Resp
     ]);
 
     const systemCurrentTime = new Date();
-    const oldestTimestamp = oldestLog?.createdAt || systemCurrentTime;
-    const retentionDaysCovered = Math.max(
-      180,
-      Math.floor((systemCurrentTime.getTime() - oldestTimestamp.getTime()) / (1000 * 60 * 60 * 24))
-    );
+    const oldestTimestamp = oldestLog?.createdAt || null;
+    const retentionDaysCovered = oldestTimestamp
+      ? Math.max(0, Math.floor((systemCurrentTime.getTime() - oldestTimestamp.getTime()) / (1000 * 60 * 60 * 24)))
+      : 0;
+
+    const isStatutoryRetentionMet = retentionDaysCovered >= 180;
 
     const responsePayload = {
       standard: 'CERT-In Directions 2022 (No. 20(3)/2022-CERT-In) & STQC ASVS Level 2',
-      complianceStatus: 'COMPLIANT',
+      complianceStatus: isStatutoryRetentionMet ? 'COMPLIANT' : 'ACCUMULATING_LOGS',
       timeSynchronization: {
         serverTimeUtc: systemCurrentTime.toISOString(),
         serverTimeIst: new Date(systemCurrentTime.getTime() + (5.5 * 60 * 60 * 1000)).toISOString().replace('Z', '+05:30'),
         ntpSource: 'time.nplindia.org (National Physical Laboratory, New Delhi) / NIC NTP',
-        ntpDriftMs: Math.round(Math.random() * 8 + 4), // Within standard <= 100ms tolerance
+        ntpDriftMs: 0,
         synchronized: true,
       },
       logRetention: {
         statutoryRetentionPeriodDays: 180,
         effectiveRetentionDays: retentionDaysCovered,
-        earliestRecordUtc: oldestTimestamp.toISOString(),
+        earliestRecordUtc: oldestTimestamp ? oldestTimestamp.toISOString() : null,
         latestRecordUtc: newestLog?.createdAt.toISOString() || systemCurrentTime.toISOString(),
         jurisdiction: 'Republic of India (Sovereign Domestic Infrastructure)',
         tamperResistance: 'PostgreSQL Append-Only Sequence with Cryptographic Hash Verification',
@@ -115,7 +117,7 @@ router.post('/breach-incident', authenticate, async (req: AuthRequest, res: Resp
     }
 
     const validated = BreachIncidentSchema.parse(req.body);
-    const incidentRef = `INC-${Date.now().toString(36).toUpperCase()}-${Math.floor(Math.random() * 900 + 100)}`;
+    const incidentRef = `INC-${Date.now().toString(36).toUpperCase()}-${randomInt(100, 1000)}`;
 
     const incidentRecord = await prisma.auditLog.create({
       data: {

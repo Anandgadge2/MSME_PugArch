@@ -29,10 +29,10 @@ export const signRefreshToken = (payload: Omit<RefreshTokenPayload, 'type'>) =>
   } as SignOptions);
 
 export const verifyAccessToken = (token: string) =>
-  jwt.verify(token, env.JWT_ACCESS_SECRET) as Partial<AccessTokenPayload>;
+  jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ['HS256'] }) as Partial<AccessTokenPayload>;
 
 export const verifyRefreshToken = (token: string) =>
-  jwt.verify(token, env.JWT_REFRESH_SECRET) as Partial<RefreshTokenPayload>;
+  jwt.verify(token, env.JWT_REFRESH_SECRET, { algorithms: ['HS256'] }) as Partial<RefreshTokenPayload>;
 
 const accountTypeCode = (accountType: unknown) => {
   if (!accountType) return undefined;

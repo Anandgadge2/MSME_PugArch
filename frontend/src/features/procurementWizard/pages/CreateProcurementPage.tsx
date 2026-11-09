@@ -10611,6 +10611,8 @@ function ScheduleStepForm({
                 <Field label="Supplier Rank & Competitor Visibility" required>
                   <SearchableSelect
                     id="auction-rank-visibility"
+                    name="rankVisibility"
+                    aria-required="true"
                     aria-label="Supplier Rank & Competitor Visibility"
                     value={draft.auctionConfig.rankVisibility}
                     options={[

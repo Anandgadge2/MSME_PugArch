@@ -1,8 +1,9 @@
+import crypto from 'crypto';
 import type { Request, Response } from 'express';
 import { isProduction } from '../config/env.js';
 import prisma from '../lib/prisma.js';
 import { randomToken, sha256 } from '../utils/crypto.js';
-import { issueAuthResponse, verifyRefreshToken } from './token.service.js';
+import { issueAuthResponse, verifyRefreshToken, verifyAccessToken } from './token.service.js';
 import { getCache } from './cache.service.js';
 import { redisKeys } from '../constants/redis-keys.js';
 
@@ -11,6 +12,12 @@ const REFRESH_COOKIE = 'refreshToken';
 const CSRF_COOKIE = 'csrfToken';
 const ACCESS_MAX_AGE_MS = 2 * 60 * 60 * 1000;
 const REFRESH_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
+const CSRF_SECRET = process.env.CSRF_SECRET || process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'msme_csrf_hmac_secret_2026';
+
+export const generateSessionCsrfToken = (userId: string | number, sessionVersion: string | number = 1): string => {
+  return crypto.createHmac('sha256', CSRF_SECRET).update(`${userId}:${sessionVersion}`).digest('hex');
+};
 
 type AuthUserForTokens = {
   id: number;
@@ -23,7 +30,7 @@ type AuthUserForTokens = {
 };
 
 const cookieBase = {
-  sameSite: isProduction ? ('none' as const) : ('lax' as const),
+  sameSite: 'lax' as const,
   secure: isProduction,
   path: '/'
 };
@@ -54,8 +61,25 @@ export const setCsrfCookie = (res: Response, token?: string) => {
   return csrfToken;
 };
 
-export const setAuthCookies = (res: Response, tokens: { accessToken: string; refreshToken: string }) => {
-  const csrfToken = setCsrfCookie(res);
+export const setAuthCookies = (
+  res: Response,
+  tokens: { accessToken: string; refreshToken: string },
+  user?: { id: string | number; sessionVersion?: string | number }
+) => {
+  let sessionCsrf: string | undefined;
+  if (user?.id) {
+    sessionCsrf = generateSessionCsrfToken(user.id, user.sessionVersion ?? 1);
+  } else if (tokens?.accessToken) {
+    try {
+      const claims = verifyAccessToken(tokens.accessToken);
+      if (claims?.id) {
+        sessionCsrf = generateSessionCsrfToken(claims.id, claims.sessionVersion ?? 1);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  const csrfToken = setCsrfCookie(res, sessionCsrf);
   res.cookie(ACCESS_COOKIE, tokens.accessToken, {
     ...cookieBase,
     httpOnly: true,
@@ -101,7 +125,7 @@ export const revokeRefreshSession = async (refreshToken: string) => {
 export const issueCookieAuth = async (req: Request, res: Response, user: AuthUserForTokens) => {
   const tokens = issueAuthResponse(user);
   await createRefreshSession(req, user.id, tokens.refreshToken);
-  const csrfToken = setAuthCookies(res, tokens);
+  const csrfToken = setAuthCookies(res, tokens, user);
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,
@@ -157,7 +181,7 @@ export const rotateRefreshToken = async (req: Request, res: Response, refreshTok
       }
     })
   ]);
-  const csrfToken = setAuthCookies(res, tokens);
+  const csrfToken = setAuthCookies(res, tokens, user);
   return {
     token: tokens.accessToken,
     accessToken: tokens.accessToken,

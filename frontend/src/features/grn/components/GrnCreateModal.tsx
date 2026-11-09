@@ -6,6 +6,7 @@ import { CheckCircle2, Plus, Trash2, X } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { getApi } from '../../shared/apiClient';
 import { runWithToast } from '../../../lib/toast';
 import { useCreateGrn, useGrnEligibility } from '../hooks';
@@ -166,21 +167,27 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
-            <div className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
-                    <div>
-                        <h3 className="text-sm font-black uppercase tracking-widest">Create Goods Receipt Note</h3>
-                        <p className="mt-0.5 text-[10px] text-white/70">Record the goods received against a Purchase Order</p>
+            <FocusTrap onEscape={onClose} className="w-full max-w-3xl max-h-[90vh] flex flex-col">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="grn-modal-title"
+                    className="w-full max-h-[90vh] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl flex flex-col"
+                >
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
+                        <div>
+                            <h3 id="grn-modal-title" className="text-sm font-black uppercase tracking-widest">Create Goods Receipt Note</h3>
+                            <p className="mt-0.5 text-[10px] text-white/70">Record the goods received against a Purchase Order</p>
+                        </div>
+                        <button onClick={onClose} aria-label="Close modal" className="rounded-md p-1 text-white/80 hover:bg-white/10">
+                            <X className="h-4 w-4" />
+                        </button>
                     </div>
-                    <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10">
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
 
                 <div className="flex-1 overflow-y-auto p-5 space-y-4">
                     {/* PO selector */}
                     <div className="space-y-1">
-                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Purchase Order</label>
+                        <label className="text-[10px] font-black uppercase tracking-wider text-slate-600">Purchase Order</label>
                         {loadingPos ? (
                             <p className="text-xs text-slate-500">Loading POs...</p>
                         ) : pos.length === 0 ? (
@@ -213,7 +220,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                     {selectedPo && (
                         <>
                             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Order Summary</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-600">Order Summary</p>
                                 <p className="mt-1 font-black text-slate-900">{selectedPo.poNumber} · {selectedPo.title}</p>
                                 <p className="text-[11px] text-slate-600">Seller: {selectedPo.seller?.name}</p>
                             </div>
@@ -221,7 +228,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                             {/* Line items */}
                             <div>
                                 <div className="flex items-center justify-between mb-2">
-                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">Line Items ({items.length})</p>
+                                    <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">Line Items ({items.length})</p>
                                     <Button type="button" variant="outline" size="sm" onClick={addItem}>
                                         <Plus className="mr-1 h-3 w-3" /> Add
                                     </Button>
@@ -254,7 +261,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                                                     <NumberField label="Accepted" value={item.acceptedQty} onChange={v => updateItem(idx, { acceptedQty: v })} />
                                                     <NumberField label="Rejected" value={item.rejectedQty} onChange={v => updateItem(idx, { rejectedQty: v })} />
                                                     <div>
-                                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">UOM</label>
+                                                        <label className="text-[9px] font-black uppercase tracking-wider text-slate-600">UOM</label>
                                                         <input
                                                             type="text"
                                                             value={item.unitOfMeasure}
@@ -282,7 +289,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Remarks (optional)</label>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600">Remarks (optional)</label>
                                 <textarea
                                     value={remarks}
                                     onChange={e => setRemarks(e.target.value)}
@@ -292,7 +299,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                                 />
                             </div>
                             <div className="space-y-1">
-                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Inspection Note (optional)</label>
+                                <label className="text-[10px] font-black uppercase tracking-wider text-slate-600">Inspection Note (optional)</label>
                                 <textarea
                                     value={inspectionNote}
                                     onChange={e => setInspectionNote(e.target.value)}
@@ -368,6 +375,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
                     </div>
                 </div>
             </div>
+            </FocusTrap>
         </div>
     );
 }
@@ -375,7 +383,7 @@ export function GrnCreateModal({ onClose, onCreated, initialPoId }: Props) {
 function NumberField({ label, value, onChange }: { label: string; value: string | number; onChange: (v: number) => void }) {
     return (
         <div>
-            <label className="text-[9px] font-black uppercase tracking-wider text-slate-400">{label}</label>
+            <label className="text-[9px] font-black uppercase tracking-wider text-slate-600">{label}</label>
             <input
                 type="number"
                 step="0.001"

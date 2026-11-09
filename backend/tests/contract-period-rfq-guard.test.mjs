@@ -52,7 +52,7 @@ test('4. CreateProcurementPage payloadJson attaches serviceDetails strictly for 
   const code = fs.readFileSync(wizardPath, 'utf8');
 
   assert.ok(
-    code.includes("serviceDetails: draft.basics.whatAreYouBuying === 'Services'"),
+    code.includes("serviceDetails: draft.basics.procurementCategory === 'SERVICES'"),
     'payloadJson must strictly gate serviceDetails to Services purchases and set null for goods/BOQ'
   );
 });

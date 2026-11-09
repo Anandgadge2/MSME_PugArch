@@ -7763,13 +7763,6 @@ export function ProcurementDetailUnifiedView(
     );
   }, [isCompletingTechEvalSuccess, statusUpper, lifecycleStageUpper]);
 
-  const shouldShowEstimatedCost = Boolean(
-    isBuyerSide ||
-    isBuyerOrAdmin ||
-    discloseEstimatedCost ||
-    isReverseAuctionType,
-  );
-
   const upperRefToken = String(
     targetId ||
     props.displayId ||
@@ -7821,6 +7814,13 @@ export function ProcurementDetailUnifiedView(
         .toUpperCase()
         .includes("REVERSE AUCTION") ||
       pathname.includes("/reverse-auction"));
+
+  const shouldShowEstimatedCost = Boolean(
+    isBuyerSide ||
+    isBuyerOrAdmin ||
+    discloseEstimatedCost ||
+    isReverseAuctionType,
+  );
 
   const isDirectPurchaseType =
     !isRateContractType &&

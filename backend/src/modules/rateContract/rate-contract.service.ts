@@ -355,9 +355,23 @@ export async function validateCallOffOrderRequest(
     };
   });
 
+  // Enforce cumulative monetary drawdown cap against totalContractValue
+  const newOrderAmount = resolvedItems.reduce((sum, item) => sum + item.totalAmount, 0);
+  const totalContractValue = Number(utilization.totalContractValue || contract.value || 0);
+  const cumulativeSpent = Number(utilization.totalOrderedValue || 0);
+
+  if (totalContractValue > 0 && (cumulativeSpent + newOrderAmount > totalContractValue)) {
+    throw new ApiError(
+      400,
+      'Order exceeds remaining monetary value of Rate Contract',
+      'RATE_CONTRACT_CAP_EXCEEDED'
+    );
+  }
+
   return {
     resolvedItems,
     totalCallOffQty,
+    totalOrderAmount: newOrderAmount,
     utilization
   };
 }

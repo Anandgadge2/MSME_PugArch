@@ -6,7 +6,7 @@ import { ApiError } from '../../utils/ApiError.js';
 import { normalizeSpaces } from '../../utils/sanitize.js';
 import { auditLog } from '../../modules/audit/audit.service.js';
 import { checkOwnership } from '../../middleware/ownership.js';
-import { gcpStorageProvider } from './gcp-storage.service.js';
+import { gcpStorageProvider, isPrivateDocument, encryptBufferEnvelope, decryptBufferEnvelope } from './gcp-storage.service.js';
 import { mapEntityTypeToFolder } from './storage-folders.enum.js';
 import { scanBufferForMalware } from './malware-scanner.service.js';
 
@@ -861,7 +861,10 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
   }
 
   let signedUrl = asset.url || `/uploads/${asset.key}` || `/api/files/${asset.id}/view`;
-  if (asset.storageProvider !== 'local') {
+  const isPrivate = isPrivateDocument({ folder: asset.key, metadata: { entityType: asset.entityType } }, asset.key);
+  if (isPrivate) {
+    signedUrl = `/api/files/${asset.id}/view`;
+  } else if (asset.storageProvider !== 'local') {
     try {
       const provider = providerFor(asset.storageProvider as StorageProviderName);
       signedUrl = await provider.getSignedUrl(asset.key, {
@@ -939,7 +942,13 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
         const localTarget = path.resolve(process.cwd(), 'uploads', assetObj.key);
         fs.mkdirSync(path.dirname(localTarget), { recursive: true });
         if (!fs.existsSync(localTarget)) {
-          fs.writeFileSync(localTarget, buffer);
+          if (isPrivateDocument({ folder: assetObj.key, metadata: { entityType: assetObj.entityType } }, assetObj.key)) {
+            void encryptBufferEnvelope(buffer).then(encBuf => {
+              if (!fs.existsSync(localTarget)) fs.writeFileSync(localTarget, encBuf);
+            }).catch(() => {});
+          } else {
+            fs.writeFileSync(localTarget, buffer);
+          }
         }
       }
     } catch {
@@ -957,7 +966,8 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
   for (const cand of localCandidates) {
     if (cand && fs.existsSync(cand) && !fs.statSync(cand).isDirectory()) {
-      const buffer = fs.readFileSync(cand);
+      const rawBuffer = fs.readFileSync(cand);
+      const buffer = await decryptBufferEnvelope(rawBuffer);
       return cacheAndReturn(buffer, assetObj?.mimeType || 'application/octet-stream');
     }
   }
@@ -966,7 +976,8 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
     try {
       const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(3000) });
       if (response.ok) {
-        const buffer = Buffer.from(await response.arrayBuffer());
+        const rawBuffer = Buffer.from(await response.arrayBuffer());
+        const buffer = await decryptBufferEnvelope(rawBuffer);
         return cacheAndReturn(buffer, signed.asset.mimeType || response.headers.get('content-type') || 'application/octet-stream');
       }
       // If GCS signed URL returned 404, the object definitely does not exist in storage
@@ -1001,7 +1012,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
       ]);
 
       if (buffer && buffer.length > 0) {
-        return cacheAndReturn(buffer, assetObj.mimeType || 'application/octet-stream');
+        return cacheAndReturn(await decryptBufferEnvelope(buffer), assetObj.mimeType || 'application/octet-stream');
       }
     } catch (gcpErr: any) {
       if (gcpErr instanceof ApiError) throw gcpErr;

@@ -3453,8 +3453,14 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
         const newMobile = String(rawData.mobile).trim();
         // Only validate and update if the mobile is genuinely different from the current user's mobile.
         if (newMobile !== (currentUser?.mobile || '').trim()) {
+          const mobileFingerprint = createHashFingerprint(newMobile, 'mobile');
           const existingMobile = await prisma.user.findFirst({
-            where: { mobile: newMobile },
+            where: {
+              OR: [
+                { mobileFingerprint },
+                { mobile: newMobile }
+              ]
+            },
             select: { id: true }
           });
           if (existingMobile && existingMobile.id !== userId) return res.status(409).json({ message: 'Mobile number already in use. Please use unique details.' });
@@ -3483,7 +3489,7 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
     let aadhaarNumberToUse = rawData.aadhaarNumber;
     const isAadhaarMasked = rawData.aadhaarNumber && String(rawData.aadhaarNumber).includes('*');
     if (isAadhaarMasked && existingProfile) {
-      aadhaarNumberToUse = existingProfile.aadhaarNumber;
+      aadhaarNumberToUse = existingProfile.aadhaarMasked;
     }
 
     const sellerValidationErrors = validateSellerOnboardingPayload({ ...rawData, pan: panToUse });
@@ -3571,8 +3577,7 @@ app.post('/api/seller/register', authenticate, authorize('seller'), async (req: 
     const flags = await flagDuplicateSellerIdentifiers({
       userId,
       pan: panToUse,
-      gstNumbers,
-      aadhaarNumber: null
+      gstNumbers
     });
     if (flags.length > 0) await markUserForManualReview(userId);
 
@@ -4459,8 +4464,14 @@ app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: Au
         // Only validate and update if the submitted mobile is different from the current user's mobile.
         // Avoids false "already in use" errors for seller-turned-buyer using their own registered mobile.
         if (newMobile !== (existingUser.mobile || '').trim()) {
+          const mobileFingerprint = createHashFingerprint(newMobile, 'mobile');
           const existingMobile = await prisma.user.findFirst({
-            where: { mobile: newMobile },
+            where: {
+              OR: [
+                { mobileFingerprint },
+                { mobile: newMobile }
+              ]
+            },
             select: { id: true }
           });
           if (existingMobile && existingMobile.id !== userId) return res.status(409).json({ message: 'Mobile number already in use. Please use unique details.' });
@@ -4490,7 +4501,6 @@ app.post('/api/buyer/register', authenticate, authorize('buyer'), async (req: Au
       email: rawData.email,
       mobile,
       alternateMobile: rawData.alternateMobile,
-      aadhaarNumber: null,
       aadhaarVerified: rawData.aadhaarVerified ?? false,
       country: rawData.country,
       city: rawData.city,
@@ -5883,9 +5893,12 @@ app.get('/api/messages/users/search', authenticate, authorize('buyer', 'seller',
     };
     if (allowedRoles.includes(role)) where.role = role;
     if (q) {
+      const qDigits = q.replace(/\D/g, '');
+      const qMobileFingerprint = qDigits ? createHashFingerprint(qDigits, 'mobile') : undefined;
       where.OR = [
         { name: { contains: q, mode: 'insensitive' } },
         { email: { contains: q, mode: 'insensitive' } },
+        ...(qMobileFingerprint ? [{ mobileFingerprint: qMobileFingerprint }] : []),
         { mobile: { contains: q, mode: 'insensitive' } },
         { userId: { contains: q, mode: 'insensitive' } },
         { buyerProfile: { organizationName: { contains: q, mode: 'insensitive' } } },

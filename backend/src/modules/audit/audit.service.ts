@@ -25,6 +25,17 @@ const persistAuditLog = async (payload: AuditPayload) => {
     ...(payload.metadata || {})
   });
 
+  // CERT-In 2022 Direction Sec 2(v): Continuous structured emission to external SIEM/WORM stream
+  logger.info({
+    event: 'CERT_IN_SECURITY_AUDIT_LOG',
+    timestamp: new Date().toISOString(),
+    actorUserId: actorId,
+    action: payload.action,
+    entityType: payload.entityType,
+    entityId: payload.entityId,
+    audit: safeMetadata
+  }, '[CERT-In SIEM Audit Stream]');
+
   try {
     if ('auditLog' in prisma) {
       await (prisma as any).auditLog.create({
@@ -36,13 +47,10 @@ const persistAuditLog = async (payload: AuditPayload) => {
           details: safeMetadata
         }
       });
-      return;
     }
   } catch (error: any) {
     logger.warn({ message: error?.message || String(error) }, '[Audit] Failed to persist audit log to database');
   }
-
-  logger.info({ audit: maskSensitive(payload) }, '[Audit] Logged audit payload');
 };
 
 export const auditLog = async (payload: AuditPayload) => {

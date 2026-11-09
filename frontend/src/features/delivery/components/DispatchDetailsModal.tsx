@@ -45,6 +45,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from '@/components/ui/loader';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { cn } from '../../../lib/utils';
 import { api } from '../../../lib/api';
@@ -762,11 +763,14 @@ export function DispatchDetailsModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-sm overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="dispatch-dialog-title"
     >
-      <div className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+      <FocusTrap onEscape={onClose} className="w-full max-w-5xl max-h-[92vh] flex flex-col my-auto">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dispatch-dialog-title"
+          className="w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
           <div className="flex items-center gap-3">
@@ -839,7 +843,7 @@ export function DispatchDetailsModal({
           {/* Top Commercial & Consignee Summary (Common to all roles) */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <Receipt className="h-3.5 w-3.5 text-blue-600" />
                 PO Commercials
               </span>
@@ -850,7 +854,7 @@ export function DispatchDetailsModal({
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-indigo-600" />
                 Consignee
               </span>
@@ -858,13 +862,13 @@ export function DispatchDetailsModal({
                 {consigneeOrgName}
               </p>
               <div className="flex items-start gap-1 pt-1 text-[11px] text-slate-500">
-                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                <MapPin className="h-3.5 w-3.5 text-slate-500 shrink-0 mt-0.5" />
                 <span className="line-clamp-2" title={consigneeAddress}>{consigneeAddress}</span>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <Boxes className="h-3.5 w-3.5 text-emerald-600" />
                 Consignment Units
               </span>
@@ -942,7 +946,7 @@ export function DispatchDetailsModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
                   {/* Carrier */}
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Carrier Partner
                     </span>
                     <p className="text-xs font-black text-slate-900 truncate">
@@ -962,7 +966,7 @@ export function DispatchDetailsModal({
 
                   {/* Tracking / AWB */}
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Tracking / AWB / LR
                     </span>
                     {trackingNumber ? (
@@ -973,7 +977,7 @@ export function DispatchDetailsModal({
                         <button
                           type="button"
                           onClick={() => copyToClipboard(trackingNumber, 'AWB / Tracking Number')}
-                          className="rounded p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
+                          className="rounded p-1 text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
                           title="Copy Tracking Number"
                           aria-label="Copy Tracking Number"
                         >
@@ -981,13 +985,13 @@ export function DispatchDetailsModal({
                         </button>
                       </div>
                     ) : (
-                      <p className="text-xs text-slate-400 italic">Not yet assigned</p>
+                      <p className="text-xs text-slate-600 italic">Not yet assigned</p>
                     )}
                   </div>
 
                   {/* ETA */}
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Expected Delivery (ETA)
                     </span>
                     <p className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
@@ -998,7 +1002,7 @@ export function DispatchDetailsModal({
 
                   {/* Mode & Vehicle */}
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Mode &amp; Vehicle
                     </span>
                     <p className="text-xs font-bold text-slate-900 truncate">
@@ -1015,7 +1019,7 @@ export function DispatchDetailsModal({
                 {/* Driver & Contact & E-Way Bill */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-1 border-t border-slate-100">
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Driver / Dispatch Agent
                     </span>
                     <p className="text-xs font-bold text-slate-800">
@@ -1033,7 +1037,7 @@ export function DispatchDetailsModal({
                   </div>
 
                   <div className="rounded-lg bg-slate-50 p-3 border border-slate-100 space-y-1">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 block">
                       Statutory E-Way Bill (Rule 138)
                     </span>
                     {ewayBillNumber ? (
@@ -1044,7 +1048,7 @@ export function DispatchDetailsModal({
                         <button
                           type="button"
                           onClick={() => copyToClipboard(ewayBillNumber, 'E-Way Bill Number')}
-                          className="rounded p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
+                          className="rounded p-1 text-slate-500 hover:text-slate-700 hover:bg-slate-200/60 transition cursor-pointer"
                           title="Copy E-Way Bill"
                           aria-label="Copy E-Way Bill"
                         >
@@ -1114,7 +1118,7 @@ export function DispatchDetailsModal({
                       )}
                     </div>
                   ) : (
-                    <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-400">
+                    <div className="rounded-lg border border-dashed border-slate-200 p-4 text-center text-xs text-slate-600">
                       Delivery Challan will be available once uploaded by the seller upon dispatch.
                     </div>
                   )}
@@ -1241,7 +1245,7 @@ export function DispatchDetailsModal({
                           : "bg-white text-slate-900"
                       )}
                     />
-                    <p className="text-[9px] text-slate-400 mt-1">Air Waybill or Lorry Receipt reference from your carrier</p>
+                    <p className="text-[9px] text-slate-600 mt-1">Air Waybill or Lorry Receipt reference from your carrier</p>
                   </div>
 
                   <div>
@@ -1287,7 +1291,7 @@ export function DispatchDetailsModal({
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 pt-2 border-t border-slate-100">
                   <div>
                     <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                      <User className="h-3 w-3 text-slate-400" />
+                      <User className="h-3 w-3 text-slate-500" />
                       Driver / Dispatch Agent
                     </label>
                     <input
@@ -1308,10 +1312,10 @@ export function DispatchDetailsModal({
                   <div>
                     <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                       <span className="flex items-center gap-1">
-                        <Phone className="h-3 w-3 text-slate-400" />
+                        <Phone className="h-3 w-3 text-slate-500" />
                         Driver Phone / Contact
                       </span>
-                      <span className="text-[9px] font-medium text-slate-400">10 digits</span>
+                      <span className="text-[9px] font-medium text-slate-600">10 digits</span>
                     </label>
                     <input
                       type="tel"
@@ -1347,7 +1351,7 @@ export function DispatchDetailsModal({
                   <div>
                     <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                       <span>Vehicle Registration No.</span>
-                      <span className="text-[9px] font-medium text-slate-400">Indian format</span>
+                      <span className="text-[9px] font-medium text-slate-600">Indian format</span>
                     </label>
                     <input
                       type="text"
@@ -1435,7 +1439,7 @@ export function DispatchDetailsModal({
                 <div>
                   <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                     <span>E-Way Bill Number (Rule 138)</span>
-                    <span className="text-[9px] font-medium text-slate-400">12 digits (numeric)</span>
+                    <span className="text-[9px] font-medium text-slate-600">12 digits (numeric)</span>
                   </label>
                   <input
                     type="text"
@@ -1765,6 +1769,7 @@ export function DispatchDetailsModal({
           )}
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

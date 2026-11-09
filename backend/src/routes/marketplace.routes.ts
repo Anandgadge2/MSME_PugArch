@@ -3822,15 +3822,14 @@ router.post('/marketplace/requirements/:id/responses', authenticate, authorize('
             }
 
             for (const target of broadcastTargets) {
+                // Statutory Sealed Bid Secrecy: Redact offeredPrice, unitPrice, taxBreakdown, and sellerOrgId from public broadcasts prior to opening
                 broadcastToProcurement(target, {
                     type: 'QUOTATION_SUBMITTED',
                     requirementId: target,
                     procurementId: finalBidToInvalidate?.id || target,
                     responseId: (response as any)?.id,
-                    offeredPrice: (response as any)?.offeredPrice ? Number((response as any).offeredPrice) : undefined,
-                    sellerOrgId: sellerOrganizationId || null,
                     timestamp: new Date().toISOString()
-                });
+                } as any);
             }
         } catch (bcErr) {
             console.error('[Marketplace Response] Failed to broadcastToProcurement', bcErr);

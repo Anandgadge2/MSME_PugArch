@@ -28,6 +28,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
 import { openFileAsset, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -766,12 +767,12 @@ export function SupplierQuotationDetailView({
       {isModal ? (
         <div className="flex flex-wrap items-center justify-between gap-3 pb-1 border-b border-slate-200/80">
           <div className="flex items-center gap-2 text-xs text-slate-600 font-medium min-w-0">
-            <span className="text-slate-400 font-bold uppercase text-[10px]">Tender Reference:</span>
+            <span className="text-slate-600 font-bold uppercase text-[10px]">Tender Reference:</span>
             <span className="font-mono font-bold text-slate-800 bg-slate-100 px-2 py-0.5 rounded border border-slate-200 text-[11px] truncate">
               {bidId || bid?.id || 'Bid'}
             </span>
             {bid?.title && (
-              <span className="text-slate-400 hidden md:inline truncate max-w-sm" title={bid.title}>
+              <span className="text-slate-600 hidden md:inline truncate max-w-sm" title={bid.title}>
                 • {bid.title}
               </span>
             )}
@@ -825,7 +826,7 @@ export function SupplierQuotationDetailView({
               <span>Back to Results</span>
             </Button>
 
-            <nav className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-400">
+            <nav className="hidden sm:flex items-center gap-1.5 text-xs font-semibold text-slate-600">
               <span className="hover:text-slate-700 cursor-pointer" onClick={onBack}>
                 Procurements
               </span>
@@ -915,26 +916,26 @@ export function SupplierQuotationDetailView({
             {/* Clean Contact Strip */}
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-slate-600 font-medium pt-1">
               <span className="inline-flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <Building2 className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                 Representative: <strong className="text-slate-800">{contactPerson}</strong>
               </span>
 
               {sellerEmail && sellerEmail !== '—' && sellerEmail !== 'Not provided' && (
                 <span className="inline-flex items-center gap-1.5 break-all">
-                  <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <Mail className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                   <a href={`mailto:${sellerEmail}`} className="hover:underline text-slate-700">{sellerEmail}</a>
                 </span>
               )}
 
               {sellerMobile && sellerMobile !== '—' && sellerMobile !== 'Not listed' && (
                 <span className="inline-flex items-center gap-1.5">
-                  <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                  <Phone className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                   <span className="text-slate-700">{sellerMobile}</span>
                 </span>
               )}
 
               <span className="inline-flex items-center gap-1.5 text-slate-500">
-                <Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                <Clock className="h-3.5 w-3.5 text-slate-500 shrink-0" />
                 Submitted: <span className="font-semibold text-slate-700">{formatDateTime(submittedAt)}</span>
               </span>
             </div>
@@ -991,7 +992,7 @@ export function SupplierQuotationDetailView({
                 <span>Base: <strong className="text-slate-800">{formatCurrency(quotedBaseAmount)}</strong></span>
                 <span>GST {gstPercentage}%: <strong className="text-slate-800">{formatCurrency(taxAmount)}</strong></span>
               </div>
-              <p className="text-[10px] text-slate-400 font-medium">
+              <p className="text-[10px] text-slate-600 font-medium">
                 F.O.R Destination • All taxes &amp; delivery included
               </p>
             </div>
@@ -1257,7 +1258,7 @@ export function SupplierQuotationDetailView({
                         key={idx}
                         className="hover:bg-blue-50/20 transition-colors align-top group"
                       >
-                        <td className="px-4 py-3.5 text-center font-bold text-slate-400 font-mono text-xs">
+                        <td className="px-4 py-3.5 text-center font-bold text-slate-600 font-mono text-xs">
                           {idx + 1}
                         </td>
 
@@ -1272,7 +1273,7 @@ export function SupplierQuotationDetailView({
                           )}
                           {(line.technicalSpecs || line.specifications) && (
                             <div className="mt-2 rounded-lg bg-slate-50 border border-slate-200/80 p-2 text-[10.5px] text-slate-700 leading-relaxed whitespace-pre-wrap">
-                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 block mb-0.5">
                                 Offered Specifications:
                               </span>
                               {line.technicalSpecs || line.specifications}
@@ -1282,11 +1283,11 @@ export function SupplierQuotationDetailView({
 
                         <td className="px-4 py-3.5 text-xs text-slate-700">
                           <div>
-                            <span className="text-slate-400 font-bold text-[9.5px] uppercase">Make:</span>{' '}
+                            <span className="text-slate-600 font-bold text-[9.5px] uppercase">Make:</span>{' '}
                             <strong className="text-slate-900">{line.makeBrand || makeBrand || '—'}</strong>
                           </div>
                           <div className="text-[11px] text-slate-600 mt-0.5">
-                            <span className="text-slate-400 font-bold text-[9.5px] uppercase">Model:</span>{' '}
+                            <span className="text-slate-600 font-bold text-[9.5px] uppercase">Model:</span>{' '}
                             <span className="font-semibold text-slate-800">{line.model || model || '—'}</span>
                           </div>
                         </td>
@@ -1305,7 +1306,7 @@ export function SupplierQuotationDetailView({
                         <td className="px-4 py-3.5 text-right font-mono font-semibold text-slate-800 text-xs tabular-nums">
                           {isTechnicallyDisqualified ? (
                             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
-                              <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                              <Lock className="h-3 w-3 text-slate-500" /> Sealed
                             </span>
                           ) : (
                             unitPrice ? formatCurrency(unitPrice) : '—'
@@ -1321,7 +1322,7 @@ export function SupplierQuotationDetailView({
                         <td className="px-4 py-3.5 text-right font-mono font-bold text-emerald-800 text-xs tabular-nums bg-emerald-50/40">
                           {isTechnicallyDisqualified ? (
                             <span className="inline-flex items-center gap-1 rounded-md bg-slate-100 border border-slate-200 px-2 py-0.5 text-[10.5px] font-bold text-slate-600">
-                              <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                              <Lock className="h-3 w-3 text-slate-500" /> Sealed
                             </span>
                           ) : (
                             lineTot ? formatCurrency(lineTot) : totalEvaluatedPrice ? formatCurrency(totalEvaluatedPrice) : '—'
@@ -1390,7 +1391,7 @@ export function SupplierQuotationDetailView({
           {/* Pricing Summary Card */}
           <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Commercial Term Summary</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Commercial Term Summary</span>
               <p className="text-xs text-slate-600">
                 Rate Basis: <strong>F.O.R Destination</strong> • Includes Packaging, Forwarding, Freight, Transit Insurance, and GST.
               </p>
@@ -1398,16 +1399,16 @@ export function SupplierQuotationDetailView({
             {isTechnicallyDisqualified ? (
               <div className="flex flex-wrap items-center gap-4 text-xs">
                 <div className="text-right">
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
+                  <span className="text-slate-600 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
                   <span className="inline-flex items-center gap-1 font-bold text-slate-500 text-xs">
-                    <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                    <Lock className="h-3 w-3 text-slate-500" /> Sealed
                   </span>
                 </div>
                 <div className="h-8 w-px bg-slate-200 hidden sm:block" />
                 <div className="text-right">
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
+                  <span className="text-slate-600 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
                   <span className="inline-flex items-center gap-1 font-bold text-slate-500 text-xs">
-                    <Lock className="h-3 w-3 text-slate-400" /> Sealed
+                    <Lock className="h-3 w-3 text-slate-500" /> Sealed
                   </span>
                 </div>
                 <div className="h-8 w-px bg-slate-200 hidden sm:block" />
@@ -1421,12 +1422,12 @@ export function SupplierQuotationDetailView({
             ) : (
               <div className="flex flex-wrap items-center gap-4 text-xs">
                 <div className="text-right">
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
+                  <span className="text-slate-600 block text-[10px] uppercase font-bold">Base Quoted Amount</span>
                   <strong className="text-slate-800 text-sm font-black">{formatCurrency(quotedBaseAmount)}</strong>
                 </div>
                 <div className="h-8 w-px bg-slate-200 hidden sm:block" />
                 <div className="text-right">
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
+                  <span className="text-slate-600 block text-[10px] uppercase font-bold">Total GST ({gstPercentage}%)</span>
                   <strong className="text-slate-800 text-sm font-black">{formatCurrency(taxAmount)}</strong>
                 </div>
                 <div className="h-8 w-px bg-slate-200 hidden sm:block" />
@@ -1454,7 +1455,7 @@ export function SupplierQuotationDetailView({
                     Supplier Cover Note &amp; Proposal Remarks
                   </h3>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">
+                <span className="text-[10px] font-bold text-slate-600 uppercase">
                   Official Declaration
                 </span>
               </div>
@@ -1467,7 +1468,7 @@ export function SupplierQuotationDetailView({
                   </p>
                 </div>
               ) : (
-                <div className="rounded-xl bg-slate-50/50 border border-dashed border-slate-200 p-6 text-center text-xs text-slate-400 font-medium">
+                <div className="rounded-xl bg-slate-50/50 border border-dashed border-slate-200 p-6 text-center text-xs text-slate-600 font-medium">
                   No special cover note or remarks submitted with this quotation.
                 </div>
               )}
@@ -1498,11 +1499,11 @@ export function SupplierQuotationDetailView({
               {/* Delivery & Validity Strip */}
               <div className="grid grid-cols-2 gap-2 pt-2 text-xs">
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Delivery SLA</span>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase block">Delivery SLA</span>
                   <strong className="text-slate-900 mt-0.5 block">{deliveryTimeline}</strong>
                 </div>
                 <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase block">Quotation Validity</span>
+                  <span className="text-[10px] font-bold text-slate-600 uppercase block">Quotation Validity</span>
                   <strong className="text-slate-900 mt-0.5 block">{result.validity || result.details?.validity || '90 Days from opening'}</strong>
                 </div>
               </div>
@@ -1614,7 +1615,7 @@ export function SupplierQuotationDetailView({
                         </div>
 
                         <div className="pt-2 border-t border-rose-150 flex items-center justify-between">
-                          <span className="text-[10px] text-slate-400 font-semibold">Packet Unopened</span>
+                          <span className="text-[10px] text-slate-600 font-semibold">Packet Unopened</span>
                           <button
                             type="button"
                             disabled
@@ -1646,7 +1647,7 @@ export function SupplierQuotationDetailView({
                             {doc.name}
                           </p>
                           {doc.fileName && doc.fileName !== doc.name && (
-                            <p className="text-[10px] text-slate-400 font-mono truncate" title={doc.fileName}>
+                            <p className="text-[10px] text-slate-600 font-mono truncate" title={doc.fileName}>
                               {doc.fileName}
                             </p>
                           )}
@@ -1679,7 +1680,7 @@ export function SupplierQuotationDetailView({
                 })}
               </div>
             ) : (
-              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-400 font-medium">
+              <div className="rounded-xl border border-dashed border-slate-200 p-8 text-center text-xs text-slate-600 font-medium">
                 No additional document files attached to this quotation.
               </div>
             )}
@@ -1769,16 +1770,17 @@ export function SupplierQuotationDetailModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="supplier-quotation-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-slate-900/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200"
       onClick={onClose}
     >
-      <div
-        className="relative w-full max-w-5xl my-auto max-h-[92vh] flex flex-col bg-slate-50 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <FocusTrap onEscape={onClose} className="w-full max-w-5xl my-auto max-h-[92vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="supplier-quotation-modal-title"
+          className="relative w-full max-w-5xl my-auto max-h-[92vh] flex flex-col bg-slate-50 rounded-2xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-200"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Modal Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-slate-200 bg-white shadow-2xs shrink-0">
           <div className="flex items-center gap-2 min-w-0">
@@ -1803,7 +1805,7 @@ export function SupplierQuotationDetailModal({
             type="button"
             onClick={onClose}
             aria-label="Close modal"
-            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-400 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
+            className="flex h-8 w-8 items-center justify-center rounded-xl text-slate-600 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-4.5 w-4.5" />
           </button>
@@ -1824,6 +1826,7 @@ export function SupplierQuotationDetailModal({
           />
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

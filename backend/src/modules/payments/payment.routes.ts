@@ -347,7 +347,7 @@ router.post('/offline-proof/:proofId/verify', async (req: AuthRequest, res) => {
       (paymentTx && paymentTx.payeeId === req.user?.id) ||
       (po && (po.sellerId === req.user?.id || po.seller?.organizationId === (req.user as any)?.organizationId));
 
-    if (!isPlatformAdmin && !isSellerPayee && req.user?.role !== 'admin' && req.user?.role !== 'seller') {
+    if (!isPlatformAdmin && !isSellerPayee) {
       throw new ApiError(403, 'Permission denied to verify this payment proof', 'PERMISSION_DENIED');
     }
 
@@ -455,7 +455,7 @@ router.post('/offline-proof/:proofId/reject', async (req: AuthRequest, res) => {
       (paymentTx && paymentTx.payeeId === req.user?.id) ||
       (po && (po.sellerId === req.user?.id || po.seller?.organizationId === (req.user as any)?.organizationId));
 
-    if (!isPlatformAdmin && !isSellerPayee && req.user?.role !== 'admin' && req.user?.role !== 'seller') {
+    if (!isPlatformAdmin && !isSellerPayee) {
       throw new ApiError(403, 'Permission denied to reject this payment proof', 'PERMISSION_DENIED');
     }
 

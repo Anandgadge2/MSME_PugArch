@@ -18,6 +18,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
 import { GLOSSARY_DICTIONARY } from '../../../components/common/ProcurementGlossaryTooltip';
 
@@ -132,16 +133,17 @@ export function ProcurementAdvisorModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Procurement Advisor: Help Me Choose"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200"
       onClick={onClose}
     >
-      <div
-        className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <FocusTrap onEscape={onClose} className="w-full max-w-xl">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Procurement Advisor: Help Me Choose"
+          className="w-full max-w-xl bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Header */}
         <div className="bg-gradient-to-r from-[#12335f] to-[#1e4986] p-4 sm:p-5 text-white flex items-center justify-between">
           <div className="flex items-center gap-2.5">
@@ -475,6 +477,7 @@ export function ProcurementAdvisorModal({
           )}
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

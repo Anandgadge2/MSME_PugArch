@@ -256,54 +256,74 @@ router.get('/procurement-bids/my', authenticate, requireAccountType('seller', 'b
       ? { tender: { buyerId: currentUserId } }
       : {};
 
-  const bids = await prisma.bid.findMany({
-    where,
-    include: {
-      tender: {
-        include: {
-          buyer: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              mobile: true,
-              buyerProfile: {
-                select: {
-                  organizationName: true,
-                  organizationType: true,
-                  city: true,
-                  state: true
+  const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+  const parsedLimit = parseInt(String(req.query.limit || '20'), 10) || 20;
+  const limit = Math.min(Math.max(1, parsedLimit), 100);
+  const skip = (page - 1) * limit;
+
+  const [totalCount, bids] = await Promise.all([
+    prisma.bid.count({ where }),
+    prisma.bid.findMany({
+      where,
+      skip,
+      take: limit,
+      include: {
+        tender: {
+          include: {
+            buyer: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                mobile: true,
+                buyerProfile: {
+                  select: {
+                    organizationName: true,
+                    organizationType: true,
+                    city: true,
+                    state: true
+                  }
+                }
+              }
+            }
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            mobile: true,
+            sellerProfile: {
+              select: {
+                businessName: true,
+                organizationType: true,
+                offices: {
+                  select: {
+                    city: true,
+                    state: true
+                  }
                 }
               }
             }
           }
         }
       },
-      seller: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          mobile: true,
-          sellerProfile: {
-            select: {
-              businessName: true,
-              organizationType: true,
-              offices: {
-                select: {
-                  city: true,
-                  state: true
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    orderBy: { createdAt: 'desc' }
-  });
+      orderBy: { createdAt: 'desc' }
+    })
+  ]);
 
-  return res.json(maskSensitive(bids));
+  const totalPages = Math.ceil(totalCount / limit);
+
+  return res.json({
+    data: maskSensitive(bids),
+    pagination: {
+      page,
+      limit,
+      totalCount,
+      totalPages
+    }
+  });
 }));
 
 router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyncRoute(async (req, res) => {
@@ -348,24 +368,31 @@ router.get('/procurement-bids/:bidId', validate({ params: idParamSchema }), asyn
       }).catch(() => []);
       const linkedAuctionIds = linkedAuctions.map((a: any) => a.id);
 
+      const isNumericBidId = typeof directBid.id === 'number' || (/^\d+$/.test(String(directBid.id)) && Number(directBid.id) <= 2147483647);
+      const numericBidId = isNumericBidId ? Number(directBid.id) : null;
+      const auctionId = directBid.auctionId ? Number(directBid.auctionId) : (directBid.sourceId ? Number(directBid.sourceId) : null);
+      const allAuctionIds = Array.from(new Set([...linkedAuctionIds, ...(auctionId ? [auctionId] : [])]));
+
       const poOrConditions: any[] = [
-        { bidId: directBid.id },
+        ...(numericBidId !== null ? [{ bidId: numericBidId }] : []),
         ...(awardIds.length > 0 ? [{ sourceType: 'procurement_bid_award', sourceId: { in: awardIds } }] : []),
-        ...(linkedAuctionIds.length > 0 ? [{ sourceType: 'auction', sourceId: { in: linkedAuctionIds } }] : [])
+        ...(allAuctionIds.length > 0 ? [{ sourceType: 'auction', sourceId: { in: allAuctionIds } }] : [])
       ];
 
-      const pos = await (prisma as any).purchaseOrder.findMany({
-        where: { OR: poOrConditions },
-        include: {
-          invoices: { include: { invoiceFile: true, paymentSlipFile: true } },
-          grns: { include: { items: true } },
-          items: true
-        },
-        orderBy: { createdAt: 'desc' }
-      }).catch((poErr: any) => {
-        logger.warn({ poErr: poErr?.message || poErr }, '[ProcurementBid] Failed to fetch purchase orders for bid');
-        return [];
-      });
+      const pos = poOrConditions.length > 0
+        ? await (prisma as any).purchaseOrder.findMany({
+            where: { OR: poOrConditions },
+            include: {
+              invoices: { include: { invoiceFile: true, paymentSlipFile: true } },
+              grns: { include: { items: true } },
+              items: true
+            },
+            orderBy: { createdAt: 'desc' }
+          }).catch((poErr: any) => {
+            logger.warn({ poErr: poErr?.message || poErr }, '[ProcurementBid] Failed to fetch purchase orders for bid');
+            return [];
+          })
+        : [];
 
       if (pos.length > 0) {
         (serialized as any).purchaseOrders = pos;

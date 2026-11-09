@@ -135,7 +135,7 @@ export function DocumentPreviewModal({
           <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 sm:px-6 sm:py-4">
             <div className="min-w-0">
               <h3 id="doc-preview-title" className="truncate text-sm font-black uppercase text-slate-900 sm:text-lg">{previewDocument.label}</h3>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Document Preview</p>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-600">Document Preview</p>
             </div>
             <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
               {activeDownloadUrl ? (
@@ -175,7 +175,7 @@ export function DocumentPreviewModal({
                 {/* Scrollable image container */}
                 <div ref={scrollContainerRef} className="h-full w-full overflow-auto overscroll-contain p-4 flex items-center justify-center">
                   {isImageLoading && (
-                    <div className="flex flex-col items-center justify-center gap-2 text-slate-400 py-12">
+                    <div className="flex flex-col items-center justify-center gap-2 text-slate-600 py-12">
                       <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
                       <span className="text-xs font-semibold uppercase tracking-wider">Loading preview...</span>
                     </div>

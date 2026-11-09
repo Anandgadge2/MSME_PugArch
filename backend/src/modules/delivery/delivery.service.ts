@@ -15,6 +15,7 @@
  *    business operation but they are logged.
  */
 
+import { randomInt, createHash } from 'crypto';
 import prisma from '../../lib/prisma.js';
 import { parsePenaltyTerms } from '../rateContract/rate-contract.service.js';
 import { ApiError } from '../../utils/ApiError.js';
@@ -1810,10 +1811,10 @@ export const deliveryService = {
     ensureNotTerminal(delivery);
 
     // Generate secure 6-digit numeric OTP
-    const rawOtp = String(Math.floor(100000 + Math.random() * 900000));
+    const rawOtp = String(randomInt(100000, 1000000));
     // Save hash (simple hash for comparison)
-    const crypto = await import('crypto');
-    const otpHash = crypto.createHash('sha256').update(rawOtp).digest('hex');
+    // Using top-level crypto
+    const otpHash = createHash('sha256').update(rawOtp).digest('hex');
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24h validity
 
     await db.deliveryTracking.update({
@@ -1857,8 +1858,8 @@ export const deliveryService = {
       throw new ApiError(400, 'Delivery OTP has expired. Please request a new OTP.', 'OTP_EXPIRED');
     }
 
-    const crypto = await import('crypto');
-    const inputHash = crypto.createHash('sha256').update(body.otp.trim()).digest('hex');
+    // Using top-level crypto
+    const inputHash = createHash('sha256').update(body.otp.trim()).digest('hex');
 
     if (inputHash !== delivery.deliveryOtpHash) {
       throw new ApiError(400, 'Invalid Delivery OTP code. Please double-check and try again.', 'OTP_INVALID');

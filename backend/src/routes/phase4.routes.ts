@@ -22,7 +22,7 @@ import { approveOnboardingAndEnsureOrganization, createOrUpdatePendingOrganizati
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
-import { invalidateUserAuthCache } from '../services/rbac.service.js';
+import { invalidateUserAuthCache, isMasterAdmin } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail, getOrGeneratePurchaseOrderPdfBuffer, getOrGenerateInvoicePdfBuffer } from '../services/invoice-pdf.service.js';
@@ -2932,6 +2932,7 @@ router.post('/buyer/settings/change-password/send-otp', authenticate, authorize(
 router.post('/buyer/settings/change-password', authenticate, authorize('buyer'), asyncRoute(async (req, res) => {
   const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
   const { hashPassword, validatePasswordStrength } = await import('../services/password.service.js');
+  const { assertPasswordNotReused, rememberPreviousPassword } = await import('../services/password-history.service.js');
 
   const { newPassword, otp } = req.body || {};
   if (!newPassword || !otp) throw new ApiError(400, 'New password and OTP are required');
@@ -2949,6 +2950,15 @@ router.post('/buyer/settings/change-password', authenticate, authorize('buyer'),
     throw new ApiError(400, 'Password does not meet security requirements: ' + passwordValidation.errors.join(', '));
   }
 
+  try {
+    await assertPasswordNotReused(user.id, newPassword, user.password);
+  } catch (err: any) {
+    if (err.message === 'PASSWORD_REUSED') {
+      throw new ApiError(400, 'New password cannot match your current or recently used passwords', 'PASSWORD_REUSED');
+    }
+    throw err;
+  }
+
   const hashedPassword = await hashPassword(newPassword);
   await db.user.update({
     where: { id: user.id },
@@ -2959,6 +2969,7 @@ router.post('/buyer/settings/change-password', authenticate, authorize('buyer'),
       lastPasswordChangeAt: new Date()
     }
   });
+  await rememberPreviousPassword(user.id, hashedPassword);
 
   await consumeOtp('forgot_password', user.email);
   await auditWrite(req, 'buyer.password_changed', 'user', user.id, {});
@@ -3872,20 +3883,95 @@ const RAW_MIME_TYPES: Record<string, string> = {
   '.txt': 'text/plain'
 };
 
-router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
+router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const rawKey = req.params.key;
-  if (!rawKey) throw new ApiError(400, 'Key is required', 'KEY_REQUIRED');
+  if (!rawKey || typeof rawKey !== 'string') {
+    throw new ApiError(400, 'Key is required', 'KEY_REQUIRED');
+  }
 
-  const ext = path.extname(rawKey).toLowerCase();
+  // Null byte or control character detection
+  if (rawKey.includes('\0') || /[\x00-\x1f]/.test(rawKey)) {
+    throw new ApiError(403, 'Path traversal detected', 'PATH_TRAVERSAL_DETECTED');
+  }
+
+  // Double-encoding check and decoding
+  let decodedKey = rawKey;
+  try {
+    decodedKey = decodeURIComponent(rawKey);
+    if (decodeURIComponent(decodedKey) !== decodedKey) {
+      decodedKey = decodeURIComponent(decodedKey);
+    }
+  } catch {
+    throw new ApiError(400, 'Invalid key encoding', 'INVALID_ENCODING');
+  }
+
+  if (decodedKey.includes('\0') || /[\x00-\x1f]/.test(decodedKey)) {
+    throw new ApiError(403, 'Path traversal detected', 'PATH_TRAVERSAL_DETECTED');
+  }
+
+  // Sanitize and normalize decodedKey and rawKey using path.posix.normalize
+  const normalizedRawKey = path.posix.normalize(rawKey.replace(/\\/g, '/'));
+  let normalizedKey = path.posix.normalize(decodedKey.replace(/\\/g, '/')).replace(/^(\/|\.)+/, '');
+
+  // Reject any key where decodedKey.includes('..') || rawKey.includes('..') immediately with HTTP 403 PATH_TRAVERSAL_DETECTED
+  if (
+    rawKey.includes('..') ||
+    decodedKey.includes('..') ||
+    normalizedRawKey.includes('..') ||
+    normalizedKey.includes('..') ||
+    path.isAbsolute(decodedKey) ||
+    decodedKey.startsWith('/')
+  ) {
+    throw new ApiError(403, 'Path traversal detected', 'PATH_TRAVERSAL_DETECTED');
+  }
+
+  decodedKey = normalizedKey;
+
+  // Public storage whitelist check: marketplace-visible asset prefixes allowed unauthenticated
+  // Requires the normalized key to strictly begin with a whitelisted prefix and NOT escape via ..
+  const PUBLIC_ASSET_PREFIXES = [
+    'categories/photos/',
+    'public/',
+    'banners/',
+    'products/',
+    'documents/',
+  ];
+  const isPublicPrefix = (
+    (decodedKey.startsWith('categories/photos/') || decodedKey.startsWith('public/') || PUBLIC_ASSET_PREFIXES.some(prefix => decodedKey.startsWith(prefix))) &&
+    !decodedKey.includes('..') &&
+    !rawKey.includes('..')
+  );
+
+  if (!req.user && !isPublicPrefix) {
+    throw new ApiError(401, 'Authentication required to access this file', 'AUTHENTICATION_REQUIRED');
+  }
+
+  // Check for path traversal sequences
+  const baseDirectories = [
+    path.resolve(process.cwd(), 'uploads'),
+    path.resolve(process.cwd(), 'backend', 'uploads'),
+    path.resolve(process.cwd(), 'public'),
+    path.resolve(process.cwd(), 'frontend', 'public')
+  ];
+
+  for (const baseDir of baseDirectories) {
+    const localPath = path.resolve(baseDir, decodedKey);
+    const relative = path.relative(baseDir, localPath);
+    if (relative.startsWith('..') || path.isAbsolute(relative) || path.isAbsolute(decodedKey)) {
+      throw new ApiError(403, 'Path traversal detected', 'PATH_TRAVERSAL_DETECTED');
+    }
+  }
+
+  const ext = path.extname(decodedKey).toLowerCase();
   let contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
-  const cacheControl = rawKey.startsWith('categories/photos/') && req.query.v
+  const cacheControl = decodedKey.startsWith('categories/photos/') && req.query.v
     ? 'public, max-age=31536000, s-maxage=31536000, immutable'
     : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
 
   // 1. Try authenticated GCS client
   try {
     const bucket = getGCSBucket();
-    const file = bucket.file(rawKey);
+    const file = bucket.file(decodedKey);
     const [exists] = await file.exists();
     if (exists) {
       const [buffer] = await file.download();
@@ -3901,7 +3987,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
   // 2. Try fetching public storage URL
   try {
     const bucketName = getGCSBucketName();
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${rawKey}`;
+    const publicUrl = `https://storage.googleapis.com/${bucketName}/${decodedKey}`;
     const response = await fetch(publicUrl);
     if (response.ok) {
       const buffer = Buffer.from(await response.arrayBuffer());
@@ -3915,16 +4001,15 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     }
   } catch {}
 
-  // 3. Try local disk storage fallback
+  // 3. Try local disk storage fallback with verified bounds
   try {
-    const candidatePaths = [
-      path.resolve(process.cwd(), 'uploads', rawKey),
-      path.resolve(process.cwd(), 'backend', 'uploads', rawKey),
-      path.resolve(process.cwd(), 'public', rawKey),
-      path.resolve(process.cwd(), 'frontend', 'public', rawKey),
-    ];
-    for (const localPath of candidatePaths) {
-      if (fs.existsSync(localPath)) {
+    for (const baseDir of baseDirectories) {
+      const localPath = path.resolve(baseDir, decodedKey);
+      const relative = path.relative(baseDir, localPath);
+      if (relative.startsWith('..') || path.isAbsolute(relative) || path.isAbsolute(decodedKey)) {
+        continue;
+      }
+      if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
         const buffer = await fs.promises.readFile(localPath);
         const optimized = await optimizeImageBuffer(buffer, contentType, req.query);
         res.setHeader('Content-Type', optimized.contentType);
@@ -3938,15 +4023,15 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
 
   // 4. Try FileAsset lookup by key or filename
   try {
-    const cleanKey = decodeURIComponent(rawKey);
+    const cleanKey = decodeURIComponent(decodedKey);
     const baseName = path.basename(cleanKey);
     const asset = await db.fileAsset.findFirst({
       where: {
         status: 'active',
         OR: [
-          { key: rawKey },
+          { key: decodedKey },
           { key: cleanKey },
-          { url: { endsWith: rawKey } },
+          { url: { endsWith: decodedKey } },
           { url: { endsWith: cleanKey } },
           { originalName: baseName }
         ]
@@ -3954,7 +4039,7 @@ router.get('/files/raw/:key(*)', asyncRoute(async (req, res) => {
     });
 
     if (asset) {
-      const publicActor = (await getPublicFileActor(asset.id)) || { id: asset.ownerId, role: asset.ownerRole || 'seller' };
+      const publicActor = (await getPublicFileActor(asset.id)) || (req.user ? { id: req.user.id, role: req.user.role } : { id: asset.ownerId, role: asset.ownerRole || 'seller' });
       const file = await getFileContent(asset.id, publicActor, {
         ipAddress: req.ip,
         userAgent: req.headers['user-agent']
@@ -4396,7 +4481,7 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
     flagged
   };
 
-  res.json(maskSensitive({ sellers, buyers, total, ...window, filters: query, summary }));
+  res.json(maskSensitive({ sellers, buyers, total, ...window, filters: query, summary }, { unmaskForAdmin: true }));
 }));
 
 /**
@@ -4428,6 +4513,31 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
   if (!user) throw new ApiError(404, 'Application not found', 'APPLICATION_NOT_FOUND');
   if (!['buyer', 'seller'].includes(String(user.role))) {
     throw new ApiError(404, 'Application not found', 'APPLICATION_NOT_FOUND');
+  }
+
+  // District multi-tenancy scoping:
+  // For the Jharsuguda single-district portal, portal administrators (role: 'admin' or 'master_admin')
+  // have legitimate jurisdiction to scrutinize all vendors and buyers applying to the portal.
+  const isMaster = isMasterAdmin(req.user) || req.user?.role === 'master_admin' || req.user?.role === 'admin';
+  if (!isMaster) {
+    const adminDistrict = req.user?.districtId || (req.user?.activeScope?.scopeType === 'DISTRICT' ? req.user.activeScope.scopeId : null);
+    if (adminDistrict) {
+      const adminDistStr = String(adminDistrict).toLowerCase().trim();
+      const userDistricts: string[] = [];
+      if (user.buyerProfile?.district) userDistricts.push(user.buyerProfile.district.toLowerCase().trim());
+      if (user.sellerProfile?.offices) {
+        for (const office of user.sellerProfile.offices) {
+          if (office.district) userDistricts.push(office.district.toLowerCase().trim());
+        }
+      }
+      if (user.organization?.district) userDistricts.push(user.organization.district.toLowerCase().trim());
+      if (user.organization?.city) userDistricts.push(user.organization.city.toLowerCase().trim());
+
+      const matchesDistrict = userDistricts.some(d => d === adminDistStr || d.includes(adminDistStr) || adminDistStr.includes(d));
+      if (!matchesDistrict && userDistricts.length > 0) {
+        throw new ApiError(403, 'Application is outside your assigned district jurisdiction', 'DISTRICT_ACCESS_DENIED');
+      }
+    }
   }
 
   // Enrich documents (the same legacy JSON shape the list endpoint expanded).
@@ -4594,18 +4704,50 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
     address: registrationGstDetails.address || organization?.addressLine1 || (profile as any)?.registeredAddress || null
   };
 
-  const enrichedProfile = profile
-    ? { ...profile, documents: enrichDocuments(profile.documents), gstVerificationDetails }
-    : { gstVerificationDetails };
+  const panValue = (profile as any)?.pan || organization?.panNumber || registrationDetails.pan || null;
+  const nameAsInPanValue = (profile as any)?.nameAsInPan || (profile as any)?.panName || registrationDetails.nameAsInPan || organization?.organizationName || null;
+  const dateAsInPanValue = (profile as any)?.dateAsInPan || (profile as any)?.dateOfIncorporation || registrationDetails.dateAsInPan || null;
+  const gstValue = (profile as any)?.gst || organization?.gstin || registrationDetails.gstin || null;
+  const mobileValue = (profile as any)?.mobile || user.mobile || null;
+  const udyamValue = (profile as any)?.udyamRegistrationNumber || organization?.udyamNumber || registrationDetails.udyamRegistrationNumber || null;
 
-  res.json(maskSensitive({
+  const enrichedProfile = profile
+    ? {
+        ...profile,
+        pan: panValue,
+        nameAsInPan: nameAsInPanValue,
+        dateAsInPan: dateAsInPanValue,
+        gst: gstValue,
+        mobile: mobileValue,
+        udyamRegistrationNumber: udyamValue,
+        documents: enrichDocuments(profile.documents),
+        gstVerificationDetails
+      }
+    : {
+        pan: panValue,
+        nameAsInPan: nameAsInPanValue,
+        dateAsInPan: dateAsInPanValue,
+        gst: gstValue,
+        mobile: mobileValue,
+        udyamRegistrationNumber: udyamValue,
+        gstVerificationDetails
+      };
+
+  const sanitizedUser = { ...user };
+  delete (sanitizedUser as any).password;
+  delete (sanitizedUser as any).passwordHash;
+  delete (sanitizedUser as any).sessionVersion;
+
+  // Registration scrutiny desk is an authenticated admin-only workflow that requires unmasked
+  // human-readable verification fields so officers can match submitted details against physical documents.
+  res.json({
     success: true,
     data: {
       _id: user.id,
-      ...user,
+      ...sanitizedUser,
       profile: enrichedProfile
     }
-  }));
+  });
 }));
 
 router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
@@ -10478,7 +10620,6 @@ for (const [path, status, action] of [
 router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(async (req, res) => {
   const body = parse(z.object({
     purchaseOrderId: z.coerce.number().int().positive().optional(),
-    quotationId: z.coerce.number().int().positive().optional(),
     amount: z.coerce.number().positive().optional(),
     gstRate: z.coerce.number().min(0).max(100).optional(),
     otherTaxRate: z.coerce.number().min(0).max(100).optional(),
@@ -10494,74 +10635,25 @@ router.post('/invoices', authenticate, authorize('seller', 'admin'), asyncRoute(
     })).optional()
   }), req.body);
 
-  let targetPoId = body.purchaseOrderId;
-
-  if (!targetPoId && body.quotationId) {
-    const quoteResp = await db.requirementResponse.findUnique({
-      where: { id: body.quotationId },
-      include: { requirement: true }
-    });
-
-    if (!quoteResp) {
-      throw new ApiError(404, 'Submitted quotation not found', 'QUOTATION_NOT_FOUND');
-    }
-
-    if (!isAdmin(req) && quoteResp.sellerUserId !== userId(req)) {
-      throw new ApiError(403, 'You are not the seller of this quotation', 'SELLER_REQUIRED');
-    }
-
-    let po = await db.purchaseOrder.findFirst({
-      where: {
-        sellerId: quoteResp.sellerUserId,
-        title: { contains: `Quotation #${quoteResp.id}` }
-      }
-    });
-
-    if (!po) {
-      const unitPrice = Number(quoteResp.offeredPrice || 0);
-      const qty = Number(quoteResp.offeredQuantity || 1);
-      const totalVal = unitPrice * qty || Number(body.amount || 0);
-      const poNum = `PO-${Date.now().toString().slice(-6)}`;
-      const buyerId = quoteResp.requirement.createdById || userId(req);
-
-      po = await db.purchaseOrder.create({
-        data: {
-          poNumber: poNum,
-          title: `Purchase Order from Quotation #${quoteResp.id}: ${quoteResp.requirement.title}`,
-          status: 'accepted',
-          poStatus: 'ACCEPTED',
-          amount: totalVal,
-          totalValue: totalVal,
-          buyerId,
-          sellerId: quoteResp.sellerUserId,
-          sourceType: 'quotation',
-          paymentTerms: 'PAY_ON_INVOICE',
-          deliveryAddress: quoteResp.requirement.location || 'As per quotation terms',
-          items: {
-            create: [{
-              itemName: quoteResp.requirement.title,
-              description: quoteResp.message || 'Quotation item',
-              quantity: qty,
-              unitOfMeasure: quoteResp.requirement.unit || 'units',
-              unitPrice: unitPrice || totalVal,
-              taxRate: body.gstRate || 18,
-              totalAmount: totalVal
-            }]
-          }
-        }
-      });
-      notifySellerNewPurchaseOrder(po.id).catch(() => undefined);
-    }
-
-    targetPoId = po.id;
-  }
+  const targetPoId = body.purchaseOrderId;
 
   if (!targetPoId) {
-    throw new ApiError(400, 'Either purchaseOrderId or quotationId must be provided', 'INVALID_INPUT');
+    throw new ApiError(400, 'Invoices cannot be submitted without an existing approved purchase order', 'PO_REQUIRED');
   }
 
   const po = await db.purchaseOrder.findUnique({ where: { id: targetPoId } });
-  if (!po || (!isAdmin(req) && po.sellerId !== userId(req))) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+  if (!po) {
+    throw new ApiError(400, 'Invoices cannot be submitted without an existing approved purchase order', 'PO_REQUIRED');
+  }
+
+  if (!isAdmin(req) && po.sellerId !== userId(req)) {
+    throw new ApiError(403, 'You are not the seller of this purchase order', 'FORBIDDEN_PO_SELLER_MISMATCH');
+  }
+
+  const validStatuses = ['accepted', 'in_fulfillment', 'delivered', 'ACCEPTED', 'IN_FULFILLMENT', 'DELIVERED'];
+  if (!validStatuses.includes(po.status) && !validStatuses.includes(po.poStatus)) {
+    throw new ApiError(409, `Cannot submit invoice for purchase order in '${po.status}' status`, 'INVALID_PO_STATUS_FOR_INVOICE');
+  }
 
   const invoice = await fulfillmentWorkflow.createInvoice(actorFrom(req), {
     ...body,
@@ -13730,6 +13822,7 @@ router.post('/seller/settings/change-password/send-otp', authenticate, asyncRout
 router.post('/seller/settings/change-password', authenticate, asyncRoute(async (req, res) => {
   const { verifyOtp, consumeOtp } = await import('../services/otp.service.js');
   const { hashPassword, validatePasswordStrength } = await import('../services/password.service.js');
+  const { assertPasswordNotReused, rememberPreviousPassword } = await import('../services/password-history.service.js');
 
   const { newPassword, otp } = req.body;
   if (!newPassword || !otp) throw new ApiError(400, 'Password and OTP are required');
@@ -13747,6 +13840,15 @@ router.post('/seller/settings/change-password', authenticate, asyncRoute(async (
     throw new ApiError(400, 'Password does not meet security requirements: ' + passwordValidation.errors.join(', '));
   }
 
+  try {
+    await assertPasswordNotReused(user.id, newPassword, user.password);
+  } catch (err: any) {
+    if (err.message === 'PASSWORD_REUSED') {
+      throw new ApiError(400, 'New password cannot match your current or recently used passwords', 'PASSWORD_REUSED');
+    }
+    throw err;
+  }
+
   const hashedPassword = await hashPassword(newPassword);
   await db.user.update({
     where: { id: user.id },
@@ -13757,6 +13859,7 @@ router.post('/seller/settings/change-password', authenticate, asyncRoute(async (
       lastPasswordChangeAt: new Date()
     }
   });
+  await rememberPreviousPassword(user.id, hashedPassword);
 
   await consumeOtp('forgot_password', identity);
   ok(res, { success: true, message: 'Password updated successfully' });
@@ -13842,10 +13945,29 @@ router.post('/seller/settings/profile', authenticate, asyncRoute(async (req, res
 }));
 
 router.post('/seller/settings/aadhaar', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+  const currentUserId = userId(req);
   const { aadhaarNumber } = req.body;
   const cleanedAadhaar = String(aadhaarNumber ?? '').replace(/\s+/g, '');
   if (!cleanedAadhaar || !/^\d{12}$/.test(cleanedAadhaar)) {
-    throw new ApiError(400, 'Valid 12-digit Aadhaar number is required');
+    throw new ApiError(400, 'Valid 12-digit Aadhaar number is required', 'INVALID_AADHAAR_FORMAT');
+  }
+
+  // Require genuine UIDAI / MeriPehchaan verification proof from UserKycVerification
+  const verifiedKyc = await db.userKycVerification.findFirst({
+    where: {
+      userId: currentUserId,
+      verificationType: 'AADHAAR',
+      status: 'VERIFIED'
+    },
+    orderBy: { verifiedAt: 'desc' }
+  });
+
+  if (!verifiedKyc) {
+    throw new ApiError(
+      403,
+      'Aadhaar must be verified through the authentic UIDAI / DigiLocker flow before saving seller settings. Please initiate verification via /api/kyc/aadhaar/start.',
+      'AADHAAR_VERIFICATION_REQUIRED'
+    );
   }
 
   // STQC & UIDAI Statutory Mandate:
@@ -13854,9 +13976,8 @@ router.post('/seller/settings/aadhaar', authenticate, authorize('seller'), async
   const aadhaarHash = createHashFingerprint(cleanedAadhaar, 'aadhaar_vault');
 
   const sellerProfile = await db.sellerProfile.update({
-    where: { userId: userId(req) },
+    where: { userId: currentUserId },
     data: {
-      aadhaarNumber: null, // Wipe plaintext Aadhaar from persistent storage
       aadhaarHash,
       aadhaarMasked,
       aadhaarVerified: true

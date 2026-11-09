@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
 import { formatDate } from '../../shared/format';
 import { getApi, postApi } from '../../shared/apiClient';
@@ -499,24 +500,31 @@ export function TaxInvoiceRegistryModal({
   return (
     <div
       className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-2 sm:p-4 md:p-6 overflow-hidden animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Tax Invoice Registry"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
           onClose();
         }
       }}
     >
-      <div
+      <FocusTrap
+        onEscape={onClose}
         className={cn(
-          "relative flex flex-col bg-white shadow-2xl transition-all duration-300 overflow-hidden",
-          isFullscreen
-            ? "fixed inset-0 z-[121] h-screen w-screen max-w-none max-h-none rounded-none p-4 sm:p-6"
-            : "w-full max-w-5xl h-full max-h-[92vh] rounded-3xl border border-slate-200/90 p-4 sm:p-6 my-auto"
+          "transition-all duration-300",
+          isFullscreen ? "fixed inset-0 z-[121] h-screen w-screen" : "w-full max-w-5xl h-full max-h-[92vh] my-auto"
         )}
-        onClick={(e) => e.stopPropagation()}
       >
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Tax Invoice Registry"
+          className={cn(
+            "relative flex flex-col bg-white shadow-2xl transition-all duration-300 overflow-hidden",
+            isFullscreen
+              ? "fixed inset-0 z-[121] h-screen w-screen max-w-none max-h-none rounded-none p-4 sm:p-6"
+              : "w-full max-w-5xl h-full max-h-[92vh] rounded-3xl border border-slate-200/90 p-4 sm:p-6 my-auto"
+          )}
+          onClick={(e) => e.stopPropagation()}
+        >
         {/* Modal Header */}
         <div className="flex items-start justify-between gap-4 border-b border-slate-200/80 pb-3.5 mb-3 shrink-0">
           <div>
@@ -768,7 +776,7 @@ export function TaxInvoiceRegistryModal({
                               className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 bg-slate-100 border border-slate-300 px-2.5 py-1 rounded-xl cursor-not-allowed"
                               title={paymentGateReason}
                             >
-                              <Lock className="h-3.5 w-3.5 text-slate-400" />
+                              <Lock className="h-3.5 w-3.5 text-slate-500" />
                               <span>Payment Locked (Awaiting Delivery)</span>
                             </span>
                           )}
@@ -878,10 +886,10 @@ export function TaxInvoiceRegistryModal({
                         className="absolute right-0 top-full mt-1.5 z-[70] w-64 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-2xl ring-1 ring-black/5 animate-in fade-in-50 slide-in-from-top-2 duration-150"
                       >
                         <div className="px-3 py-1.5 border-b border-slate-100 mb-1 flex items-center justify-between">
-                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                          <p className="text-[10px] font-black uppercase tracking-wider text-slate-600">
                             Download Invoice Copies
                           </p>
-                          <span className="text-[9px] font-bold text-slate-400">PDF</span>
+                          <span className="text-[9px] font-bold text-slate-600">PDF</span>
                         </div>
                         {[
                           { id: 'Original Copy', label: 'Original Copy', sublabel: 'For Buyer / Recipient' },
@@ -909,9 +917,9 @@ export function TaxInvoiceRegistryModal({
                             >
                               <div>
                                 <p className="text-xs font-bold leading-tight">{c.label}</p>
-                                <p className="text-[10px] text-slate-400 font-normal leading-tight">{c.sublabel}</p>
+                                <p className="text-[10px] text-slate-600 font-normal leading-tight">{c.sublabel}</p>
                               </div>
-                              <Download className={cn("h-3.5 w-3.5 shrink-0 ml-2", isSelected ? "text-[#12335f]" : "text-slate-400")} />
+                              <Download className={cn("h-3.5 w-3.5 shrink-0 ml-2", isSelected ? "text-[#12335f]" : "text-slate-500")} />
                             </button>
                           );
                         })}
@@ -958,6 +966,7 @@ export function TaxInvoiceRegistryModal({
           )}
         </div>
       </div>
+      </FocusTrap>
 
       {/* In-Place Stamp, Signature & Logo Upload Modal */}
       <SignatureStampUploadModal

@@ -31,6 +31,7 @@ import { toast } from 'sonner';
 import { getApi, postApi } from '../../shared/apiClient';
 import { formatCurrency, formatDate } from '../../shared/format';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { useAuth } from '../../../hooks/useAuth';
 import { openFileAsset, getFileAssetPreview, prewarmFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
@@ -966,15 +967,16 @@ export function PaymentReceiptViewModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-sm p-3 sm:p-5 overflow-y-auto animate-in fade-in duration-150"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="modal-proof-title"
-      aria-describedby="modal-proof-desc"
     >
-      <div
-        ref={dialogRef}
-        className="relative w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
-      >
+      <FocusTrap onEscape={onClose} className="w-full max-w-4xl max-h-[92vh] my-auto flex flex-col">
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-proof-title"
+          aria-describedby="modal-proof-desc"
+          className="relative w-full max-w-4xl rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden my-auto flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-150"
+        >
         {/* Top Gradient Decorative Bar */}
         <div className="h-1.5 w-full bg-gradient-to-r from-[#12335f] via-blue-600 to-emerald-500 shrink-0" />
 
@@ -1001,7 +1003,7 @@ export function PaymentReceiptViewModal({
                     {copiedRef ? (
                       <Check className="h-3 w-3 text-emerald-600" aria-hidden="true" />
                     ) : (
-                      <Copy className="h-3 w-3 text-slate-400 group-hover:text-slate-600" aria-hidden="true" />
+                      <Copy className="h-3 w-3 text-slate-500 group-hover:text-slate-800" aria-hidden="true" />
                     )}
                   </button>
                 )}
@@ -1097,7 +1099,7 @@ export function PaymentReceiptViewModal({
               disabled={isRefreshingPayment || loading}
               aria-label="Refresh payment details"
               title="Refresh payment details"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-800 transition cursor-pointer shrink-0 border border-transparent hover:border-slate-200"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 transition cursor-pointer shrink-0 border border-transparent hover:border-slate-200"
             >
               <RefreshCw className={cn("h-4 w-4", (isRefreshingPayment || loading) && "animate-spin text-[#12335f]")} aria-hidden="true" />
             </button>
@@ -1105,7 +1107,7 @@ export function PaymentReceiptViewModal({
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-200/70 hover:text-slate-800 transition cursor-pointer shrink-0 border border-transparent hover:border-slate-200"
+              className="flex h-8 w-8 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 transition cursor-pointer shrink-0 border border-transparent hover:border-slate-200"
             >
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
@@ -1169,7 +1171,7 @@ export function PaymentReceiptViewModal({
                     Payment Lifecycle Milestones
                   </h3>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                   Audit Log ({timelineEvents.length} Milestones)
                 </span>
               </div>
@@ -1340,7 +1342,7 @@ export function PaymentReceiptViewModal({
                       Bank Transaction &amp; UTR Audit Information
                     </h3>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                     Statutory Bank Proof
                   </span>
                 </div>
@@ -1380,7 +1382,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Payer Bank Name */}
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1">
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 block">
                       Payer Remitting Bank
                     </span>
                     <p className="font-bold text-xs sm:text-sm text-slate-900 truncate">
@@ -1390,7 +1392,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Payer Account */}
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1">
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 block">
                       Payer Account (Masked)
                     </span>
                     <p className="font-mono font-bold text-xs sm:text-sm text-slate-900 truncate">
@@ -1400,7 +1402,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Transfer Date */}
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1">
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 block">
                       Remittance Execution Date
                     </span>
                     <p className="font-bold text-xs text-slate-900">
@@ -1410,7 +1412,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Remittance Channel */}
                   <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-1">
-                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400 block">
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-600 block">
                       Remittance Channel
                     </span>
                     <p className="font-bold text-xs text-slate-900">
@@ -1536,7 +1538,7 @@ export function PaymentReceiptViewModal({
                       Linked Commercial Documents &amp; Parties
                     </h3>
                   </div>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                  <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">
                     Contract Match
                   </span>
                 </div>
@@ -1610,7 +1612,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Payer Entity */}
                   <div className="rounded-xl border border-slate-200/70 bg-white p-3 space-y-1 shadow-2xs">
-                    <div className="flex items-center gap-1.5 text-slate-400 text-[9.5px] font-black uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5 text-slate-600 text-[9.5px] font-black uppercase tracking-wider">
                       <User className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
                       <span>Payer / Procuring Buyer</span>
                     </div>
@@ -1624,7 +1626,7 @@ export function PaymentReceiptViewModal({
 
                   {/* Beneficiary Entity */}
                   <div className="rounded-xl border border-slate-200/70 bg-white p-3 space-y-1 shadow-2xs">
-                    <div className="flex items-center gap-1.5 text-slate-400 text-[9.5px] font-black uppercase tracking-wider">
+                    <div className="flex items-center gap-1.5 text-slate-600 text-[9.5px] font-black uppercase tracking-wider">
                       <Building2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" />
                       <span>Beneficiary / Supplier</span>
                     </div>
@@ -1641,7 +1643,7 @@ export function PaymentReceiptViewModal({
               {/* 6. Remarks / Notes */}
               {(resolvedProof?.remarks || activePayment?.metadata?.remarks) && (
                 <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 space-y-1.5 shadow-2xs">
-                  <span className="text-[9.5px] font-black uppercase tracking-widest text-slate-400 block">
+                  <span className="text-[9.5px] font-black uppercase tracking-widest text-slate-600 block">
                     Payer Cover Note &amp; Audit Remarks
                   </span>
                   <p className="text-xs font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
@@ -1700,8 +1702,8 @@ export function PaymentReceiptViewModal({
           {/* Status summary pill */}
           <div className="flex items-center gap-2">
             {loading ? (
-              <span className="text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                <Loader2 className="h-4 w-4 animate-spin text-slate-400" aria-hidden="true" />
+              <span className="text-xs font-semibold text-slate-600 flex items-center gap-1.5">
+                <Loader2 className="h-4 w-4 animate-spin text-slate-600" aria-hidden="true" />
                 Checking settlement status...
               </span>
             ) : isSettledState || rawStatus === 'VERIFIED' || rawStatus === 'SUCCESS' || rawStatus === 'ESCROW_RELEASED' || rawStatus === 'OFFLINE_PROOF_VERIFIED' || rawStatus === 'SETTLED' ? (
@@ -1777,6 +1779,7 @@ export function PaymentReceiptViewModal({
           </div>
         </div>
       </div>
+      </FocusTrap>
 
       {/* Full In-App Document Preview Modal */}
       {previewDocument && (

@@ -58,11 +58,6 @@ export const isAllowedCorsOrigin = (origin?: string) => {
       return true;
     }
 
-    // Allow *.run.app (GCP Cloud Run frontend services)
-    if (url.protocol === 'https:' && (url.hostname.endsWith('.run.app') || url.hostname.endsWith('.a.run.app'))) {
-      return true;
-    }
-
     // Allow official domain and subdomains
     if (url.protocol === 'https:' && (url.hostname === 'jsgsmile.in' || url.hostname.endsWith('.jsgsmile.in'))) {
       return true;

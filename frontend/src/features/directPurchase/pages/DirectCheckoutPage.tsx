@@ -10,6 +10,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
+  AlertCircle,
   ArrowLeft,
   Building2,
   Check,
@@ -68,6 +69,7 @@ export default function DirectCheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState<'PAY_ON_INVOICE' | 'NET_30' | 'PAY_ON_DELIVERY' | 'BANK_TRANSFER' | 'ONLINE'>('PAY_ON_INVOICE');
 
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsError, setTermsError] = useState<string | null>(null);
 
@@ -201,6 +203,7 @@ export default function DirectCheckoutPage() {
     }
 
     setIsPlacingOrder(true);
+    setOrderError(null);
     try {
       const res = await placeDirectOrder({
         deliveryAddressId: selectedAddressId,
@@ -224,7 +227,9 @@ export default function DirectCheckoutPage() {
       toast.success(`Order Placed Successfully! ${orderCount} Purchase Order(s) created.`);
       router.push('/orders');
     } catch (err: any) {
-      toast.error(err?.message || 'Failed to place order. Please try again.');
+      const errMsg = err?.message || 'Failed to place order. Please try again.';
+      setOrderError(errMsg);
+      toast.error(errMsg);
     } finally {
       setIsPlacingOrder(false);
     }
@@ -256,6 +261,20 @@ export default function DirectCheckoutPage() {
       </div>
 
       <form onSubmit={handlePlaceOrder} className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+        {/* Screen Reader Live Region for Order Status & Error Feedback */}
+        <div aria-live="polite" role="status" className="sr-only">
+          {isPlacingOrder ? 'Processing purchase order. Please wait.' : orderError ? `Checkout error: ${orderError}` : ''}
+        </div>
+        {orderError && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="lg:col-span-12 rounded-xl border border-red-200 bg-red-50 p-4 text-xs font-semibold text-red-700 flex items-center gap-2"
+          >
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>{orderError}</span>
+          </div>
+        )}
         {/* Left Column: Form Fields (8 Cols) */}
         <div className="space-y-6 lg:col-span-7 xl:col-span-8">
 
@@ -518,9 +537,9 @@ export default function DirectCheckoutPage() {
                 { id: 'BANK_TRANSFER', label: 'Direct Bank Transfer (NEFT / RTGS)', desc: 'Direct bank settlement upon order confirmation.' },
                 { id: 'ONLINE', label: 'Online Payment Gateway', desc: 'Pay via Card, UPI, or Net Banking.' },
               ].map(opt => (
-                <div
+                <label
                   key={opt.id}
-                  onClick={() => setPaymentMethod(opt.id as any)}
+                  htmlFor={`payment-method-${opt.id}`}
                   className={`cursor-pointer rounded-xl border p-3.5 transition-all flex items-start gap-3 ${
                     paymentMethod === opt.id
                       ? 'border-[#12335f] bg-blue-50/40 ring-2 ring-[#12335f]/20'
@@ -528,17 +547,23 @@ export default function DirectCheckoutPage() {
                   }`}
                 >
                   <input
+                    id={`payment-method-${opt.id}`}
                     type="radio"
                     name="paymentMethod"
+                    value={opt.id}
                     checked={paymentMethod === opt.id}
-                    onChange={() => {}}
-                    className="mt-0.5 h-4 w-4 text-[#12335f] focus:ring-[#12335f]"
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setPaymentMethod(opt.id as any);
+                      }
+                    }}
+                    className="mt-0.5 h-4 w-4 text-[#12335f] focus:ring-[#12335f] cursor-pointer"
                   />
                   <div>
-                    <p className="text-xs font-bold text-slate-900">{opt.label}</p>
-                    <p className="text-[11px] font-medium text-slate-500 mt-0.5">{opt.desc}</p>
+                    <span className="text-xs font-bold text-slate-900 block">{opt.label}</span>
+                    <span className="text-[11px] font-medium text-slate-600 mt-0.5 block">{opt.desc}</span>
                   </div>
-                </div>
+                </label>
               ))}
             </CardContent>
           </Card>
@@ -655,7 +680,7 @@ export default function DirectCheckoutPage() {
                   </label>
                 </div>
                 {termsError && (
-                  <p id="terms-error-text" role="alert" className="text-xs font-bold text-red-600 flex items-center gap-1 mt-1">
+                  <p id="terms-error-text" role="status" aria-live="polite" className="text-xs font-bold text-red-600 flex items-center gap-1 mt-1">
                     {termsError}
                   </p>
                 )}
@@ -771,7 +796,7 @@ export default function DirectCheckoutPage() {
                   </span>
                 </label>
                 {termsError && (
-                  <p id="terms-error-summary" role="alert" className="text-[11px] font-bold text-red-600 px-1">
+                  <p id="terms-error-summary" role="status" aria-live="polite" className="text-[11px] font-bold text-red-600 px-1">
                     {termsError}
                   </p>
                 )}

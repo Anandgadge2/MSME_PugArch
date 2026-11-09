@@ -725,6 +725,15 @@ export default function ReverseAuctionLivePage({ id }: { id: number | string }) 
   return (
     <div className="space-y-6 pb-12 bg-white text-slate-900 p-4 sm:p-6 lg:p-8 rounded-3xl border border-slate-200 shadow-sm animate-in fade-in duration-300">
       
+      {/* Screen Reader Live Region for Real-time Auction Status & Leading Bid Announcements */}
+      <div aria-live="polite" role="status" className="sr-only">
+        {live
+          ? `Auction is live. Time remaining: ${timeLeft}. Current leading L1 bid: ${currentLowest > 0 ? formatCurrency(currentLowest) : 'Awaiting bids'}. Total bids: ${bidRows.length}.`
+          : ['CLOSED', 'COMPLETED', 'AWARD_RECOMMENDED', 'AWARDED'].includes(status)
+          ? `Auction has concluded. Final winning price: ${currentLowest > 0 ? formatCurrency(currentLowest) : 'No valid bids'}.`
+          : `Auction status: ${status}.`}
+      </div>
+
       {/* Error notification */}
       {localError && (
         <div 

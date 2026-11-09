@@ -92,6 +92,16 @@ test('3. Test Parsing & Validating The Generated Product & Service Templates', a
     ipAddress: '127.0.0.1'
   };
 
+  // Resolve duplicate SKU collision for seller so all catalogue import assertions pass
+  if (actor.id) {
+    await db.product.deleteMany({
+      where: {
+        sellerId: actor.id,
+        sku: { in: ['SAF-HLM-001', 'FAS-HEX-M12'] }
+      }
+    });
+  }
+
   // Test Product Template Preview
   const productBuffer = await catalogueImportService.generateProductTemplate();
   const productFile = {

@@ -7,6 +7,7 @@ import { useConversations, useSendMessage } from '../hooks';
 import type { MessageDto, ConversationDto } from '../api';
 import { Button } from '../../../components/ui/button';
 import { roleLabel } from '../pages/MessagesPage';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 interface ForwardMessageModalProps {
   message: MessageDto;
@@ -69,25 +70,32 @@ export default function ForwardMessageModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
-        {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-100 bg-[#12335f] px-5 py-4 text-white">
-          <div className="flex items-center gap-2">
-            <Forward className="h-5 w-5 text-emerald-400" />
-            <h3 className="text-sm font-black uppercase tracking-wider">Forward Message</h3>
+      <FocusTrap onEscape={onClose} className="w-full max-w-md max-h-[85vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forward-modal-title"
+          className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-100 bg-[#12335f] px-5 py-4 text-white">
+            <div className="flex items-center gap-2">
+              <Forward className="h-5 w-5 text-emerald-400" />
+              <h3 id="forward-modal-title" className="text-sm font-black uppercase tracking-wider">Forward Message</h3>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1 text-white/80 hover:bg-white/10"
+              aria-label="Close dialog"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1 text-white/80 hover:bg-white/10"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
 
-        {/* Message Preview */}
-        <div className="border-b border-slate-100 bg-slate-50 p-3">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Selected Message Preview</p>
+          {/* Message Preview */}
+          <div className="border-b border-slate-100 bg-slate-50 p-3">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Selected Message Preview</p>
           <p className="mt-1 line-clamp-2 text-xs font-semibold text-slate-700">
             {message.content || `${message.attachments?.length || 0} attachment(s)`}
           </p>
@@ -96,7 +104,7 @@ export default function ForwardMessageModal({
         {/* Search */}
         <div className="p-3">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-600" />
             <input
               type="text"
               value={search}
@@ -110,11 +118,11 @@ export default function ForwardMessageModal({
         {/* List of Conversations */}
         <div className="flex-1 overflow-y-auto divide-y divide-slate-100 px-3 pb-2">
           {isLoading ? (
-            <div className="flex items-center justify-center py-8 text-xs text-slate-400">
+            <div className="flex items-center justify-center py-8 text-xs text-slate-600">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading chats...
             </div>
           ) : filtered.length === 0 ? (
-            <p className="py-8 text-center text-xs font-semibold text-slate-400">No chats found.</p>
+            <p className="py-8 text-center text-xs font-semibold text-slate-600">No chats found.</p>
           ) : (
             filtered.map(c => {
               const counterpart = c.buyerId === currentUserId ? c.seller : c.buyer;
@@ -165,6 +173,7 @@ export default function ForwardMessageModal({
           </Button>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

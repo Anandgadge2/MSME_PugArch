@@ -20,8 +20,15 @@ const sensitiveKeys = new Set([
 // admin UI sees the persisted status verbatim.
 const passthroughKeys = new Set([
   'sectionStatus',
-  'sectionRejectionReasons'
+  'sectionRejectionReasons',
+  'complianceViolations'
 ]);
+
+const isWorkflowStatus = (val: unknown): boolean => {
+  if (typeof val !== 'string') return false;
+  const s = val.trim().toLowerCase();
+  return ['approved', 'rejected', 'pending', 'submitted', 'verified', 'incomplete', 'under_review', 'active', 'inactive', 'suspended', 'cancelled'].includes(s);
+};
 
 export const maskValue = (value: unknown, visibleSuffix = 4) => {
   const text = String(value ?? '');
@@ -45,7 +52,10 @@ export const maskGST = (value: unknown) => {
 
 export const maskGSTIN = maskGST;
 
-export const maskAadhaar = (value: unknown) => maskValue(compact(value), 4);
+export const maskAadhaar = (value: unknown) => {
+  const text = compact(value);
+  return text.length >= 12 ? `XXXXXXXX${text.slice(-4)}` : maskValue(text, 4);
+};
 
 export const maskBankAccount = (value: unknown) => maskValue(String(value ?? '').replace(/\s+/g, ''), 4);
 
@@ -63,7 +73,11 @@ export const maskPhone = (value: unknown) => {
   return text.length > 4 ? `${'*'.repeat(text.length - 4)}${text.slice(-4)}` : maskValue(text);
 };
 
-export const maskSensitive = <T>(input: T): T => {
+export interface MaskSensitiveOptions {
+  unmaskForAdmin?: boolean;
+}
+
+export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T => {
   const mask = (val: any, stack = new Set<any>()): any => {
     if (!val || typeof val !== 'object') return val;
     if (val instanceof Date) return val;
@@ -79,11 +93,27 @@ export const maskSensitive = <T>(input: T): T => {
     return Object.entries(val).reduce<Record<string, unknown>>((acc, [key, value]) => {
       if (passthroughKeys.has(key)) {
         acc[key] = value;
-      } else if (/^aadhaar$/i.test(key)) {
+      } else if (/^aadhaar|aadhaarNumber$/i.test(key)) {
         acc[key] = value ? maskAadhaar(value) : value;
-      } else if (key !== 'bankAccounts' && /accountNumber|bankAccount/i.test(key)) {
+      } else if (options?.unmaskForAdmin && /^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key)) {
+        acc[key] = value;
+      } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
+        acc[key] = value;
+      } else if (options?.unmaskForAdmin && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
+        acc[key] = value;
+      } else if (options?.unmaskForAdmin && /(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
+        acc[key] = value;
+      } else if (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key)) {
         acc[key] = value ? maskBankAccount(value) : value;
-      } else if (sensitiveKeys.has(key) || /password|secret|token/i.test(key)) {
+      } else if (/^(pan|panNumber)$/i.test(key)) {
+        acc[key] = value ? (isWorkflowStatus(value) ? value : maskPAN(value)) : value;
+      } else if (/^(gst|gstin|gstNumber)$/i.test(key)) {
+        acc[key] = value ? (isWorkflowStatus(value) ? value : maskGST(value)) : value;
+      } else if (/(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
+        acc[key] = (typeof value === 'string' || typeof value === 'number') ? maskEmail(value) : (value ? mask(value, newStack) : value);
+      } else if (/(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
+        acc[key] = (typeof value === 'string' || typeof value === 'number') ? maskPhone(value) : (value ? mask(value, newStack) : value);
+      } else if (sensitiveKeys.has(key) || /password|secret|token|apiKey|api_key/i.test(key)) {
         acc[key] = value ? maskValue(value) : value;
       } else {
         acc[key] = mask(value, newStack);

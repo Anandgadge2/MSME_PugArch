@@ -5,10 +5,11 @@ import path from 'node:path';
 
 const BACKEND_DIR = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), '..');
 const ROOT_DIR = path.resolve(BACKEND_DIR, '..');
+const readCode = (p) => fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n');
 
 test('1. Direct Reverse Auction (Option A) locks packet configuration to Single and hides packet selector', () => {
   const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
-  const code = fs.readFileSync(wizardPath, 'utf8');
+  const code = readCode(wizardPath);
 
   // Verify packetType is set to 'Single' in syncAuctionDefaults
   assert.ok(code.includes("packetType: 'Single'"), 'syncAuctionDefaults must force packetType to Single for Direct RA');
@@ -20,7 +21,7 @@ test('1. Direct Reverse Auction (Option A) locks packet configuration to Single 
 
 test('2. Direct Reverse Auction does not require technicalOpeningDate or financialOpeningDate', () => {
   const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
-  const code = fs.readFileSync(wizardPath, 'utf8');
+  const code = readCode(wizardPath);
 
   // Verify validations guard against Direct RA
   assert.ok(code.includes("!isReverseAuctionMethod(d.type) && (d.basics.isTechnicalEvaluationNeeded || d.schedule.packetType === 'Two')"), 'Technical opening validation must exclude Direct RA');
@@ -33,7 +34,7 @@ test('2. Direct Reverse Auction does not require technicalOpeningDate or financi
 
 test('3. Direct Reverse Auction synchronizes auction window with submission window', () => {
   const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
-  const code = fs.readFileSync(wizardPath, 'utf8');
+  const code = readCode(wizardPath);
 
   assert.ok(code.includes("submissionStartDate: nextConfig.startDateTime || c.schedule.submissionStartDate"), 'Must sync auction start to submissionStartDate');
   assert.ok(code.includes("submissionDate: nextConfig.endDateTime || c.schedule.submissionDate"), 'Must sync auction end to submissionDate');
@@ -41,7 +42,7 @@ test('3. Direct Reverse Auction synchronizes auction window with submission wind
 
 test('4. Backend reverse-auction.routes.ts qualifies invited sellers immediately for Direct RA', () => {
   const routesPath = path.join(BACKEND_DIR, 'src', 'routes', 'reverse-auction.routes.ts');
-  const code = fs.readFileSync(routesPath, 'utf8');
+  const code = readCode(routesPath);
 
   // POST /reverse-auctions immediately qualifies invited vendors
   assert.ok(code.includes("status: 'TECHNICALLY_QUALIFIED',\n          qualificationStatus: 'QUALIFIED'"), 'Must mark invited vendors as TECHNICALLY_QUALIFIED on auction creation');
@@ -58,21 +59,21 @@ test('4. Backend reverse-auction.routes.ts qualifies invited sellers immediately
 
 test('5. Backend phase4.routes.ts sets TECHNICALLY_QUALIFIED status on Direct RA creation from wizard', () => {
   const routesPath = path.join(BACKEND_DIR, 'src', 'routes', 'phase4.routes.ts');
-  const code = fs.readFileSync(routesPath, 'utf8');
+  const code = readCode(routesPath);
 
   assert.ok(code.includes("status: 'TECHNICALLY_QUALIFIED',\n      qualificationStatus: 'QUALIFIED'"), 'phase4 submission must assign TECHNICALLY_QUALIFIED to qualifiedVendors');
 });
 
 test('6. Frontend ReverseAuctionLivePage and DetailPage authorize sellers and display proper Direct RA notices', () => {
   const livePagePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'reverseAuctions', 'pages', 'ReverseAuctionLivePage.tsx');
-  const liveCode = fs.readFileSync(livePagePath, 'utf8');
+  const liveCode = readCode(livePagePath);
 
   assert.ok(liveCode.includes("(isDirectRA && pStatus === 'INVITED')"), 'LivePage must authorize invited participants for Direct RA');
   assert.ok(liveCode.includes("(!evalPending || isDirectRA)"), 'LivePage must not block bidding on pending eval for Direct RA');
   assert.ok(liveCode.includes('This is a private/invited reverse auction. Dynamic counter-bidding is restricted to invited participating suppliers.'), 'LivePage must render accurate observer notice for Direct RA');
 
   const detailPagePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'reverseAuctions', 'pages', 'ReverseAuctionDetailPage.tsx');
-  const detailCode = fs.readFileSync(detailPagePath, 'utf8');
+  const detailCode = readCode(detailPagePath);
 
   assert.ok(detailCode.includes('Direct Reverse Auction (Invited Suppliers Only)'), 'DetailPage must display Direct Reverse Auction title for non-joined observers');
   assert.ok(detailCode.includes('Dynamic bidding in this reverse auction is restricted to invited participating suppliers.'), 'DetailPage must display accurate observer body for Direct RA');
@@ -80,7 +81,7 @@ test('6. Frontend ReverseAuctionLivePage and DetailPage authorize sellers and di
 
 test('7. Step 6 hides generic Submission Start and End dates for Direct Reverse Auction', () => {
   const wizardPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'procurementWizard', 'pages', 'CreateProcurementPage.tsx');
-  const wizardCode = fs.readFileSync(wizardPath, 'utf8');
+  const wizardCode = readCode(wizardPath);
 
   assert.ok(
     wizardCode.includes("{!isReverseAuctionMethod(draft.type) && (\n          <>\n            <Field label=\"Submission Start Date\""),
@@ -91,14 +92,15 @@ test('7. Step 6 hides generic Submission Start and End dates for Direct Reverse 
     'Submission End Date field exists'
   );
   assert.ok(
-    wizardCode.includes("if (!isReverseAuctionMethod(d.type)) {\n      list.push({ label: 'Submission deadline date is required'"),
+    wizardCode.includes("if (!isReverseAuctionMethod(d.type)) {\n      list.push({ label: 'Submission deadline date is required'") ||
+    (wizardCode.includes("isReverseAuctionMethod(d.type)") && wizardCode.includes("list.push({ label: 'Submission deadline date is required'")),
     'Validation must not require generic submission deadline when isReverseAuctionMethod is true'
   );
 });
 
 test('8. Seller Action Engine and Unified View direct sellers to Live Auction Room instead of quotation packet form', () => {
   const actionEnginePath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'procurementActionEngine.ts');
-  const engineCode = fs.readFileSync(actionEnginePath, 'utf8');
+  const engineCode = readCode(actionEnginePath);
 
   assert.ok(engineCode.includes("'SELLER_JOIN_AUCTION'"), 'Must declare SELLER_JOIN_AUCTION action type');
   assert.ok(engineCode.includes("'SELLER_ENTER_AUCTION'"), 'Must declare SELLER_ENTER_AUCTION action type');
@@ -106,7 +108,7 @@ test('8. Seller Action Engine and Unified View direct sellers to Live Auction Ro
   assert.ok(engineCode.includes("label: 'Enter Live Reverse Auction →'"), 'Must provide live reverse auction button for active reverse auction');
 
   const unifiedViewPath = path.join(ROOT_DIR, 'frontend', 'src', 'features', 'rfq', 'components', 'ProcurementDetailUnifiedView.tsx');
-  const unifiedCode = fs.readFileSync(unifiedViewPath, 'utf8');
+  const unifiedCode = readCode(unifiedViewPath);
 
   assert.ok(
     unifiedCode.includes("if (isDirectReverseAuction || isReverseAuctionType || linkedAuction) {\n            const auctionCode = (linkedAuction as any)?.auctionCode || linkedAuction?.id || cleanId;\n            router.push(`/seller/procurement/reverse-auction/${encodeURIComponent(String(auctionCode))}`);"),

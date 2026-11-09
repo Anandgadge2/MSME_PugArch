@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { reverseAuctionApi } from '../api';
 import { toast } from 'sonner';
 
@@ -116,12 +117,15 @@ export default function PlaceLowerBidModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="place-bid-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 space-y-5">
+      <FocusTrap onEscape={onClose} className="w-full max-w-lg">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="place-bid-modal-title"
+          className="relative w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl border border-slate-200 space-y-5"
+        >
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 pb-4">
           <div className="flex items-center gap-3">
@@ -140,7 +144,7 @@ export default function PlaceLowerBidModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+            className="rounded-xl p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -150,7 +154,7 @@ export default function PlaceLowerBidModal({
         {/* Pricing Specs */}
         <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
               Market Current L1
             </span>
             <p className="text-base font-black text-slate-900">
@@ -158,7 +162,7 @@ export default function PlaceLowerBidModal({
             </p>
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
               Max Allowed Next Bid
             </span>
             <p className="text-base font-black text-emerald-700">
@@ -166,7 +170,7 @@ export default function PlaceLowerBidModal({
             </p>
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
               Minimum Decrement
             </span>
             <p className="text-xs font-bold text-slate-700">
@@ -174,7 +178,7 @@ export default function PlaceLowerBidModal({
             </p>
           </div>
           <div>
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
               Your Last Offer
             </span>
             <p className="text-xs font-bold text-slate-700">
@@ -216,7 +220,7 @@ export default function PlaceLowerBidModal({
               Enter Your Commercial Offer (INR) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
-              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+              <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-600 font-bold">
                 ₹
               </span>
               <input
@@ -278,6 +282,7 @@ export default function PlaceLowerBidModal({
           </div>
         </form>
       </div>
+      </FocusTrap>
     </div>
   );
 }

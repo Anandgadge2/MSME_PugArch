@@ -1,5 +1,5 @@
 import { env } from '../../config/env.js';
-import { randomToken, sha256 } from '../../utils/crypto.js';
+import { randomToken, sha256, timingSafeEqual } from '../../utils/crypto.js';
 import type { PaymentProvider } from './payment.provider.js';
 
 export const bankTransferProvider: PaymentProvider = {
@@ -21,7 +21,7 @@ export const bankTransferProvider: PaymentProvider = {
     const payload = JSON.parse(rawBody.toString('utf8') || '{}');
     const configuredSecret = env.BANDHAN_WEBHOOK_SECRET || '';
     const providedSecret = String(headers['x-bank-transfer-secret'] || '');
-    const verified = Boolean(configuredSecret && providedSecret && providedSecret === configuredSecret);
+    const verified = Boolean(configuredSecret && providedSecret && timingSafeEqual(providedSecret, configuredSecret));
 
     return {
       verified,

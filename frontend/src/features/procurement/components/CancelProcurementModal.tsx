@@ -10,6 +10,7 @@ import {
   Download,
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { cn } from '../../../lib/utils';
 
 export interface CancelTargetProcurement {
@@ -164,15 +165,16 @@ export function CancelProcurementModal({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-3 sm:p-4 backdrop-blur-xs transition-opacity duration-200"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="cancel-procurement-title"
-      aria-describedby="cancel-procurement-desc"
     >
-      <div
-        ref={modalRef}
-        className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95"
-      >
+      <FocusTrap onEscape={onClose} className="w-full max-w-2xl max-h-[92vh]">
+        <div
+          ref={modalRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="cancel-procurement-title"
+          aria-describedby="cancel-procurement-desc"
+          className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-2xl sm:rounded-3xl border border-slate-200 bg-white p-5 sm:p-6 shadow-2xl transition-all duration-200 animate-in fade-in zoom-in-95"
+        >
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-4 border-b border-slate-100">
           <div className="flex items-center gap-3">
@@ -196,7 +198,7 @@ export function CancelProcurementModal({
             onClick={onClose}
             disabled={isSubmitting}
             aria-label="Close dialog"
-            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors cursor-pointer"
+            className="rounded-lg p-1.5 text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer"
           >
             <X className="h-4 w-4" />
           </button>
@@ -274,7 +276,7 @@ export function CancelProcurementModal({
                   <span className="text-rose-600" aria-hidden="true">*</span>
                 )}
               </label>
-              <span className="text-[10px] font-semibold text-slate-400">
+              <span className="text-[10px] font-semibold text-slate-600">
                 {remarks.length} / 1000
               </span>
             </div>
@@ -292,7 +294,7 @@ export function CancelProcurementModal({
               }
               aria-invalid={!!error}
               aria-describedby={error ? 'cancel-error-text' : undefined}
-              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder:text-slate-400 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all resize-none font-medium"
+              className="w-full rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-800 placeholder:text-slate-500 focus:border-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all resize-none font-medium"
             />
           </div>
 
@@ -412,6 +414,7 @@ export function CancelProcurementModal({
           </div>
         </form>
       </div>
+      </FocusTrap>
     </div>
   );
 }

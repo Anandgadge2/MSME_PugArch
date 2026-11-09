@@ -5,6 +5,57 @@ import { db, notifyWorkflowSoon } from './workflow/workflow-common.js';
 import { getFileContent } from './storage/storage.service.js';
 import { logger } from '../config/logger.js';
 
+/**
+ * Validate external image URLs against SSRF:
+ * - Must use HTTP/HTTPS protocol
+ * - Blocks metadata services (169.254.169.254, metadata.google.internal)
+ * - Blocks loopback (127.0.0.1, localhost, ::1, 0.0.0.0)
+ * - Blocks RFC 1918 private ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16)
+ * - Blocks integer/octal/hex IP notations
+ * - Requires hostname to match allowlisted domains
+ */
+export function isSafeFetchUrl(
+  urlStr: string,
+  allowedDomains: string[] = ['jsgsmile.in', 'storage.googleapis.com', 'res.cloudinary.com']
+): boolean {
+  if (!urlStr || typeof urlStr !== 'string') return false;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(urlStr);
+  } catch {
+    return false;
+  }
+
+  // Only allow HTTP/HTTPS
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  // Loopback addresses
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1' || hostname === '0.0.0.0') {
+    return false;
+  }
+
+  // Cloud metadata services
+  if (hostname === '169.254.169.254' || hostname === 'metadata.google.internal' || hostname.endsWith('.metadata.google.internal')) {
+    return false;
+  }
+
+  // RFC 1918 Private IPv4 address ranges & link-local
+  if (/^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname)) return false;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)) return false;
+  if (/^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname)) return false;
+  if (/^169\.254\.\d{1,3}\.\d{1,3}$/.test(hostname)) return false;
+
+  // Decimal, octal, hex IP notation bypassing string regex (e.g. 2130706433 = 127.0.0.1)
+  if (/^\d+$/.test(hostname) || /^0x[0-9a-f]+$/i.test(hostname)) return false;
+
+  // Domain whitelist check
+  const isAllowed = allowedDomains.some(d => hostname === d || hostname.endsWith('.' + d));
+  return isAllowed;
+}
+
 export interface TaxInvoicePdfInput {
   id?: number;
   invoiceNumber: string;
@@ -138,7 +189,7 @@ async function resolveImageBuffer(
                   }
                 } catch {}
 
-                if (!rawBuffer && asset.url && (asset.url.startsWith('http://') || asset.url.startsWith('https://'))) {
+                if (!rawBuffer && asset.url && isSafeFetchUrl(asset.url)) {
                   try {
                     const resp = await fetch(asset.url, { signal: AbortSignal.timeout(4000) });
                     if (resp.ok) {
@@ -165,7 +216,7 @@ async function resolveImageBuffer(
             }
           }
 
-          if (!rawBuffer && (trimmed.startsWith('http://') || trimmed.startsWith('https://'))) {
+          if (!rawBuffer && isSafeFetchUrl(trimmed)) {
             try {
               const resp = await fetch(trimmed, { signal: AbortSignal.timeout(4000) });
               if (resp.ok) {

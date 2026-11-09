@@ -778,7 +778,7 @@ export default function App({
 
       const roleRestricted =
         (pathname.startsWith('/master-admin') && user.role !== 'master_admin') ||
-        (pathname.startsWith('/admin') && user.role !== 'admin') ||
+        (pathname.startsWith('/admin') && user.role !== 'admin' && !(user.role === 'master_admin' && (pathname === '/admin/disputes' || pathname.startsWith('/admin/disputes/')))) ||
         (pathname.startsWith('/buyer/') && user.role !== 'buyer') ||
         (pathname.startsWith('/seller/') && !['seller', 'shg'].includes(user.role)) ||
         (pathname.startsWith('/shg/') && !isCurrentShg);

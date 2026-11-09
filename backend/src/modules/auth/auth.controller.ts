@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import prisma from '../../lib/prisma.js';
 import { Role, RegistrationStatus, OrganizationType, OrgRole } from '@prisma/client';
 import { env } from '../../config/env.js';
-import { sha256 } from '../../utils/crypto.js';
+import { sha256, createHashFingerprint } from '../../utils/crypto.js';
 import { isRedisReady, redis } from '../../config/redis.js';
 import { auditLog } from '../audit/audit.service.js';
 import { logger } from '../../config/logger.js';
@@ -349,7 +349,15 @@ export const authController = {
       const mobile = toLocalIndianMobile(req.body.mobile);
       if (!mobile) return res.status(400).json({ message: 'Valid Indian mobile number is required' });
 
-      const existingUser = await prisma.user.findFirst({ where: { mobile } });
+      const mobileFingerprint = createHashFingerprint(mobile, 'mobile');
+      const existingUser = await prisma.user.findFirst({
+        where: {
+          OR: [
+            { mobileFingerprint },
+            { mobile }
+          ]
+        }
+      });
       if (existingUser) {
         await auditLog({
           action: 'auth.otp.rejected_existing_mobile',
@@ -429,7 +437,12 @@ export const authController = {
       }
 
       const existingUser = await prisma.user.findFirst({
-        where: { mobile },
+        where: {
+          OR: [
+            { mobileFingerprint: createHashFingerprint(mobile, 'mobile') },
+            { mobile }
+          ]
+        },
         select: { id: true }
       });
 
@@ -501,7 +514,12 @@ export const authController = {
         select: { id: true, role: true, onboardingStatus: true, mobile: true }
       });
       const existingByMobile = await prisma.user.findFirst({
-        where: { mobile: normalizedMobile },
+        where: {
+          OR: [
+            { mobileFingerprint: createHashFingerprint(normalizedMobile, 'mobile') },
+            { mobile: normalizedMobile }
+          ]
+        },
         select: { id: true, role: true, onboardingStatus: true, email: true }
       });
 
@@ -901,7 +919,15 @@ export const authController = {
         user = await prisma.user.findUnique({ where: { email: emailOrMobile } });
       } else {
         const localMobile = toLocalIndianMobile(emailOrMobile) || emailOrMobile;
-        user = await prisma.user.findFirst({ where: { mobile: localMobile } });
+        const mobileFingerprint = createHashFingerprint(localMobile, 'mobile');
+        user = await prisma.user.findFirst({
+          where: {
+            OR: [
+              { mobileFingerprint },
+              { mobile: localMobile }
+            ]
+          }
+        });
       }
 
       if (!user) {
@@ -1383,7 +1409,7 @@ export const authController = {
       const user = await prisma.user.findFirst({ where: userLookupForIdentity(identifier, channel) });
       const otpToken = sha256(`${user ? user.id : 'none'}:${identifier}:${Date.now()}`).slice(0, 32);
 
-      const tokenKey = `reset_token:${otpToken}`;
+      const tokenKey = `reset_token:${sha256(otpToken)}`;
       const tokenData = { userId: user ? user.id : null, identifier, channel };
       if (redis && isRedisReady()) {
         await redis.set(tokenKey, JSON.stringify(tokenData), 'EX', 10 * 60);
@@ -1427,13 +1453,14 @@ export const authController = {
       let targetUserId: number | null = null;
 
       if (otpToken) {
-        const tokenKey = `reset_token:${otpToken}`;
+        const hashedKey = `reset_token:${sha256(otpToken)}`;
+        const legacyKey = `reset_token:${otpToken}`;
         let tokenData: { userId: number | null, identifier: string, channel: string } | null = null;
         if (redis && isRedisReady()) {
-          const raw = await redis.get(tokenKey);
+          const raw = (await redis.get(hashedKey)) || (await redis.get(legacyKey));
           if (raw) tokenData = JSON.parse(raw);
         } else {
-          const local = localResetTokens.get(tokenKey);
+          const local = localResetTokens.get(hashedKey) || localResetTokens.get(legacyKey);
           if (local && local.expiresAt > Date.now()) {
             tokenData = local;
           }
@@ -1501,11 +1528,14 @@ export const authController = {
       await rememberPreviousPassword(user.id, previousPasswordHash);
 
       if (otpToken) {
-        const tokenKey = `reset_token:${otpToken}`;
+        const hashedKey = `reset_token:${sha256(otpToken)}`;
+        const legacyKey = `reset_token:${otpToken}`;
         if (redis && isRedisReady()) {
-          await redis.del(tokenKey).catch(() => undefined);
+          await redis.del(hashedKey).catch(() => undefined);
+          await redis.del(legacyKey).catch(() => undefined);
         } else {
-          localResetTokens.delete(tokenKey);
+          localResetTokens.delete(hashedKey);
+          localResetTokens.delete(legacyKey);
         }
       }
       await consumeOtp('forgot_password', identifier);
@@ -1942,7 +1972,13 @@ export const authController = {
 
       // Check if mobile is already used by another user
       const existingUser = await prisma.user.findFirst({
-        where: { mobile, id: { not: userId } }
+        where: {
+          id: { not: userId },
+          OR: [
+            { mobileFingerprint: createHashFingerprint(mobile, 'mobile') },
+            { mobile }
+          ]
+        }
       });
       if (existingUser) {
         return res.status(400).json({ message: 'This mobile number is already in use by another account.' });

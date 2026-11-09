@@ -3,6 +3,7 @@
 import React, { useEffect, useRef } from 'react';
 import { AlertTriangle, ArrowRight, RefreshCw, ShoppingCart, Store, X } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 export interface SingleSellerConflictModalProps {
     isOpen: boolean;
@@ -95,14 +96,15 @@ export function SingleSellerConflictModal({
                 }
             }}
         >
-            <div
-                ref={dialogRef}
-                role="alertdialog"
-                aria-modal="true"
-                aria-labelledby="single-seller-conflict-title"
-                aria-describedby="single-seller-conflict-desc"
-                className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150"
-            >
+            <FocusTrap onEscape={onKeepCurrent} className="w-full max-w-lg">
+                <div
+                    ref={dialogRef}
+                    role="alertdialog"
+                    aria-modal="true"
+                    aria-labelledby="single-seller-conflict-title"
+                    aria-describedby="single-seller-conflict-desc"
+                    className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl border border-slate-200 animate-in zoom-in-95 duration-150"
+                >
                 {/* Header Strip */}
                 <div className="flex items-center justify-between border-b border-slate-100 bg-amber-50/70 px-6 py-4">
                     <div className="flex items-center gap-2.5">
@@ -125,7 +127,7 @@ export function SingleSellerConflictModal({
                         type="button"
                         onClick={onKeepCurrent}
                         disabled={isReplacing}
-                        className="rounded-lg p-1 text-slate-400 hover:bg-white hover:text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#12335f] transition-colors cursor-pointer"
+                        className="rounded-lg p-1 text-slate-600 hover:bg-white hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#12335f] transition-colors cursor-pointer"
                         aria-label="Close dialog and keep current cart"
                     >
                         <X className="h-5 w-5" />
@@ -221,6 +223,7 @@ export function SingleSellerConflictModal({
                     </Button>
                 </div>
             </div>
+            </FocusTrap>
         </div>
     );
 }

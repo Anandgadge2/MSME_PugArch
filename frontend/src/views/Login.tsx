@@ -592,7 +592,7 @@ export default function Login() {
                 <ShieldCheck className="h-5 w-5 text-[#c8a45c]" />
               </div>
               <div>
-                <p className="text-[10px] font-black text-[#c8a45c] uppercase tracking-[0.2em]">Secure Sign-In</p>
+                <p className="text-[10px] font-black text-amber-800 uppercase tracking-[0.2em]">Secure Sign-In</p>
                 <p className="text-xs font-bold text-slate-500">Official Procurement Gateway</p>
               </div>
             </div>

@@ -349,7 +349,7 @@ export default function PortalDocumentation() {
       <section className="space-y-4">
         <div className="flex flex-col justify-between gap-2.5 sm:gap-3 sm:flex-row sm:items-end">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Role-wise walkthrough</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Role-wise walkthrough</p>
             <h2 className="text-2xl font-black text-[#0b2447]">Registration, onboarding, and daily operations</h2>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -389,7 +389,7 @@ export default function PortalDocumentation() {
                   <div className="space-y-3">
                     {role.onboarding.map((step, index) => (
                       <div key={step.title} className="rounded-xl bg-white p-4 shadow-sm">
-                        <p className="text-xs font-black uppercase tracking-wide text-[#c8a45c]">Step {index + 1}</p>
+                        <p className="text-xs font-black uppercase tracking-wide text-amber-800">Step {index + 1}</p>
                         <h5 className="mt-1 font-black text-slate-900">{step.title}</h5>
                         <p className="mt-1 text-sm font-medium leading-6 text-slate-600">{step.action}</p>
                         <p className="mt-2 rounded-lg bg-amber-50 p-3 text-xs font-semibold leading-5 text-amber-900">{step.example}</p>
@@ -403,7 +403,7 @@ export default function PortalDocumentation() {
                   <div className="space-y-3">
                     {role.dailyWorkflow.map((step, index) => (
                       <div key={step.title} className="rounded-xl bg-white p-4 shadow-sm">
-                        <p className="text-xs font-black uppercase tracking-wide text-[#c8a45c]">Operation {index + 1}</p>
+                        <p className="text-xs font-black uppercase tracking-wide text-amber-800">Operation {index + 1}</p>
                         <h5 className="mt-1 font-black text-slate-900">{step.title}</h5>
                         <p className="mt-1 text-sm font-medium leading-6 text-slate-600">{step.action}</p>
                         <p className="mt-2 rounded-lg bg-blue-50 p-3 text-xs font-semibold leading-5 text-blue-900">{step.example}</p>
@@ -421,7 +421,7 @@ export default function PortalDocumentation() {
         <div className="mb-5 flex items-start gap-2.5 sm:gap-3">
           <ShoppingCart className="mt-1 h-6 w-6 text-[#c8a45c]" />
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Procurement types</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Procurement types</p>
             <h2 className="text-2xl font-black text-[#0b2447]">End-to-end procurement workflows with live examples</h2>
           </div>
         </div>
@@ -449,7 +449,7 @@ export default function PortalDocumentation() {
       <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.18em] text-[#c8a45c]">Organization roles and permissions</p>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-amber-800">Organization roles and permissions</p>
             <h2 className="text-2xl font-black text-[#0b2447]">Duties, allowed actions, and examples</h2>
             <p className="mt-1 text-sm font-medium text-slate-600">Use search, filter, sorting, and pagination to review role responsibilities.</p>
           </div>
@@ -458,7 +458,7 @@ export default function PortalDocumentation() {
             activeFilterCount={(activeRole !== 'all' ? 1 : 0) + (sortKey !== 'role' ? 1 : 0)}
             searchInput={
               <div className="relative w-full">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
                 <input
                   value={query}
                   onChange={event => handleSearchChange(event.target.value)}

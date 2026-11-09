@@ -20,6 +20,7 @@ import { postApi } from '../../shared/apiClient';
 import { useOrgRole } from '../../../hooks/useOrgRole';
 import { useAuth } from '../../../hooks/useAuth';
 import { indiaStates, indiaStatesDistricts } from '../../../data/indiaStatesDistricts';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 const ORG_TYPES: Array<{ value: string; label: string }> = [
     { value: 'STARTUP', label: 'Startup' },
@@ -110,21 +111,27 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4">
-            <div className="w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl">
-                <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
-                    <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
-                            <Building2 className="h-5 w-5" />
+            <FocusTrap onEscape={onClose} className="w-full max-w-lg">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="create-org-modal-title"
+                    className="w-full max-w-lg overflow-hidden rounded-xl border border-slate-200 bg-white shadow-2xl"
+                >
+                    <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-4 text-white">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10">
+                                <Building2 className="h-5 w-5" />
+                            </div>
+                            <div>
+                                <h3 id="create-org-modal-title" className="text-sm font-black uppercase tracking-widest">Create Organisation</h3>
+                                <p className="mt-0.5 text-[10px] text-white/70">No GST yet? Start with the basics. You'll be the Org Admin.</p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="text-sm font-black uppercase tracking-widest">Create Organisation</h3>
-                            <p className="mt-0.5 text-[10px] text-white/70">No GST yet? Start with the basics. You'll be the Org Admin.</p>
-                        </div>
+                        <button onClick={onClose} aria-label="Close dialog" className="rounded-md p-1 text-white/80 hover:bg-white/10" type="button">
+                            <X className="h-4 w-4" />
+                        </button>
                     </div>
-                    <button onClick={onClose} className="rounded-md p-1 text-white/80 hover:bg-white/10" type="button">
-                        <X className="h-4 w-4" />
-                    </button>
-                </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4 p-5">
                     <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-semibold text-amber-800">
@@ -232,6 +239,7 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
                     </div>
                 </form>
             </div>
+            </FocusTrap>
         </div>
     );
 }

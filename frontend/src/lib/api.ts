@@ -286,6 +286,10 @@ export const api = {
           const refreshed = await refreshSessionCookies().catch(() => false);
           if (refreshed) {
             const retryHeaders = normalizeHeaders(options.headers, options.body as BodyInit | null);
+            const freshToken = getStoredToken() || (typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null);
+            if (freshToken && freshToken !== 'null' && freshToken !== 'undefined' && freshToken !== COOKIE_SESSION_TOKEN) {
+              retryHeaders['Authorization'] = `Bearer ${freshToken}`;
+            }
             response = await sendRequest(retryHeaders);
           } else if (shouldDispatchUnauthorized(endpoint) && typeof window !== 'undefined') {
             window.dispatchEvent(new CustomEvent('auth:unauthorized', { detail: { code: errCode || 'SESSION_INVALID' } }));

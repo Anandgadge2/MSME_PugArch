@@ -61,7 +61,9 @@ const placeOrderSchema = z.object({
     paymentMethod: z.string().trim().optional().default('PAY_ON_INVOICE'),
     termsAccepted: z.boolean().refine(val => val === true, {
         message: 'You must accept the Direct Purchase Terms and Statutory Compliance Agreement to proceed.'
-    }).optional()
+    }).optional(),
+    rule154Certificate: z.any().optional().nullable(),
+    rule154Justification: z.any().optional().nullable()
 });
 
 
@@ -291,6 +293,24 @@ router.post(
                     });
                 }
 
+                // GFR 2017 Rule 154: Direct purchase without L1 is capped at ₹25,000 per seller unless accompanied by valid Rule 154 certificate
+                if (totalAmount > 25000) {
+                    const cert = body.rule154Certificate || body.rule154Justification;
+                    const hasValidCert = Boolean(
+                        cert && (
+                            (typeof cert === 'object' && cert.certifierName && cert.designation && (cert.reason || cert.justification) && cert.certifiedDate) ||
+                            (typeof cert === 'string' && cert.trim().length >= 10)
+                        )
+                    );
+                    if (!hasValidCert) {
+                        throw new ApiError(
+                            400,
+                            'Orders exceeding ₹25,000 require Rule 154 certificate or L1 comparison',
+                            'DIRECT_PURCHASE_THRESHOLD_EXCEEDED'
+                        );
+                    }
+                }
+
                 const poNum = numberSeries('PO');
                 const firstItemName = poItemsData[0]?.itemName || 'Items';
                 const poTitle = poItemsData.length === 1
@@ -325,6 +345,7 @@ router.post(
                             create: poItemsData
                         },
                         metadata: {
+                            rule154Certificate: body.rule154Certificate || body.rule154Justification || null,
                             deliveryDetails: {
                                 address: body.deliveryAddress,
                                 city: body.city,

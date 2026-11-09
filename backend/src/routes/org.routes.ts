@@ -14,12 +14,13 @@
  * GET    /api/org/status                  — Org approval status (for banner)
  */
 import { Router, type Response } from 'express';
+import { randomInt } from 'crypto';
 import { z } from 'zod';
 import { OrgRole, Role } from '@prisma/client';
 import prisma from '../lib/prisma.js';
 import { authenticate, requireAccountType } from '../middleware/auth.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
-import { generateSecureTemporaryPassword } from '../utils/crypto.js';
+import { generateSecureTemporaryPassword, sha256, createHashFingerprint } from '../utils/crypto.js';
 import { requireOrgRole } from '../middleware/requireOrgRole.js';
 import { shortCache } from '../middleware/httpCache.js';
 import { ApiError } from '../utils/ApiError.js';
@@ -105,7 +106,7 @@ const publicProcurementBidStatuses = ['PENDING_ADMIN_APPROVAL', 'OPEN', 'APPROVE
 
 const generateToken = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    return Array.from({ length: 48 }, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+    return Array.from({ length: 48 }, () => chars[randomInt(0, chars.length)]).join('');
 };
 
 const ORG_ROLE_VALUES = Object.values(OrgRole);
@@ -1584,7 +1585,7 @@ router.post(
                 invitedEmail: body.email,
                 orgRole: fallbackRole,
                 customRoleId: customRole?.id || null,
-                token,
+                token: sha256(token),
                 expiresAt,
                 invitedById: userId(req),
                 message: body.message || null,
@@ -1728,14 +1729,24 @@ router.get(
     asyncRoute(async (req, res) => {
         const token = z.string().min(10).parse(req.query.token);
 
-        const invite = await prisma.orgInvitation.findUnique({
-            where: { token },
+        let invite = await prisma.orgInvitation.findUnique({
+            where: { token: sha256(token) },
             include: {
                 organization: { select: { organizationName: true, organizationType: true } },
                 customRole: { select: { id: true, name: true, description: true } },
                 invitedBy: { select: { name: true, role: true } }
             }
         });
+        if (!invite) {
+            invite = await prisma.orgInvitation.findUnique({
+                where: { token },
+                include: {
+                    organization: { select: { organizationName: true, organizationType: true } },
+                    customRole: { select: { id: true, name: true, description: true } },
+                    invitedBy: { select: { name: true, role: true } }
+                }
+            });
+        }
 
         if (!invite) throw new ApiError(404, 'Invitation not found or already used.', 'INVITE_NOT_FOUND');
         if (invite.acceptedAt || invite.status === 'ACCEPTED') throw new ApiError(409, 'This invitation has already been accepted.', 'INVITE_USED');
@@ -1776,8 +1787,8 @@ router.post(
     asyncRoute(async (req, res) => {
         const body = inviteSignupSchema.parse(req.body);
 
-        const invite = await prisma.orgInvitation.findUnique({
-            where: { token: body.token },
+        let invite = await prisma.orgInvitation.findUnique({
+            where: { token: sha256(body.token) },
             include: {
                 organization: { select: { id: true, organizationName: true, verificationStatus: true } },
                 customRole: { select: { id: true, name: true } },
@@ -1807,7 +1818,12 @@ router.post(
 
         if (body.mobile) {
             const mobileTaken = await prisma.user.findFirst({
-                where: { mobile: body.mobile },
+                where: {
+                    OR: [
+                        { mobileFingerprint: createHashFingerprint(body.mobile, 'mobile') },
+                        { mobile: body.mobile }
+                    ]
+                },
                 select: { id: true }
             });
             if (mobileTaken) throw new ApiError(409, 'Mobile number already in use. Please use unique details.', 'MOBILE_EXISTS');
@@ -1903,13 +1919,22 @@ router.post(
     asyncRoute(async (req, res) => {
         const { token } = z.object({ token: z.string().min(10) }).parse(req.body);
 
-        const invite = await prisma.orgInvitation.findUnique({
-            where: { token },
+        let invite = await prisma.orgInvitation.findUnique({
+            where: { token: sha256(token) },
             include: {
                 customRole: { select: { id: true, name: true } },
                 organization: { select: { id: true, organizationName: true, verificationStatus: true } }
             }
         });
+        if (!invite) {
+            invite = await prisma.orgInvitation.findUnique({
+                where: { token },
+                include: {
+                    customRole: { select: { id: true, name: true } },
+                    organization: { select: { id: true, organizationName: true, verificationStatus: true } }
+                }
+            });
+        }
 
         if (!invite) throw new ApiError(404, 'Invitation not found or already used.', 'INVITE_NOT_FOUND');
         if (invite.acceptedAt || invite.status === 'ACCEPTED') throw new ApiError(409, 'This invitation has already been accepted.', 'INVITE_USED');
@@ -2275,7 +2300,7 @@ router.post('/org/members/:memberId/transfer-access', authenticate, requireAccou
                 invitedEmail: body.toEmail,
                 orgRole: membership.orgRole,
                 customRoleId: replacementRoleId || null,
-                token: generateToken(),
+                token: sha256(generateToken()),
                 expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
                 invitedById: userId(req),
                 message: `Access transfer: ${body.reason}`,

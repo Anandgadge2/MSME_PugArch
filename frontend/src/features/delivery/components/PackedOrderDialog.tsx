@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { runWithToast } from '../../../lib/toast';
 import { api } from '../../../lib/api';
 import { useMarkDeliveryPacked } from '../hooks';
@@ -258,11 +259,14 @@ export function PackedOrderDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-5 backdrop-blur-sm overflow-y-auto"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="pack-dialog-title"
     >
-      <div className="w-full max-w-3xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col my-auto animate-in fade-in zoom-in-95 duration-150">
+      <FocusTrap onEscape={onClose} className="w-full max-w-3xl max-h-[92vh] flex flex-col my-auto">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="pack-dialog-title"
+          className="w-full max-w-3xl max-h-[92vh] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl flex flex-col animate-in fade-in zoom-in-95 duration-150"
+        >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-[#0b1f3a] via-[#12335f] to-[#1e40af] px-6 py-4 text-white shrink-0">
           <div className="flex items-center gap-3">
@@ -304,33 +308,33 @@ export function PackedOrderDialog({
           {/* 1. Context & Destination Summary */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <Building2 className="h-3.5 w-3.5 text-indigo-600" />
                 Consignee & Buyer
               </span>
               <p className="text-xs font-bold text-slate-900 truncate" title={consigneeName}>
                 {consigneeName}
               </p>
-              <div className="flex items-start gap-1 pt-1 text-[11px] text-slate-500">
-                <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+              <div className="flex items-start gap-1 pt-1 text-[11px] text-slate-600">
+                <MapPin className="h-3.5 w-3.5 text-slate-500 shrink-0 mt-0.5" />
                 <span className="line-clamp-2" title={consigneeAddress}>{consigneeAddress}</span>
               </div>
             </div>
 
             <div className="rounded-xl border border-slate-200 bg-white p-3.5 shadow-2xs space-y-1">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
                 <Boxes className="h-3.5 w-3.5 text-emerald-600" />
                 Consignment Units
               </span>
               <div className="flex items-baseline justify-between">
                 <p className="text-base font-black text-slate-900">
-                  {items.length} <span className="text-xs font-semibold text-slate-500">line item{items.length !== 1 ? 's' : ''}</span>
+                  {items.length} <span className="text-xs font-semibold text-slate-600">line item{items.length !== 1 ? 's' : ''}</span>
                 </p>
                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
                   {totalItemQuantity} Total Units
                 </span>
               </div>
-              <p className="text-[10px] text-slate-400 pt-1">
+              <p className="text-[10px] text-slate-600 pt-1">
                 Verify each item physically into the carton before confirming seal.
               </p>
             </div>
@@ -352,7 +356,7 @@ export function PackedOrderDialog({
 
             <div className="p-3">
               {loadingItems ? (
-                <div className="py-6 flex items-center justify-center text-slate-400 text-xs font-semibold gap-2">
+                <div className="py-6 flex items-center justify-center text-slate-600 text-xs font-semibold gap-2">
                   <Loader2 className="h-4 w-4 animate-spin text-[#12335f]" />
                   Loading line items...
                 </div>
@@ -364,7 +368,7 @@ export function PackedOrderDialog({
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs text-left">
                     <thead>
-                      <tr className="border-b border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-wider">
+                      <tr className="border-b border-slate-100 text-[9px] font-black uppercase text-slate-600 tracking-wider">
                         <th className="py-2 px-2.5 w-10 text-center">Verify</th>
                         <th className="py-2 px-2.5">Item Description</th>
                         <th className="py-2 px-2.5 text-right">Ordered Qty</th>
@@ -395,7 +399,7 @@ export function PackedOrderDialog({
                                 {item.itemName || item.title || `Consignment Item #${idx + 1}`}
                               </span>
                               {item.description && (
-                                <p className="text-[10px] text-slate-400 font-normal line-clamp-1">
+                                <p className="text-[10px] text-slate-600 font-normal line-clamp-1">
                                   {item.description}
                                 </p>
                               )}
@@ -446,7 +450,7 @@ export function PackedOrderDialog({
                   required
                   className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
                 />
-                <p className="mt-0.5 text-[9px] text-slate-400">Total packed weight on scale</p>
+                <p className="mt-0.5 text-[9px] text-slate-600">Total packed weight on scale</p>
               </div>
 
               <div>
@@ -463,7 +467,7 @@ export function PackedOrderDialog({
                   placeholder="e.g. 1.2"
                   className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-semibold text-slate-800 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
                 />
-                <p className="mt-0.5 text-[9px] text-slate-400">Box & packaging weight</p>
+                <p className="mt-0.5 text-[9px] text-slate-600">Box & packaging weight</p>
               </div>
 
               <div>
@@ -481,7 +485,7 @@ export function PackedOrderDialog({
                   required
                   className="h-9 w-full rounded-lg border border-slate-200 px-3 text-xs font-mono font-bold text-slate-900 outline-none focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/15"
                 />
-                <p className="mt-0.5 text-[9px] text-slate-400">Cartons / crates count</p>
+                <p className="mt-0.5 text-[9px] text-slate-600">Cartons / crates count</p>
               </div>
             </div>
 
@@ -489,7 +493,7 @@ export function PackedOrderDialog({
             <div>
               <label className="mb-1 block text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center justify-between">
                 <span>Package Dimensions — L × W × H (cm)</span>
-                <span className="text-[9px] text-slate-400 normal-case">Formula: (L × W × H) / 5000</span>
+                <span className="text-[9px] text-slate-600 normal-case">Formula: (L × W × H) / 5000</span>
               </label>
               <div className="grid grid-cols-3 gap-2.5">
                 <div>
@@ -565,7 +569,7 @@ export function PackedOrderDialog({
                   Handling & Special Instructions
                 </h3>
               </div>
-              <span className="text-[9px] font-bold text-slate-400">Carrier Safety Flags</span>
+              <span className="text-[9px] font-bold text-slate-600">Carrier Safety Flags</span>
             </div>
 
             <div className="flex flex-wrap gap-2">
@@ -657,6 +661,7 @@ export function PackedOrderDialog({
           </div>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

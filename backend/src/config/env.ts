@@ -253,6 +253,9 @@ const normalizeDatabaseUrl = (value?: string) => {
     if (!url.searchParams.has('connect_timeout')) {
       url.searchParams.set('connect_timeout', '30');
     }
+    if (process.env.NODE_ENV === 'production' && !url.searchParams.has('sslmode')) {
+      url.searchParams.set('sslmode', 'require');
+    }
 
     return url.toString();
   } catch {

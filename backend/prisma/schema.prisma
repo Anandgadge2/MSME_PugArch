@@ -33,6 +33,7 @@ model User {
   sessionVersion                     Int                                     @default(0)
   userId                             String?                                 @unique
   mobile                             String?
+  mobileFingerprint                  String?
   dob                                DateTime?
   isDualRole                         Boolean                                 @default(false)
   organizationId                     Int?
@@ -176,6 +177,7 @@ model User {
   dpExtensionsRequested              DeliveryDpExtension[]                   @relation("DpExtensionRequester")
   dpExtensionsResponded              DeliveryDpExtension[]                   @relation("DpExtensionResponder")
   sellerPbgs                         PerformanceGuarantee[]                  @relation("SellerPbg")
+  sellerEmdDeposits                  EmdDeposit[]                            @relation("SellerEmdDeposits")
   buyerPbgs                          PerformanceGuarantee[]                  @relation("BuyerPbg")
   buyerNegotiations                  ProcurementNegotiation[]                @relation("NegotiationBuyer")
   sellerNegotiations                 ProcurementNegotiation[]                @relation("NegotiationSeller")
@@ -184,6 +186,7 @@ model User {
   @@index([role])
   @@index([accountTypeId])
   @@index([mobile])
+  @@index([mobileFingerprint])
   @@index([organizationId])
   @@index([accountStatus])
   @@index([createdAt])
@@ -207,6 +210,7 @@ model BuyerProfile {
   department               String?
   email                    String?
   mobile                   String
+  mobileFingerprint        String?
   alternateMobile          String?
   country                  String                      @default("India")
   state                    String?
@@ -231,8 +235,6 @@ model BuyerProfile {
   organizationId           Int?
   organizationTypeEnum     OrganizationType?
   verificationStatusEnum   VerificationStatus?
-  /// @deprecated Raw Aadhaar must not be written or returned. Retained temporarily for backward-compatible migrations only.
-  aadhaarNumber            String?
   aadhaarVerified          Boolean                     @default(false)
   declarationAccepted      Boolean                     @default(false)
   district                 String?
@@ -289,6 +291,7 @@ model BuyerProfile {
   @@index([gstFingerprint])
   @@index([panFingerprint])
   @@index([aadhaarHash])
+  @@index([mobileFingerprint])
 }
 
 model SellerProfile {
@@ -296,18 +299,26 @@ model SellerProfile {
   userId                       Int                 @unique
   businessName                 String?
   pan                          String              @unique
-  aadhaarNumber                String?
   dateOfIncorporation          DateTime?
   mobile                       String?
+  mobileFingerprint            String?
+  /// @deprecated Legacy flat catalog column. Active products reside in the relational 'Product' & 'CatalogueProduct' models.
+  productList                  String?
+  /// @deprecated Legacy flat catalog column. Active product names reside in the relational 'Product' model.
+  detailedProductName          String?
+  /// @deprecated Legacy flat catalog column. Active HSN classification resides in 'Product.hsnCode' & 'HSNMaster'.
+  hsnCode                      String?
+  /// @deprecated Legacy flat catalog column. Active brand names reside in the relational 'Product.brand' model.
+  brand                        String?
+  /// @deprecated Legacy flat catalog column. Active product specs reside in 'Product.specifications'.
+  specifications               String?
+  /// @deprecated Legacy flat catalog column. Active catalog classification resides in 'Category' & 'CatalogueProduct'.
+  otherCategoryDetails         String?
+  /// @deprecated Legacy document JSON blob. Active onboarding documents reside in 'SellerDocument' & 'FileAsset'.
+  documents                    Json?
+  /// @deprecated Legacy text column. Replaced by typed 'msmeCategoryEnum'.
   msmeCategory                 String?
   productCategories            String[]
-  otherCategoryDetails         String?
-  productList                  String?
-  detailedProductName          String?
-  hsnCode                      String?
-  brand                        String?
-  specifications               String?
-  documents                    Json?
   createdAt                    DateTime            @default(now())
   updatedAt                    DateTime            @updatedAt
   panMasked                    String?
@@ -353,6 +364,7 @@ model SellerProfile {
   @@index([panFingerprint])
   @@index([aadhaarHash])
   @@index([aadhaarFingerprint])
+  @@index([mobileFingerprint])
 }
 
 model Organization {
@@ -361,6 +373,7 @@ model Organization {
   organizationType             OrganizationType
   gstin                        String?
   panNumber                    String?
+  panFingerprint               String?
   cinNumber                    String?
   udyamNumber                  String?
   addressLine1                 String?
@@ -448,6 +461,7 @@ model Organization {
   @@index([organizationType])
   @@index([gstin])
   @@index([panNumber])
+  @@index([panFingerprint])
   @@index([udyamNumber])
   @@index([verificationStatus])
   @@index([isBlacklisted])
@@ -4999,6 +5013,8 @@ enum PbgStatus {
   VERIFIED_ACTIVE
   INVOCATION_REQUESTED
   INVOKED_DEFAULTED
+  INVOKED
+  FORFEITED
   RELEASE_REQUESTED
   RELEASED_COMPLETED
 }
@@ -5602,4 +5618,45 @@ enum AppealStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+// ─── GFR 2017 Rule 170: Earnest Money Deposit (EMD) ─────────────────────────
+
+enum EmdStatus {
+  PENDING
+  SUBMITTED
+  VERIFIED
+  RETURNED
+  FORFEITED
+  EXEMPTED
+}
+
+model EmdDeposit {
+  id                  Int          @id @default(autoincrement())
+  tenderId            Int?
+  procurementBidId    Int?
+  sellerId            Int
+  amount              Decimal      @db.Decimal(18, 2)
+  instrumentType      String       @default("BANK_GUARANTEE")
+  instrumentNumber    String?
+  bankName            String?
+  issueDate           DateTime?
+  expiryDate          DateTime?
+  exemptionReason     String?
+  exemptionDocumentId Int?
+  status              EmdStatus    @default(PENDING)
+  submittedAt         DateTime?
+  verifiedAt          DateTime?
+  returnedAt          DateTime?
+  forfeitedAt         DateTime?
+  forfeitureReason    String?
+  metadata            Json?
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  seller              User         @relation("SellerEmdDeposits", fields: [sellerId], references: [id])
+
+  @@index([sellerId, status])
+  @@index([tenderId])
+  @@index([procurementBidId])
 }

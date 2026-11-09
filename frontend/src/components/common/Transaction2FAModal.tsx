@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ShieldCheck, RefreshCw, X, AlertCircle, Lock, CheckCircle2 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { FocusTrap } from '../ui/FocusTrap';
 import { postApi } from '../../features/shared/apiClient';
 import { formatCurrency } from '../../features/shared/format';
 
@@ -113,7 +114,8 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div role="dialog" aria-modal="true" aria-labelledby="twofa-dialog-title" aria-describedby="twofa-dialog-desc" className="relative w-full max-w-md overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl transition-all">
+      <FocusTrap onEscape={onClose} className="w-full max-w-md">
+        <div role="dialog" aria-modal="true" aria-labelledby="twofa-dialog-title" aria-describedby="twofa-dialog-desc" className="relative w-full max-w-md overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-2xl transition-all">
         {/* Top Header Banner */}
         <div className="bg-gradient-to-br from-emerald-800 via-teal-900 to-slate-900 px-6 py-5 text-white">
           <div className="flex items-center justify-between">
@@ -144,12 +146,12 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
           {/* Action / Amount Details Card */}
           <div className="rounded-xl border border-slate-100 bg-slate-50 p-3.5 space-y-1.5">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Action</span>
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Action</span>
               <span className="font-bold text-slate-800">{actionTitle || actionType.replace(/_/g, ' ')}</span>
             </div>
             {orderId && (
               <div className="flex items-center justify-between text-xs">
-                <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Order ID</span>
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-600">Order ID</span>
                 <span className="font-bold text-slate-800">#{orderId}</span>
               </div>
             )}
@@ -170,7 +172,7 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
                 'Enter the 6-digit security code sent to your registered email/phone'
               )}
             </p>
-            <p className="text-[11px] text-slate-400 font-medium">Valid for 10 minutes</p>
+            <p className="text-[11px] text-slate-600 font-medium">Valid for 10 minutes</p>
           </div>
 
           {/* Error Message */}
@@ -240,6 +242,7 @@ export const Transaction2FAModal: React.FC<Transaction2FAModalProps> = ({
           </form>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 };

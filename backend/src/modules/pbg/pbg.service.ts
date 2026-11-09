@@ -264,4 +264,93 @@ export class PbgService {
 
     return updated;
   }
+
+  /**
+   * Statutory PBG Invocation / Forfeiture upon vendor contractual default (GFR 2017 Rule 171)
+   */
+  static async invokePbg(
+    pbgId: string | number,
+    reason: string,
+    invokedBy: string | number
+  ) {
+    if (!reason || reason.trim().length < 10) {
+      throw new ApiError(400, 'Detailed forfeiture reason is statutory requirement.', 'REASON_REQUIRED');
+    }
+
+    const numericId = typeof pbgId === 'string' ? parseInt(pbgId, 10) : pbgId;
+    const numericInvokerId = typeof invokedBy === 'string' ? parseInt(invokedBy, 10) : invokedBy;
+
+    const pbg = await db.performanceGuarantee.findFirst({
+      where: isNaN(numericId)
+        ? { bgNumber: String(pbgId) }
+        : { OR: [{ id: numericId }, { purchaseOrderId: numericId }] },
+      include: { purchaseOrder: true }
+    });
+
+    if (!pbg) {
+      throw new ApiError(404, 'Performance guarantee not found', 'PBG_NOT_FOUND');
+    }
+
+    const terminalStatuses = ['EXPIRED', 'RELEASED', 'RELEASED_COMPLETED', 'RELEASE_REQUESTED', 'INVOKED', 'INVOKED_DEFAULTED', 'FORFEITED'];
+    if (terminalStatuses.includes(pbg.status)) {
+      throw new ApiError(
+        409,
+        `Cannot invoke PBG in status '${pbg.status}'.`,
+        'PBG_INVALID_STATUS_FOR_INVOCATION'
+      );
+    }
+
+    const now = new Date();
+    const updated = await db.performanceGuarantee.update({
+      where: { id: pbg.id },
+      data: {
+        status: 'INVOKED',
+        invokedAt: now,
+        checkerRemarks: `Statutory forfeiture invoked by User #${numericInvokerId || invokedBy}: ${reason.trim()}`
+      }
+    });
+
+    // Record forfeiture event in audit trail
+    try {
+      await db.auditLog.create({
+        data: {
+          action: 'PBG_INVOKED',
+          entityType: 'performance_guarantee',
+          entityId: String(pbg.id),
+          actorUserId: isNaN(numericInvokerId) ? 1 : numericInvokerId,
+          metadata: {
+            reason: reason.trim(),
+            forfeitedAmount: Number(pbg.amount || 0),
+            purchaseOrderId: pbg.purchaseOrderId,
+            bgNumber: pbg.bgNumber,
+            previousStatus: pbg.status,
+            invokedAt: now.toISOString()
+          }
+        }
+      });
+    } catch {
+      // non-fatal
+    }
+
+    // Generate event notification
+    try {
+      if (pbg.sellerId) {
+        await db.notification.create({
+          data: {
+            userId: pbg.sellerId,
+            title: 'Performance Guarantee Invoked',
+            message: `Performance security for PO #${pbg.purchaseOrder?.poNumber || pbg.purchaseOrderId} has been invoked/forfeited: ${reason.trim()}`,
+            type: 'pbg_invoked',
+            priority: 'urgent'
+          }
+        });
+      }
+    } catch {
+      // non-fatal
+    }
+
+    return updated;
+  }
 }
+
+export const invokePbg = PbgService.invokePbg.bind(PbgService);

@@ -21,6 +21,7 @@ import {
   Filter
 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import { DateTimePicker } from '../../../components/ui/DateTimePicker';
 import { reverseAuctionApi } from '../api';
 import { formatCurrency, formatDateTime } from '../../shared/format';
@@ -205,12 +206,15 @@ export default function StartReverseAuctionModal({
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="reverse-auction-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/65 backdrop-blur-xs animate-in fade-in duration-200"
     >
-      <div className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden">
+      <FocusTrap onEscape={onClose} className="w-full max-w-3xl max-h-[92vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reverse-auction-modal-title"
+          className="relative w-full max-w-3xl max-h-[92vh] flex flex-col rounded-3xl bg-white shadow-2xl border border-slate-200 overflow-hidden"
+        >
         
         {/* Header */}
         <div className="flex items-start justify-between border-b border-slate-100 p-5 sm:p-6 bg-slate-50/50">
@@ -235,7 +239,7 @@ export default function StartReverseAuctionModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-slate-400 hover:bg-slate-200 hover:text-slate-700 transition"
+            className="rounded-xl p-2 text-slate-600 hover:bg-slate-200 hover:text-slate-900 transition"
             aria-label="Close modal"
           >
             <X className="h-5 w-5" />
@@ -348,19 +352,19 @@ export default function StartReverseAuctionModal({
                           <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-500 font-semibold">
                             {vendor.makeBrand && (
                               <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                                <Tag className="h-3 w-3 text-slate-400" />
+                                <Tag className="h-3 w-3 text-slate-500" />
                                 Make: {vendor.makeBrand} {vendor.model ? `(${vendor.model})` : ''}
                               </span>
                             )}
                             {vendor.deliveryTimeline && (
                               <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                                <Truck className="h-3 w-3 text-slate-400" />
+                                <Truck className="h-3 w-3 text-slate-500" />
                                 Delivery: {vendor.deliveryTimeline}
                               </span>
                             )}
                             {vendor.offeredQty && (
                               <span className="flex items-center gap-1 bg-white px-2 py-0.5 rounded-md border border-slate-200">
-                                <Layers className="h-3 w-3 text-slate-400" />
+                                <Layers className="h-3 w-3 text-slate-500" />
                                 Qty: {vendor.offeredQty}
                               </span>
                             )}
@@ -562,6 +566,7 @@ export default function StartReverseAuctionModal({
         </div>
 
       </div>
+      </FocusTrap>
     </div>
   );
 }

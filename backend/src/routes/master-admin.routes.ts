@@ -18,6 +18,8 @@ import { uploadFile } from '../services/storage/storage.service.js';
 import { ApiError } from '../utils/ApiError.js';
 import { safeRouteMessage } from '../utils/routeHelpers.js';
 import { env } from '../config/env.js';
+import { maskSensitive } from '../utils/maskSensitive.js';
+import * as XLSX from 'xlsx';
 
 const router = Router();
 
@@ -160,17 +162,44 @@ const csvCell = (value: unknown) => {
 };
 
 const sendCsv = (res: Response, filename: string, rows: Array<Record<string, unknown>>) => {
-  const columns = Array.from(rows.reduce((set, row) => {
+  const safeRows = rows.map(row => flattenRecord(maskSensitive(row) as Record<string, any>));
+  const columns = Array.from(safeRows.reduce((set, row) => {
     Object.keys(row).forEach(key => set.add(key));
     return set;
   }, new Set<string>()));
   const csv = [
     columns.join(','),
-    ...rows.map(row => columns.map(column => csvCell(row[column])).join(','))
+    ...safeRows.map(row => columns.map(column => csvCell(row[column])).join(','))
   ].join('\n');
   res.setHeader('Content-Type', 'text/csv; charset=utf-8');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
   res.send(csv);
+};
+
+const sendExcel = (res: Response, filename: string, rows: Array<Record<string, unknown>>, sheetTitle: string = 'Data Export') => {
+  const safeRows = rows.map(row => flattenRecord(maskSensitive(row) as Record<string, any>));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(safeRows.length > 0 ? safeRows : [{ Message: 'No records available for the selected criteria' }]);
+
+  if (safeRows.length > 0) {
+    const colKeys = Object.keys(safeRows[0]);
+    ws['!cols'] = colKeys.map(k => {
+      const maxLen = Math.max(
+        k.length,
+        ...safeRows.slice(0, 50).map(r => String(r[k] ?? '').length)
+      );
+      return { wch: Math.min(Math.max(maxLen + 4, 12), 60) };
+    });
+  }
+
+  const cleanSheetName = sheetTitle.replace(/[:\\/?*\[\]]/g, '').slice(0, 31) || 'Data';
+  XLSX.utils.book_append_sheet(wb, ws, cleanSheetName);
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', buffer.length.toString());
+  res.end(buffer);
 };
 
 const flattenRecord = (record: Record<string, any>) => {
@@ -2894,7 +2923,7 @@ router.post('/master-admin/users', ...masterOnly, requirePermission(PERMISSIONS.
       isReset: false
     }).catch((err) => console.error('[UserCreate] Failed to send welcome email:', err));
 
-    jsonOk(res, { ...user, temporaryPassword: rawPassword }, 'User created successfully and welcome credentials email sent', 201);
+    jsonOk(res, user, 'User created successfully and welcome credentials email sent', 201);
   } catch (error: any) {
     const code = String(error?.message || '');
     if (code === 'INVALID_ROLE') return jsonError(res, 400, 'Invalid role selected.', 'INVALID_ROLE');
@@ -3011,7 +3040,7 @@ router.post('/master-admin/users/:id/reset-password', ...masterOnly, requirePerm
     isReset: true
   }).catch((err) => console.error('[UserPasswordReset] Failed to send reset email:', err));
 
-  jsonOk(res, { user, temporaryPassword }, 'Temporary password generated and email sent to user successfully.');
+  jsonOk(res, user, 'Temporary password generated and email sent to user successfully.');
 }));
 
 router.post('/master-admin/users/:id/unlock', ...masterOnly, requirePermission(PERMISSIONS.USER_UPDATE), wrap(async (req, res) => {
@@ -4463,7 +4492,8 @@ router.get('/master-admin/security-overview', ...masterOnly, wrap(async (_req, r
 }));
 
 router.get('/master-admin/reports', ...masterOnly, wrap(async (_req, res) => {
-  const [organizations, users, procurementBids, tenders, rfqs, buyerRequirements, purchaseOrders, invoices, payments, products, services, documents, auditLogs] = await Promise.all([
+  const [companies, organizations, users, procurementBids, tenders, rfqs, buyerRequirements, purchaseOrders, invoices, payments, products, services, documents, auditLogs] = await Promise.all([
+    safeCount((prisma as any).company),
     safeCount(prisma.organization),
     safeCount(prisma.user),
     safeCount((prisma as any).procurementBid),
@@ -4478,7 +4508,7 @@ router.get('/master-admin/reports', ...masterOnly, wrap(async (_req, res) => {
     safeCount((prisma as any).fileAsset),
     safeCount(prisma.auditLog)
   ]);
-  jsonOk(res, { organizations, users, procurementBids, tenders, rfqs, buyerRequirements, purchaseOrders, invoices, payments, products, services, documents, auditLogs, generatedAt: new Date().toISOString() });
+  jsonOk(res, { companies, organizations, users, procurementBids, tenders, rfqs, buyerRequirements, purchaseOrders, invoices, payments, products, services, documents, auditLogs, generatedAt: new Date().toISOString() });
 }));
 
 router.get('/master-admin/reports/export', ...masterOnly, wrap(async (req, res) => {
@@ -4595,9 +4625,15 @@ router.get('/master-admin/reports/export', ...masterOnly, wrap(async (req, res) 
     return jsonError(res, 400, 'Unsupported export module.', 'VALIDATION_ERROR');
   }
 
-  await createAuditLog(req, { action: 'data.export', entityType: 'master-admin-report', metadata: { module, reason, rows: rows.length, status} });
+  const format = String(req.query.format || 'xlsx').toLowerCase();
+  await createAuditLog(req, { action: 'data.export', entityType: 'master-admin-report', metadata: { module, reason, format, rows: rows.length, status} });
   const safeModule = module.replace(/[^a-z0-9-]+/g, '-');
-  sendCsv(res, `master-admin-${safeModule}-${new Date().toISOString().slice(0, 10)}.csv`, rows.map(row => flattenRecord(row as Record<string, any>)));
+  const fileDate = new Date().toISOString().slice(0, 10);
+  if (format === 'csv') {
+    sendCsv(res, `master-admin-${safeModule}-${fileDate}.csv`, rows);
+  } else {
+    sendExcel(res, `master-admin-${safeModule}-${fileDate}.xlsx`, rows, safeModule);
+  }
 }));
 
 router.get('/master-admin/marketplace/products', ...masterOnly, wrap(async (req, res) => {

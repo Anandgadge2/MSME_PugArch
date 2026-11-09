@@ -470,10 +470,21 @@ const getExportDocumentLinks = (item: any) => {
 
 export default function AdminOnboarding() {
   const queryClient = useQueryClient();
-  const token = typeof window !== 'undefined' ? localStorage.getItem("token") || "" : "";
-  const authHeaders = { Authorization: `Bearer ${token}` };
-  const authOptions = {
-    headers: { Authorization: `Bearer ${token}` },
+  const getAuthToken = () => (typeof window !== 'undefined' ? (localStorage.getItem("token") || "") : "");
+  const token = getAuthToken();
+  const authHeaders: Record<string, string> = {
+    get Authorization() {
+      const t = getAuthToken();
+      return t ? `Bearer ${t}` : "";
+    }
+  };
+  const authOptions: RequestInit = {
+    get headers() {
+      const t = getAuthToken();
+      const h: Record<string, string> = {};
+      if (t) h.Authorization = `Bearer ${t}`;
+      return h;
+    }
   };
 
   const [sellers, setSellers] = useState<any[]>([]);
@@ -3903,7 +3914,7 @@ export default function AdminOnboarding() {
                                   <p className="text-[11px] font-bold text-slate-700 uppercase">
                                     A/C:{" "}
                                     <span className="text-slate-900">
-                                      <MaskedDataDisplay value={bank.accountNumber} type="bankAccount" />
+                                      <MaskedDataDisplay value={bank.accountNumber || bank.accountNumberMasked} type="bankAccount" />
                                     </span>{" "}
                                     | IFSC:{" "}
                                     <span className="text-slate-900">

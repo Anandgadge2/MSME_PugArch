@@ -15,6 +15,7 @@
     "lint": "npm run lint --workspaces --if-present",
     "lint:security": "eslint backend/index.ts backend/src frontend/src --ext .ts,.tsx --max-warnings=0",
     "prisma:validate": "npm run prisma:validate --workspace=backend",
+    "prisma:studio": "npx prisma studio",
     "test:security": "npm run test:security --workspace=backend",
     "test:integration": "npm run test:integration --workspace=backend",
     "security:static": "node tools/security-static-checks.mjs",

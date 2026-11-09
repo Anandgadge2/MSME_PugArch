@@ -12,7 +12,7 @@ import { hashPassword } from '../services/password.service.js';
 import { sendSubUserInvitationEmail } from '../services/mail.service.js';
 import { env, getPublicPortalUrl } from '../config/env.js';
 import { generateAlphanumericUserId } from '../utils/userId.js';
-import { generateSecureTemporaryPassword } from '../utils/crypto.js';
+import { generateSecureTemporaryPassword, sha256 } from '../utils/crypto.js';
 
 const router = Router();
 router.use('/rbac', authenticate);
@@ -492,7 +492,7 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
       scopeType: scope.scopeType,
       scopeId: scope.scopeId,
       roleIds: body.roleIds,
-      token,
+      token: sha256(token),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       invitedById: user.id
     }
@@ -515,7 +515,8 @@ router.post('/team/invite', asyncHandler(async (req, res) => {
   });
 
   await writeAudit(req, 'team.invite.created', 'scopedInvitation', invitation.id, { email: body.email, roleIds: body.roleIds, scope });
-  return apiResponse.created(res, { ...invitation, tempPassword, user: { id: targetUser.id, email: targetUser.email, name: targetUser.name } }, 'Sub-user created and invitation email sent successfully.');
+  const { token: _t, ...safeInvitation } = invitation;
+  return apiResponse.created(res, { ...safeInvitation, user: { id: targetUser.id, email: targetUser.email, name: targetUser.name } }, 'Sub-user created and invitation email sent successfully.');
 }));
 
 router.patch('/team/members/:id/disable', asyncHandler(async (req, res) => {

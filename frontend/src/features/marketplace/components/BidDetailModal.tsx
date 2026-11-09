@@ -7,6 +7,7 @@ import { marketplaceApi, type BuyerRequirement } from '../api';
 import { DataTable, ColumnDef } from '../../../components/ui/data-table';
 import { openFileAsset } from '../../../lib/files';
 import { formatDate } from '../../shared/format';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 import {
     X, Package, Wrench, Landmark, BadgeCheck, MapPin,
     Tag, Hash, IndianRupee, Calendar, CheckCircle,
@@ -167,12 +168,18 @@ export function BidDetailModal({ bid, onClose }: Props) {
     };
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true">
+        <div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center p-0 sm:p-4">
             {/* Backdrop */}
             <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px]" onClick={onClose} />
 
             {/* Panel */}
-            <div className="relative z-10 w-full sm:max-w-2xl max-h-[92dvh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden">
+            <FocusTrap onEscape={onClose} className="relative z-10 w-full sm:max-w-2xl max-h-[92dvh] flex flex-col">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="bid-detail-title"
+                    className="w-full max-h-[92dvh] flex flex-col rounded-t-2xl sm:rounded-2xl bg-white shadow-2xl overflow-hidden"
+                >
 
                 {/* Header */}
                 <div className={`flex items-start gap-3 p-4 sm:p-5 border-b border-slate-100 shrink-0 ${isService ? 'bg-purple-50' : 'bg-blue-50'}`}>
@@ -183,7 +190,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                         <p className={`text-[9px] font-black uppercase tracking-widest mb-0.5 ${isService ? 'text-purple-600' : 'text-blue-600'}`}>
                             {isService ? 'Service Requirement' : 'Product Requirement'}
                         </p>
-                        <h2 className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">{requirement.title}</h2>
+                        <h2 id="bid-detail-title" className="text-sm font-bold text-slate-900 leading-snug line-clamp-2">{requirement.title}</h2>
                     </div>
                     <button
                         onClick={onClose}
@@ -223,7 +230,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                     ...((user?.role === 'buyer' || user?.role === 'admin') ? [{ icon: <CheckCircle className="h-3.5 w-3.5 text-green-600" />, label: 'Responses', value: `${requirement._count?.responses || 0} received` }] : []),
                                 ].map(item => (
                                     <div key={item.label} className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
-                                        <div className="flex items-center gap-1.5 mb-1">{item.icon}<p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{item.label}</p></div>
+                                        <div className="flex items-center gap-1.5 mb-1">{item.icon}<p className="text-[9px] font-bold text-slate-600 uppercase tracking-wider">{item.label}</p></div>
                                         <p className="text-xs font-semibold text-slate-800">{item.value}</p>
                                     </div>
                                 ))}
@@ -262,7 +269,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
 
                             {/* Description */}
                             <div>
-                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Description</p>
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2">Description</p>
                                 <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{requirement.description}</p>
                             </div>
 
@@ -282,26 +289,26 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                             </p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Department:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Department:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.basics.department || '—'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Priority Level:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Priority Level:</span>{' '}
                                                     <span className={`font-black ${requirement.payload.basics.priority === 'Urgent' || requirement.payload.basics.priority === 'Emergency' ? 'text-red-600' : 'text-slate-800'}`}>
                                                         {requirement.payload.basics.priority || 'Normal'}
                                                     </span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Funding Source:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Funding Source:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.basics.fundingSource || '—'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Cost Center:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Cost Center:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.basics.costCenter || '—'}</span>
                                                 </div>
                                                 {requirement.payload.basics.justification && (
                                                     <div className="md:col-span-2">
-                                                        <span className="text-slate-400 font-semibold block mb-0.5">Procurement Justification:</span>
+                                                        <span className="text-slate-600 font-semibold block mb-0.5">Procurement Justification:</span>
                                                         <p className="text-slate-700 italic bg-white p-2 border border-slate-100 rounded text-xs">{requirement.payload.basics.justification}</p>
                                                     </div>
                                                 )}
@@ -317,15 +324,15 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                             </p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Bid Format:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Bid Format:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.bidType || 'Single Bid'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Evaluation Mode:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Evaluation Mode:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.evaluation || 'L1 Lowest Price'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Reverse Auction:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Reverse Auction:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.rules.reverseAuctionIntent ? 'Yes' : 'No'}</span>
                                                 </div>
                                             </div>
@@ -340,32 +347,32 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                             </p>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Supplier Selection:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Supplier Selection:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.selection || 'Open'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Min Years of Experience:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Min Years of Experience:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.experienceYears ? `${requirement.payload.vendors.experienceYears} Years` : 'None'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Min Annual Turnover:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Min Annual Turnover:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.minimumTurnover ? `INR ${Number(requirement.payload.vendors.minimumTurnover).toLocaleString('en-IN')}` : 'None'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">MSME Preference:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">MSME Preference:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.msmePreference ? 'Applicable' : 'Not Applicable'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Make in India Preference:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Make in India Preference:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.makeInIndiaPreference ? 'Applicable' : 'Not Applicable'}</span>
                                                 </div>
                                                 <div>
-                                                    <span className="text-slate-400 font-semibold">Local Supplier Preference:</span>{' '}
+                                                    <span className="text-slate-600 font-semibold">Local Supplier Preference:</span>{' '}
                                                     <span className="font-bold text-slate-800">{requirement.payload.vendors.localVendorPreference ? 'Applicable' : 'Not Applicable'}</span>
                                                 </div>
                                                 {requirement.payload.vendors.complianceNotes && (
                                                     <div className="md:col-span-2">
-                                                        <span className="text-slate-400 font-semibold block mb-0.5">Compliance Notes:</span>
+                                                        <span className="text-slate-600 font-semibold block mb-0.5">Compliance Notes:</span>
                                                         <p className="text-slate-700 italic bg-white p-2 border border-slate-100 rounded text-xs">{requirement.payload.vendors.complianceNotes}</p>
                                                     </div>
                                                 )}
@@ -416,7 +423,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                                                     const hasFile = doc.fileName && doc.documentUrl;
                                                     return (
                                                         <div key={index} className={`flex items-start gap-2.5 p-2.5 border rounded-lg ${hasFile ? 'bg-blue-50/40 border-blue-100' : 'bg-slate-50/50 border-slate-200'}`}>
-                                                            <FileText className={`h-4 w-4 mt-0.5 shrink-0 ${hasFile ? 'text-blue-600' : 'text-slate-400'}`} />
+                                                            <FileText className={`h-4 w-4 mt-0.5 shrink-0 ${hasFile ? 'text-blue-600' : 'text-slate-500'}`} />
                                                             <div className="min-w-0 flex-1">
                                                                 <p className="text-xs font-bold text-slate-800 truncate">{doc.name}</p>
                                                                 <p className="text-[10px] text-slate-500 font-medium">{doc.requirement} Checklist Document</p>
@@ -444,11 +451,11 @@ export function BidDetailModal({ bid, onClose }: Props) {
                             {/* Standard Required Documents checklist (from requiredDocuments array) */}
                             {!requirement.payload && requirement.requiredDocuments && requirement.requiredDocuments.length > 0 && (
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Required Seller Documents</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2">Required Seller Documents</p>
                                     <div className="flex flex-wrap gap-2">
                                         {requirement.requiredDocuments.map(doc => (
                                             <span key={doc} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 text-[11px] font-semibold text-slate-700">
-                                                <FileText className="h-3 w-3 text-slate-400" />{doc}
+                                                <FileText className="h-3 w-3 text-slate-500" />{doc}
                                             </span>
                                         ))}
                                     </div>
@@ -458,7 +465,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                             {/* Terms and Conditions for Standard/Non-Legacy */}
                             {!requirement.payload && requirement.terms && (
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Terms & Conditions</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2">Terms & Conditions</p>
                                     <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 whitespace-pre-line leading-relaxed">{requirement.terms}</p>
                                 </div>
                             )}
@@ -466,7 +473,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                             {/* Standard uploaded attachments */}
                             {!requirement.payload && requirement.attachmentUrl && (
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Uploaded Bid Documents</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2">Uploaded Bid Documents</p>
                                     <div className="grid gap-2 sm:grid-cols-2">
                                         {requirement.attachmentUrl.split(',').map((url, idx) => {
                                             const cleanUrl = url.trim();
@@ -496,7 +503,7 @@ export function BidDetailModal({ bid, onClose }: Props) {
                             {/* Contact Person Details */}
                             {requirement.contactPerson && (
                                 <div>
-                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Contact Authority</p>
+                                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-600 mb-2">Contact Authority</p>
                                     <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-50/50 p-2.5 border border-slate-100 rounded-lg max-w-xs">
                                         <User className="h-4 w-4 text-slate-500" />
                                         <span>{requirement.contactPerson}</span>
@@ -545,7 +552,8 @@ export function BidDetailModal({ bid, onClose }: Props) {
                         </div>
                     </div>
                 )}
-            </div>
+                </div>
+            </FocusTrap>
         </div>
     );
 }

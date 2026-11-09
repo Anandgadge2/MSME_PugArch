@@ -9,6 +9,7 @@ import { apiResponse } from '../utils/apiResponse.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { broadcastToDispute } from '../services/websocket.service.js';
+import { isMasterAdmin } from '../services/rbac.service.js';
 
 const router = Router();
 const db = prisma as any;
@@ -75,6 +76,14 @@ const ok = (res: Response, data: unknown, status = 200) => res.status(status).js
 const userId = (req: AuthRequest) => req.user!.id;
 const orgId = (req: AuthRequest) => req.user?.organizationId || null;
 const isAdmin = (req: AuthRequest) => ['admin', 'master_admin'].includes(String(req.user?.role));
+const isMaster = (req: AuthRequest) => isMasterAdmin(req.user) || req.user?.role === 'master_admin';
+const getAdminDistrict = (req: AuthRequest): string | null => {
+  if (req.user?.districtId) return String(req.user.districtId);
+  if (req.user?.activeScope?.scopeType === 'DISTRICT' && req.user.activeScope.scopeId) {
+    return String(req.user.activeScope.scopeId);
+  }
+  return null;
+};
 const normalizeStatus = (value?: string | null) => String(value || 'OPEN').toUpperCase();
 const legacyStatus = (value?: string | null) => normalizeStatus(value).toLowerCase();
 
@@ -83,10 +92,10 @@ const disputeInclude = (admin: boolean) => ({
   seller: { select: { id: true, name: true, email: true, role: true, organizationId: true } },
   raisedBy: { select: { id: true, name: true, email: true, role: true, organizationId: true } },
   assignedAdmin: { select: { id: true, name: true, email: true } },
-  raisedByOrg: { select: { id: true, organizationName: true } },
-  againstOrg: { select: { id: true, organizationName: true } },
-  buyerOrg: { select: { id: true, organizationName: true } },
-  sellerOrg: { select: { id: true, organizationName: true } },
+  raisedByOrg: { select: { id: true, organizationName: true, district: true } },
+  againstOrg: { select: { id: true, organizationName: true, district: true } },
+  buyerOrg: { select: { id: true, organizationName: true, district: true } },
+  sellerOrg: { select: { id: true, organizationName: true, district: true } },
   evidence: true,
   attachments: true,
   messages: {
@@ -288,8 +297,50 @@ const resolveLinkedEntity = async (body: z.infer<typeof createSchema>, req: Auth
   return { buyerId, sellerId, buyerOrgId, sellerOrgId, raisedByOrgId, againstOrgId, linkedEntityType, linkedEntityId: linkedEntityId || null, ids };
 };
 
-const ensureDisputeAccess = (req: AuthRequest, dispute: any) => {
-  if (isAdmin(req)) return;
+const ensureDisputeAccess = async (req: AuthRequest, dispute: any) => {
+  if (isMaster(req)) return;
+  if (isAdmin(req)) {
+    const adminDistrict = getAdminDistrict(req);
+    if (!adminDistrict) return;
+
+    const distStr = adminDistrict.toLowerCase().trim();
+    const buyerDist = dispute.buyerOrg?.district?.toLowerCase().trim();
+    const sellerDist = dispute.sellerOrg?.district?.toLowerCase().trim();
+    const raisedByDist = dispute.raisedByOrg?.district?.toLowerCase().trim();
+    const againstDist = dispute.againstOrg?.district?.toLowerCase().trim();
+
+    if ([buyerDist, sellerDist, raisedByDist, againstDist].filter(Boolean).some(d => d === distStr || d?.includes(distStr) || distStr.includes(d!))) {
+      return;
+    }
+
+    const orgIds = [dispute.buyerOrgId, dispute.sellerOrgId, dispute.raisedByOrgId, dispute.againstOrgId].filter(Boolean);
+    if (orgIds.length > 0) {
+      const orgMatches = await prisma.organization.count({
+        where: {
+          id: { in: orgIds },
+          district: { equals: adminDistrict, mode: 'insensitive' }
+        }
+      });
+      if (orgMatches > 0) return;
+    }
+
+    const userIds = [dispute.buyerId, dispute.sellerId, dispute.raisedById].filter(Boolean);
+    if (userIds.length > 0) {
+      const userMatches = await prisma.user.count({
+        where: {
+          id: { in: userIds },
+          OR: [
+            { buyerProfile: { district: { equals: adminDistrict, mode: 'insensitive' } } },
+            { organization: { district: { equals: adminDistrict, mode: 'insensitive' } } }
+          ]
+        }
+      });
+      if (userMatches > 0) return;
+    }
+
+    throw new ApiError(403, 'You cannot access a dispute outside your assigned district jurisdiction.', 'DISPUTE_FORBIDDEN');
+  }
+
   const currentUserId = userId(req);
   if ([dispute.buyerId, dispute.sellerId, dispute.raisedById, dispute.raisedByUserId].filter(Boolean).includes(currentUserId)) return;
   const organizationId = orgId(req);
@@ -298,9 +349,28 @@ const ensureDisputeAccess = (req: AuthRequest, dispute: any) => {
 };
 
 router.get('/disputes', authenticate, asyncRoute(async (req, res) => {
-  const where = isAdmin(req)
-    ? {}
-    : { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] };
+  let where: any;
+  if (isMaster(req)) {
+    where = {};
+  } else if (isAdmin(req)) {
+    const adminDistrict = getAdminDistrict(req);
+    if (adminDistrict) {
+      where = {
+        OR: [
+          { buyerOrg: { district: adminDistrict } },
+          { sellerOrg: { district: adminDistrict } },
+          { raisedByOrg: { district: adminDistrict } },
+          { againstOrg: { district: adminDistrict } },
+          { buyer: { buyerProfile: { district: adminDistrict } } },
+          { seller: { organization: { district: adminDistrict } } }
+        ]
+      };
+    } else {
+      where = {};
+    }
+  } else {
+    where = { OR: [{ raisedByOrgId: orgId(req) }, { againstOrgId: orgId(req) }, { buyerOrgId: orgId(req) }, { sellerOrgId: orgId(req) }, { raisedById: userId(req) }, { buyerId: userId(req) }, { sellerId: userId(req) }] };
+  }
   const disputes = await db.dispute.findMany({ where, include: disputeInclude(isAdmin(req)), orderBy: { updatedAt: 'desc' }, take: 100 });
   ok(res, disputes.map(toDto));
 }));
@@ -364,7 +434,7 @@ router.post('/disputes', authenticate, authorize('buyer', 'seller', 'admin', 'ma
 router.get('/disputes/:id', authenticate, asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) }, include: disputeInclude(isAdmin(req)) });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
-  ensureDisputeAccess(req, dispute);
+  await ensureDisputeAccess(req, dispute);
   ok(res, toDto(dispute));
 }));
 
@@ -372,7 +442,7 @@ router.post('/disputes/:id/messages', authenticate, authorize('buyer', 'seller',
   const body = messageSchema.parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
-  ensureDisputeAccess(req, dispute);
+  await ensureDisputeAccess(req, dispute);
   const internal = isAdmin(req) && (body.internal || body.visibility === 'ADMIN_INTERNAL');
   const messageText = body.message || body.content || '';
   const message = await prisma.$transaction(async tx => {
@@ -419,7 +489,7 @@ router.post('/disputes/:id/attachments', authenticate, authorize('buyer', 'selle
   const { fileAssetIds } = z.object({ fileAssetIds: z.array(z.coerce.number().int().positive()).min(1) }).parse(req.body);
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
-  ensureDisputeAccess(req, dispute);
+  await ensureDisputeAccess(req, dispute);
   await db.disputeAttachment.createMany({ data: fileAssetIds.map((fileAssetId: number) => ({ disputeId: dispute.id, fileAssetId, uploadedByUserId: userId(req) })) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.attachments_added', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip, metadata: { count: fileAssetIds.length } });
   
@@ -437,7 +507,7 @@ router.post('/disputes/:id/respond-clarification', authenticate, authorize('buye
   req.body = { message: body.message };
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
-  ensureDisputeAccess(req, dispute);
+  await ensureDisputeAccess(req, dispute);
   await db.disputeMessage.create({ data: { disputeId: dispute.id, senderId: userId(req), senderOrgId: orgId(req), message: body.message, content: body.message, visibility: 'PUBLIC_TO_PARTIES' } });
   const updated = await db.dispute.update({ where: { id: dispute.id }, data: { status: 'RESPONDED', statusEnum: 'RESPONDED', responseDueAt: null }, include: disputeInclude(false) });
   await auditLog({ actorUserId: userId(req), actorRole: req.user!.role, action: 'dispute.clarification_responded', entityType: 'dispute', entityId: dispute.id, ipAddress: req.ip });
@@ -447,7 +517,7 @@ router.post('/disputes/:id/respond-clarification', authenticate, authorize('buye
 router.post('/disputes/:id/withdraw', authenticate, authorize('buyer', 'seller', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) } });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
-  ensureDisputeAccess(req, dispute);
+  await ensureDisputeAccess(req, dispute);
   
   if (['RESOLVED', 'REJECTED', 'CLOSED'].includes(normalizeStatus(dispute.statusEnum || dispute.status))) {
     throw new ApiError(400, 'Cannot withdraw a finalized dispute', 'DISPUTE_FINALIZED');
@@ -466,6 +536,19 @@ router.get('/admin/disputes', authenticate, authorizeAdmin, asyncRoute(async (re
   if (status && status !== 'ALL') where.status = status;
   if (category && category !== 'ALL') where.category = category;
   if (priority && priority !== 'ALL') where.priority = priority;
+
+  const adminDistrict = getAdminDistrict(req);
+  if (!isMaster(req) && adminDistrict) {
+    where.OR = [
+      { buyerOrg: { district: adminDistrict } },
+      { sellerOrg: { district: adminDistrict } },
+      { raisedByOrg: { district: adminDistrict } },
+      { againstOrg: { district: adminDistrict } },
+      { buyer: { buyerProfile: { district: adminDistrict } } },
+      { seller: { organization: { district: adminDistrict } } }
+    ];
+  }
+
   const disputes = await db.dispute.findMany({ where, include: disputeInclude(true), orderBy: { updatedAt: 'desc' }, take: 200 });
   const summary = {
     open: disputes.filter((d: any) => normalizeStatus(d.status) === 'OPEN').length,
@@ -479,6 +562,7 @@ router.get('/admin/disputes', authenticate, authorizeAdmin, asyncRoute(async (re
 router.get('/admin/disputes/:id', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
   const dispute = await db.dispute.findUnique({ where: { id: Number(req.params.id) }, include: disputeInclude(true) });
   if (!dispute) throw new ApiError(404, 'Dispute not found', 'DISPUTE_NOT_FOUND');
+  await ensureDisputeAccess(req, dispute);
   ok(res, toDto(dispute));
 }));
 

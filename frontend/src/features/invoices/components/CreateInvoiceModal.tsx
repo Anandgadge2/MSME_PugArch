@@ -26,6 +26,7 @@ import { cn } from '../../../lib/utils';
 import { formatCurrency } from '../../shared/format';
 import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
 import { useAuth } from '../../../hooks/useAuth';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 export interface CreateInvoiceModalProps {
   open: boolean;
@@ -171,7 +172,13 @@ export function CreateInvoiceModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto bg-slate-950/70 p-2 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">
-      <div className="relative flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl">
+      <FocusTrap onEscape={onClose} className="w-full max-w-4xl max-h-[94vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-invoice-title"
+          className="relative flex max-h-[94vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-2xl"
+        >
         
         {/* Premium Header */}
         <div className="flex shrink-0 items-center justify-between border-b border-slate-200/80 bg-linear-to-r from-slate-900 via-[#12335f] to-slate-900 px-5 py-4 text-white">
@@ -188,7 +195,7 @@ export function CreateInvoiceModal({
                   GST Compliant
                 </span>
               </div>
-              <h2 className="text-lg font-bold tracking-tight text-white sm:text-xl">
+              <h2 id="create-invoice-title" className="text-lg font-bold tracking-tight text-white sm:text-xl">
                 Create Tax Invoice
               </h2>
             </div>
@@ -231,7 +238,7 @@ export function CreateInvoiceModal({
                       : "text-slate-600 hover:text-slate-900"
                   )}
                 >
-                  <Package className={cn("h-3.5 w-3.5", sourceType === 'po' ? "text-[#12335f]" : "text-slate-400")} />
+                  <Package className={cn("h-3.5 w-3.5", sourceType === 'po' ? "text-[#12335f]" : "text-slate-500")} />
                   <span>Purchase Orders ({acceptedPurchaseOrders.length})</span>
                 </button>
                 <button
@@ -244,26 +251,26 @@ export function CreateInvoiceModal({
                       : "text-slate-600 hover:text-slate-900"
                   )}
                 >
-                  <FileSpreadsheet className={cn("h-3.5 w-3.5", sourceType === 'quotation' ? "text-[#12335f]" : "text-slate-400")} />
+                  <FileSpreadsheet className={cn("h-3.5 w-3.5", sourceType === 'quotation' ? "text-[#12335f]" : "text-slate-500")} />
                   <span>Quotations ({submittedQuotations.length})</span>
                 </button>
               </div>
 
               {/* Search Bar */}
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
                 <input
                   type="text"
                   value={search}
                   onChange={e => onSearchChange(e.target.value)}
                   placeholder={sourceType === 'po' ? "Search PO #, title, or order value..." : "Search quote ID, requirement title..."}
-                  className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-medium placeholder:text-slate-400 focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/15"
+                  className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-xs font-medium placeholder:text-slate-500 focus:border-[#12335f] focus:outline-none focus:ring-2 focus:ring-[#12335f]/15"
                 />
                 {search && (
                   <button
                     type="button"
                     onClick={() => onSearchChange('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-[11px] font-bold"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 text-[11px] font-bold"
                   >
                     Clear
                   </button>
@@ -274,13 +281,13 @@ export function CreateInvoiceModal({
               <div className="max-h-[300px] lg:max-h-[380px] space-y-2 overflow-y-auto pr-1">
                 {sourceType === 'po' ? (
                   purchaseOrdersLoading ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-xs">
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-600 text-xs">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#12335f] mb-2" />
                       Loading accepted purchase orders...
                     </div>
                   ) : filteredPurchaseOrders.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center">
-                      <Package className="h-6 w-6 text-slate-400 mx-auto mb-1.5" />
+                      <Package className="h-6 w-6 text-slate-500 mx-auto mb-1.5" />
                       <p className="text-xs font-bold text-slate-700">No Accepted Purchase Orders</p>
                       <p className="text-[11px] text-slate-500 mt-1">
                         {search ? 'No purchase orders match your search query.' : 'Invoices can only be created for POs accepted by the buyer.'}
@@ -308,7 +315,7 @@ export function CreateInvoiceModal({
                                   {po.poNumber}
                                 </span>
                                 {po.buyer?.name && (
-                                  <span className="text-[10px] text-slate-400 font-medium truncate">
+                                  <span className="text-[10px] text-slate-600 font-medium truncate">
                                     · {po.buyer.name}
                                   </span>
                                 )}
@@ -326,7 +333,7 @@ export function CreateInvoiceModal({
                                   <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Selected
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-slate-400 group-hover:text-slate-600">
+                                <span className="text-[10px] text-slate-600 group-hover:text-slate-900">
                                   Click to link
                                 </span>
                               )}
@@ -338,13 +345,13 @@ export function CreateInvoiceModal({
                   )
                 ) : (
                   quotationsLoading ? (
-                    <div className="flex flex-col items-center justify-center py-12 text-slate-400 text-xs">
+                    <div className="flex flex-col items-center justify-center py-12 text-slate-600 text-xs">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-slate-300 border-t-[#12335f] mb-2" />
                       Loading submitted quotations...
                     </div>
                   ) : filteredQuotations.length === 0 ? (
                     <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6 text-center">
-                      <FileSpreadsheet className="h-6 w-6 text-slate-400 mx-auto mb-1.5" />
+                      <FileSpreadsheet className="h-6 w-6 text-slate-500 mx-auto mb-1.5" />
                       <p className="text-xs font-bold text-slate-700">No Submitted Quotations</p>
                       <p className="text-[11px] text-slate-500 mt-1">
                         {search ? 'No quotations match your search.' : 'Submit a bid response to a buyer requirement first.'}
@@ -388,7 +395,7 @@ export function CreateInvoiceModal({
                                   <CheckCircle2 className="h-3 w-3 text-emerald-600" /> Selected
                                 </span>
                               ) : (
-                                <span className="text-[10px] text-slate-400 group-hover:text-slate-600">
+                                <span className="text-[10px] text-slate-600 group-hover:text-slate-900">
                                   Click to link
                                 </span>
                               )}
@@ -464,10 +471,10 @@ export function CreateInvoiceModal({
                 <div className="space-y-1">
                   <label htmlFor="inv-amount-input" className="text-xs font-bold text-slate-700 flex items-center justify-between">
                     <span>Taxable Base Amount (₹) *</span>
-                    <span className="text-[10px] font-normal text-slate-400">Excl. Taxes</span>
+                    <span className="text-[10px] font-normal text-slate-600">Excl. Taxes</span>
                   </label>
                   <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-600">₹</span>
                     <input
                       id="inv-amount-input"
                       type="number"
@@ -485,7 +492,7 @@ export function CreateInvoiceModal({
                 <div className="space-y-1">
                   <label htmlFor="inv-gst-select" className="text-xs font-bold text-slate-700 flex items-center justify-between">
                     <span>GST Tax Rate (%) *</span>
-                    <span className="text-[10px] font-normal text-slate-400">Standard GST</span>
+                    <span className="text-[10px] font-normal text-slate-600">Standard GST</span>
                   </label>
                   <div className="flex gap-1.5">
                     <select
@@ -506,7 +513,7 @@ export function CreateInvoiceModal({
 
               {/* Quick GST Pill Selectors */}
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Quick GST:</span>
+                <span className="text-[10px] font-bold text-slate-600 uppercase tracking-wider">Quick GST:</span>
                 {GST_STANDARD_RATES.map(rate => (
                   <button
                     key={`quick-gst-${rate}`}
@@ -565,7 +572,7 @@ export function CreateInvoiceModal({
                 <div className="space-y-1">
                   <label htmlFor="inv-tds-input" className="text-xs font-bold text-slate-700 flex items-center justify-between">
                     <span>TDS Rate (%)</span>
-                    <span className="text-[10px] font-normal text-slate-400">Withholding Tax</span>
+                    <span className="text-[10px] font-normal text-slate-600">Withholding Tax</span>
                   </label>
                   <div className="flex gap-1.5">
                     <input
@@ -606,7 +613,7 @@ export function CreateInvoiceModal({
                 <div className="space-y-1">
                   <label htmlFor="inv-other-tax-input" className="text-xs font-bold text-slate-700 flex items-center justify-between">
                     <span>Other Tax / Cess (%)</span>
-                    <span className="text-[10px] font-normal text-slate-400">Optional</span>
+                    <span className="text-[10px] font-normal text-slate-600">Optional</span>
                   </label>
                   <input
                     id="inv-other-tax-input"
@@ -674,7 +681,7 @@ export function CreateInvoiceModal({
                   <div className="border-t border-slate-200 pt-2 flex items-center justify-between">
                     <div>
                       <span className="text-xs font-extrabold text-slate-900 block">Gross Invoice Value</span>
-                      <span className="text-[10px] text-slate-400">Total Billed to Buyer</span>
+                      <span className="text-[10px] text-slate-600">Total Billed to Buyer</span>
                     </div>
                     <div className="text-right">
                       <span className="text-base font-black text-slate-950 block">
@@ -739,6 +746,7 @@ export function CreateInvoiceModal({
           </div>
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

@@ -295,7 +295,15 @@ router.post('/shg/registration/send-mobile-otp', async (req, res) => {
   const { smsService, toLocalIndianMobile } = await import('../services/sms.service.js');
   const mobile = toLocalIndianMobile(req.body?.mobile);
   if (!mobile) return apiResponse.error(res, 400, 'Valid Indian mobile number is required', 'VALIDATION_ERROR');
-  const existing = await (prisma as any).user.findFirst({ where: { mobile }, select: { id: true } });
+  const existing = await (prisma as any).user.findFirst({
+    where: {
+      OR: [
+        { mobileFingerprint: createHashFingerprint(mobile, 'mobile') },
+        { mobile }
+      ]
+    },
+    select: { id: true }
+  });
   if (existing) return apiResponse.error(res, 400, 'Mobile is already registered', 'DUPLICATE_REGISTRATION');
   const otp = generateOtp();
   await storeOtp('registration_mobile', mobile, otp, undefined, 'sms');

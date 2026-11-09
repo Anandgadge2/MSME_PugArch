@@ -12,6 +12,7 @@
 import { X } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { formatDateTime } from './format';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 export interface EntityDetailField {
     key: string;
@@ -58,14 +59,18 @@ export function EntityDetailModal({ open, title, subtitle, entity, fields, onClo
     return (
         <div
             className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 backdrop-blur-sm p-0 sm:p-4 animate-in fade-in duration-150"
-            role="dialog"
-            aria-modal="true"
             onClick={e => e.target === e.currentTarget && onClose()}
         >
-            <div className="w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-xl bg-white shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200">
-                <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white shrink-0">
-                    <div className="min-w-0">
-                        <h2 className="text-sm font-black uppercase tracking-widest text-wrap-anywhere">{title}</h2>
+            <FocusTrap onEscape={onClose} className="w-full sm:max-w-3xl max-h-[92dvh] sm:max-h-[85vh] flex flex-col">
+                <div
+                    role="dialog"
+                    aria-modal="true"
+                    aria-labelledby="entity-detail-title"
+                    className="w-full max-h-[92dvh] sm:max-h-[85vh] flex flex-col overflow-hidden rounded-t-2xl sm:rounded-xl bg-white shadow-2xl animate-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200"
+                >
+                    <header className="flex items-start justify-between gap-3 border-b border-slate-100 bg-gradient-to-r from-[#0b1f3a] to-[#12335f] px-5 py-3.5 text-white shrink-0">
+                        <div className="min-w-0">
+                            <h2 id="entity-detail-title" className="text-sm font-black uppercase tracking-widest text-wrap-anywhere">{title}</h2>
                         {subtitle && <p className="mt-0.5 text-[10px] font-bold text-white/70 text-wrap-anywhere">{subtitle}</p>}
                     </div>
                     <button onClick={onClose} aria-label="Close" className="rounded-md p-1 min-h-[44px] min-w-[44px] sm:min-h-0 sm:min-w-0 flex items-center justify-center text-white/80 hover:bg-white/10 active:scale-95">
@@ -94,7 +99,7 @@ export function EntityDetailModal({ open, title, subtitle, entity, fields, onClo
 
                                     return (
                                         <div key={field.key} className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                                            <dt className="text-[9px] font-black uppercase tracking-widest text-slate-400">{field.label}</dt>
+                                            <dt className="text-[9px] font-black uppercase tracking-widest text-slate-600">{field.label}</dt>
                                             <dd className="mt-1 text-xs font-bold text-slate-900 text-wrap-anywhere">{formatted ?? '—'}</dd>
                                         </div>
                                     );
@@ -117,6 +122,7 @@ export function EntityDetailModal({ open, title, subtitle, entity, fields, onClo
 
                 {footer && <div className="border-t border-slate-100 bg-slate-50 px-5 py-3">{footer}</div>}
             </div>
+            </FocusTrap>
         </div>
     );
 }

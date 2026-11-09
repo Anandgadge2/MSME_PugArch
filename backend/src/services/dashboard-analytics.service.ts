@@ -145,10 +145,12 @@ export class DashboardAnalyticsService {
         tenderId: true,
         bidId: true,
         title: true,
+        metadata: true,
         tender: {
           select: {
             title: true,
-            category: true
+            category: true,
+            budget: true
           }
         },
         seller: {
@@ -194,6 +196,8 @@ export class DashboardAnalyticsService {
     let periodScStSpend = 0;
     let periodWomenSpend = 0;
     let periodGeneralMsmeSpend = 0;
+    let authenticSavings = 0;
+    let totalBaselineBudget = 0;
 
     for (const po of purchaseOrders) {
       const amount = Number(po.amount || po.totalValue || 0);
@@ -203,6 +207,18 @@ export class DashboardAnalyticsService {
     for (const po of periodOrders) {
       const amount = Number(po.amount || po.totalValue || 0);
       periodTotalSpend += amount;
+
+      // Aggregate authentic savings from actual database records (tender budget, quotation deltas, or PO baseline)
+      const poMeta = (po.metadata && typeof po.metadata === 'object') ? (po.metadata as Record<string, any>) : {};
+      const tenderBudget = Number(po.tender?.budget || 0);
+      const metaBudget = Number(poMeta.estimatedBudget || poMeta.budget || poMeta.estimatedCost || poMeta.baselineAmount || 0);
+      const originalAmount = Number(poMeta.originalAmount || poMeta.originalPrice || 0);
+
+      const baseline = tenderBudget > 0 ? tenderBudget : (metaBudget > 0 ? metaBudget : (originalAmount > amount ? originalAmount : 0));
+      if (baseline > amount && amount > 0) {
+        authenticSavings += (baseline - amount);
+        totalBaselineBudget += baseline;
+      }
 
       const seller = po.seller;
       const profile = seller?.sellerProfile;
@@ -401,8 +417,12 @@ export class DashboardAnalyticsService {
         generalPercent: periodGeneralPercent,
         isMandateMet: periodMsmeSharePercent >= 25.0,
         activeOrdersCount: periodOrders.length,
-        estimatedSavings: Math.round(periodTotalSpend * 0.082),
-        savingsPercent: periodTotalSpend > 0 ? 8.2 : 0,
+        estimatedSavings: Math.round(authenticSavings),
+        savingsPercent: totalBaselineBudget > 0
+          ? Number(((authenticSavings / totalBaselineBudget) * 100).toFixed(1))
+          : (periodTotalSpend > 0 && authenticSavings > 0
+              ? Number(((authenticSavings / (periodTotalSpend + authenticSavings)) * 100).toFixed(1))
+              : 0),
         allTimeTotalSpend: Math.round(totalSpend),
         allTimeOrdersCount: purchaseOrders.length
       },

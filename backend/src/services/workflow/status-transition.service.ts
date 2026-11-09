@@ -33,6 +33,7 @@ export type POWorkflowStatus =
   | 'accepted'
   | 'amendment_pending'
   | 'in_fulfillment'
+  | 'cancellation_requested'
   | 'delivered'
   | 'inspection_accepted'
   | 'invoice_submitted'
@@ -104,14 +105,15 @@ const poTransitions: TransitionMap<POWorkflowStatus> = {
   order_placed: ['accepted', 'rejected', 'cancelled', 'draft'],
   issued: ['accepted', 'rejected', 'cancelled', 'draft'],
   pending_acceptance: ['accepted', 'rejected', 'cancelled', 'draft'],
-  accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancelled', 'amendment_pending'],
+  accepted: ['in_fulfillment', 'delivered', 'rejected', 'cancellation_requested', 'amendment_pending'],
   amendment_pending: ['accepted', 'cancelled'],
-  in_fulfillment: ['delivered', 'cancelled'],
+  in_fulfillment: ['delivered', 'cancellation_requested'],
+  cancellation_requested: ['cancelled', 'accepted', 'in_fulfillment'],
   delivered: ['inspection_accepted', 'invoice_submitted'],
   inspection_accepted: ['invoice_submitted'],
   invoice_submitted: ['payment_initiated'],
   payment_initiated: ['escrow_held'],
-  escrow_held: ['completed', 'cancelled'],
+  escrow_held: ['completed', 'cancellation_requested'],
   completed: [],
   cancelled: [],
   rejected: []
@@ -172,8 +174,18 @@ export const statusTransitions = {
     assertTransition('Tender', tenderTransitions, current, next, 'draft'),
   bid: (current: unknown, next: BidWorkflowStatus) =>
     assertTransition('Bid', bidTransitions, current, next, 'draft'),
-  purchaseOrder: (current: unknown, next: POWorkflowStatus) =>
-    assertTransition('Purchase order', poTransitions, current, next, 'generated'),
+  purchaseOrder: (current: unknown, next: POWorkflowStatus, options?: { counterpartyApproved?: boolean }) => {
+    const from = normalize<POWorkflowStatus>(current, 'generated');
+    if ((from === 'accepted' || from === 'in_fulfillment') && next === 'cancelled') {
+      throw new ApiError(409, 'Accepted or fulfilling purchase orders require bilateral cancellation approval', 'INVALID_STATUS_TRANSITION');
+    }
+    if (from === 'cancellation_requested' && next === 'cancelled') {
+      if (options && options.counterpartyApproved === false) {
+        throw new ApiError(403, 'Cancellation requires counterparty approval.', 'COUNTERPARTY_APPROVAL_REQUIRED');
+      }
+    }
+    return assertTransition('Purchase order', poTransitions, current, next, 'generated');
+  },
   invoice: (current: unknown, next: InvoiceWorkflowStatus) =>
     assertTransition('Invoice', invoiceTransitions, current, next, 'draft'),
   payment: (current: unknown, next: PaymentWorkflowStatus) =>
@@ -223,6 +235,7 @@ export const poStatusEnumFor = (status: POWorkflowStatus) => {
     pending_approval: 'GENERATED',
     accepted: 'ACCEPTED',
     amendment_pending: 'AMENDMENT_PENDING',
+    cancellation_requested: 'AMENDMENT_PENDING',
     in_fulfillment: 'IN_FULFILLMENT',
     delivered: 'DELIVERED',
     completed: 'CLOSED',

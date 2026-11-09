@@ -7,6 +7,7 @@ import { Badge } from '../../../components/ui/card';
 import { cn } from '../../../lib/utils';
 import { catalogueApi, downloadCatalogueFile, type ImportPreviewResult } from '../api';
 import { DataTable } from '../../../components/ui/data-table';
+import { FocusTrap } from '@/components/ui/FocusTrap';
 
 type ImportKind = 'product' | 'service';
 
@@ -90,12 +91,13 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-3 sm:p-4 backdrop-blur-xs animate-in fade-in duration-200">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="catalogue-import-modal-title"
-        className="flex h-full w-full max-h-[90vh] flex-col overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 sm:max-w-3xl"
-      >
+      <FocusTrap onEscape={() => { reset(); onClose(); }} className="w-full sm:max-w-3xl max-h-[90vh]">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="catalogue-import-modal-title"
+          className="flex h-full w-full max-h-[90vh] flex-col overflow-hidden bg-white shadow-2xl rounded-2xl border border-slate-200 sm:max-w-3xl"
+        >
         {/* Modal Header */}
         <div className="flex items-center justify-between border-b border-slate-200/90 px-5 py-3.5 bg-slate-50/70">
           <div className="flex items-center gap-2.5">
@@ -138,7 +140,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                   : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <Package className={cn("h-3.5 w-3.5", selectedKind === 'product' ? "text-emerald-600" : "text-slate-400")} />
+              <Package className={cn("h-3.5 w-3.5", selectedKind === 'product' ? "text-emerald-600" : "text-slate-500")} />
               <span>Products Import</span>
             </button>
             <button
@@ -151,7 +153,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                   : "text-slate-600 hover:text-slate-900"
               )}
             >
-              <Wrench className={cn("h-3.5 w-3.5", selectedKind === 'service' ? "text-blue-600" : "text-slate-400")} />
+              <Wrench className={cn("h-3.5 w-3.5", selectedKind === 'service' ? "text-blue-600" : "text-slate-500")} />
               <span>Services Import</span>
             </button>
           </div>
@@ -184,7 +186,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
 
             {/* Field Breakdown Pills */}
             <div className="space-y-1.5 text-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Supported Fields in Template:</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600 block">Supported Fields in Template:</span>
               <div className="flex flex-wrap gap-1.5 text-[11px]">
                 {isProduct ? (
                   <>
@@ -248,11 +250,11 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                 : "border-slate-300 bg-white hover:bg-slate-50 hover:border-slate-400"
             )}
           >
-            <Upload className={cn("mb-2 h-7 w-7", file ? "text-emerald-600" : "text-slate-400")} aria-hidden="true" />
+            <Upload className={cn("mb-2 h-7 w-7", file ? "text-emerald-600" : "text-slate-500")} aria-hidden="true" />
             <span className="text-xs font-bold text-slate-700">
               {file ? file.name : 'Choose or drop your filled .xlsx file here'}
             </span>
-            <span className="text-[10px] text-slate-400 mt-0.5">
+            <span className="text-[10px] text-slate-600 mt-0.5">
               Supports .xlsx up to 10MB (max 1000 items per batch)
             </span>
             <input
@@ -309,7 +311,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                   ['Duplicate Rows', preview.duplicateRows, preview.duplicateRows > 0 ? 'text-amber-600' : 'text-slate-500']
                 ].map(([label, val, colorClass]) => (
                   <div key={String(label)} className="rounded-xl border border-slate-200 bg-white p-3 text-center shadow-xs">
-                    <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider">{label}</p>
+                    <p className="text-[10px] font-bold uppercase text-slate-600 tracking-wider">{label}</p>
                     <p className={cn("text-lg font-extrabold mt-0.5", colorClass)}>{val}</p>
                   </div>
                 ))}
@@ -485,6 +487,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
           )}
         </div>
       </div>
+      </FocusTrap>
     </div>
   );
 }

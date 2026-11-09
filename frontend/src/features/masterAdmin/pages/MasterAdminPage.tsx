@@ -14,6 +14,7 @@ import {
   Eye,
   FileClock,
   FileSearch,
+  FileSpreadsheet,
   FileText,
   Filter,
   Grid2X2,
@@ -559,6 +560,8 @@ export default function MasterAdminPage() {
   });
   const [viewMode, setViewMode] = useResponsiveViewMode('master-admin:control-center:view-mode');
   const [actionDialog, setActionDialog] = useState<ActionDialogState>(null);
+  const [exportDialog, setExportDialog] = useState<{ module: string; label: string; count: number; fallbackRows: Array<Record<string, any>> } | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [editor, setEditor] = useState<EditorState>(null);
   const [mutating, setMutating] = useState(false);
   const debouncedFilters = useDebounce(filters, 350);
@@ -1265,24 +1268,52 @@ export default function MasterAdminPage() {
     toast.success(`${labelize(label)} export prepared`);
   };
 
-  const exportMasterReport = async (module: string, label: string, fallbackRows: Array<Record<string, any>>) => {
-    const reason = window.prompt(`Reason for exporting ${label}`);
-    if (!reason || reason.trim().length < 4) {
-      toast.info('Export cancelled. A reason is required for audit logging.');
-      return;
-    }
+  const exportMasterReport = (module: string, label: string, count: number, fallbackRows: Array<Record<string, any>> = []) => {
+    setExportDialog({ module, label, count, fallbackRows });
+  };
+
+  const handleExportSubmit = async (reason: string) => {
+    if (!exportDialog) return;
+    const { module, label, fallbackRows } = exportDialog;
+    setExporting(true);
     try {
-      const blob = await masterAdminApi.downloadReportExport({ module, reason: reason.trim(), limit: 5000 });
+      const blob = await masterAdminApi.downloadReportExport({ module, reason: reason.trim(), format: 'xlsx', limit: 5000 });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `master-admin-${module}-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.download = `master-admin-${module}-${new Date().toISOString().slice(0, 10)}.xlsx`;
       link.click();
       URL.revokeObjectURL(url);
-      toast.success(`${label} export downloaded`);
+      toast.success(`${label} Excel export downloaded successfully`);
+      setExportDialog(null);
     } catch (err: any) {
-      toast.error(err.message || 'Backend export failed. Preparing loaded rows only.');
-      exportCsv(module, fallbackRows);
+      try {
+        const ExcelJS = (await import('exceljs')).default;
+        const workbook = new ExcelJS.Workbook();
+        workbook.creator = 'Collectorate Jharsuguda Governance';
+        const worksheet = workbook.addWorksheet(label.slice(0, 31));
+        const rows = fallbackRows || [];
+        if (rows.length > 0) {
+          worksheet.columns = Object.keys(rows[0]).map(k => ({ header: k, key: k, width: Math.max(k.length + 4, 15) }));
+          rows.forEach((r: any) => worksheet.addRow(r));
+        } else {
+          worksheet.addRow(['No records available in local cache']);
+        }
+        const buffer = await workbook.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `master-admin-${module}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+        toast.success(`${label} Excel fallback export generated successfully`);
+        setExportDialog(null);
+      } catch (fallbackErr: any) {
+        toast.error(err.message || 'Export failed. Please check network connection.');
+      }
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -1458,7 +1489,7 @@ export default function MasterAdminPage() {
               </div>
               <h1 className="flex flex-wrap items-center gap-3 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl lg:text-4xl">
                 <span>Master Admin Control Center</span>
-                <span className="rounded-full bg-gradient-to-r from-[#12335f] to-indigo-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#12335f]/20">
+                <span className="shrink-0 rounded-full bg-gradient-to-r from-[#12335f] to-indigo-900 px-3 py-1 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-[#12335f]/20">
                   {tabs.find(t => t.id === activeTab)?.label || 'Overview'}
                 </span>
               </h1>
@@ -1507,6 +1538,32 @@ export default function MasterAdminPage() {
             </div>
           </div>
         </header>
+
+        {/* Master Admin Portal Theme Tab Navigation */}
+        <nav aria-label="Master Admin Navigation" className="flex items-center gap-1.5 overflow-x-auto rounded-2xl border border-slate-200/80 bg-white/95 p-1.5 shadow-sm scrollbar-thin backdrop-blur-sm">
+          {tabs.map(tab => {
+            const isActive = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => router.push(getPathForTab(tab.id))}
+                className={cn(
+                  'flex items-center gap-2 whitespace-nowrap rounded-xl px-3.5 py-2 text-xs font-bold transition-all duration-200',
+                  isActive
+                    ? 'bg-[#12335f] text-white shadow-md shadow-[#12335f]/25'
+                    : 'text-slate-600 hover:bg-slate-100/90 hover:text-slate-900'
+                )}
+              >
+                <Icon className={cn('h-4 w-4', isActive ? 'text-amber-400' : 'text-slate-500')} />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </nav>
 
 
 
@@ -2266,8 +2323,9 @@ export default function MasterAdminPage() {
         )}
 
         {activeTab === 'exports' && (
-          <section className="space-y-4">
+          <section className="space-y-5">
             <MetricStrip summary={reports} labels={[
+              ['companies', 'Companies'],
               ['organizations', 'Organizations'],
               ['users', 'Users'],
               ['procurementBids', 'Procurements'],
@@ -2282,22 +2340,22 @@ export default function MasterAdminPage() {
               ['documents', 'Documents'],
               ['auditLogs', 'Audit Logs']
             ]} />
-            <Panel title="Data Export" icon={Download} loading={loading.reports} error={error.reports}>
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                <ExportCard label="Companies" count={companies.total} onExport={() => exportMasterReport('companies', 'Companies', companies.items as any)} />
-                <ExportCard label="Organizations" count={organizations.total} onExport={() => exportMasterReport('organizations', 'Organizations', organizations.items as any)} />
-                <ExportCard label="Users" count={users.total} onExport={() => exportMasterReport('users', 'Users', users.items as any)} />
-                <ExportCard label="Procurement Records" count={procurement.total} onExport={() => exportMasterReport('procurement-bids', 'Procurement Records', procurement.items as any)} />
-                <ExportCard label="Tenders" count={tenders.total} onExport={() => exportMasterReport('tenders', 'Tenders', tenders.items as any)} />
-                <ExportCard label="RFQs" count={rfqs.total} onExport={() => exportMasterReport('rfqs', 'RFQs', rfqs.items as any)} />
-                <ExportCard label="Buyer Requirements" count={reports?.buyerRequirements ?? 0} onExport={() => exportMasterReport('buyer-requirements', 'Buyer Requirements', [])} />
-                <ExportCard label="Orders" count={orders.total} onExport={() => exportMasterReport('orders', 'Orders', orders.items as any)} />
-                <ExportCard label="Invoices" count={invoices.total} onExport={() => exportMasterReport('invoices', 'Invoices', invoices.items as any)} />
-                <ExportCard label="Payments" count={payments.total} onExport={() => exportMasterReport('payments', 'Payments', payments.items as any)} />
-                <ExportCard label="Products" count={reports?.products ?? 0} onExport={() => exportMasterReport('products', 'Products', [])} />
-                <ExportCard label="Services" count={reports?.services ?? 0} onExport={() => exportMasterReport('services', 'Services', [])} />
-                <ExportCard label="Documents" count={reports?.documents ?? 0} onExport={() => exportMasterReport('documents', 'Documents', [])} />
-                <ExportCard label="Audit Logs" count={auditLogs.total} onExport={() => exportMasterReport('audit-logs', 'Audit Logs', auditLogs.items as any)} />
+            <Panel title="Enterprise Data Export Center (Microsoft Excel .xlsx)" icon={FileSpreadsheet} loading={loading.reports} error={error.reports}>
+              <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+                <ExportCard label="Companies" count={reports?.companies ?? companies.total} onExport={() => exportMasterReport('companies', 'Companies', reports?.companies ?? companies.total, companies.items as any)} />
+                <ExportCard label="Organizations" count={reports?.organizations ?? organizations.total} onExport={() => exportMasterReport('organizations', 'Organizations', reports?.organizations ?? organizations.total, organizations.items as any)} />
+                <ExportCard label="Users" count={reports?.users ?? users.total} onExport={() => exportMasterReport('users', 'Users', reports?.users ?? users.total, users.items as any)} />
+                <ExportCard label="Procurement Records" count={reports?.procurementBids ?? procurement.total} onExport={() => exportMasterReport('procurement-bids', 'Procurement Records', reports?.procurementBids ?? procurement.total, procurement.items as any)} />
+                <ExportCard label="Tenders" count={reports?.tenders ?? tenders.total} onExport={() => exportMasterReport('tenders', 'Tenders', reports?.tenders ?? tenders.total, tenders.items as any)} />
+                <ExportCard label="RFQs" count={reports?.rfqs ?? rfqs.total} onExport={() => exportMasterReport('rfqs', 'RFQs', reports?.rfqs ?? rfqs.total, rfqs.items as any)} />
+                <ExportCard label="Buyer Requirements" count={reports?.buyerRequirements ?? 0} onExport={() => exportMasterReport('buyer-requirements', 'Buyer Requirements', reports?.buyerRequirements ?? 0, [])} />
+                <ExportCard label="Orders" count={reports?.purchaseOrders ?? orders.total} onExport={() => exportMasterReport('orders', 'Orders', reports?.purchaseOrders ?? orders.total, orders.items as any)} />
+                <ExportCard label="Invoices" count={reports?.invoices ?? invoices.total} onExport={() => exportMasterReport('invoices', 'Invoices', reports?.invoices ?? invoices.total, invoices.items as any)} />
+                <ExportCard label="Payments" count={reports?.payments ?? payments.total} onExport={() => exportMasterReport('payments', 'Payments', reports?.payments ?? payments.total, payments.items as any)} />
+                <ExportCard label="Products" count={reports?.products ?? 0} onExport={() => exportMasterReport('products', 'Products', reports?.products ?? 0, [])} />
+                <ExportCard label="Services" count={reports?.services ?? 0} onExport={() => exportMasterReport('services', 'Services', reports?.services ?? 0, [])} />
+                <ExportCard label="Documents" count={reports?.documents ?? documents.total} onExport={() => exportMasterReport('documents', 'Documents', reports?.documents ?? documents.total, documents.items as any)} />
+                <ExportCard label="Audit Logs" count={reports?.auditLogs ?? auditLogs.total} onExport={() => exportMasterReport('audit-logs', 'Audit Logs', reports?.auditLogs ?? auditLogs.total, auditLogs.items as any)} />
               </div>
             </Panel>
             <section className="space-y-3">
@@ -2609,6 +2667,14 @@ export default function MasterAdminPage() {
               <SafetyNotice text="Master Admin records use archive, suspend, and restore actions with mandatory reasons and audit logging. Operational history is preserved." />
             </Panel>
           </section>
+        )}
+        {exportDialog && (
+          <ExportDialog
+            dialog={exportDialog}
+            busy={exporting}
+            onCancel={() => setExportDialog(null)}
+            onConfirm={handleExportSubmit}
+          />
         )}
         {actionDialog && (
           <ActionDialog
@@ -2970,13 +3036,29 @@ function HealthPill({ label, value }: { label: string; value?: string | null }) 
 
 const MetricStrip = memo(function MetricStrip({ summary, labels }: { summary?: Record<string, number>; labels: Array<[string, string]> }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
-      {labels.map(([key, label]) => (
-        <div key={key} className="rounded-md border border-slate-200 bg-white px-4 py-3 shadow-sm">
-          <p className="text-[10px] font-black uppercase tracking-wider text-slate-500">{label}</p>
-          <p className="mt-1 text-xl font-black text-[#12335f]">{summary?.[key] ?? 0}</p>
-        </div>
-      ))}
+    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7">
+      {labels.map(([key, label]) => {
+        const val = summary?.[key] ?? 0;
+        return (
+          <div
+            key={key}
+            className="group relative flex min-w-0 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-[#12335f]/30 hover:shadow-md"
+          >
+            <div className="flex items-center justify-between gap-1">
+              <p
+                title={label}
+                className="truncate text-[11px] font-bold uppercase tracking-wider text-slate-500 group-hover:text-slate-700"
+              >
+                {label}
+              </p>
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-slate-300 group-hover:bg-[#12335f] transition-colors" />
+            </div>
+            <p className="mt-2 text-xl font-black tracking-tight text-[#12335f]">
+              {Number(val).toLocaleString('en-IN')}
+            </p>
+          </div>
+        );
+      })}
     </div>
   );
 });
@@ -3009,21 +3091,162 @@ const RecordShortcutGrid = memo(function RecordShortcutGrid({
   );
 });
 
-function ExportCard({ label, count, onExport }: { label: string; count: number; onExport: () => void }) {
+function ExportCard({
+  label,
+  count,
+  onExport
+}: {
+  label: string;
+  count: number;
+  onExport: () => void;
+}) {
   return (
-    <article className="rounded-md border border-slate-200 bg-slate-50 p-4">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-black text-slate-900">{label}</p>
-          <p className="mt-1 text-xs font-semibold text-slate-500">{count.toLocaleString('en-IN')} records available</p>
+    <article className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-emerald-300/80 hover:shadow-lg hover:shadow-emerald-950/5">
+      <div>
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200/60 shadow-sm transition-transform duration-200 group-hover:scale-105">
+              <FileSpreadsheet className="h-4.5 w-4.5" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-black text-slate-900 group-hover:text-[#12335f] transition-colors" title={label}>{label}</h3>
+              <p className="text-[11px] font-medium text-slate-500">Live database records</p>
+            </div>
+          </div>
+          <span className="shrink-0 inline-flex items-center rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-black text-slate-700 border border-slate-200/60">
+            {count.toLocaleString('en-IN')}
+          </span>
         </div>
-        <Download className="h-5 w-5 text-[#12335f]" />
+        <div className="mt-3 flex items-center gap-1.5 rounded-lg bg-emerald-50/50 border border-emerald-100 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-800">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+          <span className="truncate">Format: Microsoft Excel (.xlsx)</span>
+        </div>
       </div>
-      <Button type="button" variant="outline" className="mt-4 h-9 w-full rounded-md text-xs font-black" onClick={onExport}>
-        <Download className="mr-2 h-4 w-4" />
-        Export CSV
+      <Button
+        type="button"
+        onClick={onExport}
+        className="mt-4 h-9 w-full rounded-xl bg-[#12335f] text-xs font-black text-white shadow-sm transition-all duration-200 hover:bg-[#0d274b] hover:shadow-md"
+      >
+        <Download className="mr-2 h-4 w-4 text-emerald-400" />
+        Download Excel (.xlsx)
       </Button>
     </article>
+  );
+}
+
+function ExportDialog({
+  dialog,
+  busy,
+  onCancel,
+  onConfirm
+}: {
+  dialog: { module: string; label: string; count: number };
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: (reason: string) => void;
+}) {
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!reason.trim() || reason.trim().length < 4) {
+      setError('Audit reason must be at least 4 characters describing the purpose of export.');
+      return;
+    }
+    setError('');
+    onConfirm(reason.trim());
+  };
+
+  return (
+    <ModalShell title={`Export ${dialog.label} (Microsoft Excel)`} onCancel={onCancel}>
+      <div className="space-y-4">
+        <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-3.5 text-xs text-blue-900">
+          <div className="flex items-center gap-2 font-bold text-[#12335f]">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            <span>Collectorate Jharsuguda Governance Export</span>
+          </div>
+          <p className="mt-1 leading-relaxed text-blue-800">
+            Exporting operational records from the master database requires mandatory audit justification. This download will be permanently logged with your identity, IP, and timestamp.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Dataset</span>
+            <p className="text-sm font-black text-slate-900">{dialog.label}</p>
+          </div>
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Format & Scope</span>
+            <p className="flex items-center gap-1.5 text-sm font-bold text-emerald-700">
+              <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+              Excel (.xlsx) &bull; {dialog.count.toLocaleString('en-IN')} records
+            </p>
+          </div>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="block">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700">
+                Reason for Export <span className="text-red-500">*</span>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-400">Min 4 chars</span>
+            </div>
+            <textarea
+              required
+              rows={3}
+              value={reason}
+              onChange={e => {
+                setReason(e.target.value);
+                if (error && e.target.value.trim().length >= 4) setError('');
+              }}
+              placeholder="e.g. Quarterly audit review for Collectorate Jharsuguda, departmental reconciliation, compliance inspection..."
+              aria-invalid={Boolean(error)}
+              aria-describedby={error ? 'export-reason-error' : undefined}
+              className={cn(
+                'mt-1.5 w-full rounded-xl border p-3 text-sm text-slate-800 shadow-sm outline-none transition focus:ring-2 focus:ring-[#12335f]/20',
+                error ? 'border-red-400 focus:border-red-500' : 'border-slate-200 focus:border-[#12335f]'
+              )}
+            />
+            {error && (
+              <p id="export-reason-error" className="mt-1 text-xs font-semibold text-red-600">
+                {error}
+              </p>
+            )}
+          </label>
+
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={busy}
+              onClick={onCancel}
+              className="h-10 rounded-xl text-xs font-bold"
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={busy || reason.trim().length < 4}
+              className="h-10 rounded-xl bg-[#12335f] text-xs font-black text-white hover:bg-[#0d274b] shadow-sm disabled:opacity-50"
+            >
+              {busy ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Generating Excel (.xlsx)...
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4 text-emerald-400" />
+                  Download Excel (.xlsx)
+                </>
+              )}
+            </Button>
+          </div>
+        </form>
+      </div>
+    </ModalShell>
   );
 }
 

@@ -20,7 +20,6 @@ import { EntityIdLink } from '../../shared/EntityIdLink';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GST_STANDARD_RATES, formatTaxRate } from '../../shared/gstTax';
-import { PdfEngine, DocumentConfig, moneyPdf } from '../../../lib/pdfEngine';
 import { PaymentReceiptUploadModal } from '../../payments/components/PaymentReceiptUploadModal';
 import { PaymentReceiptViewModal } from '../../payments/components/PaymentReceiptViewModal';
 import { useAuth } from '../../../hooks/useAuth';
@@ -29,7 +28,7 @@ import { SignatureStampUploadModal } from '../components/SignatureStampUploadMod
 import { CreateInvoiceModal } from '../components/CreateInvoiceModal';
 import { UploadExternalInvoiceModal } from '../components/UploadExternalInvoiceModal';
 import { RejectInvoiceModal } from '../components/RejectInvoiceModal';
-import { generateTaxInvoicePdf, TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
+import type { TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
 import { canDisburseInvoicePayment } from '../../shared/procurementLifecycleUtils';
 
@@ -1177,6 +1176,7 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
     const targetCopy = explicitCopyType || invoiceCopyType;
     try {
       const invData = prepareInvoiceData(targetCopy);
+      const { generateTaxInvoicePdf } = await import('../lib/invoicePdfGenerator');
       const doc = await generateTaxInvoicePdf(invData);
       
       if (mode === 'print') {

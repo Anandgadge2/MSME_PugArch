@@ -340,6 +340,15 @@ export default function LiveAuctionLeaderboard({
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-2xs overflow-hidden space-y-4 p-4 sm:p-5">
+      {/* Screen Reader Live Region for Dynamic Auction Updates */}
+      <div aria-live="polite" role="status" className="sr-only">
+        {isLive
+          ? `Reverse auction is live. Current lowest bid: ${formatCurrency(currentLowest)}. Time remaining: ${timeLeft}. Total bids submitted: ${bids.length}.`
+          : isCompleted
+          ? `Reverse auction completed. Final lowest winning bid: ${formatCurrency(currentLowest)}.`
+          : `Reverse auction status: ${status}.`}
+      </div>
+
       {/* Header Banner */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3.5">
         <div className="space-y-1">
