@@ -554,8 +554,14 @@ const DEFAULT_BOQ_UOMS = [
   { value: 'KG', label: 'KG - Kilograms' },
   { value: 'MT', label: 'MT - Metric Tonnes' },
   { value: 'METER', label: 'METER - Meters' },
+  { value: 'BAG', label: 'BAG - Bags' },
+  { value: 'BNDL', label: 'BNDL - Bundles' },
+  { value: 'DRUM', label: 'DRUM - Drums' },
+  { value: 'COIL', label: 'COIL - Coils' },
   { value: 'SQ FT', label: 'SQ FT - Square Feet' },
+  { value: 'SQM', label: 'SQM - Square Meters' },
   { value: 'CU.MTRS', label: 'CU.MTRS - Cubic Meters' },
+  { value: 'CFT', label: 'CFT - Cubic Feet' },
   { value: 'LTR', label: 'LTR - Litres' },
   { value: 'PKT', label: 'PKT - Packets' },
   { value: 'BOX', label: 'BOX - Boxes' },
@@ -564,11 +570,39 @@ const DEFAULT_BOQ_UOMS = [
   { value: 'LOT', label: 'LOT - Lots' },
   { value: 'LS', label: 'LS - Lump Sum' },
   { value: 'JOB', label: 'JOB - Jobs' },
+  { value: 'TRIP', label: 'TRIP - Trips' },
+  { value: 'PAIR', label: 'PAIR - Pairs' },
+  { value: 'CAN', label: 'CAN - Cans' },
+  { value: 'CYL', label: 'CYL - Cylinders' },
   { value: 'AU', label: 'AU - Activity Units' },
   { value: 'HOUR', label: 'HOUR - Hours' },
   { value: 'DAY', label: 'DAY - Days' },
   { value: 'MONTH', label: 'MONTH - Months' },
 ];
+
+export function normalizeUomAlias(rawUom: string): string {
+  const clean = (rawUom || '').trim().toUpperCase();
+  if (['BAG', 'BAGS', 'BORI', 'BORIS'].includes(clean)) return 'BAG';
+  if (['METER', 'METERS', 'MTR', 'MTRS', 'M'].includes(clean)) return 'METER';
+  if (['KG', 'KGS', 'KILOGRAM', 'KILOGRAMS'].includes(clean)) return 'KG';
+  if (['MT', 'METRIC TON', 'METRIC TONNES', 'METRIC TONNE', 'TON', 'TONS', 'TONNE', 'TONNES'].includes(clean)) return 'MT';
+  if (['NOS', 'NO', 'NUMBERS', 'NUMBER', 'PCS', 'PIECES', 'PIECE', 'EA', 'EACH'].includes(clean)) return 'NOS';
+  if (['SET', 'SETS'].includes(clean)) return 'SET';
+  if (['SQ FT', 'SQFT', 'SQ. FT.', 'SQ.FT.', 'SQ. FEET', 'SQUARE FEET'].includes(clean)) return 'SQ FT';
+  if (['SQM', 'SQ.MTRS', 'SQ M', 'SQ.M.', 'SQUARE METERS', 'SQ. METER', 'SQ METER'].includes(clean)) return 'SQM';
+  if (['CU.MTRS', 'CUM', 'CU M', 'CU.M.', 'CUBIC METERS', 'CUBIC METER'].includes(clean)) return 'CU.MTRS';
+  if (['CFT', 'CU FT', 'CU.FT.', 'CUBIC FEET', 'CUBIC FOOT'].includes(clean)) return 'CFT';
+  if (['LTR', 'LTRS', 'LITRE', 'LITRES', 'LITER', 'LITERS'].includes(clean)) return 'LTR';
+  if (['PKT', 'PKTS', 'PACKET', 'PACKETS'].includes(clean)) return 'PKT';
+  if (['BOX', 'BOXES'].includes(clean)) return 'BOX';
+  if (['PACK', 'PACKS'].includes(clean)) return 'PACK';
+  if (['RL', 'ROLL', 'ROLLS'].includes(clean)) return 'RL';
+  if (['BNDL', 'BUNDLE', 'BUNDLES'].includes(clean)) return 'BNDL';
+  if (['DRUM', 'DRUMS'].includes(clean)) return 'DRUM';
+  if (['COIL', 'COILS'].includes(clean)) return 'COIL';
+  if (['TRIP', 'TRIPS'].includes(clean)) return 'TRIP';
+  return clean || 'NOS';
+}
 
 const DEFAULT_BOQ_TAX_SLABS = [
   { value: 0, label: '0%' },
@@ -663,7 +697,7 @@ export function BOQTable({
           <thead className="bg-slate-50 text-[10px] font-black uppercase text-slate-500 border-b border-slate-200">
             <tr>
               <th className="px-3 py-2.5 text-center w-12">Sr</th>
-              <th className="px-3 py-2.5 min-w-[180px]">{isRateContract ? 'Item Description / Scope' : 'Item Description'}</th>
+              <th className="px-3 py-2.5 min-w-[260px] max-w-[380px]">{isRateContract ? 'Item Description / Scope & Specs' : 'Item Description & Technical Specs'}</th>
               {showCategory && <th className="px-3 py-2.5 w-36">Category</th>}
               <th className="px-3 py-2.5 w-32 min-w-[125px]">UOM</th>
               <th className="px-3 py-2.5 w-24 text-center" title={isRateContract ? 'Indicative Annual Consumption Volume' : 'Total Quantity'}>
@@ -687,7 +721,9 @@ export function BOQTable({
               const isCustomCat = rowCat && !resolvedCategoryNames.some(c => c.toLowerCase() === rowCat.toLowerCase());
               
               const rowUom = row.uom || 'Nos';
-              const isCustomUom = rowUom && !resolvedUoms.some(u => u.value.toLowerCase() === rowUom.toLowerCase());
+              const normalizedUom = normalizeUomAlias(rowUom);
+              const matchedUom = resolvedUoms.find(u => u.value.toLowerCase() === normalizedUom.toLowerCase() || u.value.toLowerCase() === rowUom.toLowerCase());
+              const isCustomUom = !matchedUom && Boolean(rowUom && rowUom !== 'Other');
 
               const attachmentsList = row.attachments || [];
               const hasDocs = attachmentsList.length > 0 || Boolean(row.fileName);
@@ -699,15 +735,33 @@ export function BOQTable({
                 <tr key={idx} className="align-middle hover:bg-slate-50/60 transition-colors">
                   <td className="px-3 py-2 text-center text-slate-400 font-bold">{row.srNo}</td>
                   
-                  {/* Item Description */}
-                  <td className="px-3 py-2">
-                    <input
-                      value={row.description}
-                      onChange={e => onChange(idx, 'description', e.target.value)}
-                      className={tableInput}
-                      placeholder="Describe item specifications"
-                      aria-label={`Item description for row ${row.srNo}`}
-                    />
+                  {/* Item Description & Technical Specs */}
+                  <td className="px-3 py-2 min-w-[260px] max-w-[380px]">
+                    <div className="space-y-1.5">
+                      <textarea
+                        rows={2}
+                        value={row.description}
+                        onChange={e => onChange(idx, 'description', e.target.value)}
+                        className="w-full min-h-[46px] rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 transition-all resize-y leading-tight"
+                        placeholder="Describe item specifications, grade, dimensions..."
+                        title={row.description}
+                        aria-label={`Item description for row ${row.srNo}`}
+                      />
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider shrink-0 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded" title="Technical remarks / Make / Standards">
+                          Specs
+                        </span>
+                        <input
+                          type="text"
+                          value={row.remarks || ''}
+                          onChange={e => onChange(idx, 'remarks', e.target.value)}
+                          className="h-6 w-full rounded border border-slate-200 bg-slate-50/70 hover:bg-white focus:bg-white px-2 text-[11px] font-medium text-slate-700 placeholder:text-slate-400 outline-none focus:border-[#12335f] focus:ring-1 focus:ring-[#12335f]/15 transition-all"
+                          placeholder="Technical remarks (e.g. Tata / Jindal with MTC, IS 4923)"
+                          title={row.remarks || 'Enter technical remarks, approved make, or standards'}
+                          aria-label={`Technical remarks for row ${row.srNo}`}
+                        />
+                      </div>
+                    </div>
                   </td>
 
                   {/* Category Dropdown (Database + Standard + Custom) - hidden when showCategory is false */}
@@ -757,7 +811,7 @@ export function BOQTable({
                         aria-label={`Unit of measure for row ${row.srNo}`}
                         placeholder="UOM"
                         searchPlaceholder="Search UOM..."
-                        value={resolvedUoms.some(u => u.value.toLowerCase() === rowUom.toLowerCase()) ? (resolvedUoms.find(u => u.value.toLowerCase() === rowUom.toLowerCase())?.value) : (rowUom ? 'Other' : 'NOS')}
+                        value={matchedUom ? matchedUom.value : (rowUom ? 'Other' : 'NOS')}
                         options={[
                           ...resolvedUoms.map(u => ({ value: u.value, label: u.label || u.value })),
                           { value: 'Other', label: 'Other / Custom...' }

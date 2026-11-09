@@ -1783,6 +1783,16 @@ export default function CreateProcurementPage() {
       list.push({ label: d.basics.procurementCategory === 'WORKS' ? 'At least one Work Schedule / BOQ item is required' : 'At least one BOQ item is required', ok: d.boqTable.length > 0 && d.boqTable.some(r => r.description.trim()), severity: 'error', stepIdx: 3 });
       if (d.boqTable.length > 0) {
         list.push({ label: 'All BOQ rows must have positive quantities & rates', ok: d.boqTable.every(r => r.quantity > 0 && r.estimatedRate >= 0), severity: 'error', stepIdx: 3 });
+        const step2Cat = (d.basics.category || '').trim();
+        if (step2Cat && step2Cat !== 'General' && step2Cat !== 'Other') {
+          const hasCategoryMismatch = d.boqTable.some(r => r.category && r.category.trim().toLowerCase() !== step2Cat.toLowerCase());
+          list.push({
+            label: `All BOQ items must share the uniform schedule category "${step2Cat}"`,
+            ok: !hasCategoryMismatch,
+            severity: 'error',
+            stepIdx: 3,
+          });
+        }
       }
       list.push({ label: 'Total BOQ quantity must be greater than 0', ok: totalProcurementQty > 0, severity: 'error', stepIdx: 3 });
     } else if (isServiceContract) {
@@ -1978,6 +1988,10 @@ export default function CreateProcurementPage() {
       if (isBoqSchedule) {
         if (d.boqTable.length === 0 || !d.boqTable.some(r => r.description.trim())) return false;
         if (d.boqTable.some(r => r.quantity <= 0 || r.estimatedRate < 0)) return false;
+        const step2Cat = (d.basics.category || '').trim();
+        if (step2Cat && step2Cat !== 'General' && step2Cat !== 'Other') {
+          if (d.boqTable.some(r => r.category && r.category.trim().toLowerCase() !== step2Cat.toLowerCase())) return false;
+        }
       } else if (isServiceContract) {
         const title = (d.serviceDetails.serviceTitle || d.basics.title || '').trim();
         if (!title) return false;
@@ -5667,6 +5681,10 @@ function ItemsDetailsForm({
   const [quickDocItem, setQuickDocItem] = useState<ItemRow | null>(null);
   const [quickDocBoqRowIdx, setQuickDocBoqRowIdx] = useState<number | null>(null);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
+  const [boqCategoryMismatch, setBoqCategoryMismatch] = useState<{
+    boqCat: string;
+    step2Cat: string;
+  } | null>(null);
   const [cartCategoryConflict, setCartCategoryConflict] = useState<{
     isOpen: boolean;
     tenderCategory: string;
@@ -6620,11 +6638,12 @@ function ItemsDetailsForm({
                 const hsn = hsnIdx >= 0 && r[hsnIdx] ? String(r[hsnIdx]).trim() : '';
                 const rawUom = uomIdx >= 0 && r[uomIdx] ? String(r[uomIdx]).trim().slice(0, 120) : 'NOS';
                 const cleanUom = rawUom.toUpperCase();
+                const rawCategory = catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : '';
 
                 parsedBoqRows.push({
                   srNo: idx + 1,
                   description: desc,
-                  category: catIdx >= 0 && r[catIdx] ? String(r[catIdx]).trim() : (draft.basics.category || 'General'),
+                  category: rawCategory || draft.basics.category || 'General',
                   quantity: qty,
                   uom: cleanUom || 'NOS',
                   estimatedRate: rate,
@@ -6639,6 +6658,56 @@ function ItemsDetailsForm({
                 });
               }
             });
+
+            // Enforce schedule category uniformity and detect Step 2 mismatch
+            const foundCategories = Array.from(
+              new Set(
+                parsedBoqRows
+                  .map(row => (row.category || '').trim())
+                  .filter(c => Boolean(c) && c.toLowerCase() !== 'general')
+              )
+            );
+
+            let scheduleCategory = (draft.basics.category || '').trim();
+            if (scheduleCategory === 'Other') scheduleCategory = '';
+
+            if (foundCategories.length > 1) {
+              // Multiple categories detected in uploaded file
+              const targetCat = scheduleCategory || foundCategories[0];
+              parsedBoqRows = parsedBoqRows.map(r => ({
+                ...r,
+                category: targetCat,
+              }));
+              toast.warning(
+                `Multiple categories detected in BOQ (${foundCategories.join(', ')}). All items have been aligned to uniform schedule category: "${targetCat}".`,
+                { duration: 6000 }
+              );
+              scheduleCategory = targetCat;
+              setBoqCategoryMismatch(null);
+            } else if (foundCategories.length === 1) {
+              const fileCategory = foundCategories[0];
+              if (!scheduleCategory || scheduleCategory === 'General') {
+                scheduleCategory = fileCategory;
+                setBoqCategoryMismatch(null);
+              } else if (scheduleCategory.toLowerCase() !== fileCategory.toLowerCase()) {
+                setBoqCategoryMismatch({
+                  boqCat: fileCategory,
+                  step2Cat: scheduleCategory,
+                });
+                toast.warning(
+                  `Category mismatch: Uploaded BOQ specifies "${fileCategory}", but Step 2 is set to "${scheduleCategory}". Verify resolution below.`,
+                  { duration: 7000 }
+                );
+              } else {
+                setBoqCategoryMismatch(null);
+              }
+            } else {
+              parsedBoqRows = parsedBoqRows.map(r => ({
+                ...r,
+                category: scheduleCategory || 'General',
+              }));
+              setBoqCategoryMismatch(null);
+            }
           }
         }
       } catch (parseErr) {
@@ -6648,6 +6717,10 @@ function ItemsDetailsForm({
       updateDraft(c => {
         const nextTable = parsedBoqRows.length > 0 ? parsedBoqRows : c.boqTable;
         const totalSum = nextTable.reduce((acc, row) => acc + (Number(row.total) || (Number(row.quantity || 0) * Number(row.estimatedRate || 0))), 0);
+        const resolvedBasicsCat = (c.basics.category && c.basics.category !== 'General' && c.basics.category !== 'Other')
+          ? c.basics.category
+          : (parsedBoqRows.length > 0 && parsedBoqRows[0]?.category ? parsedBoqRows[0].category : c.basics.category);
+
         return {
           ...c,
           boqFileAssetId: uploadedFileId || c.boqFileAssetId,
@@ -6655,6 +6728,7 @@ function ItemsDetailsForm({
           boqTable: nextTable,
           basics: {
             ...c.basics,
+            category: resolvedBasicsCat,
             estimatedValue: parsedBoqRows.length > 0 ? totalSum : c.basics.estimatedValue
           }
         };
@@ -6670,6 +6744,26 @@ function ItemsDetailsForm({
     } finally {
       setUploadingFile(false);
     }
+  };
+
+  const handleSyncBOQCategoriesToStep2 = () => {
+    const targetCat = draft.basics.category || 'General';
+    updateDraft(c => ({
+      ...c,
+      boqTable: c.boqTable.map(r => ({ ...r, category: targetCat }))
+    }));
+    setBoqCategoryMismatch(null);
+    toast.success(`All BOQ items synchronized to schedule category "${targetCat}".`);
+  };
+
+  const handleSyncStep2ToBOQCategory = (newCat: string) => {
+    updateDraft(c => ({
+      ...c,
+      basics: { ...c.basics, category: newCat },
+      boqTable: c.boqTable.map(r => ({ ...r, category: newCat }))
+    }));
+    setBoqCategoryMismatch(null);
+    toast.success(`Tender Category in Step 2 updated to "${newCat}" to match BOQ schedule.`);
   };
 
   // BOQ Handlers
@@ -7619,13 +7713,118 @@ function ItemsDetailsForm({
             <span className="truncate">Uploaded {isRateContract ? 'SOR' : 'BOQ'}: <strong>{draft.boqFileName}</strong></span>
             <button
               type="button"
-              onClick={() => updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }))}
-              className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0"
+              onClick={() => {
+                updateDraft(c => ({ ...c, boqFileName: '', boqFileAssetId: null }));
+                setBoqCategoryMismatch(null);
+              }}
+              className="text-rose-500 hover:text-rose-700 font-bold ml-auto shrink-0 cursor-pointer"
             >
               Remove
             </button>
           </div>
         )}
+
+        {/* Schedule Category Uniformity & Sync Controls */}
+        {(() => {
+          const step2Cat = (draft.basics.category || '').trim();
+          const boqRows = draft.boqTable || [];
+          const distinctBoqCats = Array.from(new Set(boqRows.map(r => (r.category || '').trim()).filter(Boolean)));
+          const hasMixedCats = distinctBoqCats.length > 1;
+          const isCategoryMismatch = boqCategoryMismatch || (
+            step2Cat && step2Cat !== 'General' && step2Cat !== 'Other' && distinctBoqCats.length === 1 && distinctBoqCats[0].toLowerCase() !== step2Cat.toLowerCase()
+              ? { boqCat: distinctBoqCats[0], step2Cat }
+              : null
+          );
+          const isSynced = !hasMixedCats && !isCategoryMismatch;
+          const effectiveDisplayCat = step2Cat && step2Cat !== 'Other' ? step2Cat : (distinctBoqCats[0] || 'General');
+
+          return (
+            <div className="space-y-2">
+              {/* Category Mismatch Interactive Banner */}
+              {isCategoryMismatch && (
+                <div className="rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-xs text-amber-950 font-medium shadow-3xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn" role="alert">
+                  <div className="flex items-start sm:items-center gap-2.5">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5 sm:mt-0" aria-hidden="true" />
+                    <div>
+                      <p className="font-black text-amber-900 text-xs">
+                        Category Mismatch: Step 2 Tender Intent vs BOQ Schedule
+                      </p>
+                      <p className="text-[11px] text-amber-800 mt-0.5">
+                        Step 2 specifies <strong>&quot;{isCategoryMismatch.step2Cat}&quot;</strong>, but the uploaded schedule specifies <strong>&quot;{isCategoryMismatch.boqCat}&quot;</strong>. Choose how to synchronize:
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto flex-wrap">
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleSyncStep2ToBOQCategory(isCategoryMismatch.boqCat)}
+                      className="h-8 px-3 text-xs font-bold bg-[#12335f] hover:bg-[#0b2447] text-white shadow-3xs cursor-pointer"
+                    >
+                      Update Step 2 to &quot;{isCategoryMismatch.boqCat}&quot;
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSyncBOQCategoriesToStep2}
+                      className="h-8 px-3 text-xs font-bold bg-white hover:bg-amber-100 text-amber-900 border-amber-300 shadow-3xs cursor-pointer"
+                    >
+                      Align BOQ to &quot;{isCategoryMismatch.step2Cat}&quot;
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Mixed Categories Warning */}
+              {hasMixedCats && (
+                <div className="rounded-xl border border-rose-300 bg-rose-50 p-3 text-xs text-rose-950 font-medium shadow-3xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn" role="alert">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" aria-hidden="true" />
+                    <span>
+                      <strong>Multiple Categories Found in Schedule:</strong> Items have mixed categories ({distinctBoqCats.join(', ')}). All items must belong to the same schedule category.
+                    </span>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleSyncBOQCategoriesToStep2}
+                    className="h-7.5 px-3 text-[11px] font-bold bg-rose-700 hover:bg-rose-800 text-white shrink-0 cursor-pointer"
+                  >
+                    Unify All to &quot;{effectiveDisplayCat}&quot;
+                  </Button>
+                </div>
+              )}
+
+              {/* Uniform Schedule Category Status Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2 text-xs">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-500">Uniform Schedule Category:</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-md bg-[#12335f]/10 border border-[#12335f]/20 px-2.5 py-0.5 text-xs font-black text-[#12335f]">
+                    <Tag className="h-3 w-3" aria-hidden="true" />
+                    {effectiveDisplayCat}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {isSynced ? (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md border border-emerald-200">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" aria-hidden="true" /> Synced with Step 2 Intent
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleSyncBOQCategoriesToStep2}
+                      className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-100/80 hover:bg-amber-200/80 px-2 py-0.5 rounded-md border border-amber-300 transition-colors cursor-pointer"
+                      title="Sync all BOQ line item categories with Step 2 Procurement Intent"
+                    >
+                      <RefreshCw className="h-3 w-3 text-amber-700" aria-hidden="true" /> Sync All Items to Step 2
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {draft.type === 'RATE_CONTRACT' && (
           <div className="rounded-xl border border-indigo-200 bg-indigo-50/90 p-3 sm:p-3.5 text-xs text-indigo-950 font-medium shadow-3xs">
