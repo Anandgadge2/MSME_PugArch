@@ -1831,7 +1831,7 @@ export const authController = {
           permissions: req.user?.permissions || [],
           enabledFeatures: req.user?.enabledFeatures || []},
         profile: enrichedProfile
-      }));
+      }, { unmaskSelf: true }));
     } catch (err: any) {
       handleSecureRouteError(res, err);
     }

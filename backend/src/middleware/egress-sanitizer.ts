@@ -11,6 +11,7 @@ const WORKFLOW_STATUSES = new Set([
 
 export interface EgressSanitizerOptions {
   isScrutinyAdmin?: boolean;
+  isSelfProfile?: boolean;
 }
 
 export function sanitizeEgressPayload(val: any, depth = 0, options: EgressSanitizerOptions = {}): any {
@@ -38,7 +39,7 @@ export function sanitizeEgressPayload(val: any, depth = 0, options: EgressSaniti
 
     // For authorized admin / master_admin officers performing KYC scrutiny:
     // Retain cleartext PAN, GSTIN, and Bank Accounts to allow cross-verification against uploaded proofs
-    if (options.isScrutinyAdmin) {
+    if (options.isScrutinyAdmin || options.isSelfProfile) {
       if (/^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key) ||
           (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
         result[key] = value;
@@ -94,6 +95,7 @@ export const globalEgressSanitizer = (req: Request, res: Response, next: NextFun
         const isAdmin = role === 'admin' || role === 'master_admin';
         const rawPath = req.originalUrl || (req.baseUrl ? `${req.baseUrl}${req.path}` : req.path) || '';
         const path = rawPath.toLowerCase();
+        const isSelfProfile = path.includes('/auth/me') || path.includes('/onboarding/me');
         const isScrutinyRoute = Boolean(res.locals && res.locals.isScrutinyAdmin) || (isAdmin && (
           path.includes('/admin/onboarding') ||
           path.includes('/master-admin/onboarding') ||
@@ -103,7 +105,7 @@ export const globalEgressSanitizer = (req: Request, res: Response, next: NextFun
           path.includes('/master-admin/organizations')
         ));
 
-        const sanitized = sanitizeEgressPayload(body, 0, { isScrutinyAdmin: isScrutinyRoute });
+        const sanitized = sanitizeEgressPayload(body, 0, { isScrutinyAdmin: isScrutinyRoute, isSelfProfile });
         return originalJson(sanitized);
       } catch {
         return originalJson(body);

@@ -217,6 +217,35 @@ assert.equal(maskSensitiveAdmin.user.panNumber, 'ABCDE1234F', 'PAN must be unmas
 assert.equal(maskSensitiveAdmin.user.gstin, '27ABCDE1234F1Z5', 'GSTIN must be unmasked in maskSensitive admin mode');
 console.log('✔ KYC Scrutiny Desk Role-Based Admin Verification Unmasking Verified');
 
+// 19c. DPDPA 2023 Section 11 Self-Data Access & Auto-fill Verification (Own Profile Access)
+const selfProfilePayload = maskSensitive({
+  user: {
+    id: 101,
+    name: 'Rajesh Kumar',
+    email: 'rajesh.kumar@vedanta.co.in',
+    mobile: '9876543210',
+    aadhaarNumber: '123456789012',
+    password: '$2a$12$SuperSecretHashedPasswordMustNeverLeak'
+  },
+  buyerProfile: {
+    pan: 'ABCDE1234F',
+    gst: '21ABCDE1234F1ZN',
+    representativeName: 'Rajesh Kumar'
+  }
+}, { unmaskSelf: true });
+
+assert.equal(selfProfilePayload.user.email, 'rajesh.kumar@vedanta.co.in', 'User own email MUST NOT be masked for auto-fill and self-management');
+assert.equal(selfProfilePayload.user.mobile, '9876543210', 'User own mobile MUST NOT be masked for procurement wizard and contact inputs');
+assert.equal(selfProfilePayload.user.aadhaarNumber, 'XXXXXXXX9012', 'Aadhaar MUST remain masked even for self per UIDAI');
+assert.equal(selfProfilePayload.buyerProfile.pan, 'ABCDE1234F', 'User own PAN must be unmasked');
+assert.equal(selfProfilePayload.buyerProfile.gst, '21ABCDE1234F1ZN', 'User own GST must be unmasked');
+
+const egressSelfPayload = sanitizeEgressPayload(selfProfilePayload, 0, { isSelfProfile: true });
+assert.equal(egressSelfPayload.user.password, undefined, 'Password MUST be completely purged by egress sanitizer');
+assert.equal(egressSelfPayload.buyerProfile.pan, 'ABCDE1234F', 'Egress sanitizer must not mask own PAN on /api/auth/me');
+assert.equal(egressSelfPayload.buyerProfile.gst, '21ABCDE1234F1ZN', 'Egress sanitizer must not mask own GST on /api/auth/me');
+console.log('✔ DPDPA Section 11 Self-Profile & Procurement Wizard Unmasking Verified');
+
 // 20. Static Uploads Direct Access Restriction (CWE-306 Prevention)
 const publicAllowedDirs = ['org-logos', 'banners', 'products', 'company-logos', 'category-photos'];
 const testPaths = [

@@ -75,6 +75,7 @@ export const maskPhone = (value: unknown) => {
 
 export interface MaskSensitiveOptions {
   unmaskForAdmin?: boolean;
+  unmaskSelf?: boolean;
 }
 
 export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T => {
@@ -90,18 +91,20 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
 
     if (Array.isArray(val)) return val.map(item => mask(item, newStack));
 
+    const allowUnmaskedPii = Boolean(options?.unmaskForAdmin || options?.unmaskSelf);
+
     return Object.entries(val).reduce<Record<string, unknown>>((acc, [key, value]) => {
       if (passthroughKeys.has(key)) {
         acc[key] = value;
       } else if (/^aadhaar|aadhaarNumber$/i.test(key)) {
         acc[key] = value ? maskAadhaar(value) : value;
-      } else if (options?.unmaskForAdmin && /^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key)) {
+      } else if (allowUnmaskedPii && /^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key)) {
         acc[key] = value;
       } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
         acc[key] = value;
-      } else if (options?.unmaskForAdmin && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
+      } else if (allowUnmaskedPii && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
         acc[key] = value;
-      } else if (options?.unmaskForAdmin && /(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
+      } else if (allowUnmaskedPii && /(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
         acc[key] = value;
       } else if (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key)) {
         acc[key] = value ? maskBankAccount(value) : value;
