@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useId, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Search, X, Check } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -62,15 +63,22 @@ export function SearchableSelect({
   const [isCustomSelected, setIsCustomSelected] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState<number>(-1);
   const [openUpwards, setOpenUpwards] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
+  const [isMounted, setIsMounted] = useState(false);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const generatedId = useId();
   const comboboxId = id || `${generatedId}-combobox`;
   const listboxId = `${comboboxId}-listbox`;
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   // Compile full options list
   const fullOptions: SelectOption[] = [...options];
@@ -101,37 +109,83 @@ export function SearchableSelect({
     }
   }, [value, options, allowOther, allowNotApplicable]);
 
-  // Handle position flipping when opening
+  // Handle position calculation for the fixed portal popover
   const updatePosition = useCallback(() => {
-    if (containerRef.current) {
-      const rect = containerRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
-      const spaceBelow = viewportHeight - rect.bottom;
-      const spaceAbove = rect.top;
-      // If less than 240px below and more space above, open upwards
-      setOpenUpwards(spaceBelow < 240 && spaceAbove > spaceBelow);
+    const triggerEl = triggerRef.current || containerRef.current;
+    if (!triggerEl) return;
+    const rect = triggerEl.getBoundingClientRect();
+    const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+    const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+
+    // Minimum width of 240px or trigger width, capped at viewportWidth - 16
+    const desiredWidth = Math.min(Math.max(rect.width, 240), viewportWidth - 16);
+
+    // Position horizontally: align left by default, but if it would overflow right viewport, clamp
+    let left = rect.left;
+    if (left + desiredWidth > viewportWidth - 8) {
+      left = Math.max(8, viewportWidth - desiredWidth - 8);
     }
+
+    const spaceBelow = viewportHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    const shouldOpenUpwards = spaceBelow < 250 && spaceAbove > spaceBelow;
+
+    const nextStyle: React.CSSProperties = {
+      position: 'fixed',
+      zIndex: 9999,
+      width: `${desiredWidth}px`,
+      left: `${left}px`,
+    };
+
+    if (shouldOpenUpwards) {
+      const maxH = Math.min(280, Math.max(120, spaceAbove - 16));
+      nextStyle.bottom = `${viewportHeight - rect.top + 4}px`;
+      nextStyle.maxHeight = `${maxH}px`;
+      setOpenUpwards(true);
+    } else {
+      const maxH = Math.min(280, Math.max(120, spaceBelow - 16));
+      nextStyle.top = `${rect.bottom + 4}px`;
+      nextStyle.maxHeight = `${maxH}px`;
+      setOpenUpwards(false);
+    }
+
+    setDropdownStyle(nextStyle);
   }, []);
 
-  // Handle click outside to close dropdown
+  // Recalculate position on resize and scroll
   useEffect(() => {
+    if (!isOpen) return;
+    updatePosition();
+    const handleScrollOrResize = () => {
+      updatePosition();
+    };
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [isOpen, updatePosition]);
+
+  // Handle click outside to close dropdown (protecting both trigger container and portal dropdown)
+  useEffect(() => {
+    if (!isOpen) return;
     function handleClickOutside(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      const target = event.target as Node;
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(target) &&
+        (!dropdownRef.current || !dropdownRef.current.contains(target))
+      ) {
         setIsOpen(false);
         setSearch('');
       }
     }
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      window.addEventListener('resize', updatePosition);
-      window.addEventListener('scroll', updatePosition, true);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
     };
-  }, [isOpen, updatePosition]);
+  }, [isOpen]);
 
   // Filter options based on search query
   const query = search.trim().toLowerCase();
@@ -375,17 +429,17 @@ export function SearchableSelect({
         </button>
       </div>
 
-      {isOpen && (
+      {isOpen && isMounted && typeof document !== 'undefined' && createPortal(
         <div
+          ref={dropdownRef}
           id={listboxId}
           role="listbox"
           aria-label={ariaLabel || placeholder}
           className={cn(
-            "absolute left-0 right-0 z-50 rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl animate-in fade-in duration-100 flex flex-col",
-            openUpwards ? "bottom-full mb-1" : "top-full mt-1",
+            "rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl animate-in fade-in duration-100 flex flex-col",
             dropdownClassName
           )}
-          style={{ maxHeight: '280px' }}
+          style={dropdownStyle}
         >
           {/* Search Box Header */}
           <div className="relative border-b border-slate-100 p-1 flex items-center gap-1.5 min-w-0 shrink-0">
@@ -482,7 +536,8 @@ export function SearchableSelect({
               })
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Custom 'Other' Freeform Text Field */}

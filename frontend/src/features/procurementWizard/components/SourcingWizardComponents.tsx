@@ -665,14 +665,14 @@ export function BOQTable({
               <th className="px-3 py-2.5 text-center w-12">Sr</th>
               <th className="px-3 py-2.5 min-w-[180px]">{isRateContract ? 'Item Description / Scope' : 'Item Description'}</th>
               {showCategory && <th className="px-3 py-2.5 w-36">Category</th>}
-              <th className="px-3 py-2.5 w-28">UOM</th>
+              <th className="px-3 py-2.5 w-32 min-w-[125px]">UOM</th>
               <th className="px-3 py-2.5 w-24 text-center" title={isRateContract ? 'Indicative Annual Consumption Volume' : 'Total Quantity'}>
                 {isRateContract ? 'Est. Annual Qty' : 'Qty'}
               </th>
               <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Legally binding ceiling unit rate for call-offs' : 'Estimated Unit Rate'}>
                 {isRateContract ? 'Ceiling Rate (₹)' : 'Est. Rate (₹)'}
               </th>
-              <th className="px-3 py-2.5 w-20 text-center">Tax %</th>
+              <th className="px-3 py-2.5 w-28 text-center">Tax %</th>
               <th className="px-3 py-2.5 w-28 text-center">HSN/SAC</th>
               <th className="px-3 py-2.5 w-36 text-center">Docs (Opt.)</th>
               <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Estimated Annual Ceiling Expenditure' : 'Total Gross Value'}>
