@@ -22,7 +22,9 @@
     "audit:deps": "npm audit --workspaces --audit-level=critical",
     "security:audit": "npm audit --workspaces --audit-level=high",
     "security:check": "npm run typecheck && npm run prisma:validate && npm run lint:security && npm run test:security && npm run security:static && npm run production:check && npm run build && npm run audit:deps",
-    "simulate:procurements": "npx tsx backend/src/scripts/simulate-all-procurements-1.5to2hr.ts"
+    "simulate:procurements": "npx tsx backend/src/scripts/simulate-all-procurements-1.5to2hr.ts",
+    "backfill:encryption": "npx tsx backend/src/scripts/backfill-encryption.ts",
+    "backfill:encryption:dry": "npx tsx backend/src/scripts/backfill-encryption.ts --dry-run"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
