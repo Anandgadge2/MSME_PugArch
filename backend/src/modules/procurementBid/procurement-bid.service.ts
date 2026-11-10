@@ -2481,7 +2481,7 @@ export const listPublicBids = async (query: any, actor?: any) => {
     : publicBidPredicate;
 
   const where: any = {
-    approvalStatus: { in: ['APPROVED', 'PENDING'] },
+    approvalStatus: { not: 'REJECTED' },
     status: { in: query.status ? [String(query.status).toUpperCase()] : publicBidStatuses },
     ...restrictedBidsCondition
   };

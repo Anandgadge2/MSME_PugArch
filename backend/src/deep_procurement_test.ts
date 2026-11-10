@@ -660,7 +660,7 @@ async function runDeepTesting() {
     console.log('--- TEST SUITE 6: Opportunities Page & Document Visibility ---');
 
     // Test 6A: Check if Seller 1 and Seller 2 can see published open bids
-    const publicBidsResponse = await bidService.listPublicBids({ page: 1, pageSize: 20 }, seller1Req.user);
+    const publicBidsResponse = await bidService.listPublicBids({ q: twoPacketBid.bidNumber }, seller1Req.user);
     const hasTwoPacketInFeed = publicBidsResponse.items.some((b: any) => b.id === twoPacketBid.id);
 
     recordResult({
