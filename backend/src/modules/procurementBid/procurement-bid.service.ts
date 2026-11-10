@@ -1608,8 +1608,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const publicDocuments = (bid.documents || []).filter((doc: any) => {
     if (doc.visibility === 'PUBLIC' || doc.visibility === 'SELLER_AFTER_LOGIN') return true;
     if (actor?.role === 'seller') {
-      const isInternalApproval = internalBuyerDocTypes.includes(doc.documentType) && doc.visibility === 'BUYER_ADMIN_ONLY';
-      return !isInternalApproval;
+      if (doc.visibility === 'BUYER_ADMIN_ONLY' || doc.visibility === 'INTERNAL') return false;
+      return !internalBuyerDocTypes.includes(doc.documentType);
     }
     return isAdmin || isBuyerOwner;
   });
@@ -4260,7 +4260,7 @@ export const evaluateTechnical = async (req: AuthRequest, bidId: string, body: a
       }));
     }
     return rows;
-  });
+  }, { maxWait: 15000, timeout: 30000 });
   await procurementAudit(req, 'TECHNICAL_EVALUATION_STARTED', 'ProcurementBid', bid.id, { status: 'TECHNICAL_EVALUATION' }, bid);
   for (const row of updatedRows) {
     await procurementAudit(req, row.status === 'QUALIFIED' ? 'SELLER_QUALIFIED' : 'SELLER_DISQUALIFIED', 'ProcurementBidParticipation', row.participationId, row);
@@ -4414,7 +4414,7 @@ export const performFinancialRankingAndOpening = async (bid: any, evaluatorId?: 
       data: { financialStatus: 'LOCKED' }
     });
     return qualified.map((row: any, index: number) => ({ ...row, rank: index + 1, finalStatus: rankToFinalStatus(index + 1) }));
-  });
+  }, { maxWait: 15000, timeout: 30000 });
 
   if (req && ranked.length > 0) {
     await procurementAudit(req, 'FINANCIAL_EVALUATION_OPENED', 'ProcurementBid', bid.id, { qualifiedCount: ranked.length }).catch(() => null);
@@ -5932,7 +5932,7 @@ export const generatePOForBid = async (req: AuthRequest, bidId: string, body: an
 
 export const approveFinalAward = async (req: AuthRequest, bidId: string, body: any) => {
   const bid = await resolveBid(bidId, {});
-  if (bid.status !== 'AWARD_RECOMMENDED') throw new ApiError(400, 'Final award approval requires an award recommendation first.', 'INVALID_STATUS_TRANSITION');
+  if (!['AWARD_RECOMMENDED', 'AWARD_OFFERED'].includes(bid.status)) throw new ApiError(400, 'Final award approval requires an award recommendation first.', 'INVALID_STATUS_TRANSITION');
   const award = await db.procurementBidAward.findFirst({
     where: { bidId: bid.id, ...(body.awardId ? { id: Number(body.awardId) } : {}) },
     orderBy: { createdAt: 'desc' }
@@ -5945,7 +5945,7 @@ export const approveFinalAward = async (req: AuthRequest, bidId: string, body: a
     });
     // NOTE: Standby bidders remain active/standby and are NOT transitioned to NOT_SELECTED until seller accepts the PO!
     await tx.procurementBidParticipation.update({ where: { id: award.participationId }, data: { finalStatus: 'AWARDED' } });
-    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'AWARD_RECOMMENDED', lifecycleStage: 'EVALUATION' } });
+    await tx.procurementBid.update({ where: { id: bid.id }, data: { status: 'AWARD_RECOMMENDED', lifecycleStage: 'AWARD_RECOMMENDED' } });
     return approved;
   });
   await procurementAudit(req, 'FINAL_AWARD_APPROVED', 'ProcurementBidAward', updated.id, updated);
