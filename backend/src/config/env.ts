@@ -174,9 +174,17 @@ const envSchema = z.object({
   FIELD_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)').optional(),
   FIELD_ENCRYPTION_KEY_FALLBACK: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY_FALLBACK must be a 64-character hex string (32 bytes)').optional(),
   ENFORCE_SSL: envBoolean(false),
+
+  // AI & Document Extraction Configuration
   GEMINI_API_KEY: optionalString(),
+  NVIDIA_API_KEY: optionalString(),
   NVIDIA_NIM_API_KEY: withFallback(['NVIDIA_NIM_API_KEY', 'NVIDIA_API_KEY'], optionalString()),
-  NVIDIA_API_KEY: optionalString()
+  AI_PROVIDER_PRIORITY: z.string().default('gemini,nvidia'),
+  AI_REQUEST_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  GEMINI_MODEL: z.string().default('gemini-2.5-flash'),
+  GEMINI_BASE_URL: z.string().url().default('https://generativelanguage.googleapis.com/v1beta'),
+  NVIDIA_MODEL: z.string().default('meta/llama-3.2-11b-vision-instruct'),
+  NVIDIA_BASE_URL: z.string().url().default('https://integrate.api.nvidia.com/v1')
 });
 const parsed = envSchema.safeParse(process.env);
 
