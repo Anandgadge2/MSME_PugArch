@@ -21,6 +21,8 @@
     "node_modules",
     "dist",
     "tests",
-    "src/scripts/**"
+    "src/scripts/**",
+    "src/*test*.ts",
+    "src/**/*.test.ts"
   ]
 }

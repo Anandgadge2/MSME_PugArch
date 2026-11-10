@@ -1,5 +1,6 @@
 import prisma from './lib/prisma.js';
-import { generateAccessToken } from './services/token.service.js';
+import { signAccessToken } from './services/token.service.js';
+const generateAccessToken = (payload: any) => signAccessToken(payload);
 import * as bidWizardService from './modules/procurementBid/bid-wizard.service.js';
 import * as bidService from './modules/procurementBid/procurement-bid.service.js';
 import * as orderService from './modules/procurementBid/procurement-order.service.js';
@@ -179,7 +180,7 @@ async function runDeepTesting() {
         category: 'GFR_COMPLIANCE',
         title: 'RFQ Creation with ₹50 Lakhs Estimated Value (Threshold Breach)',
         expected: 'System should block or warn that RFQ method is limited to ₹2.5L/₹5L under GFR Rule 155, and require Open Tender Enquiry for ₹50L.',
-        actual: `System created published RFQ #${submitResult.bidNumber || submitResult.id} for ₹50,00,000 without any threshold block or GFR warning.`,
+        actual: `System created published RFQ #${(submitResult as any).procurementBid?.bidNumber || (submitResult as any).bidNumber || (submitResult as any).id} for ₹50,00,000 without any threshold block or GFR warning.`,
         status: 'WARNING',
         details: 'GFR Rule 155 strictly limits RFQ / Purchase Committee procurement up to ₹2,50,000. Purchases over ₹25,00,000 legally require Advertised Tender (GFR 161). System currently has no ceiling validation on RFQ.'
       });
@@ -1020,7 +1021,7 @@ async function runDeepTesting() {
           category: 'GFR_COMPLIANCE',
           title: 'Supplier Declines Purchase Order (Enterprise Decline Protocol)',
           expected: 'Order cancelled, dispute logged, PBG auto-released under GFR 171, and tender returned to evaluation for L2 re-award.',
-          actual: `PO status set to: ${declinedPoResult?.status || 'declined'}, PO Status: ${declinedPoResult?.poStatus}`,
+          actual: `PO status set to: ${(declinedPoResult as any)?.purchaseOrder?.status || (declinedPoResult as any)?.status || 'declined'}, PO Status: ${(declinedPoResult as any)?.purchaseOrder?.poStatus || (declinedPoResult as any)?.poStatus}`,
           status: 'PASS',
           details: 'Cleanly handled excused supplier rejection without system deadlock.'
         });
@@ -1121,8 +1122,8 @@ async function runDeepTesting() {
         purchaseOrderId: fulfillmentPo.id,
         status: 'DELIVERED',
         trackingNumber: `TRK-${Date.now()}`,
-        carrier: 'BlueDart MSME Express',
-        deliveredAt: new Date()
+        carrierName: 'BlueDart MSME Express',
+        actualDelivery: new Date()
       }
     });
 
@@ -1156,7 +1157,8 @@ async function runDeepTesting() {
               orderedQty: 100,
               receivedQty: 100,
               acceptedQty: 100,
-              rejectedQty: 0
+              rejectedQty: 0,
+              unitOfMeasure: 'NOS'
             }
           ]
         }
@@ -1199,7 +1201,7 @@ async function runDeepTesting() {
         payerBankName: 'State Bank of India',
         uploadedByUserId: buyer.id,
         status: 'VERIFIED',
-        verifiedByUserId: 1, // Master Admin
+        verifiedByUserId: buyer.id, // Buyer verification
         verifiedAt: new Date()
       }
     });
@@ -1207,7 +1209,7 @@ async function runDeepTesting() {
     // Close the loop: Mark Invoice as PAID and PO as paid_offline_verified
     await prisma.invoice.update({
       where: { id: invoice.id },
-      data: { status: 'paid', invoiceStatus: 'PAID', paymentDate: new Date() }
+      data: { status: 'paid', invoiceStatus: 'PAID' }
     });
 
     await prisma.purchaseOrder.update({
@@ -1229,7 +1231,7 @@ async function runDeepTesting() {
       title: 'Procurement Settlement Loop Closure (UTR Verification to Paid State)',
       expected: 'PO transitions to paid_offline_verified, Invoice marked PAID, and payment recorded.',
       actual: isLoopClosed
-        ? `Loop closed cleanly: PO.status=${closedPo?.status}, Invoice.status=${closedPo?.invoices[0]?.status}, paymentDate=${closedPo?.invoices[0]?.paymentDate}`
+        ? `Loop closed cleanly: PO.status=${closedPo?.status}, Invoice.status=${closedPo?.invoices[0]?.status}, paidAt=${paymentProof.paymentDate}`
         : 'Loop failed to close!',
       status: isLoopClosed ? 'PASS' : 'FAIL',
       details: 'Complete lifecycle verified: Tender -> Participation -> Award -> PO -> Delivery -> GRN -> Invoice -> Payment -> Settlement.'
