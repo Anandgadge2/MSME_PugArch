@@ -3918,7 +3918,7 @@ export default function AdminOnboarding() {
                                     </span>{" "}
                                     | IFSC:{" "}
                                     <span className="text-slate-900">
-                                      {bank.ifsc}
+                                      {bank.ifsc || bank.ifscCode}
                                     </span>
                                   </p>
                                   <p className="text-[10px] font-medium text-slate-500 uppercase">

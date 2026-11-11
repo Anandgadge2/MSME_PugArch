@@ -1,4 +1,5 @@
 import { maskPAN, maskGST, maskBankAccount, maskAadhaar } from '../utils/maskSensitive.js';
+import { isEncrypted, decryptField } from '../utils/crypto.js';
 import type { Request, Response, NextFunction } from 'express';
 
 const FORBIDDEN_CREDENTIAL_KEYS = new Set([
@@ -31,50 +32,60 @@ export function sanitizeEgressPayload(val: any, depth = 0, options: EgressSaniti
       continue;
     }
 
+    let effectiveVal = value;
+    if (typeof effectiveVal === 'string' && isEncrypted(effectiveVal)) {
+      try {
+        effectiveVal = decryptField(effectiveVal);
+      } catch {
+        // preserve encrypted text if key missing or invalid
+      }
+    }
+
     // 2. Aadhaar statutory masking - NEVER EXPOSE FULL AADHAAR TO ANYONE (UIDAI MANDATE)
     if (/^aadhaar(Number)?$/i.test(key)) {
-      result[key] = value ? maskAadhaar(value) : value;
+      result[key] = effectiveVal ? maskAadhaar(effectiveVal) : effectiveVal;
       continue;
     }
 
     // For authorized admin / master_admin officers performing KYC scrutiny:
-    // Retain cleartext PAN, GSTIN, and Bank Accounts to allow cross-verification against uploaded proofs
+    // Retain cleartext PAN, GSTIN, Bank Accounts, Mobile, and Identity names to allow cross-verification against uploaded proofs
     if (options.isScrutinyAdmin || options.isSelfProfile) {
-      if (/^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key) ||
+      if (/^(pan|panNumber|gst|gstin|gstNumber|nameAsInPan|panName|dateAsInPan)$/i.test(key) ||
+          /(^|_)(phone|mobile|officialPhone|contactPhone)$/i.test(key) ||
           (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
-        result[key] = value;
+        result[key] = effectiveVal;
         continue;
       }
     }
 
     // 3. Bank Account numbers
     if (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key)) {
-      result[key] = value ? maskBankAccount(value) : value;
+      result[key] = effectiveVal ? maskBankAccount(effectiveVal) : effectiveVal;
       continue;
     }
 
     // 4. PAN numbers (preserve workflow status flags)
     if (/^(pan|panNumber)$/i.test(key)) {
-      if (typeof value === 'string' && WORKFLOW_STATUSES.has(value.trim().toLowerCase())) {
-        result[key] = value;
+      if (typeof effectiveVal === 'string' && WORKFLOW_STATUSES.has(effectiveVal.trim().toLowerCase())) {
+        result[key] = effectiveVal;
       } else {
-        result[key] = value ? maskPAN(value) : value;
+        result[key] = effectiveVal ? maskPAN(effectiveVal) : effectiveVal;
       }
       continue;
     }
 
     // 5. GSTIN (preserve workflow status flags)
     if (/^(gst|gstin|gstNumber)$/i.test(key)) {
-      if (typeof value === 'string' && WORKFLOW_STATUSES.has(value.trim().toLowerCase())) {
-        result[key] = value;
+      if (typeof effectiveVal === 'string' && WORKFLOW_STATUSES.has(effectiveVal.trim().toLowerCase())) {
+        result[key] = effectiveVal;
       } else {
-        result[key] = value ? maskGST(value) : value;
+        result[key] = effectiveVal ? maskGST(effectiveVal) : effectiveVal;
       }
       continue;
     }
 
     // Recurse for nested objects
-    result[key] = sanitizeEgressPayload(value, depth + 1, options);
+    result[key] = sanitizeEgressPayload(effectiveVal, depth + 1, options);
   }
   return result;
 }

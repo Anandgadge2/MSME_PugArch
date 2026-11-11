@@ -29,9 +29,9 @@ import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPa
 import { redisKeys } from '../constants/redis-keys.js';
 import { ApiError } from '../utils/ApiError.js';
 import { handleSecureRouteError } from '../utils/routeHelpers.js';
-import { maskSensitive } from '../utils/maskSensitive.js';
+import { maskSensitive, maskBankAccount } from '../utils/maskSensitive.js';
 import { formatIstDateTime } from '../services/email-template.builder.js';
-import { sha256, createHashFingerprint } from '../utils/crypto.js';
+import { sha256, createHashFingerprint, decryptField, isEncrypted } from '../utils/crypto.js';
 import { panVerificationService } from '../services/verification/pan.service.js';
 import { udyamVerificationService } from '../services/verification/udyam.service.js';
 import { formatRequirementNumber, formatRefId, CANONICAL_METHOD_PREFIXES, getCanonicalLookupVariants } from '../utils/refIdUtils.js';
@@ -4704,12 +4704,33 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
     address: registrationGstDetails.address || organization?.addressLine1 || (profile as any)?.registeredAddress || null
   };
 
-  const panValue = (profile as any)?.pan || organization?.panNumber || registrationDetails.pan || null;
-  const nameAsInPanValue = (profile as any)?.nameAsInPan || (profile as any)?.panName || registrationDetails.nameAsInPan || organization?.organizationName || null;
-  const dateAsInPanValue = (profile as any)?.dateAsInPan || (profile as any)?.dateOfIncorporation || registrationDetails.dateAsInPan || null;
-  const gstValue = (profile as any)?.gst || organization?.gstin || registrationDetails.gstin || null;
-  const mobileValue = (profile as any)?.mobile || user.mobile || null;
-  const udyamValue = (profile as any)?.udyamRegistrationNumber || organization?.udyamNumber || registrationDetails.udyamRegistrationNumber || null;
+  const rawPan = (profile as any)?.pan || organization?.panNumber || registrationDetails.pan || null;
+  const rawNameAsInPan = (profile as any)?.nameAsInPan || (profile as any)?.panName || registrationDetails.nameAsInPan || organization?.organizationName || null;
+  const rawDateAsInPan = (profile as any)?.dateAsInPan || (profile as any)?.dateOfIncorporation || registrationDetails.dateAsInPan || null;
+  const rawGst = (profile as any)?.gst || organization?.gstin || registrationDetails.gstin || null;
+  const rawMobile = (profile as any)?.mobile || user.mobile || null;
+  const rawUdyam = (profile as any)?.udyamRegistrationNumber || organization?.udyamNumber || registrationDetails.udyamRegistrationNumber || null;
+
+  const panValue = isEncrypted(rawPan) ? decryptField(rawPan) : rawPan;
+  const nameAsInPanValue = isEncrypted(rawNameAsInPan) ? decryptField(rawNameAsInPan) : rawNameAsInPan;
+  const dateAsInPanValue = isEncrypted(rawDateAsInPan) ? decryptField(rawDateAsInPan) : rawDateAsInPan;
+  const gstValue = isEncrypted(rawGst) ? decryptField(rawGst) : rawGst;
+  const mobileValue = isEncrypted(rawMobile) ? decryptField(rawMobile) : rawMobile;
+  const udyamValue = isEncrypted(rawUdyam) ? decryptField(rawUdyam) : rawUdyam;
+
+  const rawBankAccounts = (profile as any)?.bankAccounts;
+  const enrichedBankAccounts = Array.isArray(rawBankAccounts)
+    ? rawBankAccounts.map((b: any) => {
+        const rawAccount = b.accountNumber;
+        const plainAccount = isEncrypted(rawAccount) ? decryptField(rawAccount) : rawAccount;
+        const displayAccount = plainAccount || b.accountNumberMasked || null;
+        return {
+          ...b,
+          accountNumber: displayAccount,
+          accountNumberMasked: b.accountNumberMasked || (plainAccount ? maskBankAccount(plainAccount) : null)
+        };
+      })
+    : [];
 
   const enrichedProfile = profile
     ? {
@@ -4720,6 +4741,7 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
         gst: gstValue,
         mobile: mobileValue,
         udyamRegistrationNumber: udyamValue,
+        bankAccounts: enrichedBankAccounts.length > 0 ? enrichedBankAccounts : (profile as any).bankAccounts,
         documents: enrichDocuments(profile.documents),
         gstVerificationDetails
       }

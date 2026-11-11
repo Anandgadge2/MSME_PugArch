@@ -1,3 +1,5 @@
+import { isEncrypted, decryptField } from './crypto.js';
+
 const sensitiveKeys = new Set([
   'password',
   'token',
@@ -96,30 +98,42 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
     return Object.entries(val).reduce<Record<string, unknown>>((acc, [key, value]) => {
       if (passthroughKeys.has(key)) {
         acc[key] = value;
-      } else if (/^aadhaar|aadhaarNumber$/i.test(key)) {
-        acc[key] = value ? maskAadhaar(value) : value;
-      } else if (allowUnmaskedPii && /^(pan|panNumber|gst|gstin|gstNumber)$/i.test(key)) {
-        acc[key] = value;
+        return acc;
+      }
+
+      let effectiveVal = value;
+      if (typeof effectiveVal === 'string' && isEncrypted(effectiveVal)) {
+        try {
+          effectiveVal = decryptField(effectiveVal);
+        } catch {
+          // retain encrypted text if key missing or invalid
+        }
+      }
+
+      if (/^aadhaar|aadhaarNumber$/i.test(key)) {
+        acc[key] = effectiveVal ? maskAadhaar(effectiveVal) : effectiveVal;
+      } else if (allowUnmaskedPii && /^(pan|panNumber|gst|gstin|gstNumber|nameAsInPan|panName)$/i.test(key)) {
+        acc[key] = effectiveVal;
       } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
-        acc[key] = value;
+        acc[key] = effectiveVal;
       } else if (allowUnmaskedPii && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
-        acc[key] = value;
+        acc[key] = effectiveVal;
       } else if (allowUnmaskedPii && /(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
-        acc[key] = value;
+        acc[key] = effectiveVal;
       } else if (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key)) {
-        acc[key] = value ? maskBankAccount(value) : value;
+        acc[key] = effectiveVal ? maskBankAccount(effectiveVal) : effectiveVal;
       } else if (/^(pan|panNumber)$/i.test(key)) {
-        acc[key] = value ? (isWorkflowStatus(value) ? value : maskPAN(value)) : value;
+        acc[key] = effectiveVal ? (isWorkflowStatus(effectiveVal) ? effectiveVal : maskPAN(effectiveVal)) : effectiveVal;
       } else if (/^(gst|gstin|gstNumber)$/i.test(key)) {
-        acc[key] = value ? (isWorkflowStatus(value) ? value : maskGST(value)) : value;
+        acc[key] = effectiveVal ? (isWorkflowStatus(effectiveVal) ? effectiveVal : maskGST(effectiveVal)) : effectiveVal;
       } else if (/(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
-        acc[key] = (typeof value === 'string' || typeof value === 'number') ? maskEmail(value) : (value ? mask(value, newStack) : value);
+        acc[key] = (typeof effectiveVal === 'string' || typeof effectiveVal === 'number') ? maskEmail(effectiveVal) : (effectiveVal ? mask(effectiveVal, newStack) : effectiveVal);
       } else if (/(^|_)(phone|mobile|officialPhone|contactPhone|complainantMobile|contactPersonMobile|verifyingMobile|mobileNumber)$/i.test(key)) {
-        acc[key] = (typeof value === 'string' || typeof value === 'number') ? maskPhone(value) : (value ? mask(value, newStack) : value);
+        acc[key] = (typeof effectiveVal === 'string' || typeof effectiveVal === 'number') ? maskPhone(effectiveVal) : (effectiveVal ? mask(effectiveVal, newStack) : effectiveVal);
       } else if (sensitiveKeys.has(key) || /password|secret|token|apiKey|api_key/i.test(key)) {
-        acc[key] = value ? maskValue(value) : value;
+        acc[key] = effectiveVal ? maskValue(effectiveVal) : effectiveVal;
       } else {
-        acc[key] = mask(value, newStack);
+        acc[key] = mask(effectiveVal, newStack);
       }
       return acc;
     }, {});
