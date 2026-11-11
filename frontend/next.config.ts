@@ -1,8 +1,16 @@
 import type { NextConfig } from "next";
 import path from "path";
 
-const isAbsoluteHttpUrl = (value?: string): value is string =>
-  Boolean(value && /^https?:\/\//i.test(value));
+const isAbsoluteHttpUrl = (value?: string): value is string => {
+  if (!value || typeof value !== "string") return false;
+  const trimmed = value.trim();
+  if (!/^https?:\/\//i.test(trimmed)) return false;
+  // localhost / 127.0.0.1 is NEVER a valid remote backend URL for proxy rewrites
+  if (trimmed.includes("localhost") || trimmed.includes("127.0.0.1")) {
+    return false;
+  }
+  return true;
+};
 
 const getBackendUrl = (): string => {
   // 1. Allow explicit override via BACKEND_URL or NEXT_PUBLIC_BACKEND_URL
@@ -51,7 +59,12 @@ const getBackendUrl = (): string => {
     return "https://msme-pugarch-backend.vercel.app";
   }
 
-  // 4. Fallback to local .env configuration
+  // 4. Production fallback: never return localhost in production or Vercel
+  if (process.env.NODE_ENV === "production" || process.env.VERCEL) {
+    return "https://msme-pug-arch-forked-backend.vercel.app";
+  }
+
+  // 5. Local development fallback
   return (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
 };
 
