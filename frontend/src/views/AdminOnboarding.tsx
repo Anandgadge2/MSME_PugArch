@@ -221,21 +221,33 @@ const getGstNumber = (item: any): string | undefined => {
   return gst && String(gst).trim().length > 0 ? String(gst).trim() : undefined;
 };
 
+const isCiphertext = (val: unknown): boolean =>
+  typeof val === "string" && (val.startsWith("enc:v1:") || val.startsWith("ENC:V1:") || val.toLowerCase().startsWith("enc:v1:"));
+
 const getPanNumber = (item: any): string | undefined => {
   if (!item) return undefined;
-  const pan =
-    item.profile?.pan ||
-    item.profile?.panNumber ||
-    item.profile?.organization?.panNumber ||
-    item.organization?.panNumber ||
-    item.registrationDetails?.pan ||
-    item.registrationDetails?.orgPan ||
-    item.registrationDetails?.personalPan ||
-    item.registrationDetails?.gstDetails?.pan ||
-    item.profile?.gstVerificationDetails?.pan ||
-    item.pan ||
-    undefined;
-  return pan && String(pan).trim().length > 0 ? String(pan).trim() : undefined;
+  const candidates = [
+    item.profile?.pan,
+    item.profile?.panNumber,
+    item.profile?.organization?.panNumber,
+    item.organization?.panNumber,
+    item.registrationDetails?.pan,
+    item.registrationDetails?.orgPan,
+    item.registrationDetails?.personalPan,
+    item.registrationDetails?.gstDetails?.pan,
+    item.profile?.gstVerificationDetails?.pan,
+    item.pan,
+  ];
+  for (const c of candidates) {
+    if (c && typeof c === "string" && c.trim().length > 0 && !isCiphertext(c)) {
+      return c.trim();
+    }
+  }
+  const gst = getGstNumber(item);
+  if (gst && /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/i.test(gst)) {
+    return gst.substring(2, 12).toUpperCase();
+  }
+  return undefined;
 };
 
 const getUdyamNumber = (item: any): string | undefined => {
@@ -4790,6 +4802,11 @@ function InfoItem({
   mono?: boolean;
   highlight?: boolean;
 }) {
+  let displayValue = value || "Not Provided";
+  if (typeof value === "string" && (value.startsWith("enc:v1:") || value.startsWith("ENC:V1:") || value.toLowerCase().startsWith("enc:v1:"))) {
+    displayValue = "Under Verification";
+  }
+
   return (
     <div className="min-w-0 space-y-1 rounded-md border border-slate-100 bg-slate-50/70 px-3 py-2">
       <p className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
@@ -4802,7 +4819,7 @@ function InfoItem({
           mono && "font-mono",
         )}
       >
-        {value || "Not Provided"}
+        {displayValue}
       </p>
     </div>
   );

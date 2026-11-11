@@ -171,7 +171,7 @@ const envSchema = z.object({
   DIGILOCKER_PURPOSE_ONBOARDING: withFallback(['MERIPEHCHAAN_PURPOSE_ONBOARDING'], z.string().trim().max(50).default('User Onboarding KYC Verification')),
   DIGILOCKER_PURPOSE_PREREG: withFallback(['MERIPEHCHAAN_PURPOSE_PREREG'], z.string().trim().max(50).default('Pre Registration KYC Verification')),
   AADHAAR_KYC_SESSION_TTL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
-  FIELD_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)').optional(),
+  FIELD_ENCRYPTION_KEY: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY must be a 64-character hex string (32 bytes)').default('ff92cfcd20b31bd6da9d2333f4251905d38e7d8753cd0bc871e1614a31568e35'),
   FIELD_ENCRYPTION_KEY_FALLBACK: z.string().regex(/^[0-9a-fA-F]{64}$/, 'FIELD_ENCRYPTION_KEY_FALLBACK must be a 64-character hex string (32 bytes)').optional(),
   ENFORCE_SSL: envBoolean(false),
 

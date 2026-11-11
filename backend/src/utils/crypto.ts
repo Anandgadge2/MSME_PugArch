@@ -76,12 +76,16 @@ export const decryptField = (encryptedValue: string | null | undefined, customKe
   const tag = Buffer.from(tagB64, 'base64');
   const ciphertext = Buffer.from(cipherB64, 'base64');
 
+  const prodMasterKey = 'ff92cfcd20b31bd6da9d2333f4251905d38e7d8753cd0bc871e1614a31568e35';
+  const prodFallbackKey = '891c492896363f1b5b1b41cc8d56c13ca41d26b38d580e09d98ca98963f23c7d';
   const defaultDerivedKey = crypto.createHash('sha256').update(env.JWT_SECRET || 'dev_master_key_msme_pugarch_2026').digest('hex');
   const legacyFallbackKey = '18f6417f99fffab68c3c6c039b47a5dfd148b746550e51f6766afddae8fed7bc';
 
   const keysToTry = [
     customKeyHex || env.FIELD_ENCRYPTION_KEY,
+    prodMasterKey,
     env.FIELD_ENCRYPTION_KEY_FALLBACK,
+    prodFallbackKey,
     defaultDerivedKey,
     legacyFallbackKey
   ].filter((k): k is string => Boolean(k && k.length === 64));

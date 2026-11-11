@@ -4488,10 +4488,14 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       id: u.id,
       name: u.name,
       email: u.email,
+      mobile: plainMobile,
       role: u.role,
       onboardingStatus: u.onboardingStatus,
       registrationDetails: u.registrationDetails,
-      organization: u.organization,
+      organization: u.organization ? {
+        ...u.organization,
+        panNumber: isEncrypted(u.organization.panNumber) ? decryptField(u.organization.panNumber) : u.organization.panNumber
+      } : u.organization,
       createdAt: u.createdAt,
       sectionStatus: u.sectionStatus,
       adminFeedback: u.adminFeedback,
@@ -4795,6 +4799,16 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
   delete (sanitizedUser as any).password;
   delete (sanitizedUser as any).passwordHash;
   delete (sanitizedUser as any).sessionVersion;
+  if (sanitizedUser.mobile && isEncrypted(sanitizedUser.mobile)) {
+    sanitizedUser.mobile = decryptField(sanitizedUser.mobile);
+  }
+  if (sanitizedUser.organization) {
+    const org = { ...sanitizedUser.organization };
+    if (org.panNumber && isEncrypted(org.panNumber)) {
+      org.panNumber = decryptField(org.panNumber);
+    }
+    sanitizedUser.organization = org;
+  }
 
   // Registration scrutiny desk is an authenticated admin-only workflow that requires unmasked
   // human-readable verification fields so officers can match submitted details against physical documents.

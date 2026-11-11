@@ -16,7 +16,15 @@ const getBackendUrl = (): string => {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
   }
 
-  // 2. If we are on Vercel, dynamically construct the backend URL from the frontend VERCEL_URL
+  // 2. Production domain (jsgsmile.in) routing: direct to high-performance Cloud Run backend
+  if (
+    process.env.NEXT_PUBLIC_APP_URL?.includes("jsgsmile.in") ||
+    process.env.VERCEL_PROJECT_PRODUCTION_URL?.includes("jsgsmile.in")
+  ) {
+    return "https://msme-backend-yvkunmwzya-el.a.run.app";
+  }
+
+  // 3. If we are on Vercel, dynamically construct the backend URL from the frontend VERCEL_URL
   if (process.env.VERCEL_URL) {
     const vercelUrl = process.env.VERCEL_URL;
     let backendHost = vercelUrl;
