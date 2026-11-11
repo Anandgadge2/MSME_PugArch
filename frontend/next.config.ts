@@ -16,38 +16,43 @@ const getBackendUrl = (): string => {
     return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
   }
 
-  // 2. Production domain (jsgsmile.in) routing: direct to high-performance Cloud Run backend
+  // 2. Production GCP Cloud Run deployment (jsgsmile.in)
+  // jsgsmile.in is pointed to GCP deployment only in production (not in Vercel)
   if (
-    process.env.NEXT_PUBLIC_APP_URL?.includes("jsgsmile.in") ||
-    process.env.VERCEL_PROJECT_PRODUCTION_URL?.includes("jsgsmile.in")
+    !process.env.VERCEL &&
+    (process.env.NEXT_PUBLIC_APP_URL?.includes("jsgsmile.in") ||
+     Boolean(process.env.K_SERVICE) ||
+     (process.env.NODE_ENV === "production" && !process.env.VERCEL_URL))
   ) {
     return "https://msme-backend-yvkunmwzya-el.a.run.app";
   }
 
-  // 3. If we are on Vercel, dynamically construct the backend URL from the frontend VERCEL_URL
-  if (process.env.VERCEL_URL) {
-    const vercelUrl = process.env.VERCEL_URL;
-    let backendHost = vercelUrl;
-    if (vercelUrl.includes("msme-pugarch-frontend")) {
-      backendHost = vercelUrl.replace(
-        "msme-pugarch-frontend",
-        "msme-pugarch-backend",
-      );
-    } else if (vercelUrl.includes("msme-portal-pug-arch-frontend")) {
-      backendHost = vercelUrl.replace(
-        "msme-portal-pug-arch-frontend",
-        "msme-pugarch-backend",
-      );
-    } else if (vercelUrl.includes("msme-frontend")) {
-      backendHost = vercelUrl.replace("msme-frontend", "msme-pugarch-backend");
-    } else {
-      backendHost = vercelUrl.replace("frontend", "backend");
+  // 3. Vercel deployments: Map to known stable backend domains (never use per-deployment preview hashes)
+  if (process.env.VERCEL || process.env.VERCEL_URL) {
+    const vUrl = (process.env.VERCEL_URL || "").toLowerCase();
+    const repoSlug = (process.env.VERCEL_GIT_REPO_SLUG || "").toLowerCase();
+    const projName = (process.env.VERCEL_PROJECT_PRODUCTION_URL || "").toLowerCase();
+
+    // Forked Production repo on Vercel (pugarchdev/MSME_PugArch_Forked)
+    if (
+      vUrl.includes("forked") ||
+      repoSlug.includes("forked") ||
+      projName.includes("forked")
+    ) {
+      return "https://msme-pug-arch-forked-backend.vercel.app";
     }
-    return `https://${backendHost}`.replace(/\/$/, "");
+
+    // pugarchdev preview deployments
+    if (vUrl.includes("pugarchdev") || repoSlug.includes("pugarchdev") || projName.includes("pugarchdev")) {
+      return "https://msme-pugarchdev-backend.vercel.app";
+    }
+
+    // Testing repo on Vercel (Anandgadge2/MSME_PugArch)
+    return "https://msme-pugarch-backend.vercel.app";
   }
 
-  // 3. Fallback to local .env configuration
-  return (process.env.NEXT_PUBLIC_API_URL || "").replace(/\/$/, "");
+  // 4. Fallback to local .env configuration
+  return (process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000").replace(/\/$/, "");
 };
 
 const nextConfig: NextConfig = {
