@@ -116,33 +116,12 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   const rawBid: any = bidData || (reqData as any)?.requirement || (reqData as any)?.data || reqData || initialData || {};
   const reqObj: any = (reqData as any)?.requirement || reqData || {};
 
-  if (!bidData && !reqData && !initialData && isQueryInProgress) {
-    return <ProcurementDetailSkeleton procurementTypeLabel="Request for Quotation" />;
-  }
-
-  if (!bidData && !reqData && !initialData && !isQueryInProgress) {
-    return (
-      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
-        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
-          <ShieldAlert className="h-8 w-8" />
-        </div>
-        <h1 className="text-xl font-black text-slate-950">Procurement Requirement Not Found</h1>
-        <p className="max-w-md text-sm font-semibold leading-relaxed text-slate-500">
-          The requested RFQ opportunity could not be loaded or may no longer be available.
-        </p>
-        <Button onClick={() => router.push(user?.role === 'buyer' ? '/buyer/my-procurements' : '/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
-          {user?.role === 'buyer' ? 'Return to Procurements' : 'Return to Opportunities'}
-        </Button>
-      </div>
-    );
-  }
-
   const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const statusUpper = String(rawBid.status || reqObj.status || 'OPEN').toUpperCase();
   const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
-  const handleConvertToInvoice = async () => {
+  const handleConvertToInvoice = useCallback(async () => {
     const idToUse = requestId || effectiveTargetId;
     if (!idToUse) return;
     setIsConvertingInvoice(true);
@@ -160,9 +139,9 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     } finally {
       setIsConvertingInvoice(false);
     }
-  };
+  }, [requestId, effectiveTargetId, router]);
 
-  const handleSubmitQuotation = () => {
+  const handleSubmitQuotation = useCallback(() => {
     if (!user) {
       toast.error('Please login to submit a quotation.');
       router.push(`/login?redirect=${encodeURIComponent(pathname || '')}`);
@@ -170,7 +149,7 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     }
     const resolvedId = effectiveTargetId || activeRfqId;
     router.push(`/bids/${encodeURIComponent(resolvedId)}/participate`);
-  };
+  }, [user, router, pathname, effectiveTargetId, activeRfqId]);
 
   const mergedBid = useMemo(() => ({
     ...rawBid,
@@ -239,6 +218,27 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     invoiceStatusData?.canConvertToInvoice,
     handleConvertToInvoiceCallback
   ]);
+
+  if (!bidData && !reqData && !initialData && isQueryInProgress) {
+    return <ProcurementDetailSkeleton procurementTypeLabel="Request for Quotation" />;
+  }
+
+  if (!bidData && !reqData && !initialData && !isQueryInProgress) {
+    return (
+      <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-4 text-center">
+        <div className="flex h-16 w-16 items-center justify-center rounded-xl border border-amber-200 bg-amber-50 text-amber-600">
+          <ShieldAlert className="h-8 w-8" />
+        </div>
+        <h1 className="text-xl font-black text-slate-950">Procurement Requirement Not Found</h1>
+        <p className="max-w-md text-sm font-semibold leading-relaxed text-slate-500">
+          The requested RFQ opportunity could not be loaded or may no longer be available.
+        </p>
+        <Button onClick={() => router.push(user?.role === 'buyer' ? '/buyer/my-procurements' : '/seller/opportunities')} className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs px-6 h-10 rounded-xl">
+          {user?.role === 'buyer' ? 'Return to Procurements' : 'Return to Opportunities'}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <>

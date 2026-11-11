@@ -219,8 +219,6 @@ export function SupplierQuotationDetailView({
   const [previewLoadingId, setPreviewLoadingId] = React.useState<string | number | null>(null);
   const [activeTab, setActiveTab] = React.useState<'pricing' | 'terms' | 'compliance'>('pricing');
 
-  if (!result) return null;
-
   const isTwoPacket = React.useMemo(() => {
     if (isTwoPacketModeProp !== undefined) return isTwoPacketModeProp;
     if (!bid) return false;
@@ -238,6 +236,8 @@ export function SupplierQuotationDetailView({
       b.technicalPacket?.schedule?.packetType === 'Two-Packet'
     );
   }, [isTwoPacketModeProp, bid]);
+
+  if (!result) return null;
 
   // Extract seller identity & contact information
   const sellerOrg =

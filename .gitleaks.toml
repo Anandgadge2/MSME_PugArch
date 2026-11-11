@@ -8,5 +8,6 @@ paths = [
     '''tools/.*''',
     '''backend/tests/.*''',
     '''\.github/workflows/.*''',
-    '''docs/.*'''
+    '''docs/.*''',
+    '''cloudbuild\.yaml'''
 ]
