@@ -32,8 +32,8 @@ const productionStaticOrigins = [
 const configuredOrigins = [
   ...productionStaticOrigins,
   ...(isProduction ? [] : staticOrigins),
-  ...(env.FRONTEND_URL ? env.FRONTEND_URL.split(',') : []),
-  ...(env.CORS_ALLOWED_ORIGINS ? env.CORS_ALLOWED_ORIGINS.split(',') : [])
+  ...(env.FRONTEND_URL ? env.FRONTEND_URL.split(/[,;]/) : []),
+  ...(env.CORS_ALLOWED_ORIGINS ? env.CORS_ALLOWED_ORIGINS.split(/[,;]/) : [])
 ].map(origin => origin.trim()).filter(Boolean);
 
 const isAllowedVercelFrontendOrigin = (origin: string) => {
