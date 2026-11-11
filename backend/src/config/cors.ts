@@ -11,6 +11,8 @@ const staticOrigins = [
   'http://localhost:5173',
   'http://localhost:5174',
   'https://msme-pugarch-frontend.vercel.app',
+  'https://msme-pug-arch-forked-frontend.vercel.app',
+  'https://msme-pug-arch-forked-backend.vercel.app/',
   'https://msme-portal-pug-arch-frontend.vercel.app',
   'https://msme-frontend.vercel.app',
   'https://msme-pugarch.vercel.app',
