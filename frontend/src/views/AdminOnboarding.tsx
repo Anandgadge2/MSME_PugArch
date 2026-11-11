@@ -3539,19 +3539,19 @@ export default function AdminOnboarding() {
                           />
                           <InfoItem
                             label="PAN Number"
-                            value={selectedItem.profile?.pan}
+                            value={selectedItem.profile?.pan || selectedItem.organization?.panNumber || selectedItem.registrationDetails?.pan}
                             mono
                             highlight
                           />
                           <InfoItem
                             label="Name in PAN"
-                            value={selectedItem.profile?.nameAsInPan}
+                            value={selectedItem.profile?.nameAsInPan || selectedItem.profile?.panName || selectedItem.registrationDetails?.nameAsInPan || selectedItem.profile?.businessName || selectedItem.organization?.organizationName || "N/A"}
                           />
                           <InfoItem
                             label="Date in PAN"
                             value={
-                              selectedItem.profile?.dateAsInPan
-                                ? formatDate(selectedItem.profile.dateAsInPan)
+                              (selectedItem.profile?.dateAsInPan || selectedItem.profile?.dateOfIncorporation || selectedItem.registrationDetails?.dateAsInPan)
+                                ? formatDate(selectedItem.profile?.dateAsInPan || selectedItem.profile?.dateOfIncorporation || selectedItem.registrationDetails?.dateAsInPan)
                                 : "N/A"
                             }
                           />

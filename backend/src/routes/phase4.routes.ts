@@ -4292,6 +4292,9 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
         businessName: true,
         organizationType: true,
         pan: true,
+        nameAsInPan: true,
+        dateAsInPan: true,
+        panVerified: true,
         msmeCategory: true,
         msmeType: true,
         vendorType: true,
@@ -4455,6 +4458,31 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       enrichedDocs = docsObj;
     }
 
+    const regDetails = (u.registrationDetails as Record<string, any>) || {};
+    const rawPan = rawProfile?.pan || u.organization?.panNumber || regDetails.pan || null;
+    const rawNameAsInPan = (rawProfile as any)?.nameAsInPan || (rawProfile as any)?.panName || regDetails.nameAsInPan || u.organization?.organizationName || null;
+    const rawDateAsInPan = (rawProfile as any)?.dateAsInPan || (rawProfile as any)?.dateOfIncorporation || regDetails.dateAsInPan || null;
+    const rawMobile = rawProfile?.mobile || u.mobile || null;
+
+    const plainPan = isEncrypted(rawPan) ? decryptField(rawPan) : rawPan;
+    const plainNameAsInPan = isEncrypted(rawNameAsInPan) ? decryptField(rawNameAsInPan) : rawNameAsInPan;
+    const plainDateAsInPan = isEncrypted(rawDateAsInPan) ? decryptField(rawDateAsInPan) : rawDateAsInPan;
+    const plainMobile = isEncrypted(rawMobile) ? decryptField(rawMobile) : rawMobile;
+
+    const rawBankAccounts = (rawProfile as any)?.bankAccounts;
+    const enrichedBankAccounts = Array.isArray(rawBankAccounts)
+      ? rawBankAccounts.map((b: any) => {
+          const rawAccount = b.accountNumber;
+          const plainAccount = isEncrypted(rawAccount) ? decryptField(rawAccount) : rawAccount;
+          const displayAccount = plainAccount || b.accountNumberMasked || null;
+          return {
+            ...b,
+            accountNumber: displayAccount,
+            accountNumberMasked: b.accountNumberMasked || (plainAccount ? maskBankAccount(plainAccount) : null)
+          };
+        })
+      : [];
+
     const item = {
       _id: String(u.id),
       id: u.id,
@@ -4468,7 +4496,15 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
       sectionStatus: u.sectionStatus,
       adminFeedback: u.adminFeedback,
       complianceViolations: u.complianceViolations,
-      profile: rawProfile ? { ...rawProfile, documents: enrichedDocs } : rawProfile
+      profile: rawProfile ? {
+        ...rawProfile,
+        pan: plainPan,
+        nameAsInPan: plainNameAsInPan,
+        dateAsInPan: plainDateAsInPan,
+        mobile: plainMobile,
+        bankAccounts: enrichedBankAccounts.length > 0 ? enrichedBankAccounts : (rawProfile as any).bankAccounts,
+        documents: enrichedDocs
+      } : rawProfile
     };
     if (['seller', 'shg'].includes(u.role)) sellers.push(item);
     else buyers.push(item);
