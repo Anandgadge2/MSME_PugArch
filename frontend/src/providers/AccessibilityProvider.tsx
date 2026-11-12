@@ -52,6 +52,55 @@ export const AccessibilityProvider: React.FC<{ children: React.ReactNode }> = ({
     root.setAttribute('lang', language);
   }, [fontSize, language]);
 
+  // Global anti-rage-click and double-click debounce safeguard (WCAG 2.1 AA)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleGlobalClickCapture = (event: MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (!target) return;
+
+      const interactive = target.closest('button, [role="button"], input[type="submit"]') as HTMLElement | null;
+      if (!interactive) return;
+
+      // 1. If element is already busy or disabled, prevent duplicate triggers immediately
+      if (
+        interactive.hasAttribute('disabled') ||
+        interactive.getAttribute('aria-busy') === 'true' ||
+        interactive.getAttribute('aria-disabled') === 'true'
+      ) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      // 2. Allow specific rapid-click components (e.g. quantity steppers, sliders) to opt out
+      if (
+        interactive.dataset.allowRapidClick === 'true' ||
+        interactive.getAttribute('data-stepper') === 'true' ||
+        interactive.closest('[role="spinbutton"]')
+      ) {
+        return;
+      }
+
+      // 3. Debounce identical button clicks within 350ms to suppress unintended double-clicks
+      const now = Date.now();
+      const lastClick = Number(interactive.dataset.lastClickTime || '0');
+      if (now - lastClick < 350) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+
+      interactive.dataset.lastClickTime = String(now);
+    };
+
+    document.addEventListener('click', handleGlobalClickCapture, true);
+    return () => {
+      document.removeEventListener('click', handleGlobalClickCapture, true);
+    };
+  }, []);
+
   const setFontSize = (size: FontSizeOption) => {
     setFontSizeState(size);
     try {
