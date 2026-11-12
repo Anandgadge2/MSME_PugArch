@@ -8,7 +8,7 @@ import { Input, Select } from '../components/ui/input';
 import { DateTimePicker } from '../components/ui/DateTimePicker';
 import { Card, CardContent } from '../components/ui/card';
 import { toast } from 'sonner';
-import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle } from 'lucide-react';
+import { Save, Plus, Trash2, ShieldCheck, Info, CheckCircle2, ArrowUpDown, FileText, UploadCloud, AlertCircle, ExternalLink, Clock, X, Lock, AlertTriangle, Pencil, Building2, Landmark } from 'lucide-react';
 import { Loader2 } from '@/components/ui/loader';
 import { DataTable, type ColumnDef } from '@/components/ui/data-table';
 import { GeMSellerSidebar } from '../components/GeMSellerSidebar';
@@ -103,12 +103,12 @@ const ACCOUNT_SETTINGS_ITEMS = [
 const SHG_MANDATORY_DOCUMENTS = [
   { id: 'udyam_certificate', label: 'Udyam Registration Certificate' },
   { id: 'group_leader_aadhaar', label: 'Aadhaar of Group Leader' },
-  { id: 'bank_passbook_cancelled_cheque', label: 'Bank Passbook / Cancelled Cheque' },
-  { id: 'member_list', label: 'Member List' },
-  { id: 'shg_registration_certificate', label: 'SHG Registration Certificate / Formation Resolution' }
+  { id: 'bank_passbook_cancelled_cheque', label: 'Bank Passbook / Cancelled Cheque' }
 ];
 
 const SHG_OPTIONAL_DOCUMENTS = [
+  { id: 'member_list', label: 'Member List' },
+  { id: 'shg_registration_certificate', label: 'SHG Registration Certificate / Formation Resolution' },
   { id: 'pan_card_group_representative', label: 'PAN Card (Group or Representative)' },
   { id: 'address_proof', label: 'Address Proof' },
   { id: 'gst_certificate', label: 'GST Certificate (if applicable)' },
@@ -469,8 +469,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
     if (isHerShg) {
       const docs: { id: string; label: string; required: boolean; category: 'mandatory' | 'optional'; isRecommended?: boolean }[] = [
         ...SHG_MANDATORY_DOCUMENTS.map(doc => ({ ...doc, required: true as const, category: 'mandatory' as const })),
-        ...SHG_OPTIONAL_DOCUMENTS.map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: true })),
-        ...(SHG_TYPE_OPTIONAL_DOCUMENTS[shgType] || []).map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: true }))
+        ...SHG_OPTIONAL_DOCUMENTS.map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: false })),
+        ...(SHG_TYPE_OPTIONAL_DOCUMENTS[shgType] || []).map(doc => ({ ...doc, required: false as const, category: 'optional' as const, isRecommended: false }))
       ];
       return docs;
     }
@@ -1471,9 +1471,11 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       sortable: true,
       sortKey: 'name',
       cell: (office: any) => (
-        <div className="text-slate-600 break-words max-w-[180px]">
+        <div className="text-slate-600 break-words">
           <div className="font-semibold text-slate-800">{office.name}</div>
-          <div className="text-xs text-slate-400">{office.type}</div>
+          <span className="inline-flex items-center px-2 py-0.5 mt-1 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200">
+            {office.type || 'Registered'}
+          </span>
         </div>
       )
     },
@@ -1484,7 +1486,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       sortable: true,
       sortKey: 'address',
       cell: (office: any) => (
-        <div className="text-slate-600 whitespace-normal break-words max-w-[300px]">
+        <div className="text-slate-600 whitespace-normal break-words leading-relaxed">
           {office.address}, {office.city}, {office.state} - {office.pincode}
         </div>
       )
@@ -1494,9 +1496,23 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       header: 'ACTION',
       align: 'right',
       cell: (office: any) => (
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => handleEditOffice(office)} className="text-[#12335f] hover:text-[#0b2445] font-bold text-xs uppercase">EDIT</button>
-          <button type="button" onClick={() => handleDeleteOffice(office.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">DELETE</button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => handleEditOffice(office)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#12335f] bg-[#12335f]/5 hover:bg-[#12335f]/10 rounded-md transition focus-visible:ring-2 focus-visible:ring-[#12335f]"
+          >
+            <Pencil className="h-3 w-3" />
+            <span>Edit</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteOffice(office.id)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-md transition focus-visible:ring-2 focus-visible:ring-rose-500"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span>Delete</span>
+          </button>
         </div>
       )
     }
@@ -1547,9 +1563,23 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       header: 'ACTION',
       align: 'right',
       cell: (bank: any) => (
-        <div className="flex items-center justify-end gap-3">
-          <button type="button" onClick={() => handleEditBank(bank)} className="text-indigo-600 hover:text-indigo-800 font-bold text-xs uppercase">Edit</button>
-          <button type="button" onClick={() => handleDeleteBank(bank.id)} className="text-red-500 hover:text-red-700 font-bold text-xs uppercase">Delete</button>
+        <div className="flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => handleEditBank(bank)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-[#12335f] bg-[#12335f]/5 hover:bg-[#12335f]/10 rounded-md transition focus-visible:ring-2 focus-visible:ring-[#12335f]"
+          >
+            <Pencil className="h-3 w-3" />
+            <span>Edit</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDeleteBank(bank.id)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-md transition focus-visible:ring-2 focus-visible:ring-rose-500"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span>Delete</span>
+          </button>
         </div>
       )
     }
@@ -2072,14 +2102,44 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                     <div className="space-y-4 animate-in fade-in duration-300 min-w-0 w-full">
                       <p className="text-sm text-gray-600">You can add multiple office locations as per their function/type for your Business</p>
 
-                      <div className="flex border-b border-gray-200">
-                        <button onClick={() => { setOfficeTab('manage'); setEditingOfficeId(null); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'manage' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Offices</button>
-                        <button onClick={() => { setOfficeTab('add'); if (!editingOfficeId) resetOfficeForm(); }} className={`px-6 py-3 text-sm font-semibold ${officeTab === 'add' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>{editingOfficeId ? 'Edit Office' : 'Add New Office'}</button>
+                      <div className="flex border-b border-gray-200 gap-6">
+                        <button
+                          type="button"
+                          onClick={() => { setOfficeTab('manage'); setEditingOfficeId(null); }}
+                          className={`pb-3 text-sm font-semibold transition border-b-2 flex items-center gap-2 ${
+                            officeTab === 'manage'
+                              ? 'text-[#12335f] border-[#12335f]'
+                              : 'text-gray-500 border-transparent hover:text-gray-800'
+                          }`}
+                        >
+                          <Building2 className="h-4 w-4" />
+                          <span>Manage Offices</span>
+                          {formData.offices.length > 0 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 font-bold text-slate-700">
+                              {formData.offices.length}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setOfficeTab('add'); if (!editingOfficeId) resetOfficeForm(); }}
+                          className={`pb-3 text-sm font-semibold transition border-b-2 flex items-center gap-2 ${
+                            officeTab === 'add'
+                              ? 'text-[#12335f] border-[#12335f]'
+                              : 'text-gray-500 border-transparent hover:text-gray-800'
+                          }`}
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{editingOfficeId ? 'Edit Office' : 'Add New Office'}</span>
+                        </button>
                       </div>
 
                       {officeTab === 'manage' && (
                         <div className="pt-4 space-y-6 animate-in fade-in min-w-0 w-full">
-                          <p className="text-sm text-gray-700">You need to update your GSTIN for getting the order above 40 lakhs.</p>
+                          <div className="flex items-start gap-2.5 p-3 rounded-lg bg-amber-50/80 border border-amber-200 text-amber-800 text-xs sm:text-sm">
+                            <Info className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                            <span>You need to update your GSTIN for getting orders above ₹40 Lakhs.</span>
+                          </div>
 
                           <div className="space-y-3 w-full">
                             <DataTable
@@ -2088,7 +2148,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                               keyExtractor={(office: any, idx) => office.id || idx}
                               showSrNo={true}
                               srNoHeader="Sr. No."
-                              minWidth="min-w-[650px] w-full"
+                              srNoWidth="w-16"
+                              minWidth="min-w-[700px] w-full"
                               sortKey={officeSortKey}
                               sortDirection="asc"
                               onSort={(field) => setOfficeSortKey(field as any)}
@@ -2097,8 +2158,17 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             />
                             {formData.offices.length > 0 && (
                               <div className="flex flex-col sm:flex-row justify-between items-center gap-2.5 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl">
-                                <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left">{formData.offices.length} of {formData.offices.length} Office Location displayed.</span>
-                                <button onClick={() => { setOfficeTab('add'); resetOfficeForm(); }} className="text-[#12335f] font-bold hover:underline uppercase text-xs min-h-[44px] sm:min-h-0 flex items-center justify-center px-2">ADD NEW OFFICE</button>
+                                <span className="text-xs sm:text-sm text-gray-600 text-center sm:text-left font-medium">
+                                  {formData.offices.length} of {formData.offices.length} Office Location{formData.offices.length > 1 ? 's' : ''} displayed.
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => { setOfficeTab('add'); resetOfficeForm(); }}
+                                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-[#12335f] bg-white border border-slate-300 hover:bg-slate-50 transition shadow-xs"
+                                >
+                                  <Plus className="h-3.5 w-3.5" />
+                                  <span>Add New Office</span>
+                                </button>
                               </div>
                             )}
                           </div>
@@ -2291,22 +2361,49 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         </div>
                       )}
 
-                      <div className="flex border-b border-gray-200">
-                        <button onClick={() => { setBankTab('manage'); setEditingBankId(null); }} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'manage' && !editingBankId ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>Manage Bank Account</button>
-                        <button onClick={() => {
-                          setBankTab('add');
-                          setEditingBankId(null);
-                          setNewBank({
-                            ifsc: '',
-                            bankName: '',
-                            bankAddress: '',
-                            holderName: '',
-                            accountNumber: '',
-                            confirmAccountNumber: '',
-                            isPrimary: false
-                          });
-                          setBankErrors({});
-                        }} className={`px-6 py-3 text-sm font-semibold ${bankTab === 'add' ? 'text-[#12335f] border-t-2 border-l-2 border-r-2 border-gray-200 rounded-t-lg bg-white -mb-px' : 'text-gray-500 hover:text-gray-700'}`}>{editingBankId ? 'Edit Bank Account' : 'Add new Bank Account'}</button>
+                      <div className="flex border-b border-gray-200 gap-6">
+                        <button
+                          type="button"
+                          onClick={() => { setBankTab('manage'); setEditingBankId(null); }}
+                          className={`pb-3 text-sm font-semibold transition border-b-2 flex items-center gap-2 ${
+                            bankTab === 'manage' && !editingBankId
+                              ? 'text-[#12335f] border-[#12335f]'
+                              : 'text-gray-500 border-transparent hover:text-gray-800'
+                          }`}
+                        >
+                          <Landmark className="h-4 w-4" />
+                          <span>Manage Bank Account</span>
+                          {normalizeList(formData.bankAccounts).length > 0 && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 font-bold text-slate-700">
+                              {normalizeList(formData.bankAccounts).length}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBankTab('add');
+                            setEditingBankId(null);
+                            setNewBank({
+                              ifsc: '',
+                              bankName: '',
+                              bankAddress: '',
+                              holderName: '',
+                              accountNumber: '',
+                              confirmAccountNumber: '',
+                              isPrimary: false
+                            });
+                            setBankErrors({});
+                          }}
+                          className={`pb-3 text-sm font-semibold transition border-b-2 flex items-center gap-2 ${
+                            bankTab === 'add'
+                              ? 'text-[#12335f] border-[#12335f]'
+                              : 'text-gray-500 border-transparent hover:text-gray-800'
+                          }`}
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>{editingBankId ? 'Edit Bank Account' : 'Add new Bank Account'}</span>
+                        </button>
                       </div>
 
                       {bankTab === 'manage' && (
@@ -2318,7 +2415,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                             keyExtractor={(bank: any, idx) => bank.id || idx}
                             showSrNo={true}
                             srNoHeader="Sr. No."
-                            minWidth="min-w-[650px] w-full"
+                            srNoWidth="w-16"
+                            minWidth="min-w-[700px] w-full"
                             sortKey={bankSortKey}
                             sortDirection="asc"
                             onSort={(field) => setBankSortKey(field as any)}

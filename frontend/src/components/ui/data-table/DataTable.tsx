@@ -95,7 +95,7 @@ export function DataTable<T>({
   rowClassName,
   showSrNo = true,
   srNoHeader = 'Sr. No',
-  srNoWidth = 'w-[4%]',
+  srNoWidth = 'w-16',
   minWidth = 'min-w-[1000px]',
   scrollWrapperClassName,
   className,
@@ -385,7 +385,7 @@ export function DataTable<T>({
                 <th
                   scope="col"
                   className={cn(
-                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 whitespace-nowrap",
+                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 whitespace-nowrap min-w-[56px]",
                     srNoWidth
                   )}
                 >

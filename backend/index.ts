@@ -3976,10 +3976,8 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
     const shgType = String(regDetails.shgType || '').trim();
     const requiredDocs: string[] = isHerShg
       ? [
-        'shg_registration_certificate',
         'group_leader_aadhaar',
         'bank_passbook_cancelled_cheque',
-        'member_list',
         'udyam_certificate'
       ]
       : ['pan_copy', 'bank_passbook', 'address_proof'];
@@ -4035,6 +4033,7 @@ app.post('/api/seller/submit', authenticate, authorize('seller'), async (req: Au
       });
 
     const shgOptionalDocPatterns = [
+      'memberlist', 'member', 'shgregistrationcertificate', 'formationresolution',
       'pancard', 'pancopy', 'pan',
       'addressproof',
       'gstcertificate', 'gst',

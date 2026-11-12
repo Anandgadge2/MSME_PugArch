@@ -100,9 +100,8 @@ const safeShgInclude = {
   resolutions: true
 };
 
-const requiredDocumentTypes = (registrationStatus?: string) => {
-  const base = ['UDYAM_CERTIFICATE', 'LEADER_KYC', 'BANK_PASSBOOK', 'MEMBER_LIST'];
-  if (registrationStatus === 'REGISTERED') base.push('REGISTRATION_CERTIFICATE');
+const requiredDocumentTypes = (_registrationStatus?: string) => {
+  const base = ['UDYAM_CERTIFICATE', 'LEADER_KYC', 'BANK_PASSBOOK'];
   return base;
 };
 

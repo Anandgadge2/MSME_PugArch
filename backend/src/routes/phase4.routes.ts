@@ -3337,7 +3337,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     ].includes(String(regDetails.businessType || regDetails.shgType || '').trim().toLowerCase());
 
     const requiredDocs: string[] = isShg
-      ? ['bank_passbook', 'leader_aadhaar', 'member_list', 'shg_registration_certificate', 'udyam_certificate']
+      ? ['bank_passbook', 'leader_aadhaar', 'udyam_certificate']
       : ['pan_copy', 'bank_passbook', 'address_proof'];
 
     const addRequiredDoc = (docType: string) => {
@@ -3391,6 +3391,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       });
 
     const shgOptionalDocPatterns = [
+      'memberlist', 'member', 'shgregistrationcertificate', 'formationresolution',
       'pancard', 'pancopy', 'pan',
       'addressproof',
       'gstcertificate', 'gst',
