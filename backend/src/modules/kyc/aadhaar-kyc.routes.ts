@@ -37,7 +37,7 @@ const requestMeta = (req: Request) => {
   };
 };
 
-router.get('/kyc/aadhaar/start', authenticate, rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
+router.get('/kyc/aadhaar/start', authenticate, rateLimit(20, 10 * 60_000), asyncRoute(async (req, res) => {
   if (!req.user) return apiResponse.error(res, 401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
   try {
     const { redirectPath, frontendOrigin, purpose } = req.query;
@@ -57,7 +57,7 @@ router.get('/kyc/aadhaar/start', authenticate, rateLimit(5, 10 * 60_000), asyncR
   }
 }));
 
-router.post('/kyc/aadhaar/start-url', authenticate, rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
+router.post('/kyc/aadhaar/start-url', authenticate, rateLimit(20, 10 * 60_000), asyncRoute(async (req, res) => {
   if (!req.user) return apiResponse.error(res, 401, 'Authentication token is required', 'AUTH_TOKEN_MISSING');
   try {
     const { redirectPath, frontendOrigin, purpose } = req.body;
@@ -87,7 +87,7 @@ router.get(['/kyc/aadhaar/callback', '/kyc/aadhar/callback'], rateLimit(30, 10 *
   }
 }));
 
-router.post('/kyc/aadhaar/pre-register/start', rateLimit(5, 10 * 60_000), asyncRoute(async (req, res) => {
+router.post('/kyc/aadhaar/pre-register/start', rateLimit(20, 10 * 60_000), asyncRoute(async (req, res) => {
   try {
     const { consent, mobile, aadhaarNumber, vid, redirectPath, frontendOrigin, purpose } = req.body;
 

@@ -621,6 +621,13 @@ export const aadhaarKycService = {
       })
       : null;
 
+    if (!session && state) {
+      const preRegSession = await prisma.preRegistrationKycSession.findUnique({ where: { state } });
+      if (preRegSession) {
+        return this.preRegisterCallback(query, meta);
+      }
+    }
+
     if (providerError) {
       if (session) {
         await prisma.userKycVerification.upsert({

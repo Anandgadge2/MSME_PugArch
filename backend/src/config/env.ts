@@ -164,7 +164,7 @@ const envSchema = z.object({
   MERIPEHCHAAN_USERINFO_URL: withFallback(['userinfo_endpoint', 'USERINFO_ENDPOINT'], optionalUrl()),
   MERIPEHCHAAN_JWKS_URL: withFallback(['jwks_uri', 'JWKS_URI'], optionalUrl()),
   MERIPEHCHAAN_ISSUER: withFallback(['issuer', 'ISSUER'], optionalString()),
-  MERIPEHCHAAN_REDIRECT_URI: optionalUrl(),
+  MERIPEHCHAAN_REDIRECT_URI: withFallback(['MERIPEHCHAAN_REDIRECT_URI', 'DIGILOCKER_REDIRECT_URI'], optionalUrl()),
   MERIPEHCHAAN_SCOPES: z.string().default('openid profile email'),
   MERIPEHCHAAN_ACR: optionalString(),
   DIGILOCKER_SERVICE_NAME: withFallback(['MERIPEHCHAAN_SERVICE_NAME'], z.string().trim().max(50).default('JsgSmile MSME Portal')),
@@ -285,6 +285,7 @@ export const env = {
   JWT_SECRET: parsed.data.JWT_SECRET,
   JWT_ACCESS_SECRET: parsed.data.JWT_ACCESS_SECRET || parsed.data.JWT_SECRET,
   JWT_REFRESH_SECRET: parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_SECRET,
+  MERIPEHCHAAN_REDIRECT_URI: parsed.data.MERIPEHCHAAN_REDIRECT_URI || (parsed.data.FRONTEND_URL ? `${parsed.data.FRONTEND_URL.replace(/\/$/, '')}/api/kyc/aadhaar/callback` : 'https://www.jsgsmile.in/api/kyc/aadhaar/callback'),
   FIELD_ENCRYPTION_KEY: parsed.data.FIELD_ENCRYPTION_KEY || crypto.createHash('sha256').update(parsed.data.JWT_SECRET || 'dev_master_key_msme_pugarch_2026').digest('hex'),
   FIELD_ENCRYPTION_KEY_FALLBACK: parsed.data.FIELD_ENCRYPTION_KEY_FALLBACK
 };
