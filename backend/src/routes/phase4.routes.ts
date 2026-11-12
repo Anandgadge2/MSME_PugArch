@@ -4522,7 +4522,23 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
     flagged
   };
 
-  res.json(maskSensitive({ sellers, buyers, total, ...window, filters: query, summary }, { unmaskForAdmin: true }));
+  res.json(maskSensitive({
+    success: true,
+    sellers,
+    buyers,
+    total,
+    ...window,
+    filters: query,
+    summary,
+    data: {
+      sellers,
+      buyers,
+      total,
+      summary,
+      ...window,
+      filters: query
+    }
+  }, { unmaskForAdmin: true }));
 }));
 
 /**

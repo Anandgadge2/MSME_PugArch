@@ -29,6 +29,8 @@ import { Tabs } from "../components/ui/tabs";
 import { Input } from "../components/ui/input";
 import { Skeleton } from "../components/ui/skeleton";
 import { toast } from "sonner";
+import { useAuth } from "../hooks/useAuth";
+import { COOKIE_SESSION_TOKEN } from "../lib/auth";
 import { getFileAssetPreview, type DocumentPreview } from "../lib/files";
 import { DocumentPreviewModal } from "../components/DocumentPreviewModal";
 import { FocusTrap } from "../components/ui/FocusTrap";
@@ -49,6 +51,7 @@ import {
   Building2,
   Briefcase,
   AlertTriangle,
+  AlertCircle,
   Download,
   Filter,
   Clock,
@@ -482,22 +485,24 @@ const getExportDocumentLinks = (item: any) => {
 
 export default function AdminOnboarding() {
   const queryClient = useQueryClient();
-  const getAuthToken = () => (typeof window !== 'undefined' ? (localStorage.getItem("token") || "") : "");
-  const token = getAuthToken();
-  const authHeaders: Record<string, string> = {
-    get Authorization() {
-      const t = getAuthToken();
-      return t ? `Bearer ${t}` : "";
+  const { user, token, loading: isAuthLoading } = useAuth();
+
+  const isAuthorizedAdmin = Boolean(
+    user && ['admin', 'master_admin'].includes(String(user.role).toLowerCase())
+  );
+
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {};
+    const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+    if (t && t !== COOKIE_SESSION_TOKEN && t !== 'null' && t !== 'undefined') {
+      headers.Authorization = `Bearer ${t}`;
     }
-  };
-  const authOptions: RequestInit = {
-    get headers() {
-      const t = getAuthToken();
-      const h: Record<string, string> = {};
-      if (t) h.Authorization = `Bearer ${t}`;
-      return h;
-    }
-  };
+    return headers;
+  }, [token]);
+
+  const authOptions = useMemo<RequestInit>(() => ({
+    headers: authHeaders
+  }), [authHeaders]);
 
   const [sellers, setSellers] = useState<any[]>([]);
   const [buyers, setBuyers] = useState<any[]>([]);
@@ -591,39 +596,55 @@ export default function AdminOnboarding() {
   const scrutinyModalScrollRef = useRef<HTMLDivElement | null>(null);
 
   // 1. Fetch KPI stats (shares key and cache with dashboard/MISReports)
-  const { data: adminStats, isLoading: isAdminStatsLoading } = useQuery({
-    queryKey: ['adminStats'],
+  const { data: adminStats, isLoading: isAdminStatsLoading, error: adminStatsError } = useQuery({
+    queryKey: ['adminStats', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/admin/reports/summary?kpiOnly=true', { headers: authHeaders });
       if (!res.ok) throw new Error('Failed to fetch stats');
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token,
-    staleTime: 5 * 60_000,
+    enabled: isAuthorizedAdmin,
+    staleTime: 60_000,
   });
 
   // 2. Fetch registrations list query
-  const { data: onboardingData, isLoading: isOnboardingLoading } = useQuery({
-    queryKey: ['adminOnboardingList'],
+  const {
+    data: onboardingData,
+    isLoading: isOnboardingLoading,
+    error: onboardingError,
+    refetch: refetchOnboarding
+  } = useQuery({
+    queryKey: ['adminOnboardingList', user?.id],
     queryFn: async () => {
-      const res = await api.fetch("/api/admin/onboarding?pageSize=1000", authOptions);
-      if (!res.ok) throw new Error("Failed to load onboarding records");
+      const res = await api.fetch("/api/admin/onboarding?pageSize=1000", { headers: authHeaders });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson?.message || errJson?.error || `Failed to load onboarding records (${res.status})`);
+      }
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token,
-    staleTime: 5 * 60_000,
+    enabled: isAuthorizedAdmin,
+    staleTime: 60_000,
   });
 
-  const isLoading = isOnboardingLoading;
+  const isLoading = isOnboardingLoading || (isAuthLoading && !user);
 
   useEffect(() => {
     if (onboardingData) {
-      queueMicrotask(() => {
-        setSellers(Array.isArray(onboardingData.sellers) ? onboardingData.sellers : []);
-        setBuyers(Array.isArray(onboardingData.buyers) ? onboardingData.buyers : []);
-      });
+      const s = Array.isArray(onboardingData.sellers)
+        ? onboardingData.sellers
+        : Array.isArray(onboardingData.data?.sellers)
+          ? onboardingData.data.sellers
+          : [];
+      const b = Array.isArray(onboardingData.buyers)
+        ? onboardingData.buyers
+        : Array.isArray(onboardingData.data?.buyers)
+          ? onboardingData.data.buyers
+          : [];
+      setSellers(s);
+      setBuyers(b);
     }
   }, [onboardingData]);
 
@@ -666,7 +687,7 @@ export default function AdminOnboarding() {
         setShowcaseItemsLoading(true);
         try {
           const res = await api.fetch(`/api/buyer-showcase/admin/organizations/${selectedItem.profile.id}/items`, {
-            headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+            headers: authHeaders
           });
           if (res.ok) {
             const body = await res.json();
@@ -697,7 +718,7 @@ export default function AdminOnboarding() {
         { isActive: checked },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            ...authHeaders,
             'Content-Type': 'application/json'
           }
         }
@@ -733,7 +754,7 @@ export default function AdminOnboarding() {
         { status },
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem('token')}`,
+            ...authHeaders,
             'Content-Type': 'application/json'
           }
         }
@@ -939,9 +960,7 @@ export default function AdminOnboarding() {
         `/api/admin/onboarding/${numericId}/status`,
         { onboardingStatus: status, adminFeedback: reason || undefined },
         {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: authHeaders,
         },
       );
       if (res.ok) {
@@ -1120,9 +1139,7 @@ export default function AdminOnboarding() {
           sectionRejectionReasons: updatedRejectionReasons,
         },
         {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
+          headers: authHeaders,
         },
       );
       if (res.ok) {
@@ -2255,6 +2272,18 @@ export default function AdminOnboarding() {
                         <div className="h-4 w-12 bg-slate-100 rounded" />
                       </div>
                     ))}
+                  </div>
+                ) : onboardingError ? (
+                  <div className="py-16 text-center text-slate-600 m-6 rounded-2xl border border-rose-200 bg-rose-50/50 p-6">
+                    <AlertCircle className="h-10 w-10 text-rose-500 mx-auto mb-3" />
+                    <h3 className="text-sm font-bold text-slate-900">Unable to load onboarding records</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
+                      {onboardingError instanceof Error ? onboardingError.message : 'Please check your connection and sign in status.'}
+                    </p>
+                    <Button onClick={() => refetchOnboarding()} className="mt-4 bg-[#12335f] hover:bg-[#0b2445] text-white rounded-xl text-xs font-bold px-5">
+                      <RefreshCw className="h-3.5 w-3.5 mr-2" />
+                      Retry Connection
+                    </Button>
                   </div>
                 ) : currentData.length === 0 ? (
                   <div className="py-20 text-center text-slate-400 border-2 border-dashed border-slate-100 m-6 rounded-2xl">

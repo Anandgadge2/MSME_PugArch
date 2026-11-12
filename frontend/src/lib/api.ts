@@ -84,7 +84,7 @@ export const unwrapApiData = <T = any>(body: any): T => {
 const normalizeHeaders = (headers: HeadersInit | undefined, body?: BodyInit | null) => {
   const next: Record<string, string> = { ...(headers as any) };
   const auth = next.Authorization || next.authorization || '';
-  if (/^Bearer\s*(null|undefined)?$/i.test(auth.trim())) {
+  if (/^Bearer\s*(null|undefined|cookie-session)?$/i.test(auth.trim())) {
     delete next.Authorization;
     delete next.authorization;
   }

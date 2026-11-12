@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useDebounce } from '../hooks/useDebounce';
+import { useAuth } from '../hooks/useAuth';
+import { COOKIE_SESSION_TOKEN } from '../lib/auth';
 import {
   Building2,
   Search,
@@ -73,8 +75,19 @@ interface Organization {
 }
 
 export default function OrganizationManagement() {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-  const authHeaders = useMemo(() => ({ headers: { Authorization: `Bearer ${token}` } }), [token]);
+  const { user, token, loading: isAuthLoading } = useAuth();
+  const isAuthorizedAdmin = Boolean(
+    user && ['admin', 'master_admin'].includes(String(user.role).toLowerCase())
+  );
+
+  const authHeaders = useMemo(() => {
+    const headers: Record<string, string> = {};
+    const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+    if (t && t !== COOKIE_SESSION_TOKEN && t !== 'null' && t !== 'undefined') {
+      headers.Authorization = `Bearer ${t}`;
+    }
+    return { headers };
+  }, [token]);
   const queryClient = useQueryClient();
 
   const [openActionMenuId, setOpenActionMenuId] = useState<number | null>(null);
@@ -87,14 +100,14 @@ export default function OrganizationManagement() {
   const [viewMode, setViewMode] = useResponsiveViewMode();
 
   const { data: pendingAppealsData } = useQuery({
-    queryKey: ['admin-appeals', 'pending-count'],
+    queryKey: ['admin-appeals', 'pending-count', user?.id],
     queryFn: async () => {
       const res = await api.fetch('/api/admin/organizations/appeals?status=PENDING', { ...authHeaders });
       if (!res.ok) return [];
       const json = await res.json();
       return json.data || [];
     },
-    enabled: !!token,
+    enabled: isAuthorizedAdmin,
     staleTime: 30_000
   });
   const pendingAppealCount = Array.isArray(pendingAppealsData) ? pendingAppealsData.length : 0;
@@ -258,8 +271,8 @@ export default function OrganizationManagement() {
       const payload = await res.json();
       return payload?.data || payload || {};
     },
-    enabled: !!token,
-    staleTime: 5 * 60_000,
+    enabled: isAuthorizedAdmin,
+    staleTime: 60_000,
   });
 
   const orgs = useMemo(() => {

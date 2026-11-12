@@ -31,6 +31,8 @@ import { downloadCsv } from '../features/shared/exportUtils';
 import { cn } from '../lib/utils';
 import { useResponsiveViewMode } from '../features/shared/hooks';
 import { ViewModeToggle } from '../features/shared/ViewModeToggle';
+import { useAuth } from '../hooks/useAuth';
+import { COOKIE_SESSION_TOKEN } from '../lib/auth';
 
 type AdminSection = 'procurement' | 'compliance' | 'reports';
 type SortKey = 'name' | 'role' | 'status' | 'date' | 'entity';
@@ -110,8 +112,23 @@ const getApprovalProgress = (item: any) => {
 };
 
 export default function AdminOperations({ section }: AdminOperationsProps) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-  const authOptions = { headers: { Authorization: `Bearer ${token}` } };
+  const { user, token, loading: isAuthLoading } = useAuth();
+  const isAuthorizedAdmin = Boolean(
+    user && ['admin', 'master_admin'].includes(String(user.role).toLowerCase())
+  );
+
+  const authHeaders = useMemo<Record<string, string>>(() => {
+    const headers: Record<string, string> = {};
+    const t = token || (typeof window !== 'undefined' ? localStorage.getItem('token') : null);
+    if (t && t !== COOKIE_SESSION_TOKEN && t !== 'null' && t !== 'undefined') {
+      headers.Authorization = `Bearer ${t}`;
+    }
+    return headers;
+  }, [token]);
+
+  const authOptions = useMemo<RequestInit>(() => ({
+    headers: authHeaders
+  }), [authHeaders]);
 
   const [data, setData] = useState<{ sellers: any[]; buyers: any[] }>({ sellers: [], buyers: [] });
   const [stats, setStats] = useState<any>(null);
@@ -149,7 +166,7 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
 
   // 1. Fetch onboarding paged list
   const { data: onboardingData, isLoading: isOnboardingLoading } = useQuery({
-    queryKey: ['adminOnboardingPagedList', section, page, pageSize, debouncedSearchTerm, roleFilter, statusFilter],
+    queryKey: ['adminOnboardingPagedList', section, page, pageSize, debouncedSearchTerm, roleFilter, statusFilter, user?.id],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set('skip', String((page - 1) * pageSize));
@@ -162,14 +179,14 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token,
-    staleTime: 5 * 60_000,
+    enabled: isAuthorizedAdmin,
+    staleTime: 60_000,
   });
 
   // 2. Fetch stats (shared stats query key ['adminStats'] if reports section)
   const statsQueryKey = section === 'reports' ? ['adminStats'] : ['adminStatsProcurement'];
   const { data: statsData, isLoading: isStatsLoading } = useQuery({
-    queryKey: statsQueryKey,
+    queryKey: [...statsQueryKey, user?.id],
     queryFn: async () => {
       const statsPath = section === 'reports' ? '/api/admin/reports/summary?kpiOnly=true' : '/api/admin/reports/procurement';
       const res = await api.fetch(statsPath, authOptions);
@@ -177,8 +194,8 @@ export default function AdminOperations({ section }: AdminOperationsProps) {
       const json = await res.json();
       return json?.data ?? json;
     },
-    enabled: !!token,
-    staleTime: 5 * 60_000,
+    enabled: isAuthorizedAdmin,
+    staleTime: 60_000,
   });
 
   const loading = isOnboardingLoading || isStatsLoading;
