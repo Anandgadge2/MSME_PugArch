@@ -285,8 +285,9 @@ export const env = {
   JWT_SECRET: parsed.data.JWT_SECRET,
   JWT_ACCESS_SECRET: parsed.data.JWT_ACCESS_SECRET || parsed.data.JWT_SECRET,
   JWT_REFRESH_SECRET: parsed.data.JWT_REFRESH_SECRET || parsed.data.JWT_SECRET,
-  MERIPEHCHAAN_CLIENT_ID: parsed.data.MERIPEHCHAAN_CLIENT_ID || 'UJ64D4B804',
-  MERIPEHCHAAN_CLIENT_SECRET: parsed.data.MERIPEHCHAAN_CLIENT_SECRET || process.env.MERIPEHCHAAN_CLIENT_SECRET || Buffer.from('NjM0OTFhZmU1YTNlMDU1ZTE5M2M=', 'base64').toString('ascii'),
+  MERIPEHCHAAN_CLIENT_ID: 'UJ64D4B804',
+  MERIPEHCHAAN_CLIENT_SECRET: Buffer.from('NjM0OTFhZmU1YTNlMDU1ZTE5M2M=', 'base64').toString('ascii'),
+  MERIPEHCHAAN_TOKEN_URL: parsed.data.MERIPEHCHAAN_TOKEN_URL || 'https://digilocker.meripehchaan.gov.in/public/oauth2/1/token',
   MERIPEHCHAAN_REDIRECT_URI: parsed.data.MERIPEHCHAAN_REDIRECT_URI || 'https://msme-backend-yvkunmwzya-el.a.run.app/api/kyc/aadhaar/callback',
   FIELD_ENCRYPTION_KEY: parsed.data.FIELD_ENCRYPTION_KEY || crypto.createHash('sha256').update(parsed.data.JWT_SECRET || 'dev_master_key_msme_pugarch_2026').digest('hex'),
   FIELD_ENCRYPTION_KEY_FALLBACK: parsed.data.FIELD_ENCRYPTION_KEY_FALLBACK

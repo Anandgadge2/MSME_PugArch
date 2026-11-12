@@ -255,15 +255,13 @@ const exchangeTokenWithProvider = async (
 ): Promise<TokenExchangeResult> => {
   const actualRedirectUri = redirectUri || config.redirectUri;
 
-  // Sanitize: trim whitespace/quotes that may have leaked from env var
-  const clientId = (config.clientId || '').trim().replace(/^["']|["']$/g, '') || 'UJ64D4B804';
+  // Enforce authentic MeriPehchaan PROD Partner credentials
   const defaultSecret = Buffer.from('NjM0OTFhZmU1YTNlMDU1ZTE5M2M=', 'base64').toString('ascii');
-  const clientSecret = (config.clientSecret && config.clientSecret.trim().replace(/^["']|["']$/g, '')) || defaultSecret;
+  const clientId = 'UJ64D4B804';
+  const clientSecret = defaultSecret;
 
   // Diagnostic log (masked) to surface config issues in production
-  const masked = clientId.length > 8
-    ? `${clientId.slice(0, 4)}...${clientId.slice(-4)} (len=${clientId.length})`
-    : `[TOO_SHORT len=${clientId.length}]`;
+  const masked = `${clientId.slice(0, 4)}...${clientId.slice(-4)} (len=${clientId.length})`;
   logger.info(
     { clientIdMasked: masked, tokenUrl: config.tokenUrl, redirectUri: actualRedirectUri },
     '[MeriPehchaan] Starting token exchange'
@@ -273,15 +271,13 @@ const exchangeTokenWithProvider = async (
 
   // Multi-strategy token exchange for DigiLocker / MeriPehchaan / API Setu compatibility:
   // DigiLocker / MeriPehchaan endpoints strictly require client_id and client_secret in the POST body.
-  // Never send a request where client_id is missing from the body, as DigiLocker will reject with
-  // "The client_id parameter is invalid" (HTTP 401) and invalidate the single-use authorization code.
   const attempts: Array<{
     name: string;
     headers: Record<string, string>;
     body: Record<string, string>;
   }> = [
     {
-      name: 'Basic Auth Header + Body Credentials + PKCE',
+      name: 'Form Body Credentials + Basic Auth Header + PKCE',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
@@ -297,7 +293,7 @@ const exchangeTokenWithProvider = async (
       },
     },
     {
-      name: 'Body Credentials Only + PKCE',
+      name: 'Form Body Credentials Only + PKCE',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
@@ -316,7 +312,7 @@ const exchangeTokenWithProvider = async (
   if (codeVerifier) {
     attempts.push(
       {
-        name: 'Basic Auth Header + Body Credentials without PKCE',
+        name: 'Form Body Credentials + Basic Auth Header without PKCE',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
@@ -331,7 +327,7 @@ const exchangeTokenWithProvider = async (
         },
       },
       {
-        name: 'Body Credentials Only without PKCE',
+        name: 'Form Body Credentials Only without PKCE',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
           'Accept': 'application/json',
@@ -347,62 +343,72 @@ const exchangeTokenWithProvider = async (
     );
   }
 
+  // Candidate token endpoints (v1 canonical endpoint matches /oauth2/1/authorize)
+  const candidateTokenUrls = [
+    'https://digilocker.meripehchaan.gov.in/public/oauth2/1/token',
+    'https://digilocker.meripehchaan.gov.in/public/oauth2/2/token',
+    config.tokenUrl,
+  ].filter((url, index, arr) => arr.indexOf(url) === index);
+
   let lastErrorDetail = '';
   let lastStatus = 0;
 
-  for (let i = 0; i < attempts.length; i++) {
-    const attempt = attempts[i];
-    try {
-      const response = await fetch(config.tokenUrl, {
-        method: 'POST',
-        headers: attempt.headers,
-        body: new URLSearchParams(attempt.body),
-      });
-
-      const rawText = await response.text();
-      let parsed: any = null;
+  for (const tokenUrl of candidateTokenUrls) {
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i];
       try {
-        parsed = JSON.parse(rawText);
-      } catch {
-        parsed = null;
+        const response = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: attempt.headers,
+          body: new URLSearchParams(attempt.body),
+        });
+
+        const rawText = await response.text();
+        let parsed: any = null;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch {
+          parsed = null;
+        }
+
+        const accessToken = parsed?.access_token || parsed?.accessToken || parsed?.token;
+
+        if (response.ok && accessToken) {
+          logger.info({ strategy: attempt.name, tokenUrl }, '[MeriPehchaan] Token exchange succeeded');
+          return {
+            ...parsed,
+            access_token: accessToken,
+          };
+        }
+
+        lastStatus = response.status;
+        lastErrorDetail =
+          (parsed && (parsed.error_description || parsed.error || parsed.message)) ||
+          rawText ||
+          response.statusText;
+
+        logger.warn(
+          {
+            strategy: attempt.name,
+            tokenUrl,
+            status: response.status,
+            statusText: response.statusText,
+            error: lastErrorDetail,
+          },
+          '[MeriPehchaan] Token exchange attempt failed'
+        );
+
+        // If the code is already expired or consumed, retry won't succeed
+        if (
+          parsed?.error === 'invalid_grant' &&
+          /expired|already used|consumed/i.test(String(parsed?.error_description || ''))
+        ) {
+          break;
+        }
+      } catch (fetchErr: any) {
+        lastErrorDetail = fetchErr?.message || String(fetchErr);
+        logger.warn({ strategy: attempt.name, tokenUrl, error: lastErrorDetail }, '[MeriPehchaan] Token exchange attempt threw network error');
       }
-
-      const accessToken = parsed?.access_token || parsed?.accessToken || parsed?.token;
-
-      if (response.ok && accessToken) {
-        logger.info({ strategy: attempt.name }, '[MeriPehchaan] Token exchange succeeded');
-        return {
-          ...parsed,
-          access_token: accessToken,
-        };
-      }
-
-      lastStatus = response.status;
-      lastErrorDetail =
-        (parsed && (parsed.error_description || parsed.error || parsed.message)) ||
-        rawText ||
-        response.statusText;
-
-      logger.warn(
-        {
-          strategy: attempt.name,
-          status: response.status,
-          statusText: response.statusText,
-          error: lastErrorDetail,
-        },
-        '[MeriPehchaan] Token exchange attempt failed'
-      );
-
-      // If the code is already expired or consumed, retry won't succeed
-      if (
-        parsed?.error === 'invalid_grant' &&
-        /expired|already used|consumed/i.test(String(parsed?.error_description || ''))
-      ) {
-        break;
-      }
-    } catch (fetchErr: any) {
-      lastErrorDetail = fetchErr?.message || String(fetchErr);
-      logger.warn({ strategy: attempt.name, error: lastErrorDetail }, '[MeriPehchaan] Token exchange attempt threw network error');
     }
   }
 
