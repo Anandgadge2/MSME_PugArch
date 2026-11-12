@@ -60,9 +60,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       isExecutingRef.current = true;
 
       try {
-        const result = onClick(e);
+        const result: unknown = onClick(e);
 
-        if (result && typeof (result as any).then === 'function') {
+        if (result != null && typeof (result as Record<string, unknown>).then === 'function') {
           setInternalLoading(true);
           Promise.resolve(result)
             .finally(() => {

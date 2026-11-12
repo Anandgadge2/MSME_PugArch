@@ -116,14 +116,36 @@ const DOCUMENT_LABELS: Record<string, string> = {
   pan: "PAN_COPY",
   panCard: "PAN_COPY",
   pan_copy: "PAN_COPY",
+  panCopy: "PAN_COPY",
+  PAN_COPY: "PAN_COPY",
   regCert: "REGISTRATION_CERTIFICATE",
+  registration_certificate: "REGISTRATION_CERTIFICATE",
+  registrationCertificate: "REGISTRATION_CERTIFICATE",
+  business_registration_proof: "REGISTRATION_CERTIFICATE",
   gstCert: "GST_CERTIFICATE",
+  gst_certificate: "GST_CERTIFICATE",
+  gstCertificate: "GST_CERTIFICATE",
+  gst: "GST_CERTIFICATE",
   addressProof: "ADDRESS_PROOF",
+  address_proof: "ADDRESS_PROOF",
+  addressProofDoc: "ADDRESS_PROOF",
+  ADDRESS_PROOF: "ADDRESS_PROOF",
+  udyamCert: "UDYAM_CERTIFICATE",
+  udyam_cert: "UDYAM_CERTIFICATE",
+  udyam_certificate: "UDYAM_CERTIFICATE",
+  udyamCertificate: "UDYAM_CERTIFICATE",
+  udyam: "UDYAM_CERTIFICATE",
+  UDYAM_CERTIFICATE: "UDYAM_CERTIFICATE",
+  bankPassbook: "BANK_PASSBOOK",
+  bank_passbook: "BANK_PASSBOOK",
+  cancelled_cheque: "BANK_PASSBOOK",
+  cancelledCheque: "BANK_PASSBOOK",
   authLetter: "AUTHORIZATION_LETTER",
+  auth_letter: "AUTHORIZATION_LETTER",
   uploaded_files: "UPLOADED_FILES",
   leader_aadhaar: "GROUP_LEADER_AADHAAR_CARD",
+  group_leader_aadhaar: "GROUP_LEADER_AADHAAR_CARD",
   member_list: "MEMBER_LIST",
-  registration_certificate: "SHG_REGISTRATION_CERTIFICATE",
   training_certificate: "TRAINING_SKILL_CERTIFICATE",
   product_photos: "PRODUCT_PHOTOS_CATALOGUE",
   iso: "ISO_CERTIFICATE",
@@ -132,6 +154,29 @@ const DOCUMENT_LABELS: Record<string, string> = {
   nsic_certificate: "NSIC_CERTIFICATE",
   dipp_certificate: "DIPP_CERTIFICATE",
   itr_3_years: "ITR_3_YEARS"
+};
+
+const getCanonicalDocCategory = (typeOrKey: unknown): string => {
+  const raw = String(typeOrKey || "").trim();
+  const label = DOCUMENT_LABELS[raw] || "";
+  const s = (label || raw).toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (!s) return "";
+  if (s.includes("udyam") || s.includes("msme")) return "udyam";
+  if (s.includes("pan")) return "pan";
+  if (s.includes("gst")) return "gst";
+  if (s.includes("address")) return "address";
+  if (s.includes("bank") || s.includes("passbook") || s.includes("cheque")) return "bank";
+  if (s.includes("incorporation") || s.includes("regcert") || s.includes("registration")) return "reg_cert";
+  if (s.includes("auth")) return "auth_letter";
+  if (s.includes("leader") || s.includes("aadhaar")) return "leader_aadhaar";
+  if (s.includes("member")) return "member_list";
+  if (s.includes("training") || s.includes("skill")) return "training_certificate";
+  if (s.includes("photo") || s.includes("catalogue")) return "product_photos";
+  if (s.includes("iso")) return "iso";
+  if (s.includes("nsic")) return "nsic";
+  if (s.includes("dipp")) return "dipp";
+  if (s.includes("itr")) return "itr";
+  return s;
 };
 
 const getDocumentLabel = (key: string) =>
@@ -146,23 +191,87 @@ const getDocumentUploadedAt = (file: any) =>
 const normalizeDocType = (str: unknown) => String(str || "").toLowerCase().replace(/[\s-]+/g, "_");
 
 const getSellerOnboardingDocuments = (profile: any) => {
-  const sellerDocuments = Array.isArray(profile?.sellerDocuments)
+  const rawSellerDocs = Array.isArray(profile?.sellerDocuments)
     ? profile.sellerDocuments.filter((doc: any) =>
       Boolean(doc?.fileAsset),
     )
     : [];
 
-  const legacyDocuments =
-    profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)
-      ? Object.entries(profile.documents).filter(([key, value]) => {
-        if (!getDocumentFiles(value).some(getDocumentUrl)) return false;
-        const normKey = normalizeDocType(key);
-        return !sellerDocuments.some((doc: any) => {
-          const normDocType = normalizeDocType(doc.documentType);
-          return normDocType === normKey || normDocType.includes(normKey) || normKey.includes(normDocType);
+  const sellerDocuments: any[] = [];
+  const seenSellerDocIds = new Set<string>();
+  const seenSellerFileIds = new Set<string>();
+  const seenSellerCategories = new Set<string>();
+
+  for (const doc of rawSellerDocs) {
+    const docId = doc.id ? String(doc.id) : null;
+    const file = doc.fileAsset;
+    const fileId = file?.id || file?.fileId ? String(file.id || file.fileId) : null;
+    const cat = getCanonicalDocCategory(doc.documentType);
+
+    if (docId && seenSellerDocIds.has(docId)) continue;
+    if (fileId && seenSellerFileIds.has(fileId)) continue;
+    if (cat && seenSellerCategories.has(cat)) continue;
+
+    if (docId) seenSellerDocIds.add(docId);
+    if (fileId) seenSellerFileIds.add(fileId);
+    if (cat) seenSellerCategories.add(cat);
+    sellerDocuments.push(doc);
+  }
+
+  const knownFileIds = new Set<string>(seenSellerFileIds);
+  const knownUrls = new Set<string>();
+  const knownFileNames = new Set<string>();
+  const knownCategories = new Set<string>(seenSellerCategories);
+
+  for (const doc of sellerDocuments) {
+    const file = doc.fileAsset;
+    const url = getDocumentUrl(file);
+    if (url) knownUrls.add(String(url));
+    const fn = getDocumentFileName(file, "");
+    if (fn) knownFileNames.add(String(fn).toLowerCase());
+  }
+
+  const legacyDocuments: [string, any][] = [];
+  const seenLegacyKeys = new Set<string>();
+  const seenLegacyCategories = new Set<string>();
+
+  if (profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)) {
+    for (const [key, value] of Object.entries(profile.documents)) {
+      const files = getDocumentFiles(value).filter(getDocumentUrl);
+      if (files.length === 0) continue;
+
+      const cat = getCanonicalDocCategory(key);
+
+      const matchesKnownSellerDoc =
+        (cat && knownCategories.has(cat)) ||
+        files.some((file: any) => {
+          const fid = file?.fileId || file?.id || file?.fileAssetId;
+          if (fid && knownFileIds.has(String(fid))) return true;
+          const url = getDocumentUrl(file);
+          if (url && knownUrls.has(String(url))) return true;
+          const fn = getDocumentFileName(file, "");
+          if (fn && knownFileNames.has(String(fn).toLowerCase())) return true;
+          return false;
         });
-      })
-      : [];
+
+      if (matchesKnownSellerDoc) {
+        continue;
+      }
+
+      if (cat && seenLegacyCategories.has(cat)) {
+        continue;
+      }
+
+      const normKey = (key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (seenLegacyKeys.has(normKey)) {
+        continue;
+      }
+
+      if (cat) seenLegacyCategories.add(cat);
+      seenLegacyKeys.add(normKey);
+      legacyDocuments.push([key, value]);
+    }
+  }
 
   return { sellerDocuments, legacyDocuments };
 };
@@ -4040,11 +4149,13 @@ export default function AdminOnboarding() {
 
                                   const reasons = (selectedItem.sectionRejectionReasons as Record<string, string>) || {};
                                   const normDocType = (doc.documentType || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+                                  const docCat = getCanonicalDocCategory(doc.documentType);
 
                                   let sellerDocRejectionReason: string | null = doc.remarks || null;
                                   if (!sellerDocRejectionReason) {
                                     for (const [rKey, rVal] of Object.entries(reasons)) {
-                                      if (rKey.toLowerCase().replace(/[^a-z0-9]/g, "") === normDocType) {
+                                      const normR = rKey.toLowerCase().replace(/[^a-z0-9]/g, "");
+                                      if (normR === normDocType || (docCat && getCanonicalDocCategory(rKey) === docCat)) {
                                         sellerDocRejectionReason = String(rVal);
                                         break;
                                       }
@@ -4168,10 +4279,12 @@ export default function AdminOnboarding() {
                                   const label = getDocumentLabel(key);
                                   const reasons = (selectedItem.sectionRejectionReasons as Record<string, string>) || {};
                                   const normKey = key.toLowerCase().replace(/[^a-z0-9]/g, "");
+                                  const legacyCat = getCanonicalDocCategory(key);
 
                                   let docRejectionReason: string | null = null;
                                   for (const [rKey, rVal] of Object.entries(reasons)) {
-                                    if (rKey.toLowerCase().replace(/[^a-z0-9]/g, "") === normKey) {
+                                    const normR = rKey.toLowerCase().replace(/[^a-z0-9]/g, "");
+                                    if (normR === normKey || (legacyCat && getCanonicalDocCategory(rKey) === legacyCat)) {
                                       docRejectionReason = String(rVal);
                                       break;
                                     }

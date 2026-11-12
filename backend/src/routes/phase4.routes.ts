@@ -4568,7 +4568,7 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
     }
   });
   if (!user) throw new ApiError(404, 'Application not found', 'APPLICATION_NOT_FOUND');
-  if (!['buyer', 'seller'].includes(String(user.role))) {
+  if (!['buyer', 'seller', 'shg'].includes(String(user.role))) {
     throw new ApiError(404, 'Application not found', 'APPLICATION_NOT_FOUND');
   }
 
@@ -4598,8 +4598,8 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
   }
 
   // Enrich documents (the same legacy JSON shape the list endpoint expanded).
-  const profile = user.role === 'seller' ? user.sellerProfile : user.buyerProfile;
-  if (profile && user.role === 'seller' && user.sellerProfile?.sellerDocuments) {
+  const profile = ['seller', 'shg'].includes(user.role) ? user.sellerProfile : user.buyerProfile;
+  if (profile && ['seller', 'shg'].includes(user.role) && user.sellerProfile?.sellerDocuments) {
     const docsObj = typeof profile.documents === 'object' && profile.documents ? { ...(profile.documents as Record<string, any>) } : {};
     for (const sd of user.sellerProfile.sellerDocuments) {
       if (sd.fileAsset) {
@@ -5147,8 +5147,8 @@ router.post('/admin/onboarding/:id/document-request', authenticate, authorizeAdm
   const cleanReason = body.reason.replace(/\0/g, '').trim();
   const docType = body.documentType.trim();
 
-  // If seller, update the specific SellerDocument if it exists
-  if (existing.role === 'seller' && existing.sellerProfile) {
+  // If seller or SHG, update the specific SellerDocument if it exists
+  if (['seller', 'shg'].includes(existing.role) && existing.sellerProfile) {
     const existingSellerDoc = existing.sellerProfile.sellerDocuments.find(
       (d: any) => d.documentType.toLowerCase() === docType.toLowerCase()
     );
