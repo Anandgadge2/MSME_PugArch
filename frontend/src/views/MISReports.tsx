@@ -241,21 +241,27 @@ export default function MISReports() {
 
   // Export handlers
   const exportCsv = () => {
-    const rows = [
-      ['Category', 'Metric', 'Value'],
-      ['Network', 'Total Network Participants', stats?.totalNetwork || 0],
-      ['Network', 'Active MSME Sellers', stats?.activeSellers || 0],
-      ['Network', 'Active Anchor Buyers', stats?.activeBuyers || 0],
-      ['Network', 'Pending Verification Reviews', stats?.pendingApproval || 0],
-      ['Procurement', 'Active Procurement Value', stats?.activeProcurementValue || '₹0.00Cr'],
-      ['Procurement', 'Tender Success Rate', stats?.tenderSuccessRate || '0%'],
-      ['Procurement', 'Total Purchase Orders', stats?.purchaseOrders || 0],
-      ['Compliance', 'MSMED 45-Day Payment Adherence', settlementHealth.complianceRate],
-      ['Compliance', 'Average Onboarding Days', stats?.avgOnboardingTime || '0 Days'],
-      ['Compliance', 'Escrow Custody Held', settlementHealth.escrowHeldValue],
-      ['Linkage', 'Jharsuguda Local Vendor Share', `${geographicLinkage.localLinkagePercent}%`],
-    ];
-    downloadCsv(`jsg-smile-mis-report-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    if (isExporting !== null) return;
+    setIsExporting('csv');
+    try {
+      const rows = [
+        ['Category', 'Metric', 'Value'],
+        ['Network', 'Total Network Participants', stats?.totalNetwork || 0],
+        ['Network', 'Active MSME Sellers', stats?.activeSellers || 0],
+        ['Network', 'Active Anchor Buyers', stats?.activeBuyers || 0],
+        ['Network', 'Pending Verification Reviews', stats?.pendingApproval || 0],
+        ['Procurement', 'Active Procurement Value', stats?.activeProcurementValue || '₹0.00Cr'],
+        ['Procurement', 'Tender Success Rate', stats?.tenderSuccessRate || '0%'],
+        ['Procurement', 'Total Purchase Orders', stats?.purchaseOrders || 0],
+        ['Compliance', 'MSMED 45-Day Payment Adherence', settlementHealth.complianceRate],
+        ['Compliance', 'Average Onboarding Days', stats?.avgOnboardingTime || '0 Days'],
+        ['Compliance', 'Escrow Custody Held', settlementHealth.escrowHeldValue],
+        ['Linkage', 'Jharsuguda Local Vendor Share', `${geographicLinkage.localLinkagePercent}%`],
+      ];
+      downloadCsv(`jsg-smile-mis-report-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+    } finally {
+      setTimeout(() => setIsExporting(null), 1000);
+    }
   };
 
   const exportExcel = async () => {
@@ -295,12 +301,7 @@ export default function MISReports() {
         ]
       };
       const blob = await engine.generate(config);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `jsg-smile-mis-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
-      a.click();
-      URL.revokeObjectURL(url);
+      engine.download(blob, `jsg-smile-mis-report-${new Date().toISOString().slice(0, 10)}.xlsx`);
     } catch (err) {
       console.error('Excel Export Failed:', err);
     } finally {
@@ -414,9 +415,11 @@ export default function MISReports() {
             <button
               type="button"
               onClick={exportCsv}
+              disabled={isExporting !== null}
+              aria-busy={isExporting === 'csv'}
               title="Download CSV Dataset"
               aria-label="Download CSV Dataset"
-              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-black uppercase text-slate-700 shadow-sm hover:bg-slate-50 active:scale-95 transition"
+              className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-xs font-black uppercase text-slate-700 shadow-sm hover:bg-slate-50 active:scale-95 transition disabled:opacity-50"
             >
               <Download className="h-3.5 w-3.5 text-slate-500" /> CSV
             </button>

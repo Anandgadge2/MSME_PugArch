@@ -3,6 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/hooks/useAuth';
 import { AccessibilityProvider } from '@/providers/AccessibilityProvider';
 import { Toaster } from 'sonner';
+import '@/lib/toast'; // Initializes global toast deduplication
 import React, { useState } from 'react';
 import { getQueryClient } from '@/lib/queryClient';
 import { CookieConsentBanner } from '@/components/compliance/CookieConsentBanner';
@@ -16,7 +17,14 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
       <AccessibilityProvider>
         <AuthProvider>
           {children}
-          <Toaster position="top-center" richColors closeButton expand={true} />
+          <Toaster
+            position="top-center"
+            richColors
+            closeButton
+            expand={false}
+            visibleToasts={3}
+            duration={4000}
+          />
           <CookieConsentBanner />
           <SessionTimeoutDialog />
         </AuthProvider>

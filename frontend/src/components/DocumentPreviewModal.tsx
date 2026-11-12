@@ -29,9 +29,16 @@ export function DocumentPreviewModal({
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [resolvedImageSrc, setResolvedImageSrc] = useState<string | null>(previewDocument?.url?.trim() || null);
-  const [isImageLoading, setIsImageLoading] = useState(Boolean(previewDocument?.url?.trim()));
-  const [imageLoadError, setImageLoadError] = useState(!previewDocument?.url?.trim());
+  const [resolvedImageSrc, setResolvedImageSrc] = useState<string | null>(
+    previewDocument?.mode === 'image' ? (previewDocument?.url?.trim() || null) : null
+  );
+  const [resolvedPdfSrc, setResolvedPdfSrc] = useState<string | null>(
+    previewDocument?.mode === 'pdf' ? (previewDocument?.url?.trim() || null) : null
+  );
+  const [isImageLoading, setIsImageLoading] = useState(previewDocument?.mode === 'image' && Boolean(previewDocument?.url?.trim()));
+  const [imageLoadError, setImageLoadError] = useState(previewDocument?.mode === 'image' && !previewDocument?.url?.trim());
+  const [isPdfLoading, setIsPdfLoading] = useState(previewDocument?.mode === 'pdf' && Boolean(previewDocument?.url?.trim()));
+  const [pdfLoadError, setPdfLoadError] = useState(previewDocument?.mode === 'pdf' && !previewDocument?.url?.trim());
   const recoveryAttemptedRef = useRef(false);
   const createdBlobUrlsRef = useRef<string[]>([]);
 
@@ -49,14 +56,60 @@ export function DocumentPreviewModal({
   useEffect(() => {
     if (previewDocument) {
       const url = previewDocument.url?.trim() || null;
-      setResolvedImageSrc(url);
+      setResolvedImageSrc(previewDocument.mode === 'image' ? url : null);
+      setResolvedPdfSrc(previewDocument.mode === 'pdf' ? url : null);
       setScale(1);
       setRotation(0);
-      setIsImageLoading(Boolean(url));
-      setImageLoadError(!url);
+      setIsImageLoading(previewDocument.mode === 'image' && Boolean(url));
+      setImageLoadError(previewDocument.mode === 'image' && !url);
+      setIsPdfLoading(previewDocument.mode === 'pdf' && Boolean(url));
+      setPdfLoadError(previewDocument.mode === 'pdf' && !url);
       recoveryAttemptedRef.current = false;
     }
-  }, [previewDocument?.url]);
+  }, [previewDocument?.url, previewDocument?.mode]);
+
+  // Attempt resilient recovery if PDF fails to load inside iframe
+  const handlePdfError = useCallback(async () => {
+    if (recoveryAttemptedRef.current || !previewDocument) {
+      setPdfLoadError(true);
+      setIsPdfLoading(false);
+      return;
+    }
+    recoveryAttemptedRef.current = true;
+    setIsPdfLoading(true);
+
+    try {
+      if (previewDocument.fileId) {
+        signedUrlCache.delete(previewDocument.fileId);
+      }
+      const recoveryUrl = previewDocument.fileId
+        ? `/api/files/${previewDocument.fileId}/view`
+        : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
+            ? (resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl)
+            : (resolveMediaUrl(previewDocument.url) || previewDocument.url));
+
+      if (!recoveryUrl.startsWith('blob:')) {
+        const res = await api.fetch(recoveryUrl, { skipCache: true });
+        if (res.ok) {
+          const rawBlob = await res.blob();
+          if (rawBlob.size > 0) {
+            const pdfBlob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type: 'application/pdf' });
+            const blobUrl = URL.createObjectURL(pdfBlob);
+            createdBlobUrlsRef.current.push(blobUrl);
+            setResolvedPdfSrc(blobUrl);
+            setPdfLoadError(false);
+            setIsPdfLoading(false);
+            return;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[DocumentPreviewModal] PDF recovery failed:', err);
+    }
+
+    setPdfLoadError(true);
+    setIsPdfLoading(false);
+  }, [previewDocument]);
 
   // Attempt resilient recovery if image fails to load directly
   const handleImageError = useCallback(async () => {
@@ -131,7 +184,17 @@ export function DocumentPreviewModal({
     }
   };
 
-  const activeDownloadUrl = resolvedImageSrc || previewDocument.url?.trim() || '';
+  const fallbackDownloadUrl = previewDocument.fileId
+    ? `/api/files/${previewDocument.fileId}/view`
+    : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
+        ? previewDocument.originalUrl
+        : '');
+  const activeDownloadUrl = (
+    resolvedPdfSrc ||
+    resolvedImageSrc ||
+    previewDocument.url ||
+    fallbackDownloadUrl
+  ).trim();
 
   return createPortal(
     <div
@@ -301,17 +364,53 @@ export function DocumentPreviewModal({
               </>
             )}
             {previewDocument.mode === 'pdf' && (
-              previewDocument.url ? (
-                <iframe
-                  src={previewDocument.url}
-                  title={previewDocument.label || 'PDF Preview'}
-                  className="h-full w-full"
-                />
-              ) : (
-                <div className="flex h-full w-full items-center justify-center p-8 text-center text-slate-500">
-                  <p className="text-xs font-bold uppercase">No document URL provided</p>
-                </div>
-              )
+              <div className="relative h-full w-full flex flex-col items-center justify-center bg-slate-100">
+                {isPdfLoading && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 bg-slate-100 text-slate-600">
+                    <Loader2 className="h-8 w-8 animate-spin text-blue-600" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">Loading PDF...</span>
+                  </div>
+                )}
+                {pdfLoadError || !resolvedPdfSrc ? (
+                  <div className="m-auto flex max-w-md flex-col items-center justify-center rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 mb-3">
+                      <AlertCircle className="h-6 w-6" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900 mb-1">Direct PDF Preview Unavailable</h4>
+                    <p className="text-xs text-slate-500 mb-4">
+                      This document cannot be rendered inside the frame. You can open or download the original PDF directly.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={activeDownloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Open Original</span>
+                      </a>
+                      <a
+                        href={activeDownloadUrl}
+                        download={previewDocument.label || 'document.pdf'}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-2xs hover:bg-blue-700"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download</span>
+                      </a>
+                    </div>
+                  </div>
+                ) : (
+                  <iframe
+                    key={resolvedPdfSrc}
+                    src={resolvedPdfSrc}
+                    title={previewDocument.label || 'PDF Preview'}
+                    className="h-full w-full border-0"
+                    onLoad={() => setIsPdfLoading(false)}
+                    onError={handlePdfError}
+                  />
+                )}
+              </div>
             )}
             {previewDocument.mode === 'office' && (
               previewDocument.url ? (
