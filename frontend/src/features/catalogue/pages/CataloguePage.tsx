@@ -746,12 +746,6 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
     }
   };
 
-  useEffect(() => {
-    return () => {
-      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
-    };
-  }, [previewDocument?.url]);
-
   const data = useMemo(() => [...products, ...services], [products, services]);
   const categories = useMemo(() => Array.from(new Set(data.map(item => item.category?.name).filter(Boolean) as string[])).sort(), [data]);
   const statuses = useMemo(() => Array.from(new Set(data.map(item => item.status).filter(Boolean) as string[])).sort(), [data]);

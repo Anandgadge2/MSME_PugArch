@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw, Download, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
-import type { DocumentPreview } from '../lib/files';
+import { signedUrlCache, type DocumentPreview } from '../lib/files';
 import { FocusTrap } from './ui/FocusTrap';
 import { api, resolveMediaUrl } from '../lib/api';
 
@@ -69,17 +69,30 @@ export function DocumentPreviewModal({
     setIsImageLoading(true);
 
     try {
-      const targetUrl = resolveMediaUrl(previewDocument.url) || previewDocument.url;
-      const res = await api.fetch(targetUrl, { skipCache: true });
-      if (res.ok) {
-        const blob = await res.blob();
-        if (blob.size > 0) {
-          const blobUrl = URL.createObjectURL(blob);
-          createdBlobUrlsRef.current.push(blobUrl);
-          setResolvedImageSrc(blobUrl);
-          setImageLoadError(false);
-          setIsImageLoading(false);
-          return;
+      if (previewDocument.fileId) {
+        signedUrlCache.delete(previewDocument.fileId);
+      }
+
+      // If we have a fileId or an original HTTP URL, prioritize server fetch over a broken blob: URL
+      const recoveryUrl = previewDocument.fileId
+        ? `/api/files/${previewDocument.fileId}/view`
+        : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
+            ? (resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl)
+            : (resolveMediaUrl(previewDocument.url) || previewDocument.url));
+
+      // Avoid refetching a dead blob: URL
+      if (!recoveryUrl.startsWith('blob:')) {
+        const res = await api.fetch(recoveryUrl, { skipCache: true });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob.size > 0) {
+            const blobUrl = URL.createObjectURL(blob);
+            createdBlobUrlsRef.current.push(blobUrl);
+            setResolvedImageSrc(blobUrl);
+            setImageLoadError(false);
+            setIsImageLoading(false);
+            return;
+          }
         }
       }
     } catch (err) {
@@ -88,7 +101,7 @@ export function DocumentPreviewModal({
 
     setImageLoadError(true);
     setIsImageLoading(false);
-  }, [previewDocument?.url]);
+  }, [previewDocument]);
 
   // Lock body scroll while preview is open (save & restore previous value)
   useEffect(() => {

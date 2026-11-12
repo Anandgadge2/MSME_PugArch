@@ -862,12 +862,6 @@ export default function AdminOnboarding() {
     }
   };
 
-  useEffect(() => {
-    return () => {
-      if (previewDocument?.url?.startsWith("blob:")) URL.revokeObjectURL(previewDocument.url);
-    };
-  }, [previewDocument?.url]);
-
   const handleUpdateStatus = async (
     userId: string,
     status: string,

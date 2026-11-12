@@ -7,6 +7,8 @@ export type DocumentPreview = {
   label: string;
   url: string;
   mode: DocumentPreviewMode;
+  fileId?: number;
+  originalUrl?: string;
 };
 
 const getAbsoluteApiUrl = (endpoint: string) => {
@@ -35,6 +37,7 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
 
 interface CachedPreviewEntry {
   preview: DocumentPreview;
+  blob?: Blob;
   expiresAt: number;
 }
 
@@ -55,19 +58,52 @@ class SignedUrlCacheManager {
       this.cache.delete(key);
       return null;
     }
+
+    // If the cached preview was backed by a Blob, generate a fresh live Object URL on each access.
+    // This completely prevents "revoked blob URL" errors when closing and re-opening the preview modal.
+    if (entry.blob) {
+      const freshBlobUrl = URL.createObjectURL(entry.blob);
+      return {
+        ...entry.preview,
+        url: freshBlobUrl
+      };
+    }
+
+    // If it's a bare blob: URL without the backing blob, it may be revoked; purge and return null.
+    if (entry.preview.url?.startsWith('blob:')) {
+      this.cache.delete(key);
+      return null;
+    }
+
     return entry.preview;
   }
 
-  set(fileId: number | string, hasSession: boolean, preview: DocumentPreview): void {
+  set(fileId: number | string, hasSession: boolean, preview: DocumentPreview, blob?: Blob): void {
     if (this.cache.size >= this.MAX_ENTRIES) {
       const keysToDelete = Array.from(this.cache.keys()).slice(0, 50);
       keysToDelete.forEach((k) => this.cache.delete(k));
     }
+
+    // Never cache a bare blob: string without the underlying Blob object
+    if (preview.url?.startsWith('blob:') && !blob) {
+      return;
+    }
+
     const key = this.makeKey(fileId, hasSession);
     this.cache.set(key, {
       preview,
+      blob,
       expiresAt: Date.now() + this.TTL_MS,
     });
+  }
+
+  delete(fileId: number | string, hasSession?: boolean): void {
+    if (hasSession !== undefined) {
+      this.cache.delete(this.makeKey(fileId, hasSession));
+    } else {
+      this.cache.delete(this.makeKey(fileId, true));
+      this.cache.delete(this.makeKey(fileId, false));
+    }
   }
 
   clear(): void {
@@ -187,7 +223,9 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
               const result: DocumentPreview = {
                 label,
                 url: previewUrl,
-                mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || '')
+                mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || ''),
+                fileId: fileId ?? undefined,
+                originalUrl: absoluteFallbackUrl || undefined
               };
               signedUrlCache.set(fileId, hasSession, result);
               if (result.mode === 'image') predecodeImage(result.url);
@@ -215,9 +253,11 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const result: DocumentPreview = {
             label,
             url: blobUrl,
-            mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || '')
+            mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || ''),
+            fileId: fileId ?? undefined,
+            originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view`
           };
-          signedUrlCache.set(fileId, hasSession, result);
+          signedUrlCache.set(fileId, hasSession, result, blob);
           if (result.mode === 'image') predecodeImage(result.url);
           return result;
         }
@@ -246,9 +286,11 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const result: DocumentPreview = {
               label,
               url: blobUrl,
-              mode: getDocumentPreviewMode(blobUrl, contentType)
+              mode: getDocumentPreviewMode(blobUrl, contentType),
+              fileId: fileId ?? undefined,
+              originalUrl: absoluteFallbackUrl
             };
-            if (fileId) signedUrlCache.set(fileId, hasSession, result);
+            if (fileId) signedUrlCache.set(fileId, hasSession, result, blob);
             if (result.mode === 'image') predecodeImage(result.url);
             return result;
           }
@@ -260,7 +302,9 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       const result: DocumentPreview = {
         label,
         url: absoluteFallbackUrl,
-        mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '')
+        mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || ''),
+        fileId: fileId ?? undefined,
+        originalUrl: absoluteFallbackUrl
       };
       if (fileId) signedUrlCache.set(fileId, hasSession, result);
       if (result.mode === 'image') predecodeImage(result.url);

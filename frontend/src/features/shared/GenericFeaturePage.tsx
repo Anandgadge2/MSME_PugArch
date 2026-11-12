@@ -67,11 +67,6 @@ export default function GenericFeaturePage({ title, description, endpoint, empty
   const queryParams = useMemo(() => ({ q: searchTerm.trim(), status: statusFilter }), [searchTerm, statusFilter]);
   const { records, loading, refreshing, error, reload, page, pageSize, total, setPage, setPageSize } = usePaginatedFeatureQuery<GenericRecord>(endpoint, queryParams, 20);
   const statusOptions = useMemo(() => Array.from(new Set(records.map(statusOf).filter(Boolean))).sort(), [records]);
-  useEffect(() => {
-    return () => {
-      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
-    };
-  }, [previewDocument?.url]);
 
   const handlePreviewDocument = async (rec: GenericRecord) => {
     try {

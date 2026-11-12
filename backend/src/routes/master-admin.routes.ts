@@ -1381,18 +1381,21 @@ router.get('/master-admin/organizations', ...masterOnly, wrap(async (req, res) =
 
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
-  const companyId = numberOrUndefined(req.query.companyId);
   const verificationStatus = textOrNull(req.query.status);
   const organizationType = textOrNull(req.query.organizationType);
+  const normalizedOrgType = organizationType ? organizationType.toUpperCase().trim() : null;
+  const normalizedStatus = verificationStatus ? verificationStatus.toUpperCase().trim() : null;
+
   const where: any = {
-    ...(companyId ? { companyId } : {}),
-    ...(verificationStatus ? { verificationStatus: verificationStatus as any } : {}),
-    ...(organizationType ? { organizationType: { contains: organizationType, mode: 'insensitive' } } : {}),
+    ...(normalizedStatus && (allowedVerificationStatuses.has(normalizedStatus) || normalizedStatus === 'ACTIVE' || normalizedStatus === 'CLOSED' || normalizedStatus === 'ARCHIVED') ? { verificationStatus: normalizedStatus as any } : {}),
+    ...(normalizedOrgType && (allowedOrganizationTypes.has(normalizedOrgType) || normalizedOrgType === 'SHG') ? { organizationType: normalizedOrgType as any } : {}),
     ...(q ? {
       OR: [
         { organizationName: { contains: q, mode: 'insensitive' } },
         { gstin: { contains: q, mode: 'insensitive' } },
-        { pan: { contains: q, mode: 'insensitive' } },
+        { panNumber: { contains: q, mode: 'insensitive' } },
+        { udyamNumber: { contains: q, mode: 'insensitive' } },
+        { cinNumber: { contains: q, mode: 'insensitive' } },
         { district: { contains: q, mode: 'insensitive' } },
         { state: { contains: q, mode: 'insensitive' } }
       ]

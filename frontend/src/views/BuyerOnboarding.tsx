@@ -460,12 +460,6 @@ export default function BuyerOnboarding() {
 
   const isSmsEnabled = enabledFeatures.includes('sms');
 
-  useEffect(() => {
-    return () => {
-      if (previewDocument?.url?.startsWith('blob:')) URL.revokeObjectURL(previewDocument.url);
-    };
-  }, [previewDocument?.url]);
-
   const handleSectionChange = (id: string) => {
     setActiveSection(id);
     const params = new URLSearchParams(window.location.search);
