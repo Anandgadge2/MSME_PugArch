@@ -2,6 +2,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { maskPAN, maskGSTIN } from './maskPii';
 import { resolveMediaUrl } from './api';
+import { canInitiateDownload } from './downloadManager';
 
 /**
  * Enterprise PDF Engine for JSGSMILE Enterprise Procurement Portal
@@ -138,6 +139,9 @@ export function drawFitImage(
  */
 export function outputPdf(doc: jsPDF, filename: string, mode: 'download' | 'print'): void {
   const safeName = filename.endsWith('.pdf') ? filename : `${filename}.pdf`;
+  if (!canInitiateDownload(mode === 'print' ? `print_${safeName}` : safeName)) {
+    return;
+  }
   if (mode === 'print') {
     doc.autoPrint();
     window.open(doc.output('bloburl'), '_blank');

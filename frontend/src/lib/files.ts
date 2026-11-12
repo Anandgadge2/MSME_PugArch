@@ -1,5 +1,6 @@
 import { api, unwrapApiData, BASE_URL, resolveMediaUrl } from './api';
 import { getCookieValue } from './auth';
+import { triggerBrowserDownload, canInitiateDownload } from './downloadManager';
 
 export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
 
@@ -248,12 +249,18 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
 
         if (res.ok) {
           const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-          const blob = await res.blob();
+          const rawBlob = await res.blob();
+          const fileName = fileAsset?.fileName || label;
+          const isPdf = contentType.toLowerCase().includes('pdf') ||
+            fileName.toLowerCase().endsWith('.pdf') ||
+            rawBlob.type.toLowerCase().includes('pdf');
+          const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
+          const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
           const blobUrl = URL.createObjectURL(blob);
           const result: DocumentPreview = {
             label,
             url: blobUrl,
-            mode: getDocumentPreviewMode(blobUrl, contentType, (fileAsset?.fileName || label).split('.').pop() || ''),
+            mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
             fileId: fileId ?? undefined,
             originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view`
           };
@@ -281,12 +288,18 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           });
           if (res.ok) {
             const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
-            const blob = await res.blob();
+            const rawBlob = await res.blob();
+            const fileName = fileAsset?.fileName || label;
+            const isPdf = contentType.toLowerCase().includes('pdf') ||
+              fileName.toLowerCase().endsWith('.pdf') ||
+              rawBlob.type.toLowerCase().includes('pdf');
+            const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
+            const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
             const blobUrl = URL.createObjectURL(blob);
             const result: DocumentPreview = {
               label,
               url: blobUrl,
-              mode: getDocumentPreviewMode(blobUrl, contentType),
+              mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
               fileId: fileId ?? undefined,
               originalUrl: absoluteFallbackUrl
             };
@@ -541,18 +554,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 };
 
 const triggerDownloadBlob = (url: string, filename: string) => {
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.setAttribute('download', filename);
-  link.target = '_blank';
-  document.body.appendChild(link);
-  link.click();
-  setTimeout(() => {
-    try {
-      document.body.removeChild(link);
-    } catch {}
-  }, 100);
+  triggerBrowserDownload(url, filename);
 };
 
 export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document') => {
@@ -574,6 +576,10 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
   }
 
   const fileName = (typeof fileAsset === 'object' && (fileAsset?.originalName || fileAsset?.name || fileAsset?.fileName)) || fallbackName;
+  const lockKey = `file-asset-${fileId || fileName}`;
+  if (!canInitiateDownload(lockKey)) {
+    return;
+  }
   const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
   const authHeaders: Record<string, string> = {};
   if (token && token !== 'null' && token !== 'undefined') {
