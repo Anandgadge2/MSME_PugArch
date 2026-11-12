@@ -4438,14 +4438,30 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
         if (sd.fileAsset) {
           const docTypeUpper = (sd.documentType || '').toUpperCase();
           let k = 'uploaded_files';
-          if (docTypeUpper.includes('PAN')) k = 'pan';
-          else if (docTypeUpper.includes('GST')) k = 'gstCert';
-          else if (docTypeUpper.includes('UDYAM') || docTypeUpper.includes('MSME')) k = 'udyamCert';
-          else if (docTypeUpper.includes('PASSBOOK') || docTypeUpper.includes('CHEQUE') || docTypeUpper.includes('BANK')) k = 'bankPassbook';
-          else if (docTypeUpper.includes('INCORPORATION')) k = 'regCert';
-          else if (docTypeUpper.includes('ADDRESS')) k = 'addressProof';
-          else if (docTypeUpper.includes('AUTH') || docTypeUpper.includes('LETTER')) k = 'authLetter';
-          else k = sd.documentType || 'uploaded_files';
+          if (docTypeUpper.includes('PAN')) {
+            k = 'pan';
+            delete docsObj.pan_copy; delete docsObj.panCard; delete docsObj.panCopy;
+          } else if (docTypeUpper.includes('GST')) {
+            k = 'gstCert';
+            delete docsObj.gst_certificate; delete docsObj.gst; delete docsObj.gstCertificate;
+          } else if (docTypeUpper.includes('UDYAM') || docTypeUpper.includes('MSME')) {
+            k = 'udyamCert';
+            delete docsObj.udyam_certificate; delete docsObj.udyam_cert; delete docsObj.udyam;
+          } else if (docTypeUpper.includes('PASSBOOK') || docTypeUpper.includes('CHEQUE') || docTypeUpper.includes('BANK')) {
+            k = 'bankPassbook';
+            delete docsObj.bank_passbook; delete docsObj.cancelled_cheque; delete docsObj.bank_passbook_cancelled_cheque;
+          } else if (docTypeUpper.includes('INCORPORATION')) {
+            k = 'regCert';
+            delete docsObj.registration_certificate; delete docsObj.business_registration_proof;
+          } else if (docTypeUpper.includes('ADDRESS')) {
+            k = 'addressProof';
+            delete docsObj.address_proof; delete docsObj.addressProofDoc;
+          } else if (docTypeUpper.includes('AUTH') || docTypeUpper.includes('LETTER')) {
+            k = 'authLetter';
+            delete docsObj.authorization_letter; delete docsObj.auth_letter;
+          } else {
+            k = sd.documentType || 'uploaded_files';
+          }
 
           docsObj[k] = {
             fileId: sd.fileAsset.id,
@@ -4605,13 +4621,30 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
       if (sd.fileAsset) {
         const u = (sd.documentType || '').toUpperCase();
         let k = 'uploaded_files';
-        if (u.includes('PAN')) k = 'pan';
-        else if (u.includes('GST')) k = 'gstCert';
-        else if (u.includes('UDYAM') || u.includes('MSME')) k = 'udyamCert';
-        else if (u.includes('PASSBOOK') || u.includes('CHEQUE') || u.includes('BANK')) k = 'bankPassbook';
-        else if (u.includes('INCORPORATION')) k = 'regCert';
-        else if (u.includes('ADDRESS')) k = 'addressProof';
-        else if (u.includes('AUTH') || u.includes('LETTER')) k = 'authLetter';
+        if (u.includes('PAN')) {
+          k = 'pan';
+          delete docsObj.pan_copy; delete docsObj.panCard; delete docsObj.panCopy;
+        } else if (u.includes('GST')) {
+          k = 'gstCert';
+          delete docsObj.gst_certificate; delete docsObj.gst; delete docsObj.gstCertificate;
+        } else if (u.includes('UDYAM') || u.includes('MSME')) {
+          k = 'udyamCert';
+          delete docsObj.udyam_certificate; delete docsObj.udyam_cert; delete docsObj.udyam;
+        } else if (u.includes('PASSBOOK') || u.includes('CHEQUE') || u.includes('BANK')) {
+          k = 'bankPassbook';
+          delete docsObj.bank_passbook; delete docsObj.cancelled_cheque; delete docsObj.bank_passbook_cancelled_cheque;
+        } else if (u.includes('INCORPORATION')) {
+          k = 'regCert';
+          delete docsObj.registration_certificate; delete docsObj.business_registration_proof;
+        } else if (u.includes('ADDRESS')) {
+          k = 'addressProof';
+          delete docsObj.address_proof; delete docsObj.addressProofDoc;
+        } else if (u.includes('AUTH') || u.includes('LETTER')) {
+          k = 'authLetter';
+          delete docsObj.authorization_letter; delete docsObj.auth_letter;
+        } else {
+          k = sd.documentType || 'uploaded_files';
+        }
         
         docsObj[k] = {
           fileId: sd.fileAsset.id,

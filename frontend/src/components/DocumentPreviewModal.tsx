@@ -52,6 +52,15 @@ export function DocumentPreviewModal({
     };
   }, []);
 
+  // Fallback timer: Chromium internal PDF plugin might not fire onLoad event in some subframes
+  useEffect(() => {
+    if (!isPdfLoading) return;
+    const timer = setTimeout(() => {
+      setIsPdfLoading(false);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [isPdfLoading]);
+
   // Derived state: reset controls if the previewed document URL changes
   useEffect(() => {
     if (previewDocument) {
@@ -184,10 +193,13 @@ export function DocumentPreviewModal({
     }
   };
 
+  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
+  const authQuery = token ? `?token=${encodeURIComponent(token)}` : '';
+
   const fallbackDownloadUrl = previewDocument.fileId
-    ? `/api/files/${previewDocument.fileId}/view`
+    ? `/api/files/${previewDocument.fileId}/view${authQuery}`
     : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
-        ? previewDocument.originalUrl
+        ? (previewDocument.originalUrl.includes('?') ? `${previewDocument.originalUrl}&token=${encodeURIComponent(token || '')}` : `${previewDocument.originalUrl}${authQuery}`)
         : '');
   const activeDownloadUrl = (
     resolvedPdfSrc ||
@@ -402,7 +414,7 @@ export function DocumentPreviewModal({
                   </div>
                 ) : (
                   <iframe
-                    key={resolvedPdfSrc}
+                    key={`${resolvedPdfSrc}-${previewDocument.fileId || previewDocument.label}`}
                     src={resolvedPdfSrc}
                     title={previewDocument.label || 'PDF Preview'}
                     className="h-full w-full border-0"

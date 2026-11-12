@@ -218,15 +218,20 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const body = await res.json().catch(() => null);
           const data = unwrapApiData<any>(body);
           if (data?.signedUrl) {
-            const isRealSignedUrl = data.signedUrl.includes('X-Goog-Algorithm') || data.signedUrl.includes('Signature=');
-            const previewUrl = isRealSignedUrl ? data.signedUrl : (resolveMediaUrl(data.signedUrl) || data.signedUrl);
-            if (previewUrl && (previewUrl.startsWith('http://') || previewUrl.startsWith('https://'))) {
+            const isRealSignedUrl =
+              data.signedUrl.includes('X-Goog-Algorithm') ||
+              data.signedUrl.includes('Signature=') ||
+              data.signedUrl.includes('GoogleAccessId=');
+
+            // Only use direct cloud CDN streaming if it's an authentic, cryptographically pre-signed cloud URL
+            if (isRealSignedUrl && (data.signedUrl.startsWith('http://') || data.signedUrl.startsWith('https://'))) {
+              const previewUrl = data.signedUrl;
               const result: DocumentPreview = {
                 label,
                 url: previewUrl,
                 mode: getDocumentPreviewMode(previewUrl, data.file?.mimeType || fileAsset?.mimeType || ''),
                 fileId: fileId ?? undefined,
-                originalUrl: absoluteFallbackUrl || undefined
+                originalUrl: absoluteFallbackUrl || previewUrl
               };
               signedUrlCache.set(fileId, hasSession, result);
               if (result.mode === 'image') predecodeImage(result.url);
@@ -238,7 +243,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         // Fallback to viewEndpoint below
       }
 
-      // Fallback: try viewEndpoint for local files or direct blob streaming
+      // Fallback / Private documents: stream binary Blob via authenticated API with bearer token
       const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
       try {
         const res = await api.fetch(viewEndpoint, {
@@ -257,12 +262,13 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
           const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
           const blobUrl = URL.createObjectURL(blob);
+          const authParam = token ? `?token=${encodeURIComponent(token)}` : '';
           const result: DocumentPreview = {
             label,
             url: blobUrl,
             mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
             fileId: fileId ?? undefined,
-            originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view`
+            originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authParam}`
           };
           signedUrlCache.set(fileId, hasSession, result, blob);
           if (result.mode === 'image') predecodeImage(result.url);
@@ -296,12 +302,15 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
             const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
             const blobUrl = URL.createObjectURL(blob);
+            const authParam = (token && absoluteFallbackUrl.includes('/api/files/'))
+              ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(token)}` : `?token=${encodeURIComponent(token)}`)
+              : '';
             const result: DocumentPreview = {
               label,
               url: blobUrl,
               mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
               fileId: fileId ?? undefined,
-              originalUrl: absoluteFallbackUrl
+              originalUrl: `${absoluteFallbackUrl}${authParam}`
             };
             if (fileId) signedUrlCache.set(fileId, hasSession, result, blob);
             if (result.mode === 'image') predecodeImage(result.url);

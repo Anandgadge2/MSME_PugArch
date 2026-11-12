@@ -201,6 +201,8 @@ const getSellerOnboardingDocuments = (profile: any) => {
   const seenSellerDocIds = new Set<string>();
   const seenSellerFileIds = new Set<string>();
   const seenSellerCategories = new Set<string>();
+  const knownUrls = new Set<string>();
+  const knownFileNames = new Set<string>();
 
   for (const doc of rawSellerDocs) {
     const docId = doc.id ? String(doc.id) : null;
@@ -215,25 +217,17 @@ const getSellerOnboardingDocuments = (profile: any) => {
     if (docId) seenSellerDocIds.add(docId);
     if (fileId) seenSellerFileIds.add(fileId);
     if (cat) seenSellerCategories.add(cat);
-    sellerDocuments.push(doc);
-  }
-
-  const knownFileIds = new Set<string>(seenSellerFileIds);
-  const knownUrls = new Set<string>();
-  const knownFileNames = new Set<string>();
-  const knownCategories = new Set<string>(seenSellerCategories);
-
-  for (const doc of sellerDocuments) {
-    const file = doc.fileAsset;
     const url = getDocumentUrl(file);
-    if (url) knownUrls.add(String(url));
+    if (url) knownUrls.add(String(url).toLowerCase());
     const fn = getDocumentFileName(file, "");
     if (fn) knownFileNames.add(String(fn).toLowerCase());
+    sellerDocuments.push(doc);
   }
 
   const legacyDocuments: [string, any][] = [];
   const seenLegacyKeys = new Set<string>();
-  const seenLegacyCategories = new Set<string>();
+  // CRITICAL: Initialize seen categories with categories already present in sellerDocuments so duplicate alias keys never get through!
+  const seenLegacyCategories = new Set<string>(seenSellerCategories);
 
   if (profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)) {
     for (const [key, value] of Object.entries(profile.documents)) {
@@ -242,23 +236,23 @@ const getSellerOnboardingDocuments = (profile: any) => {
 
       const cat = getCanonicalDocCategory(key);
 
-      const matchesKnownSellerDoc =
-        (cat && knownCategories.has(cat)) ||
-        files.some((file: any) => {
-          const fid = file?.fileId || file?.id || file?.fileAssetId;
-          if (fid && knownFileIds.has(String(fid))) return true;
-          const url = getDocumentUrl(file);
-          if (url && knownUrls.has(String(url))) return true;
-          const fn = getDocumentFileName(file, "");
-          if (fn && knownFileNames.has(String(fn).toLowerCase())) return true;
-          return false;
-        });
-
-      if (matchesKnownSellerDoc) {
+      // If category is already rendered in relational sellerDocuments or previous legacy entry, skip completely!
+      if (cat && seenLegacyCategories.has(cat)) {
         continue;
       }
 
-      if (cat && seenLegacyCategories.has(cat)) {
+      // Check if ANY file in this entry was already shown in sellerDocuments
+      const matchesKnownSellerDoc = files.some((file: any) => {
+        const fid = file?.fileId || file?.id || file?.fileAssetId;
+        if (fid && seenSellerFileIds.has(String(fid))) return true;
+        const url = getDocumentUrl(file);
+        if (url && knownUrls.has(String(url).toLowerCase())) return true;
+        const fn = getDocumentFileName(file, "");
+        if (fn && knownFileNames.has(String(fn).toLowerCase())) return true;
+        return false;
+      });
+
+      if (matchesKnownSellerDoc) {
         continue;
       }
 
@@ -267,13 +261,77 @@ const getSellerOnboardingDocuments = (profile: any) => {
         continue;
       }
 
+      // Filter duplicate files inside this entry
+      const uniqueFiles = files.filter((file: any) => {
+        const fid = file?.fileId || file?.id || file?.fileAssetId;
+        if (fid && seenSellerFileIds.has(String(fid))) return false;
+        const url = getDocumentUrl(file);
+        if (url && knownUrls.has(String(url).toLowerCase())) return false;
+        const fn = getDocumentFileName(file, "");
+        if (fn && knownFileNames.has(String(fn).toLowerCase())) return false;
+
+        if (fid) seenSellerFileIds.add(String(fid));
+        if (url) knownUrls.add(String(url).toLowerCase());
+        if (fn) knownFileNames.add(String(fn).toLowerCase());
+        return true;
+      });
+
+      if (uniqueFiles.length === 0) continue;
+
       if (cat) seenLegacyCategories.add(cat);
       seenLegacyKeys.add(normKey);
-      legacyDocuments.push([key, value]);
+      legacyDocuments.push([key, uniqueFiles]);
     }
   }
 
   return { sellerDocuments, legacyDocuments };
+};
+
+const getBuyerOnboardingDocuments = (profile: any): [string, any[]][] => {
+  if (!profile?.documents || typeof profile.documents !== 'object' || Array.isArray(profile.documents)) {
+    return [];
+  }
+
+  const result: [string, any[]][] = [];
+  const seenCategories = new Set<string>();
+  const seenFileIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const seenFileNames = new Set<string>();
+  const seenKeys = new Set<string>();
+
+  for (const [key, value] of Object.entries(profile.documents)) {
+    const files = getDocumentFiles(value).filter(getDocumentUrl);
+    if (files.length === 0) continue;
+
+    const cat = getCanonicalDocCategory(key);
+    // Suppress redundant alias categories (e.g., gst and gstCert, pan and panCard, bank and bankPassbook, address and addressProof)
+    if (cat && seenCategories.has(cat)) continue;
+
+    const normKey = (key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (seenKeys.has(normKey)) continue;
+
+    const uniqueFiles = files.filter((file: any) => {
+      const fid = file?.fileId || file?.id || file?.fileAssetId;
+      if (fid && seenFileIds.has(String(fid))) return false;
+      const url = getDocumentUrl(file);
+      if (url && seenUrls.has(String(url).toLowerCase())) return false;
+      const fn = getDocumentFileName(file, '');
+      if (fn && seenFileNames.has(String(fn).toLowerCase())) return false;
+
+      if (fid) seenFileIds.add(String(fid));
+      if (url) seenUrls.add(String(url).toLowerCase());
+      if (fn) seenFileNames.add(String(fn).toLowerCase());
+      return true;
+    });
+
+    if (uniqueFiles.length === 0) continue;
+
+    if (cat) seenCategories.add(cat);
+    seenKeys.add(normKey);
+    result.push([key, uniqueFiles]);
+  }
+
+  return result;
 };
 
 
@@ -3340,11 +3398,7 @@ export default function AdminOnboarding() {
                           </div>
                         </div>
                         {(() => {
-                          const buyerDocumentEntries = selectedItem.profile?.documents && typeof selectedItem.profile.documents === 'object'
-                            ? Object.entries(selectedItem.profile.documents)
-                              .map(([key, url]: [string, any]) => [key, getDocumentFiles(url).filter(getDocumentUrl)] as [string, any[]])
-                              .filter(([, files]) => files.length > 0)
-                            : [];
+                          const buyerDocumentEntries = getBuyerOnboardingDocuments(selectedItem.profile);
 
                           return (
                             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
