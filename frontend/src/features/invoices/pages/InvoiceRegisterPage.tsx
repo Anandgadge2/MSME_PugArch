@@ -31,6 +31,7 @@ import { RejectInvoiceModal } from '../components/RejectInvoiceModal';
 import type { TaxInvoiceData, TaxInvoiceItem } from '../lib/invoicePdfGenerator';
 import { Stamp, Download, ChevronDown, Truck } from 'lucide-react';
 import { canDisburseInvoicePayment } from '../../shared/procurementLifecycleUtils';
+import { canInitiateDownload } from '../../../lib/downloadManager';
 
 type InvoiceRow = {
   id: number;
@@ -1174,6 +1175,10 @@ export default function InvoiceRegisterPage({ role = 'buyer' }: { role?: 'buyer'
   const handleDownloadPdf = async (mode: 'download' | 'print' = 'download', explicitCopyType?: string) => {
     if (!selectedInvoice) return;
     const targetCopy = explicitCopyType || invoiceCopyType;
+    const invNum = selectedInvoice.invoiceNumber || 'Invoice';
+    const lockKey = `${mode}_${invNum}_${targetCopy}`;
+    if (!canInitiateDownload(lockKey)) return;
+
     try {
       const invData = prepareInvoiceData(targetCopy);
       const { generateTaxInvoicePdf } = await import('../lib/invoicePdfGenerator');
