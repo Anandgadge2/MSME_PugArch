@@ -74,6 +74,8 @@ export const validationPatterns = {
 
 export type FieldType = keyof typeof validationPatterns;
 
+import { hasValidGstinChecksum } from '../features/shared/gstVerification';
+
 export const validateField = (type: FieldType, value: string): string | null => {
   if (!value) return "This field is required";
   
@@ -95,6 +97,10 @@ export const validateField = (type: FieldType, value: string): string | null => 
       case 'udyam': return "Invalid Udyam: Format UDYAM-XX-00-0000000";
       default: return "Invalid format";
     }
+  }
+
+  if (type === 'gst' && !hasValidGstinChecksum(trimmedValue)) {
+    return "Invalid GSTIN checksum: Please re-check the 15-digit GSTIN";
   }
   
   return null;

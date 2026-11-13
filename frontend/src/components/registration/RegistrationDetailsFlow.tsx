@@ -27,7 +27,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { cn } from '../../lib/utils';
-import { indiaStates, indiaStatesDistricts } from '../../data/indiaStatesDistricts';
+import { indiaStates, indiaStatesDistricts, findMatchedState, findMatchedDistrict, stateByCode } from '../../data/indiaStatesDistricts';
+import { formatGstVerificationError, hasValidGstinChecksum, getExpectedGstinChecksum } from '../../features/shared/gstVerification';
 import { aadhaarKycApi, type AadhaarKycStatus } from '../../features/kyc/aadhaarKycApi';
 import { focusFirstError } from '../../utils/accessibility';
 import { sanitizeIndianMobileInput, sanitizePersonNameInput, validateIndianMobile, validatePersonName } from '../../lib/validation';
@@ -241,146 +242,109 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
   };
 
   const fetchGstDetails = async () => {
-    if (!formData.gstin || formData.gstin.length !== 15) {
-      setGstError('Please enter a valid 15-digit GSTIN');
+    const rawGstin = String(formData.gstin || '').trim().toUpperCase();
+    if (!rawGstin || rawGstin.length !== 15) {
+      const msg = 'Please enter a valid 15-digit GSTIN';
+      setGstError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+    if (!GSTIN_REGEX.test(rawGstin)) {
+      const msg = 'Invalid GSTIN format. Must be 15 characters (e.g. 21AAAAA0000A1Z5).';
+      setGstError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    const expectedCheckChar = getExpectedGstinChecksum(rawGstin);
+    if (expectedCheckChar && expectedCheckChar !== rawGstin[14]) {
+      const statePrefix = rawGstin.slice(0, 2);
+      const stateName = stateByCode[statePrefix] || `State code ${statePrefix}`;
+      const msg = `Invalid GSTIN checksum. Last character should be '${expectedCheckChar}' for ${stateName} (${statePrefix}). Please check your GST certificate.`;
+      setGstError(msg);
+      toast.error(msg);
       return;
     }
 
     setIsFetchingGst(true);
     setGstError('');
     try {
-      const res = await api.fetch(`/api/utils/gst-verify/${formData.gstin}`);
+      const res = await api.fetch(`/api/utils/gst-verify/${rawGstin}`);
+      const resolvedPan = rawGstin.slice(2, 12);
 
-      const resolvedPan = formData.gstin.toUpperCase().slice(2, 12);
       if (res.ok) {
         const data = await res.json();
-        // If API returns valid name, auto-populate
-        if (data?.legalName || data?.tradeName) {
-          const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
-          const apiPan = String(data.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-          const finalPan = PAN_RE.test(apiPan) ? apiPan : resolvedPan;
+        const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
+        const apiPan = String(data.pan || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const finalPan = PAN_RE.test(apiPan) ? apiPan : resolvedPan;
 
-          const matchedState = data.state ? data.state.trim().toUpperCase() : '';
-          let matchedDistrict = '';
-          if (matchedState) {
-            const districts = indiaStatesDistricts[matchedState] || [];
-            const searchDistrict = (data.district || '').trim().toLowerCase();
-            const searchCity = (data.city || '').trim().toLowerCase();
-            const found = districts.find(d => {
-              const dl = d.toLowerCase();
-              return (searchDistrict && dl === searchDistrict) || (searchCity && dl === searchCity);
-            }) || districts.find(d => {
-              const dl = d.toLowerCase();
-              return (searchDistrict && (dl.includes(searchDistrict) || searchDistrict.includes(dl))) ||
-                     (searchCity && (dl.includes(searchCity) || searchCity.includes(dl)));
-            });
-            if (found) matchedDistrict = found;
+        const stateNameFromGst = data.state || stateByCode[rawGstin.slice(0, 2)] || '';
+        const matchedState = findMatchedState(stateNameFromGst) || stateNameFromGst;
+        const districtSearch = data.district || data.city || '';
+        const matchedDistrict = findMatchedDistrict(matchedState, districtSearch) || districtSearch;
+
+        const fetchedOrgName = (data.legalName || data.legalBusinessName || data.tradeName || data.organizationName || '').trim();
+        const fetchedAddress = (data.address || data.businessAddress || data.registeredOfficeAddress || '').trim();
+        const fetchedCity = (data.city || matchedDistrict || '').trim();
+        const fetchedPincode = (data.pincode ? String(data.pincode).replace(/\D/g, '').slice(0, 6) : '');
+
+        setFormData((prev: any) => ({
+          ...prev,
+          businessName: fetchedOrgName || prev.businessName,
+          organisation: fetchedOrgName || prev.organisation,
+          orgPan: finalPan || prev.orgPan,
+          state: matchedState || prev.state,
+          district: matchedDistrict || prev.district,
+          city: fetchedCity || prev.city,
+          pincode: fetchedPincode || prev.pincode,
+          officeZoneName: fetchedAddress || prev.officeZoneName,
+          address: fetchedAddress || prev.address
+        }));
+
+        setSelectedDocs((prev) => {
+          if (!prev.includes('gstCert')) {
+            return [...prev, 'gstCert'];
           }
+          return prev;
+        });
 
-          setFormData((prev: any) => ({
-            ...prev,
-            businessName: (data.legalName || data.tradeName || '').trim() || prev.businessName,
-            organisation: (data.legalName || data.tradeName || '').trim() || prev.organisation,
-            orgPan: finalPan || prev.orgPan,
-            state: matchedState || prev.state,
-            district: matchedDistrict || prev.district,
-            city: (data.city || matchedDistrict || '').trim() || prev.city,
-            pincode: (data.pincode ? String(data.pincode).replace(/\D/g, '').slice(0, 6) : '') || prev.pincode,
-            officeZoneName: (data.address || data.businessAddress || '').trim() || prev.officeZoneName,
-            address: (data.address || data.businessAddress || '').trim() || prev.address
-          }));
-          
-          setSelectedDocs((prev) => {
-            if (!prev.includes('gstCert')) {
-              return [...prev, 'gstCert'];
-            }
-            return prev;
-          });
+        setVerifiedGstDetails({
+          ...data,
+          gstin: rawGstin,
+          pan: finalPan,
+          legalName: fetchedOrgName,
+          address: fetchedAddress,
+          state: matchedState,
+          city: fetchedCity,
+          district: matchedDistrict,
+          pincode: fetchedPincode
+        });
+        setIsGstVerified(true);
+        setGstError('');
 
-          setVerifiedGstDetails(data);
-          setIsGstVerified(true);
-          toast.success(`GST verified: ${data.status || 'Active'}`);
+        if (fetchedOrgName) {
+          if (data.partial) {
+            toast.info(data.message || 'GST verified. Some address details could not be retrieved, please complete them manually.');
+          } else {
+            toast.success(`GST verified: ${fetchedOrgName}`);
+          }
         } else {
-          // API succeeded but returned empty/null data: allow manual entry
-          setFormData((prev: any) => ({
-            ...prev,
-            orgPan: resolvedPan || prev.orgPan
-          }));
-          setVerifiedGstDetails({
-            gstin: formData.gstin,
-            pan: resolvedPan,
-            legalName: '',
-            address: '',
-            state: '',
-            city: '',
-            district: '',
-            pincode: '',
-            registrationDate: ''
-          });
-          setIsGstVerified(true);
-          setGstError('');
-          toast.warning('Please enter your Organisation Name .');
+          toast.info(data.message || 'GSTIN is valid, but organisation name was not returned by the registry. Please enter it manually.');
         }
       } else {
-        // API returned error: check if it's already registered
-        let errorMsg = '';
-        let isRegistered = false;
-        try {
-          const errData = await res.json();
-          if (errData?.code === 'GST_ALREADY_REGISTERED' || errData?.message?.includes('already registered')) {
-            errorMsg = 'GST is already registered. Please use another GSTIN.';
-            isRegistered = true;
-          } else if (errData?.message) {
-            errorMsg = errData.message;
-          }
-        } catch {}
-
-        if (isRegistered) {
-          setGstError(errorMsg);
-          setIsGstVerified(false);
-          toast.error(errorMsg);
-        } else {
-          // API returned other error: allow manual entry
-          setFormData((prev: any) => ({
-            ...prev,
-            orgPan: resolvedPan || prev.orgPan
-          }));
-          setVerifiedGstDetails({
-            gstin: formData.gstin,
-            pan: resolvedPan,
-            legalName: '',
-            address: '',
-            state: '',
-            city: '',
-            district: '',
-            pincode: '',
-            registrationDate: ''
-          });
-          setIsGstVerified(true);
-          setGstError('');
-          toast.warning('Please enter your Organisation Name.');
-        }
+        const errData = await res.json().catch(() => ({}));
+        const errorMsg = formatGstVerificationError(errData);
+        setGstError(errorMsg);
+        setIsGstVerified(false);
+        toast.error(errorMsg);
       }
-    } catch (err) {
-      const resolvedPan = formData.gstin.toUpperCase().slice(2, 12);
-      setFormData((prev: any) => ({
-        ...prev,
-        orgPan: resolvedPan || prev.orgPan
-      }));
-      setVerifiedGstDetails({
-        gstin: formData.gstin,
-        pan: resolvedPan,
-        legalName: '',
-        address: '',
-        state: '',
-        city: '',
-        district: '',
-        pincode: '',
-        registrationDate: ''
-      });
-      setIsGstVerified(true);
-      setGstError('');
-      toast.warning('Please enter your Organisation Name.');
+    } catch (err: any) {
+      const msg = 'Unable to reach GST verification service. Please try again later or enter details manually.';
+      setGstError(msg);
+      setIsGstVerified(false);
+      toast.error(msg);
     } finally {
       setIsFetchingGst(false);
     }
@@ -1354,7 +1318,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <label htmlFor="reg-flow-buyer-gstin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
                           GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-start">
                           <Input
                             id="reg-flow-buyer-gstin"
                             placeholder="Enter GSTIN"
@@ -1367,6 +1331,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             }}
                             maxLength={15}
                             error={gstError}
+                            isValid={isGstVerified && !gstError}
                             className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
                           />
                           <Button
@@ -1374,7 +1339,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             variant="outline"
                             onClick={fetchGstDetails}
                             disabled={isFetchingGst || !formData.gstin}
-                            className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
+                            className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold shrink-0"
                           >
                             {isFetchingGst ? '...' : 'Fetch'}
                           </Button>
@@ -1499,7 +1464,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         <label htmlFor="reg-flow-seller-gstin" className="flex items-center gap-1 text-[13px] font-semibold text-slate-700">
                           GSTIN (Optional) <Info className="h-3.5 w-3.5 text-slate-400" aria-hidden="true" />
                         </label>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-start">
                           <Input
                             id="reg-flow-seller-gstin"
                             placeholder="Enter GSTIN"
@@ -1512,6 +1477,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             }}
                             maxLength={15}
                             error={gstError}
+                            isValid={isGstVerified && !gstError}
                             className="h-10 rounded border-slate-300 bg-white text-[13px] flex-1"
                           />
                           <Button
@@ -1519,7 +1485,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                             variant="outline"
                             onClick={fetchGstDetails}
                             disabled={isFetchingGst || !formData.gstin}
-                            className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold"
+                            className="h-10 px-4 rounded bg-slate-50 text-slate-600 border-slate-300 text-[12px] font-bold shrink-0"
                           >
                             {isFetchingGst ? '...' : 'Fetch'}
                           </Button>

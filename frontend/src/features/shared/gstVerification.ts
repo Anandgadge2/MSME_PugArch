@@ -40,3 +40,41 @@ export const isGstProviderUnavailable = (error: any) => {
     /api setu returned status|provider is unreachable|service is not configured/i.test(combined)
   );
 };
+
+export const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
+export const GSTIN_CHECKSUM_CHARS = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+export const hasValidGstinChecksum = (value: unknown): boolean => {
+  const gstin = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (!GSTIN_REGEX.test(gstin)) return false;
+
+  let factor = 2;
+  let sum = 0;
+  for (let index = 13; index >= 0; index -= 1) {
+    const codePoint = GSTIN_CHECKSUM_CHARS.indexOf(gstin[index]);
+    const product = codePoint * factor;
+    sum += Math.floor(product / 36) + (product % 36);
+    factor = factor === 2 ? 1 : 2;
+  }
+
+  const checksumIndex = (36 - (sum % 36)) % 36;
+  return GSTIN_CHECKSUM_CHARS[checksumIndex] === gstin[14];
+};
+
+export const getExpectedGstinChecksum = (value: unknown): string => {
+  const gstin = String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (gstin.length < 14) return '';
+
+  let factor = 2;
+  let sum = 0;
+  for (let index = 13; index >= 0; index -= 1) {
+    const codePoint = GSTIN_CHECKSUM_CHARS.indexOf(gstin[index]);
+    if (codePoint === -1) return '';
+    const product = codePoint * factor;
+    sum += Math.floor(product / 36) + (product % 36);
+    factor = factor === 2 ? 1 : 2;
+  }
+
+  const checksumIndex = (36 - (sum % 36)) % 36;
+  return GSTIN_CHECKSUM_CHARS[checksumIndex] || '';
+};
