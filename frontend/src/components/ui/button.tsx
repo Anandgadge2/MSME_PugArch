@@ -8,6 +8,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   isLoading?: boolean;
   loadingText?: React.ReactNode;
   debounceMs?: number;
+  showSpinner?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -18,6 +19,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       size = 'md',
       isLoading = false,
       loadingText,
+      showSpinner = true,
       children,
       disabled,
       onClick,
@@ -113,7 +115,9 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       >
         {isBusy ? (
           <>
-            <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+            {showSpinner && (
+              <Loader2 className="h-4 w-4 animate-spin text-current" forceGold={false} />
+            )}
             <span className="sr-only">Processing, please wait...</span>
             {loadingText !== undefined ? loadingText : children}
           </>

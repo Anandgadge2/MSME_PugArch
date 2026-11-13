@@ -314,10 +314,12 @@ export default function ClarificationPanel({
               type="button"
               onClick={submitQuestion}
               disabled={ask.isPending || question.trim().length < 3}
+              isLoading={ask.isPending}
+              loadingText="Sending..."
               className="h-9 rounded-xl bg-[#12335f] px-4 text-xs font-black uppercase text-white hover:bg-[#0b2447] flex items-center gap-1.5"
             >
-              {ask.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Send className="h-3.5 w-3.5" aria-hidden="true" />}
-              {ask.isPending ? 'Sending' : 'Send Question'}
+              <Send className="h-3.5 w-3.5" aria-hidden="true" />
+              Send Question
             </Button>
           </div>
         </div>
@@ -421,9 +423,11 @@ export default function ClarificationPanel({
                     type="button"
                     onClick={() => submitReply(c.id)}
                     disabled={reply.isPending || !(replyDrafts[c.id] || '').trim()}
+                    isLoading={reply.isPending}
+                    loadingText="Publishing Answer..."
                     className="h-8 rounded-lg bg-emerald-600 px-3 text-[11px] font-black uppercase text-white hover:bg-emerald-700 flex items-center gap-1.5"
                   >
-                    {reply.isPending ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <Send className="h-3 w-3" aria-hidden="true" />}
+                    <Send className="h-3 w-3" aria-hidden="true" />
                     Publish Answer
                   </Button>
                 </div>

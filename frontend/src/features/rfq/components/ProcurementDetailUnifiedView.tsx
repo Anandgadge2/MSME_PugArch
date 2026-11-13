@@ -13329,10 +13329,12 @@ export function ProcurementDetailUnifiedView(
                       type="button"
                       size="sm"
                       disabled={isIssuingPO}
+                      isLoading={isIssuingPO}
+                      loadingText="Issuing PO..."
                       onClick={() => handleIssueActivePO(effectiveActiveOrder.id)}
                       className="h-8 px-3.5 gap-1.5 text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white shadow-xs rounded-lg cursor-pointer"
                     >
-                      {isIssuingPO ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
+                      <Send className="h-3.5 w-3.5" />
                       Issue PO to Supplier
                     </Button>
                   </div>

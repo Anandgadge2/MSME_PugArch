@@ -314,9 +314,11 @@ export default function ApprovalQueuePage() {
                                         size="sm"
                                         onClick={handleBulkApprove}
                                         disabled={!canApproveApprovals || approveMut.isPending}
+                                        isLoading={approveMut.isPending}
+                                        loadingText="Approving..."
                                         className="h-8 bg-emerald-600 text-white hover:bg-emerald-700 text-[10px] font-black uppercase"
                                     >
-                                        {approveMut.isPending ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <CheckCircle2 className="mr-1 h-3 w-3" />}
+                                        <CheckCircle2 className="mr-1 h-3 w-3" />
                                         Approve Selected
                                     </Button>
                                 </div>
@@ -614,9 +616,11 @@ function PendingList({ items, isLoading, error, expandedId, onExpand, onApprove,
                                 <Button
                                     onClick={() => onApprove(approval)}
                                     disabled={approving || !canApprove}
+                                    isLoading={approving}
+                                    loadingText="Approving..."
                                     className="bg-emerald-600 text-white hover:bg-emerald-700"
                                 >
-                                    {approving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                                    <CheckCircle2 className="mr-2 h-4 w-4" />
                                     Approve
                                 </Button>
                             </div>
@@ -759,9 +763,11 @@ function ActionModal({ type, approval, onClose, onReject, onClarify, pending }: 
                         <Button
                             onClick={() => isReject ? onReject(note.trim()) : onClarify(note.trim())}
                             disabled={pending || note.trim().length < minLen}
+                            isLoading={pending}
+                            loadingText={isReject ? 'Rejecting...' : 'Sending...'}
                             className={isReject ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-blue-600 text-white hover:bg-blue-700'}
                         >
-                            {pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (isReject ? <XCircle className="mr-2 h-4 w-4" /> : <MessageCircle className="mr-2 h-4 w-4" />)}
+                            {isReject ? <XCircle className="mr-2 h-4 w-4" /> : <MessageCircle className="mr-2 h-4 w-4" />}
                             {isReject ? 'Confirm Rejection' : 'Send Clarification'}
                         </Button>
                     </div>

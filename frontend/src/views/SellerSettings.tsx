@@ -795,9 +795,11 @@ export default function SellerSettings() {
                         <Button
                           onClick={handleGetProfileOtp}
                           disabled={isLoading}
+                          isLoading={isLoading}
+                          loadingText="GETTING OTP..."
                           className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100 rounded"
                         >
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "GET OTP"}
+                          GET OTP
                         </Button>
                       ) : (
                         <>
@@ -812,9 +814,11 @@ export default function SellerSettings() {
                           <Button
                             onClick={handleUpdateProfile}
                             disabled={isLoading || !profileOtp}
+                            isLoading={isLoading}
+                            loadingText="UPDATING PROFILE..."
                             className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-emerald-100 rounded"
                           >
-                            {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : "UPDATE PROFILE"}
+                            UPDATE PROFILE
                           </Button>
                         </>
                       )}
@@ -998,8 +1002,8 @@ export default function SellerSettings() {
                 </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-end gap-4 pt-4 border-t border-gray-100">
-                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
-                    {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE AADHAAR'}
+                  <Button onClick={handleUpdateAadhaar} disabled={isLoading} isLoading={isLoading} loadingText="UPDATING AADHAAR..." className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100">
+                    UPDATE AADHAAR
                   </Button>
                 </div>
               </div>
@@ -1194,9 +1198,11 @@ export default function SellerSettings() {
                   <Button 
                     onClick={handleChangePassword} 
                     disabled={isLoading || !passwordForm.newPassword || !passwordOtpSent || !passwordOtp} 
+                    isLoading={isLoading}
+                    loadingText="CHANGING PASSWORD..."
                     className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
-                    {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'CHANGE PASSWORD'}
+                    CHANGE PASSWORD
                   </Button>
                 </div>
               </div>
@@ -1257,9 +1263,11 @@ export default function SellerSettings() {
                   <Button 
                     onClick={handleChangeEmail} 
                     disabled={isLoading || !emailForm.newEmail || emailForm.newEmail !== emailForm.confirmEmail || !emailOtpSent || !emailOtp || !emailPassword} 
+                    isLoading={isLoading}
+                    loadingText="UPDATING EMAIL..."
                     className="w-full sm:w-auto bg-[#12335f] hover:bg-slate-800 text-white font-bold px-10 h-12 uppercase tracking-widest text-xs shadow-lg shadow-blue-100"
                   >
-                    {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'UPDATE EMAIL'}
+                    UPDATE EMAIL
                   </Button>
                 </div>
               </div>
@@ -1340,9 +1348,11 @@ export default function SellerSettings() {
                 <Button 
                   onClick={handleCloseAccount} 
                   disabled={isLoading}
+                  isLoading={isLoading}
+                  loadingText="DELETING..."
                   className="bg-red-600 hover:bg-red-700 text-white font-bold px-6 h-12 uppercase tracking-widest text-xs shadow-lg shadow-red-100"
                 >
-                  {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'DELETE PERMANENTLY'}
+                  DELETE PERMANENTLY
                 </Button>
               </div>
             </div>
