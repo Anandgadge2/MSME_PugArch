@@ -2116,7 +2116,14 @@ app.get('/api/utils/gst-verify/:gstin', async (req, res) => {
       pincode: normalized.pincode,
       hasAddress: Boolean(normalized.address)
     }, 'Mapped GST provider output');
-    res.json(maskSensitive(normalized));
+    const masked = maskSensitive(normalized) as unknown as Record<string, unknown>;
+    const source = normalized as unknown as Record<string, unknown>;
+    masked.pan = source.pan;
+    masked.gstin = source.gstin;
+    masked.gstNumber = source.gstNumber;
+    masked.requestedGstin = source.requestedGstin;
+    masked.responseGstin = source.responseGstin;
+    res.json(masked);
   } catch (err: any) {
     logger.error({ err, requestId: req.id }, 'GST verification failed.');
     res.status(err?.statusCode || 500).json({

@@ -1,4 +1,5 @@
 import https from 'https';
+import tls from 'tls';
 import crypto from 'crypto';
 import prisma from '../lib/prisma.js';
 import { logger } from '../config/logger.js';
@@ -220,9 +221,9 @@ const isApiSetuHost = (url: string) => {
   }
 };
 
-const apiSetuCa = () => {
+const apiSetuCa = (): string[] => {
   const configured = clean(process.env.APISETU_CA_CERT).replace(/\\n/g, '\n');
-  return configured || undefined;
+  return [...tls.rootCertificates, ...(configured ? [configured] : [APISETU_ROOT_CA])];
 };
 
 const apiSetuAllowInsecureTls = () =>

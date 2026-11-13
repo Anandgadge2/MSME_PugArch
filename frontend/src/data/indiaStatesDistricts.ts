@@ -39,3 +39,76 @@ export const indiaStatesDistricts: Record<string, string[]> = {
 };
 
 export const indiaStates = Object.keys(indiaStatesDistricts);
+
+export const stateByCode: Record<string, string> = {
+  '01': 'JAMMU & KASHMIR',
+  '02': 'HIMACHAL PRADESH',
+  '03': 'PUNJAB',
+  '04': 'CHANDIGARH',
+  '05': 'UTTARAKHAND',
+  '06': 'HARYANA',
+  '07': 'DELHI',
+  '08': 'RAJASTHAN',
+  '09': 'UTTAR PRADESH',
+  '10': 'BIHAR',
+  '11': 'SIKKIM',
+  '12': 'ARUNACHAL PRADESH',
+  '13': 'NAGALAND',
+  '14': 'MANIPUR',
+  '15': 'MIZORAM',
+  '16': 'TRIPURA',
+  '17': 'MEGHALAYA',
+  '18': 'ASSAM',
+  '19': 'WEST BENGAL',
+  '20': 'JHARKHAND',
+  '21': 'ODISHA',
+  '22': 'CHHATTISGARH',
+  '23': 'MADHYA PRADESH',
+  '24': 'GUJARAT',
+  '25': 'DAMAN & DIU',
+  '26': 'DADRA & NAGAR HAVELI',
+  '27': 'MAHARASHTRA',
+  '28': 'ANDHRA PRADESH',
+  '29': 'KARNATAKA',
+  '30': 'GOA',
+  '31': 'LAKSHADWEEP',
+  '32': 'KERALA',
+  '33': 'TAMIL NADU',
+  '34': 'PUDUCHERRY',
+  '35': 'ANDAMAN & NICOBAR',
+  '36': 'TELANGANA',
+  '37': 'ANDHRA PRADESH',
+  '38': 'LADAKH'
+};
+
+export const findMatchedState = (stateName?: string): string => {
+  if (!stateName) return '';
+  const clean = (str: string) => str
+    .toUpperCase()
+    .replace(/\bAND\b/g, '&')
+    .replace(/\bISLANDS\b/g, '')
+    .replace(/[^A-Z0-9&]/g, '')
+    .trim();
+  const normalizedSearch = clean(stateName);
+  const matched = indiaStates.find(s => {
+    const normalizedState = clean(s);
+    return normalizedState === normalizedSearch || 
+           normalizedState.includes(normalizedSearch) || 
+           normalizedSearch.includes(normalizedState);
+  });
+  return matched || '';
+};
+
+export const findMatchedDistrict = (matchedState?: string, districtName?: string): string => {
+  if (!matchedState || !districtName) return '';
+  const districts = indiaStatesDistricts[matchedState] || [];
+  const clean = (str: string) => str.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const normalizedSearch = clean(districtName);
+  const matched = districts.find(d => {
+    const normalizedDistrict = clean(d);
+    return normalizedDistrict === normalizedSearch ||
+           normalizedDistrict.includes(normalizedSearch) ||
+           normalizedSearch.includes(normalizedDistrict);
+  });
+  return matched || '';
+};
