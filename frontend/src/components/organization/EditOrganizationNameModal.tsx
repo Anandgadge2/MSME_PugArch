@@ -221,9 +221,10 @@ export function EditOrganizationNameModal({
                     type="button"
                     onClick={() => handleSendOtp('email')}
                     disabled={isLoading || !newName.trim() || newName.trim() === currentName?.trim()}
+                    isLoading={isLoading}
                     className="h-10 bg-blue-900 hover:bg-blue-800 text-white font-bold text-xs uppercase tracking-wider gap-2"
                   >
-                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    <ShieldCheck className="w-4 h-4" />
                     Send Verification OTP
                   </Button>
                 </div>
@@ -287,9 +288,10 @@ export function EditOrganizationNameModal({
                   <Button
                     type="submit"
                     disabled={isLoading || otp.length !== 6}
+                    isLoading={isLoading}
                     className="h-10 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs uppercase tracking-wider gap-2"
                   >
-                    {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShieldCheck className="w-4 h-4" />}
+                    <ShieldCheck className="w-4 h-4" />
                     Confirm & Update Name
                   </Button>
                 </div>

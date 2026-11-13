@@ -232,8 +232,8 @@ export function CreateOrganizationModal({ open, onClose, onCreated }: CreateOrga
                         <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={submitting} className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
-                            {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Building2 className="mr-2 h-4 w-4" />}
+                        <Button type="submit" disabled={submitting} isLoading={submitting} loadingText="Creating Organisation..." className="bg-[#12335f] text-white hover:bg-[#0e2a4f]">
+                            <Building2 className="mr-2 h-4 w-4" />
                             Create Organisation
                         </Button>
                     </div>

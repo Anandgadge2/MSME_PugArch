@@ -1685,9 +1685,10 @@ export function PaymentReceiptViewModal({
                       type="button"
                       onClick={handleReject}
                       disabled={rejecting || !rejectReason.trim()}
+                      isLoading={rejecting}
+                      loadingText="Rejecting..."
                       className="h-8.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white px-4 text-xs font-bold shadow-xs cursor-pointer disabled:opacity-60"
                     >
-                      {rejecting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" aria-hidden="true" /> : null}
                       <span>Confirm Rejection</span>
                     </Button>
                   </div>

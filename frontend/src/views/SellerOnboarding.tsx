@@ -1739,8 +1739,8 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
                         />
                       </div>
                       <div className="flex justify-end gap-2.5 sm:gap-3 pt-4">
-                        <Button onClick={verifyAndContinue} disabled={isLoading} className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
-                          {isLoading ? <Loader2 className="animate-spin h-4 w-4" /> : 'Verify & Continue'}
+                        <Button onClick={verifyAndContinue} disabled={isLoading} isLoading={isLoading} loadingText="Verifying..." className="bg-[#12335f] hover:bg-slate-800 rounded-xl px-8 h-12 font-black uppercase text-xs tracking-widest text-white shadow-lg shadow-blue-100">
+                          Verify & Continue
                         </Button>
                       </div>
                     </div>

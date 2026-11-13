@@ -2609,6 +2609,8 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   <Button
                     onClick={handleSubmit}
                     disabled={isLoading || !formData.businessName}
+                    isLoading={isLoading}
+                    loadingText="Activating..."
                     className={cn(
                       "h-10 px-8 rounded text-[13px] font-bold tracking-wider shadow-sm flex items-center gap-2 transition-all",
                       !formData.businessName
@@ -2616,8 +2618,7 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                         : "bg-[#12335f] hover:bg-slate-800 text-white"
                     )}
                   >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {isLoading ? 'Activating...' : 'Activate Profile'}
+                    Activate Profile
                   </Button>
                 ) : currentSubStep === 2 && role === 'buyer' && (isAadhaarVerified || isPanVerified) ? null : currentSubStep < 4 ? (
                   <Button
@@ -2642,10 +2643,11 @@ export default function RegistrationDetailsFlow({ businessType, shgType = '', on
                   <Button
                     onClick={handleSubmit}
                     disabled={isLoading || !isPasswordStrong(formData.password) || formData.password !== formData.confirmPassword}
+                    isLoading={isLoading}
+                    loadingText="Creating..."
                     className="h-10 px-8 rounded bg-[#12335f] hover:bg-slate-800 text-white text-[13px] font-bold  tracking-wider shadow-sm flex items-center gap-2"
                   >
-                    {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                    {isLoading ? 'Creating...' : 'Create Account'}
+                    Create Account
                   </Button>
                 )}
               </div>

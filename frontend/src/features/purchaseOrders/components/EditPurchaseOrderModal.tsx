@@ -976,24 +976,20 @@ export function EditPurchaseOrderModal({
                     variant="outline"
                     onClick={() => handleSaveDraft(false)}
                     disabled={submitting || uploadingPdf}
+                    isLoading={submitting}
                     className="h-10 px-4 text-xs font-black uppercase tracking-wider border-slate-300 text-slate-800 hover:bg-slate-50"
                   >
-                    {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Draft'}
+                    Save Draft
                   </Button>
                   <Button
                     type="button"
                     onClick={() => handleSaveDraft(true)}
                     disabled={submitting || uploadingPdf}
+                    isLoading={submitting}
                     className="h-10 px-4 bg-[#12335f] hover:bg-[#0e2a4f] text-white text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5"
                   >
-                    {submitting ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-4 w-4" />
-                        <span>Save & Issue PO</span>
-                      </>
-                    )}
+                    <CheckCircle2 className="h-4 w-4" />
+                    <span>Save & Issue PO</span>
                   </Button>
                 </>
               ) : (
@@ -1001,16 +997,11 @@ export function EditPurchaseOrderModal({
                   type="button"
                   onClick={() => handleSaveDraft(false)}
                   disabled={submitting || uploadingPdf}
+                  isLoading={submitting}
                   className="h-10 px-5 bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-black uppercase tracking-wider shadow-sm flex items-center gap-1.5"
                 >
-                  {submitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-4 w-4" />
-                      <span>Submit Amendment</span>
-                    </>
-                  )}
+                  <CheckCircle2 className="h-4 w-4" />
+                  <span>Submit Amendment</span>
                 </Button>
               )}
             </div>

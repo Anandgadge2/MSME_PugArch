@@ -437,9 +437,11 @@ export function ConsentManagementCard() {
               size="sm"
               onClick={handleExportPersonalData}
               disabled={isExporting}
+              isLoading={isExporting}
+              loadingText="Exporting..."
               className="w-full text-xs font-bold border-slate-300 hover:bg-slate-100 rounded-xl"
             >
-              {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" aria-hidden="true" /> : <Download className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />}
+              <Download className="h-3.5 w-3.5 mr-1.5" aria-hidden="true" />
               Export My Data (JSON)
             </Button>
           </div>
@@ -602,9 +604,10 @@ export function ConsentManagementCard() {
                     type="button"
                     onClick={handleConfirmWithdraw}
                     disabled={isSubmitting}
+                    isLoading={isSubmitting}
+                    loadingText="Withdrawing..."
                     className="bg-red-600 hover:bg-red-700 text-white rounded-xl font-black uppercase text-xs tracking-wider"
                   >
-                    {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" aria-hidden="true" /> : null}
                     Confirm Withdrawal
                   </Button>
                 </div>
