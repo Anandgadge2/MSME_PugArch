@@ -2750,7 +2750,7 @@ router.get('/onboarding/me', authenticate, asyncRoute(async (req, res) => {
   ok(res, user);
 }));
 
-router.put('/seller/onboarding', authenticate, authorize('seller'), asyncRoute(async (req, res) => {
+router.put('/seller/onboarding', authenticate, requireAccountType('seller', 'shg', 'admin', 'master_admin'), asyncRoute(async (req, res) => {
   const data = req.body || {};
   const exists = await db.sellerProfile.findUnique({ where: { userId: userId(req) } });
   if (!exists) {
@@ -3320,7 +3320,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
   });
   if (!user) throw new ApiError(404, 'User not found');
 
-  if (user.role === 'seller') {
+  if (user.role === 'seller' || user.role === 'shg') {
     const profile = user.sellerProfile;
     if (!profile) throw new ApiError(400, 'Seller profile not found');
 
@@ -3447,7 +3447,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
     }
   }
 
-  if (user.role === 'seller') {
+  if (user.role === 'seller' || user.role === 'shg') {
     if (STRICT_VERIFICATION.PAN === false) finalSectionStatus.pan = 'approved';
     if (STRICT_VERIFICATION.BANK === false) finalSectionStatus.bank = 'approved';
     if (STRICT_VERIFICATION.UDYAM === false) finalSectionStatus.additional = 'approved';
@@ -3468,7 +3468,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
       where: { userId: user.id },
       data: { verificationStatusEnum: 'UNDER_REVIEW', verificationStatus: 'UNDER_REVIEW' }
     });
-  } else if (user.role === 'seller') {
+  } else if (user.role === 'seller' || user.role === 'shg') {
     await db.sellerProfile.updateMany({
       where: { userId: user.id },
       data: { verificationStatusEnum: 'UNDER_REVIEW' }
@@ -3539,9 +3539,9 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
 
 router.post('/onboarding/upload-document', authenticate, upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   if (!req.file) throw new ApiError(400, 'Document file is required', 'DOCUMENT_REQUIRED');
-  if (req.user?.role !== 'seller' && req.user?.role !== 'shg') throw new ApiError(403, 'Document upload is only available for seller/SHG accounts', 'FORBIDDEN');
+  if (!req.user || !userId(req)) throw new ApiError(401, 'Authentication required', 'AUTH_REQUIRED');
 
-  // Upsert sellerProfile — SHG users register as 'seller' role but may not have
+  // Upsert sellerProfile — SHG and seller users (as well as admins/buyers testing onboarding)
   // completed the PAN step yet. We auto-create a minimal profile so they can
   // upload their SHG verification documents independently.
   let profile = await db.sellerProfile.findUnique({ where: { userId: userId(req) } });
