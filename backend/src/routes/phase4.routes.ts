@@ -11,6 +11,7 @@ import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { getGCSBucket, getGCSBucketName } from '../config/gcs.js';
+import { applyCorsHeaders } from '../config/cors.js';
 import { getFileContent, getSignedUrl, uploadFile } from '../services/storage/storage.service.js';
 import { authenticate, optionalAuthenticate, authorize, authorizeAdmin, requireAccountType, requirePermission, type AuthRequest } from '../middleware/auth.js';
 import { verifyAccessToken } from '../services/token.service.js';
@@ -3839,7 +3840,7 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  applyCorsHeaders(req, res);
   res.setHeader('ETag', etag);
 
   // Relax frame restrictions so portal iframes can display document preview inline
@@ -3984,7 +3985,7 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
       res.setHeader('Content-Type', optimized.contentType);
       res.setHeader('Content-Length', optimized.buffer.length);
       res.setHeader('Cache-Control', cacheControl);
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      applyCorsHeaders(req, res);
       return res.end(optimized.buffer);
     }
   } catch {}
@@ -4001,7 +4002,7 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
       res.setHeader('Content-Type', optimized.contentType);
       res.setHeader('Content-Length', optimized.buffer.length);
       res.setHeader('Cache-Control', cacheControl);
-      res.setHeader('Access-Control-Allow-Origin', '*');
+      applyCorsHeaders(req, res);
       return res.end(optimized.buffer);
     }
   } catch {}
@@ -4020,7 +4021,7 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
         res.setHeader('Content-Type', optimized.contentType);
         res.setHeader('Content-Length', optimized.buffer.length);
         res.setHeader('Cache-Control', cacheControl);
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        applyCorsHeaders(req, res);
         return res.end(optimized.buffer);
       }
     }
@@ -4054,7 +4055,7 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
         res.setHeader('Content-Type', optimized.contentType);
         res.setHeader('Content-Length', optimized.buffer.length);
         res.setHeader('Cache-Control', cacheControl);
-        res.setHeader('Access-Control-Allow-Origin', '*');
+        applyCorsHeaders(req, res);
         return res.end(optimized.buffer);
       }
     }
@@ -4117,7 +4118,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   res.setHeader('Content-Type', file.contentType);
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  applyCorsHeaders(req, res);
   res.setHeader('ETag', etag);
 
   // Relax frame restrictions so portal iframes can display document preview inline
@@ -4177,7 +4178,7 @@ router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: A
   res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
   res.setHeader('Content-Length', file.buffer.length);
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  applyCorsHeaders(req, res);
   res.setHeader('Cache-Control', 'private, no-store');
   return res.end(file.buffer);
 }));

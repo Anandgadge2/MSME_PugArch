@@ -25,6 +25,7 @@ export const BASE_URL = getBaseUrl().replace(/\/$/, '');
 
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
+  if (endpoint.startsWith('/proxy')) return endpoint;
 
   // On Vercel, BASE_URL is intentionally empty — all /api/* requests are
   // same-origin and proxied to the backend via Next.js rewrites.
@@ -42,7 +43,7 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
     if (gcsMatch && !trimmed.includes('X-Goog-Algorithm')) {
-      return `${BASE_URL}/api/files/raw/${gcsMatch[1]}`;
+      return `/api/files/raw/${gcsMatch[1]}`;
     }
     return trimmed;
   }
