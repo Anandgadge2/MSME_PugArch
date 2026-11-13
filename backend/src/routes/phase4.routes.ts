@@ -3842,6 +3842,10 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
 
+  // Relax frame restrictions so portal iframes can display document preview inline
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', "default-src 'self' data: blob:; frame-ancestors 'self' https://www.jsgsmile.in https://jsgsmile.in http://localhost:3000 http://localhost:5000;");
+
   if (req.headers['if-none-match'] === etag) {
     res.status(304);
     return res.end();
@@ -4115,6 +4119,10 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   res.setHeader('Content-Disposition', `inline; filename="${filename}"; filename*=UTF-8''${filename}`);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('ETag', etag);
+
+  // Relax frame restrictions so portal iframes can display document preview inline
+  res.removeHeader('X-Frame-Options');
+  res.setHeader('Content-Security-Policy', "default-src 'self' data: blob:; frame-ancestors 'self' https://www.jsgsmile.in https://jsgsmile.in http://localhost:3000 http://localhost:5000;");
 
   if (req.headers['if-none-match'] === etag) {
     res.status(304);

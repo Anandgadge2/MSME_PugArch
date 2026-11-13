@@ -181,6 +181,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
   }
 
   const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
+  const isRealToken = Boolean(token && token !== 'null' && token !== 'undefined' && token !== 'cookie-session');
   const hasSession = Boolean(token || getCookieValue('csrfToken'));
 
   // Check in-memory cache first for instant (< 1ms) resolution
@@ -199,9 +200,10 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
   }
 
   const authHeaders: Record<string, string> = {};
-  if (token && token !== 'null' && token !== 'undefined') {
+  if (isRealToken) {
     authHeaders['Authorization'] = `Bearer ${token}`;
   }
+  const authQuery = isRealToken ? `?token=${encodeURIComponent(token!)}` : '';
 
   const resolvePreview = async (): Promise<DocumentPreview> => {
     // 2. If we have a file ID, fetch direct signed URL first for fast cloud CDN streaming
@@ -245,12 +247,24 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
 
       // Fallback / Private documents: stream binary Blob via authenticated API with bearer token
       const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
+      const viewEndpointWithAuth = `${viewEndpoint}${authQuery}`;
       try {
-        const res = await api.fetch(viewEndpoint, {
+        let res = await api.fetch(viewEndpointWithAuth, {
           method: 'GET',
           headers: authHeaders,
           skipCache: true
         });
+
+        // In local development, if cross-origin cookie issue occurs, try same-origin rewrite proxy
+        if (!res.ok && typeof window !== 'undefined' && window.location.origin.includes('localhost:3000')) {
+          try {
+            res = await fetch(`/proxy${viewEndpointWithAuth}`, {
+              method: 'GET',
+              headers: authHeaders,
+              credentials: 'include'
+            });
+          } catch {}
+        }
 
         if (res.ok) {
           const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
@@ -262,13 +276,12 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
           const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
           const blobUrl = URL.createObjectURL(blob);
-          const authParam = token ? `?token=${encodeURIComponent(token)}` : '';
           const result: DocumentPreview = {
             label,
             url: blobUrl,
             mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
             fileId: fileId ?? undefined,
-            originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authParam}`
+            originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authQuery}`
           };
           signedUrlCache.set(fileId, hasSession, result, blob);
           if (result.mode === 'image') predecodeImage(result.url);
@@ -302,8 +315,8 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
             const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
             const blobUrl = URL.createObjectURL(blob);
-            const authParam = (token && absoluteFallbackUrl.includes('/api/files/'))
-              ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(token)}` : `?token=${encodeURIComponent(token)}`)
+            const authParam = (isRealToken && absoluteFallbackUrl.includes('/api/files/'))
+              ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(token!)}` : `?token=${encodeURIComponent(token!)}`)
               : '';
             const result: DocumentPreview = {
               label,
@@ -321,15 +334,16 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         }
       }
 
+      const mode = getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '');
       const result: DocumentPreview = {
         label,
-        url: absoluteFallbackUrl,
-        mode: getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || ''),
+        url: mode === 'pdf' ? '' : absoluteFallbackUrl,
+        mode,
         fileId: fileId ?? undefined,
         originalUrl: absoluteFallbackUrl
       };
-      if (fileId) signedUrlCache.set(fileId, hasSession, result);
-      if (result.mode === 'image') predecodeImage(result.url);
+      if (fileId && result.url) signedUrlCache.set(fileId, hasSession, result);
+      if (result.mode === 'image' && result.url) predecodeImage(result.url);
       return result;
     }
 

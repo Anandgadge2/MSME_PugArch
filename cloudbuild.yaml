@@ -82,7 +82,7 @@ steps:
 substitutions:
   _LOCATION: 'asia-south1'
   _AR_REPO: 'msme-repo'
-  _TAG: 'latest'
+  _TAG: '${COMMIT_SHA}'
   _BACKEND_URL: 'https://msme-backend-yvkunmwzya-el.a.run.app'
   _NEXT_PUBLIC_API_URL: '/proxy'
   _NEXT_PUBLIC_APP_URL: 'https://www.jsgsmile.in'

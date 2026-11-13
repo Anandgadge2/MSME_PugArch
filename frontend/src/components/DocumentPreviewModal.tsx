@@ -61,25 +61,10 @@ export function DocumentPreviewModal({
     return () => clearTimeout(timer);
   }, [isPdfLoading]);
 
-  // Derived state: reset controls if the previewed document URL changes
-  useEffect(() => {
-    if (previewDocument) {
-      const url = previewDocument.url?.trim() || null;
-      setResolvedImageSrc(previewDocument.mode === 'image' ? url : null);
-      setResolvedPdfSrc(previewDocument.mode === 'pdf' ? url : null);
-      setScale(1);
-      setRotation(0);
-      setIsImageLoading(previewDocument.mode === 'image' && Boolean(url));
-      setImageLoadError(previewDocument.mode === 'image' && !url);
-      setIsPdfLoading(previewDocument.mode === 'pdf' && Boolean(url));
-      setPdfLoadError(previewDocument.mode === 'pdf' && !url);
-      recoveryAttemptedRef.current = false;
-    }
-  }, [previewDocument?.url, previewDocument?.mode]);
-
   // Attempt resilient recovery if PDF fails to load inside iframe
   const handlePdfError = useCallback(async () => {
     if (recoveryAttemptedRef.current || !previewDocument) {
+      setResolvedPdfSrc(null);
       setPdfLoadError(true);
       setIsPdfLoading(false);
       return;
@@ -91,34 +76,98 @@ export function DocumentPreviewModal({
       if (previewDocument.fileId) {
         signedUrlCache.delete(previewDocument.fileId);
       }
-      const recoveryUrl = previewDocument.fileId
-        ? `/api/files/${previewDocument.fileId}/view`
-        : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
-            ? (resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl)
-            : (resolveMediaUrl(previewDocument.url) || previewDocument.url));
+      const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
+      const isRealToken = Boolean(token && token !== 'null' && token !== 'undefined' && token !== 'cookie-session');
+      const authQuery = isRealToken ? `?token=${encodeURIComponent(token!)}` : '';
+      const authHeaders: Record<string, string> = {};
+      if (isRealToken) {
+        authHeaders['Authorization'] = `Bearer ${token}`;
+      }
 
-      if (!recoveryUrl.startsWith('blob:')) {
-        const res = await api.fetch(recoveryUrl, { skipCache: true });
-        if (res.ok) {
-          const rawBlob = await res.blob();
-          if (rawBlob.size > 0) {
-            const pdfBlob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type: 'application/pdf' });
-            const blobUrl = URL.createObjectURL(pdfBlob);
-            createdBlobUrlsRef.current.push(blobUrl);
-            setResolvedPdfSrc(blobUrl);
-            setPdfLoadError(false);
-            setIsPdfLoading(false);
-            return;
+      const endpointsToTry: string[] = [];
+      if (previewDocument.fileId) {
+        endpointsToTry.push(`/api/files/${previewDocument.fileId}/view${authQuery}`);
+        endpointsToTry.push(`/proxy/api/files/${previewDocument.fileId}/view${authQuery}`);
+      }
+      if (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')) {
+        const orig = resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl;
+        if (!endpointsToTry.includes(orig)) endpointsToTry.push(orig);
+      }
+      if (previewDocument.url && !previewDocument.url.startsWith('blob:')) {
+        const u = resolveMediaUrl(previewDocument.url) || previewDocument.url;
+        if (!endpointsToTry.includes(u)) endpointsToTry.push(u);
+      }
+
+      for (const ep of endpointsToTry) {
+        try {
+          const res = await api.fetch(ep, { headers: authHeaders, skipCache: true });
+          if (res.ok) {
+            const rawBlob = await res.blob();
+            if (rawBlob.size > 0) {
+              const pdfBlob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type: 'application/pdf' });
+              const blobUrl = URL.createObjectURL(pdfBlob);
+              createdBlobUrlsRef.current.push(blobUrl);
+              setResolvedPdfSrc(blobUrl);
+              setPdfLoadError(false);
+              setIsPdfLoading(false);
+              return;
+            }
           }
+        } catch {
+          // Try next endpoint
         }
       }
     } catch (err) {
       console.warn('[DocumentPreviewModal] PDF recovery failed:', err);
     }
 
+    setResolvedPdfSrc(null);
     setPdfLoadError(true);
     setIsPdfLoading(false);
   }, [previewDocument]);
+
+  // Derived state: reset controls if the previewed document URL changes
+  useEffect(() => {
+    if (previewDocument) {
+      const url = previewDocument.url?.trim() || null;
+      setScale(1);
+      setRotation(0);
+      recoveryAttemptedRef.current = false;
+
+      if (previewDocument.mode === 'image') {
+        setResolvedImageSrc(url);
+        setIsImageLoading(Boolean(url));
+        setImageLoadError(!url);
+        setResolvedPdfSrc(null);
+        setIsPdfLoading(false);
+        setPdfLoadError(false);
+      } else if (previewDocument.mode === 'pdf') {
+        setResolvedImageSrc(null);
+        setIsImageLoading(false);
+        setImageLoadError(false);
+
+        // An iframe can ONLY safely render in-memory blob: URLs!
+        // Never put raw HTTP/HTTPS URLs into iframe src directly.
+        if (url && (url.startsWith('blob:') || url.startsWith('data:'))) {
+          setResolvedPdfSrc(url);
+          setIsPdfLoading(false);
+          setPdfLoadError(false);
+        } else {
+          // If url is not an in-memory blob URL, do not mount raw HTTP URL into iframe.
+          // Start background blob resolution immediately to prevent "localhost refused to connect".
+          setResolvedPdfSrc(null);
+          setIsPdfLoading(true);
+          setPdfLoadError(false);
+          void handlePdfError();
+        }
+      } else {
+        setResolvedImageSrc(null);
+        setResolvedPdfSrc(null);
+        setIsImageLoading(false);
+        setIsPdfLoading(false);
+      }
+    }
+  }, [previewDocument?.url, previewDocument?.mode, handlePdfError]);
 
   // Attempt resilient recovery if image fails to load directly
   const handleImageError = useCallback(async () => {

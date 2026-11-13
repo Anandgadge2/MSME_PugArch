@@ -1008,7 +1008,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
       const buffer = await Promise.race([
         readGcpStream(),
-        new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('GCS read timeout')), 3000))
+        new Promise<Buffer>((_, reject) => setTimeout(() => reject(new Error('GCS read timeout')), 15000))
       ]);
 
       if (buffer && buffer.length > 0) {
