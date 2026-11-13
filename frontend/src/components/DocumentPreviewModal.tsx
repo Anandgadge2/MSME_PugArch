@@ -44,16 +44,11 @@ export function DocumentPreviewModal({
   const recoveryAttemptedRef = useRef(false);
   const createdBlobUrlsRef = useRef<string[]>([]);
 
-  // Cleanup created blob URLs after safe timeout so quick modal re-opens don't hit revoked blob URLs
+  // Resilient memory management: do not prematurely revoke live object URLs while user inspects documents
   useEffect(() => {
     return () => {
-      const urlsToClean = [...createdBlobUrlsRef.current];
+      // Kept clean without aggressive premature revocation to ensure quick re-opens never hit net::ERR_FILE_NOT_FOUND
       createdBlobUrlsRef.current = [];
-      setTimeout(() => {
-        urlsToClean.forEach(url => {
-          try { URL.revokeObjectURL(url); } catch {}
-        });
-      }, 60_000);
     };
   }, []);
 
@@ -104,7 +99,7 @@ export function DocumentPreviewModal({
 
       for (const ep of endpointsToTry) {
         try {
-          const res = await api.fetch(ep, { headers: authHeaders, credentials: 'omit', skipCache: true });
+          const res = await api.fetch(ep, { headers: authHeaders, credentials: 'include', skipCache: true });
           if (res.ok) {
             const rawBlob = await res.blob();
             if (rawBlob.size > 0) {
@@ -163,11 +158,18 @@ export function DocumentPreviewModal({
         setIsImageLoading(false);
         setImageLoadError(false);
 
-        if (url) {
+        const isCloudSignedUrl = url && (
+          url.includes('X-Goog-Algorithm') ||
+          url.includes('Signature=') ||
+          url.includes('GoogleAccessId=')
+        );
+
+        if (url && (url.startsWith('blob:') || isCloudSignedUrl)) {
           setResolvedPdfSrc(url);
           setIsPdfLoading(false);
           setPdfLoadError(false);
         } else {
+          // Resolve internal / relative API endpoints via authenticated fetch
           setResolvedPdfSrc(null);
           setIsPdfLoading(true);
           setPdfLoadError(false);

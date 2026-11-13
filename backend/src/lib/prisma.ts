@@ -160,7 +160,7 @@ const prismaClientSingleton = () => {
     const isServerless = !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_VERSION || process.env.LAMBDA_TASK_ROOT);
     const connectionLimit = process.env.PRISMA_CONNECTION_LIMIT || (isServerless ? '2' : '10');
     const poolTimeout = process.env.PRISMA_POOL_TIMEOUT || '30';
-    dbUrl += (dbUrl.includes('?') ? '&' : '?') + `connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}`;
+    dbUrl += (dbUrl.includes('?') ? '&' : '?') + `connection_limit=${connectionLimit}&pool_timeout=${poolTimeout}&connect_timeout=30&socket_timeout=60`;
   }
   const client = new PrismaClient(dbUrl ? {
     datasources: {
@@ -269,7 +269,22 @@ const prismaClientSingleton = () => {
             }
           }
 
-          const rawResult = await query(args);
+          let rawResult: any;
+          try {
+            rawResult = await query(args);
+          } catch (err: any) {
+            const isConnectionDrop =
+              err?.code === 'P1017' ||
+              err?.code === 'P1001' ||
+              /Server has closed the connection|Connection terminated unexpectedly|connection closed|Connection timed out|socket hang up/i.test(err?.message || '');
+            if (isConnectionDrop) {
+              console.warn(`[Prisma] Stale pooled connection dropped (${err?.code || 'P1017'}). Reconnecting and retrying operation...`);
+              await new Promise(resolve => setTimeout(resolve, 250));
+              rawResult = await query(args);
+            } else {
+              throw err;
+            }
+          }
           // STQC Data-at-Rest Decryption: Transparently decrypt ciphertext on read
           const result = decryptDeep(rawResult);
           if (

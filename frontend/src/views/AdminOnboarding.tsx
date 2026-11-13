@@ -1507,13 +1507,22 @@ export default function AdminOnboarding() {
   };
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
-    const key = fileAsset?.fileAssetId || fileAsset?.fileId || fileAsset?.id || fileAsset?.url || label;
+    const isGenuineFileAsset = Boolean(
+      fileAsset?.originalName ||
+      fileAsset?.mimeType ||
+      fileAsset?.storageProvider ||
+      fileAsset?.storageProviderEnum ||
+      fileAsset?.key ||
+      fileAsset?.bucket
+    );
+    const resolvedFileId = fileAsset?.fileAssetId || fileAsset?.fileAsset?.id || fileAsset?.fileId || (isGenuineFileAsset ? fileAsset?.id : null);
+    const key = resolvedFileId || fileAsset?.url || fileAsset?.fileUrl || label;
     try {
       setViewingDocKey(key);
       const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
         ? {
             ...fileAsset,
-            fileId: fileAsset.fileAssetId || fileAsset.fileAsset?.id || fileAsset.fileId || (fileAsset.fileAsset ? null : fileAsset.id),
+            fileId: resolvedFileId,
             url: fileAsset.url || fileAsset.fileAsset?.url || fileAsset.fileUrl || fileAsset.documentUrl
           }
         : fileAsset;
@@ -4313,17 +4322,25 @@ export default function AdminOnboarding() {
                                       <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between gap-2">
                                         <button
                                           type="button"
-                                          onClick={() => handleViewDocument({ ...doc, ...(file || {}), fileAssetId: doc.fileAssetId || file?.id, fileId: doc.fileId || file?.id || doc.fileAssetId, url: doc.url || getDocumentUrl(file) }, doc.label || doc.documentType)}
-                                          disabled={viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType)}
+                                          onClick={() => handleViewDocument({
+                                            ...doc,
+                                            fileAssetId: doc.fileAssetId || file?.id,
+                                            fileId: doc.fileAssetId || file?.id,
+                                            fileAsset: file,
+                                            originalName: file?.originalName || doc.originalName,
+                                            mimeType: file?.mimeType || doc.mimeType,
+                                            url: doc.url || getDocumentUrl(file)
+                                          }, doc.label || doc.documentType)}
+                                          disabled={viewingDocKey === (doc.fileAssetId || file?.id || doc.url || doc.id || doc.documentType)}
                                           className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors disabled:opacity-60"
                                           aria-label={`View ${doc.label || doc.documentType || "document"}`}
                                         >
-                                          {viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType) ? (
+                                          {viewingDocKey === (doc.fileAssetId || file?.id || doc.url || doc.id || doc.documentType) ? (
                                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#12335f]" aria-hidden="true" />
                                           ) : (
                                             <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                           )}
-                                          <span>{viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType) ? "Opening..." : "View Document"}</span>
+                                          <span>{viewingDocKey === (doc.fileAssetId || file?.id || doc.url || doc.id || doc.documentType) ? "Opening..." : "View Document"}</span>
                                         </button>
                                         <button
                                           type="button"

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 /**
@@ -12,7 +12,7 @@ import { usePathname, useSearchParams } from 'next/navigation';
  * 3. Custom 'app:route-start' events
  * 4. Next.js pathname and searchParams transitions
  */
-export function NavigationProgressBar() {
+function NavigationProgressBarInner() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isNavigating, setIsNavigating] = useState(false);
@@ -34,23 +34,32 @@ export function NavigationProgressBar() {
   useEffect(() => {
     let progressTimer: NodeJS.Timeout;
     let safetyTimer: NodeJS.Timeout;
+    let startTimer: NodeJS.Timeout;
 
     const startProgress = () => {
-      setIsNavigating(true);
-      setProgress(25);
+      // Defer all state updates to the macrotask queue via setTimeout.
+      // This prevents "useInsertionEffect must not schedule updates" errors when Next.js
+      // performs router transitions or history state manipulations inside React's commit phase.
+      clearTimeout(startTimer);
+      startTimer = setTimeout(() => {
+        setIsNavigating(true);
+        setProgress(25);
 
-      progressTimer = setTimeout(() => {
-        setProgress(60);
+        clearTimeout(progressTimer);
         progressTimer = setTimeout(() => {
-          setProgress(85);
-        }, 300);
-      }, 150);
+          setProgress(60);
+          progressTimer = setTimeout(() => {
+            setProgress(85);
+          }, 300);
+        }, 150);
 
-      // Safety fallback: auto-clear after 10s if route transition aborts
-      safetyTimer = setTimeout(() => {
-        setIsNavigating(false);
-        setProgress(0);
-      }, 10000);
+        // Safety fallback: auto-clear after 10s if route transition aborts
+        clearTimeout(safetyTimer);
+        safetyTimer = setTimeout(() => {
+          setIsNavigating(false);
+          setProgress(0);
+        }, 10000);
+      }, 0);
     };
 
     const handleCustomRouteStart = () => {
@@ -87,7 +96,7 @@ export function NavigationProgressBar() {
     window.history.pushState = function (...args) {
       const url = args[2];
       if (url && typeof url === 'string' && url.startsWith('/') && url !== window.location.pathname) {
-        startProgress();
+        setTimeout(startProgress, 0);
       }
       return originalPushState.apply(this, args);
     };
@@ -95,7 +104,7 @@ export function NavigationProgressBar() {
     window.history.replaceState = function (...args) {
       const url = args[2];
       if (url && typeof url === 'string' && url.startsWith('/') && url !== window.location.pathname) {
-        startProgress();
+        setTimeout(startProgress, 0);
       }
       return originalReplaceState.apply(this, args);
     };
@@ -108,6 +117,7 @@ export function NavigationProgressBar() {
       window.history.replaceState = originalReplaceState;
       window.removeEventListener('app:route-start', handleCustomRouteStart as EventListener);
       document.removeEventListener('click', handleClick, true);
+      clearTimeout(startTimer);
       clearTimeout(progressTimer);
       clearTimeout(safetyTimer);
     };
@@ -129,6 +139,14 @@ export function NavigationProgressBar() {
         }}
       />
     </div>
+  );
+}
+
+export function NavigationProgressBar() {
+  return (
+    <Suspense fallback={null}>
+      <NavigationProgressBarInner />
+    </Suspense>
   );
 }
 

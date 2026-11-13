@@ -42,7 +42,7 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
     return trimmed;
   }
   // Strip any repeating /proxy/proxy/ chains completely
-  const normalized = trimmed.replace(/^(\/?proxy)+/i, '/proxy');
+  const normalized = trimmed.replace(/(?:\/?proxy\/+)+/gi, '/proxy/').replace(/^\/?proxy$/i, '/proxy');
   if (normalized.startsWith('/proxy/') || normalized === '/proxy') {
     return normalized;
   }

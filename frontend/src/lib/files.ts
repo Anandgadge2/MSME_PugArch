@@ -1,5 +1,5 @@
 import { api, unwrapApiData, BASE_URL, resolveMediaUrl } from './api';
-import { getCookieValue } from './auth';
+import { getCookieValue, getStoredToken } from './auth';
 import { triggerBrowserDownload, canInitiateDownload } from './downloadManager';
 
 export type DocumentPreviewMode = 'image' | 'pdf' | 'office' | 'google';
@@ -217,19 +217,30 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         }
       }
     }
-    // 3. Fallback: fileAsset.id (only if no URL or explicit fileAssetId)
+    // 3. Fallback: fileAsset.id ONLY if this object is genuinely a FileAsset record
+    // (do NOT treat arbitrary sellerProfile.id or sellerDocument.id as a fileAsset ID)
     if (!fileId) {
-      if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
-        fileId = fileAsset.id;
-      } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
-        fileId = Number(fileAsset.id);
+      const isGenuineFileAsset = Boolean(
+        fileAsset.originalName ||
+        fileAsset.mimeType ||
+        fileAsset.storageProvider ||
+        fileAsset.storageProviderEnum ||
+        fileAsset.key ||
+        fileAsset.bucket
+      );
+      if (isGenuineFileAsset) {
+        if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
+          fileId = fileAsset.id;
+        } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+          fileId = Number(fileAsset.id);
+        }
       }
     }
   }
 
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
-  const isRealToken = Boolean(token && token !== 'null' && token !== 'undefined' && token !== 'cookie-session');
-  const hasSession = Boolean(token || getCookieValue('csrfToken'));
+  const storedToken = typeof window !== 'undefined' ? (getStoredToken() || localStorage.getItem('token') || localStorage.getItem('msme_auth_token')) : null;
+  const isRealToken = Boolean(storedToken && storedToken !== 'null' && storedToken !== 'undefined' && storedToken !== 'cookie-session');
+  const hasSession = Boolean(storedToken || getCookieValue('csrfToken') || getCookieValue('token'));
 
   // Check in-memory cache first for instant (< 1ms) resolution
   if (fileId) {
@@ -248,9 +259,9 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
 
   const authHeaders: Record<string, string> = {};
   if (isRealToken) {
-    authHeaders['Authorization'] = `Bearer ${token}`;
+    authHeaders['Authorization'] = `Bearer ${storedToken}`;
   }
-  const authQuery = isRealToken ? `?token=${encodeURIComponent(token!)}` : '';
+  const authQuery = isRealToken ? `?token=${encodeURIComponent(storedToken!)}` : '';
 
   const resolvePreview = async (): Promise<DocumentPreview> => {
     // 2. If we have a file ID, fetch direct signed URL first for fast cloud CDN streaming
@@ -260,6 +271,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         const res = await api.fetch(signedUrlEndpoint, {
           method: 'GET',
           headers: authHeaders,
+          credentials: 'include',
           skipCache: true
         });
 
@@ -292,14 +304,14 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         // Fallback to viewEndpoint below
       }
 
-      // Fallback / Private documents: stream binary Blob via authenticated API with bearer token
+      // Fallback / Private documents: stream binary Blob via authenticated API with bearer token & credentials
       const viewEndpoint = hasSession ? `/api/files/${fileId}/view` : `/api/public/files/${fileId}/view`;
       const viewEndpointWithAuth = `${viewEndpoint}${authQuery}`;
       try {
         let res = await api.fetch(viewEndpointWithAuth, {
           method: 'GET',
           headers: authHeaders,
-          credentials: 'omit',
+          credentials: 'include',
           skipCache: true
         });
 
@@ -309,7 +321,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             res = await fetch(`/proxy${viewEndpointWithAuth}`, {
               method: 'GET',
               headers: authHeaders,
-              credentials: 'omit'
+              credentials: 'include'
             });
           } catch {}
         }
@@ -376,7 +388,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
             const blobUrl = URL.createObjectURL(blob);
             const authParam = (isRealToken && absoluteFallbackUrl.includes('/api/files/'))
-              ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(token!)}` : `?token=${encodeURIComponent(token!)}`)
+              ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(storedToken!)}` : `?token=${encodeURIComponent(storedToken!)}`)
               : '';
             const finalMode = (detected.mode === 'image' || detected.mode === 'pdf')
               ? detected.mode
