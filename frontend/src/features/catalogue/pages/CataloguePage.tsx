@@ -33,6 +33,7 @@ import { CompareTray } from '../../marketplace/components/CompareTray';
 import { resolveMarketplaceImage } from '../../marketplace/utils/marketplaceImages';
 import { setCartConflictState } from '../../marketplace/hooks/useMarketplaceCart';
 import { CatalogueImportModal } from '../components/CatalogueImportModal';
+import { triggerRouteProgress } from '../../../components/ui/NavigationProgressBar';
 import type { ImportBatchDto } from '../api';
 
 type CatalogueMode = 'buyer' | 'seller' | 'admin';
@@ -516,6 +517,8 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const [buyerActions, setBuyerActions] = useState<Record<string, BuyerActionState>>({});
   const [importKind, setImportKind] = useState<'product' | 'service' | null>(null);
   const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
+  const [isOpeningProduct, setIsOpeningProduct] = useState(false);
+  const [isOpeningService, setIsOpeningService] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportBatchDto[]>([]);
   const [openActionId, setOpenActionId] = useState<string | number | null>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
@@ -1025,10 +1028,30 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
           <div className="flex flex-wrap gap-2.5">
             {mode === 'seller' && (
               <>
-                <Button disabled={!sellerApproved} onClick={() => router.push('/seller/products/new')} className="h-10 rounded-2xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wider text-white shadow-md border-0 hover:bg-emerald-400">
+                <Button
+                  disabled={!sellerApproved || isOpeningProduct || isOpeningService}
+                  isLoading={isOpeningProduct}
+                  loadingText="Opening..."
+                  onClick={() => {
+                    setIsOpeningProduct(true);
+                    triggerRouteProgress();
+                    router.push('/seller/products/new');
+                  }}
+                  className="h-10 rounded-2xl bg-emerald-500 px-4 text-xs font-black uppercase tracking-wider text-white shadow-md border-0 hover:bg-emerald-400 cursor-pointer"
+                >
                   <PackagePlus className="mr-2 h-4 w-4" /> Add Product
                 </Button>
-                <Button disabled={!sellerApproved} onClick={() => router.push('/seller/services/new')} className="h-10 rounded-2xl border border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-white/15">
+                <Button
+                  disabled={!sellerApproved || isOpeningProduct || isOpeningService}
+                  isLoading={isOpeningService}
+                  loadingText="Opening..."
+                  onClick={() => {
+                    setIsOpeningService(true);
+                    triggerRouteProgress();
+                    router.push('/seller/services/new');
+                  }}
+                  className="h-10 rounded-2xl border border-white/20 bg-white/10 px-4 text-xs font-black uppercase tracking-wider text-white shadow-md hover:bg-white/15 cursor-pointer"
+                >
                   <Wrench className="mr-2 h-4 w-4" /> Add Service
                 </Button>
                 <Button disabled={!sellerApproved} variant="outline" onClick={() => setImportKind(kindFilter === 'service' ? 'service' : 'product')} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">

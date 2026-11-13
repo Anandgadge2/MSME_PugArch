@@ -143,6 +143,7 @@ import { MarketplaceHeader } from './features/marketplace/components/Marketplace
 import { GlobalCartConflictModal } from './features/marketplace/components/GlobalCartConflictModal';
 import { OrgApprovalBanner } from './components/OrgApprovalBanner';
 import PremiumLoader from './components/PremiumLoader';
+import { NavigationProgressBar } from './components/ui/NavigationProgressBar';
 import { SubUserActivationGate } from './features/auth/components/SubUserActivationGate';
 import { PageTableSkeleton, ProfileSkeleton, BuyerProfileSkeleton, FormSectionSkeleton, StorefrontSkeleton, GridCardSkeleton, GrnDetailSkeleton } from './components/ui/skeleton';
 
@@ -220,7 +221,13 @@ function RouteFallback() {
     );
   }
 
-  if (pathname.includes('/create') || pathname.includes('/wizard') || pathname.includes('/register')) {
+  if (
+    pathname.includes('/create') ||
+    pathname.includes('/wizard') ||
+    pathname.includes('/register') ||
+    pathname.includes('/new') ||
+    pathname.includes('/edit')
+  ) {
     return (
       <div className="space-y-6 max-w-5xl mx-auto p-4 sm:p-6 animate-in fade-in duration-150">
         <div className="h-8 w-64 bg-slate-200/70 rounded-xl" />
@@ -1401,6 +1408,7 @@ export default function App({
 
   return (
     <>
+      <NavigationProgressBar />
       {isLoggingIn && (
         (() => { console.log('[APP LOADER] reason: LOGIN'); return true; })() && 
         <PremiumLoader
