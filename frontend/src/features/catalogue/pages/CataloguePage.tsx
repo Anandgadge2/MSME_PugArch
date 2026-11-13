@@ -515,6 +515,7 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
   const [addingItemKey, setAddingItemKey] = useState<string | null>(null);
   const [buyerActions, setBuyerActions] = useState<Record<string, BuyerActionState>>({});
   const [importKind, setImportKind] = useState<'product' | 'service' | null>(null);
+  const [isDownloadingTemplate, setIsDownloadingTemplate] = useState(false);
   const [importHistory, setImportHistory] = useState<ImportBatchDto[]>([]);
   const [openActionId, setOpenActionId] = useState<string | number | null>(null);
   const debouncedSearchTerm = useDebounce(searchTerm, 200);
@@ -1033,13 +1034,29 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                 <Button disabled={!sellerApproved} variant="outline" onClick={() => setImportKind(kindFilter === 'service' ? 'service' : 'product')} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15">
                   <FileUp className="mr-2 h-4 w-4" /> Import {kindFilter === 'service' ? 'Services' : kindFilter === 'product' ? 'Products' : ''}
                 </Button>
-                <Button disabled={!sellerApproved} variant="outline" onClick={() => {
-                  const isService = kindFilter === 'service';
-                  downloadCatalogueFile(
-                    isService ? '/api/catalogue/import/templates/services' : '/api/catalogue/import/templates/products',
-                    isService ? 'catalogue_services_template.xlsx' : 'catalogue_products_template.xlsx'
-                  ).catch(() => toast.error('Template download failed'));
-                }} className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15" title={kindFilter === 'service' ? 'Download Service Template' : 'Download Product Template'}>
+                <Button
+                  disabled={!sellerApproved || isDownloadingTemplate}
+                  isLoading={isDownloadingTemplate}
+                  loadingText="Downloading..."
+                  variant="outline"
+                  onClick={async () => {
+                    if (isDownloadingTemplate) return;
+                    setIsDownloadingTemplate(true);
+                    try {
+                      const isService = kindFilter === 'service';
+                      await downloadCatalogueFile(
+                        isService ? '/api/catalogue/import/templates/services' : '/api/catalogue/import/templates/products',
+                        isService ? 'catalogue_services_template.xlsx' : 'catalogue_products_template.xlsx'
+                      );
+                    } catch {
+                      toast.error('Template download failed');
+                    } finally {
+                      setIsDownloadingTemplate(false);
+                    }
+                  }}
+                  className="h-10 rounded-2xl border-white/20 bg-white/10 text-xs font-black uppercase tracking-wider text-white hover:bg-white/15"
+                  title={kindFilter === 'service' ? 'Download Service Template' : 'Download Product Template'}
+                >
                   <Download className="mr-2 h-4 w-4" /> {kindFilter === 'service' ? 'Service Template' : kindFilter === 'product' ? 'Product Template' : 'Template'}
                 </Button>
               </>

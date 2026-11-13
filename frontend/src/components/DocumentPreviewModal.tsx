@@ -1,19 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { X, ZoomIn, ZoomOut, RotateCw, RefreshCw, Download, Loader2, AlertCircle, ExternalLink } from 'lucide-react';
-import { signedUrlCache, type DocumentPreview } from '../lib/files';
+import { signedUrlCache, detectBlobMimeType, type DocumentPreview } from '../lib/files';
 import { FocusTrap } from './ui/FocusTrap';
 import { api, resolveMediaUrl } from '../lib/api';
 
 const getDocumentPreviewUrl = (url: string) => {
   if (!url) return url;
-
   const lowerUrl = url.toLowerCase();
   if (lowerUrl.includes('.png') || lowerUrl.includes('.jpg') || lowerUrl.includes('.jpeg') || lowerUrl.includes('.gif') || lowerUrl.includes('.webp') || lowerUrl.includes('.pdf')) {
     return url;
   }
-
-  return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  const isPublicHttps = url.startsWith('https://') && !url.includes('localhost') && !url.includes('127.0.0.1');
+  if (isPublicHttps) {
+    return `https://docs.google.com/gview?embedded=1&url=${encodeURIComponent(url)}`;
+  }
+  return url;
 };
 
 const getOfficePreviewUrl = (url: string) =>
@@ -87,14 +89,13 @@ export function DocumentPreviewModal({
       const endpointsToTry: string[] = [];
       if (previewDocument.fileId) {
         endpointsToTry.push(`/api/files/${previewDocument.fileId}/view${authQuery}`);
-        endpointsToTry.push(`/proxy/api/files/${previewDocument.fileId}/view${authQuery}`);
       }
       if (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')) {
-        const orig = resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl;
+        const orig = previewDocument.originalUrl;
         if (!endpointsToTry.includes(orig)) endpointsToTry.push(orig);
       }
-      if (previewDocument.url && !previewDocument.url.startsWith('blob:')) {
-        const u = resolveMediaUrl(previewDocument.url) || previewDocument.url;
+      if (previewDocument.url && !previewDocument.url.startsWith('blob:') && !previewDocument.url.startsWith('data:')) {
+        const u = previewDocument.url;
         if (!endpointsToTry.includes(u)) endpointsToTry.push(u);
       }
 
@@ -104,6 +105,19 @@ export function DocumentPreviewModal({
           if (res.ok) {
             const rawBlob = await res.blob();
             if (rawBlob.size > 0) {
+              const detected = await detectBlobMimeType(rawBlob);
+              if (detected.isValid && detected.mode === 'image') {
+                const imgBlob = rawBlob.type.startsWith('image/') ? rawBlob : new Blob([rawBlob], { type: detected.mime || 'image/png' });
+                const blobUrl = URL.createObjectURL(imgBlob);
+                createdBlobUrlsRef.current.push(blobUrl);
+                setResolvedImageSrc(blobUrl);
+                setIsImageLoading(false);
+                setImageLoadError(false);
+                setResolvedPdfSrc(null);
+                setPdfLoadError(false);
+                setIsPdfLoading(false);
+                return;
+              }
               const pdfBlob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type: 'application/pdf' });
               const blobUrl = URL.createObjectURL(pdfBlob);
               createdBlobUrlsRef.current.push(blobUrl);
@@ -188,15 +202,29 @@ export function DocumentPreviewModal({
       const recoveryUrl = previewDocument.fileId
         ? `/api/files/${previewDocument.fileId}/view`
         : (previewDocument.originalUrl && !previewDocument.originalUrl.startsWith('blob:')
-            ? (resolveMediaUrl(previewDocument.originalUrl) || previewDocument.originalUrl)
-            : (resolveMediaUrl(previewDocument.url) || previewDocument.url));
+            ? previewDocument.originalUrl
+            : (previewDocument.url && !previewDocument.url.startsWith('blob:') ? previewDocument.url : ''));
 
       // Avoid refetching a dead blob: URL
-      if (!recoveryUrl.startsWith('blob:')) {
+      if (recoveryUrl && !recoveryUrl.startsWith('blob:')) {
         const res = await api.fetch(recoveryUrl, { skipCache: true });
         if (res.ok) {
-          const blob = await res.blob();
-          if (blob.size > 0) {
+          const rawBlob = await res.blob();
+          if (rawBlob.size > 0) {
+            const detected = await detectBlobMimeType(rawBlob);
+            if (detected.isValid && detected.mode === 'pdf') {
+              const pdfBlob = rawBlob.type === 'application/pdf' ? rawBlob : new Blob([rawBlob], { type: 'application/pdf' });
+              const blobUrl = URL.createObjectURL(pdfBlob);
+              createdBlobUrlsRef.current.push(blobUrl);
+              setResolvedPdfSrc(blobUrl);
+              setPdfLoadError(false);
+              setIsPdfLoading(false);
+              setResolvedImageSrc(null);
+              setIsImageLoading(false);
+              setImageLoadError(false);
+              return;
+            }
+            const blob = rawBlob.type.startsWith('image/') ? rawBlob : new Blob([rawBlob], { type: detected.mime || 'image/png' });
             const blobUrl = URL.createObjectURL(blob);
             createdBlobUrlsRef.current.push(blobUrl);
             setResolvedImageSrc(blobUrl);
@@ -487,15 +515,40 @@ export function DocumentPreviewModal({
               )
             )}
             {previewDocument.mode === 'google' && (
-              previewDocument.url ? (
+              previewDocument.url && previewDocument.url.startsWith('https://') && !previewDocument.url.includes('localhost') ? (
                 <iframe
                   src={getDocumentPreviewUrl(previewDocument.url)}
                   title={previewDocument.label || 'Document Preview'}
                   className="h-full w-full"
                 />
               ) : (
-                <div className="flex h-full w-full items-center justify-center p-8 text-center text-slate-500">
-                  <p className="text-xs font-bold uppercase">No document URL provided</p>
+                <div className="flex h-full w-full flex-col items-center justify-center p-8 text-center text-slate-600">
+                  <AlertCircle className="h-12 w-12 text-slate-400 mb-3" />
+                  <p className="text-sm font-bold text-slate-800">Preview Not Supported Directly In Frame</p>
+                  <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                    This file format cannot be rendered inside the inline preview frame. You can open or download the original file directly.
+                  </p>
+                  {activeDownloadUrl ? (
+                    <div className="mt-4 flex items-center gap-2">
+                      <a
+                        href={activeDownloadUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 shadow-2xs hover:bg-slate-50"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Open Original</span>
+                      </a>
+                      <a
+                        href={activeDownloadUrl}
+                        download={previewDocument.label || 'document'}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-blue-600 px-3 text-xs font-bold text-white shadow-2xs hover:bg-blue-700"
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        <span>Download</span>
+                      </a>
+                    </div>
+                  ) : null}
                 </div>
               )
             )}

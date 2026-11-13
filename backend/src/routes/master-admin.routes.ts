@@ -96,7 +96,7 @@ const checkNotMasterAdmin = async (id: number, res: Response): Promise<boolean> 
 const allowedRoles = new Set(['master_admin', 'admin', 'buyer', 'seller', 'shg']);
 const allowedUserStatuses = new Set(['PENDING', 'ACTIVE', 'BLOCKED', 'SUSPENDED', 'DELETED']);
 const allowedVerificationStatuses = new Set(['PENDING', 'UNDER_REVIEW', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'FAILED', 'MANUAL_REVIEW_REQUIRED', 'EXPIRED']);
-const allowedOrganizationTypes = new Set(['MSME', 'PROPRIETORSHIP', 'PARTNERSHIP', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'TRUST', 'SOCIETY', 'STARTUP', 'NGO', 'EDUCATIONAL_INSTITUTION', 'GOVERNMENT', 'PSU']);
+const allowedOrganizationTypes = new Set(['MSME', 'PROPRIETORSHIP', 'PARTNERSHIP', 'PRIVATE_LIMITED', 'PUBLIC_LIMITED', 'LLP', 'TRUST', 'SOCIETY', 'STARTUP', 'NGO', 'EDUCATIONAL_INSTITUTION', 'GOVERNMENT', 'PSU', 'SHG']);
 const allowedMarketplaceStatuses = new Set(['DRAFT', 'ACTIVE', 'INACTIVE', 'OUT_OF_STOCK', 'ARCHIVED']);
 const allowedOrderStatuses = new Set(['generated', 'issued', 'accepted', 'in_fulfillment', 'delivered', 'completed', 'closed', 'cancelled', 'escrow_held']);
 const allowedInvoiceStatuses = new Set(['submitted', 'under_review', 'approved', 'rejected', 'paid', 'cancelled']);
@@ -235,17 +235,18 @@ const withAadhaarKyc = <T extends { kycVerifications?: any[] }>(record: T) => {
   const sellerProf = rest.sellerProfiles?.[0] || {};
   const sellerOffice = sellerProf.offices?.[0] || {};
   const buyerProf = rest.buyerProfiles?.[0] || {};
+  const shgProf = rest.shgProfiles || {};
 
   return {
     ...rest,
     aadhaarKyc: kycVerifications?.[0] || null,
     email: rest.email || primaryUser.email || '',
     mobile: rest.mobile || rest.phone || primaryUser.mobile || '',
-    address: rest.address || rest.addressLine1 || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
-    addressLine1: rest.addressLine1 || rest.address || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
-    state: rest.state || sellerProf.state || sellerOffice.state || buyerProf.state || regDetails.state || gstDetails.state || '',
-    district: rest.district || sellerProf.district || sellerOffice.district || buyerProf.city || regDetails.district || gstDetails.district || '',
-    pincode: rest.pincode || sellerOffice.pincode || buyerProf.pincode || regDetails.pincode || gstDetails.pincode || '',
+    address: rest.address || rest.addressLine1 || shgProf.village || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
+    addressLine1: rest.addressLine1 || rest.address || shgProf.village || sellerOffice.addressLine1 || sellerProf.registeredAddress || buyerProf.address || gstDetails.address || '',
+    state: rest.state || shgProf.state || sellerProf.state || sellerOffice.state || buyerProf.state || regDetails.state || gstDetails.state || '',
+    district: rest.district || shgProf.district || sellerProf.district || sellerOffice.district || buyerProf.city || regDetails.district || gstDetails.district || '',
+    pincode: rest.pincode || shgProf.pincode || sellerOffice.pincode || buyerProf.pincode || regDetails.pincode || gstDetails.pincode || '',
     panNumber: rest.panNumber || rest.pan || sellerProf.pan || regDetails.pan || gstDetails.pan || '',
     gstin: rest.gstin || sellerProf.gst || regDetails.gstin || gstDetails.gstin || ''
   };
@@ -658,6 +659,7 @@ const organizationSelect = {
   buyerProfiles: {
     select: { address: true, city: true, state: true, pincode: true }
   },
+  shgProfiles: true,
   kycVerifications: {
     where: { provider: 'MERIPEHCHAAN' as const, verificationType: 'AADHAAR' as const },
     take: 1,
@@ -1362,7 +1364,7 @@ router.get('/master-admin/organizations', ...masterOnly, wrap(async (req, res) =
   // Dynamically backfill/ensure organizations for registered users who are in review but don't have organization linked yet
   const pendingUsers = await prisma.user.findMany({
     where: {
-      role: { in: ['buyer', 'seller'] },
+      role: { in: ['buyer', 'seller', 'shg'] },
       onboardingStatus: 'under_compliance_review',
       organizationId: null
     },

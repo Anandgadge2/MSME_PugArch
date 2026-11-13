@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState, useMemo } from 'react';
+import { FormEvent, useEffect, useState, useMemo, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Eye,
@@ -239,6 +239,7 @@ export default function CatalogueFormPage() {
   const [otherCategoryName, setOtherCategoryName] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const isSavingRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState(blankForm);
@@ -544,6 +545,7 @@ export default function CatalogueFormPage() {
 
   const submitForm = async (event: FormEvent) => {
     event.preventDefault();
+    if (isSavingRef.current || saving) return;
     setAttemptedSubmit(true);
 
     if (!isAllValid) {
@@ -570,6 +572,7 @@ export default function CatalogueFormPage() {
       return;
     }
 
+    isSavingRef.current = true;
     setSaving(true);
     try {
       let resolvedCategoryId: number | null = form.categoryId && form.categoryId !== 'OTHER' ? Number(form.categoryId) : null;
@@ -671,6 +674,9 @@ export default function CatalogueFormPage() {
       toast.error(err instanceof Error ? err.message : 'Unable to save marketplace item');
     } finally {
       setSaving(false);
+      setTimeout(() => {
+        isSavingRef.current = false;
+      }, 200);
     }
   };
 

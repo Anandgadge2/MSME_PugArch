@@ -80,7 +80,7 @@ interface CachedPreviewEntry {
 
 class SignedUrlCacheManager {
   private cache = new Map<string, CachedPreviewEntry>();
-  private readonly TTL_MS = 15 * 60 * 1000; // 15-minute TTL for cloud signed URLs
+  private readonly TTL_MS = 4 * 60 * 1000; // 4-minute TTL to safely remain within 5-minute cloud signed URL expiry
   private readonly MAX_ENTRIES = 250;
 
   private makeKey(fileId: number | string, hasSession: boolean): string {
@@ -188,34 +188,41 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
     };
   }
 
+  const fallbackUrl = typeof fileAsset === 'object'
+    ? (fileAsset?.viewUrl || fileAsset?.downloadUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    : null;
+  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
+
   let fileId: number | null = null;
   if (typeof fileAsset === 'number') {
     fileId = fileAsset;
   } else if (typeof fileAsset === 'string' && /^\d+$/.test(fileAsset)) {
     fileId = Number(fileAsset);
   } else if (fileAsset && typeof fileAsset === 'object') {
+    // 1. Explicit fileAssetId or nested fileAsset.id
     if (fileAsset.fileAssetId && !isNaN(Number(fileAsset.fileAssetId))) {
       fileId = Number(fileAsset.fileAssetId);
+    } else if (fileAsset.fileAsset?.id && !isNaN(Number(fileAsset.fileAsset.id))) {
+      fileId = Number(fileAsset.fileAsset.id);
     } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
       fileId = Number(fileAsset.fileId);
-    } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
-      fileId = fileAsset.id;
-    } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
-      fileId = Number(fileAsset.id);
     }
-  }
-
-  const fallbackUrl = typeof fileAsset === 'object'
-    ? (fileAsset?.viewUrl || fileAsset?.downloadUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
-    : null;
-  const absoluteFallbackUrl = fallbackUrl ? getAbsoluteApiUrl(fallbackUrl) : '';
-
-  if (!fileId && fallbackUrl) {
-    const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
-    if (match && match[1]) {
-      const parsedId = Number(match[1]);
-      if (Number.isFinite(parsedId) && parsedId > 0) {
-        fileId = parsedId;
+    // 2. Extracted from authentic /api/files/:id URL
+    if (!fileId && fallbackUrl) {
+      const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
+      if (match && match[1]) {
+        const parsedId = Number(match[1]);
+        if (Number.isFinite(parsedId) && parsedId > 0) {
+          fileId = parsedId;
+        }
+      }
+    }
+    // 3. Fallback: fileAsset.id (only if no URL or explicit fileAssetId)
+    if (!fileId) {
+      if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
+        fileId = fileAsset.id;
+      } else if (typeof fileAsset.id === 'string' && /^\d+$/.test(fileAsset.id)) {
+        fileId = Number(fileAsset.id);
       }
     }
   }
@@ -313,13 +320,9 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const detected = await detectBlobMimeType(rawBlob);
 
           if (!detected.isValid) {
-            return {
-              label,
-              url: '',
-              mode: 'google',
-              fileId: fileId ?? undefined,
-              originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authQuery}`
-            };
+            // Not a valid previewable binary blob (e.g. error json/html returned)
+            // Fall through to fallbackUrl rather than returning broken empty preview
+            throw new Error('Invalid binary content returned from view endpoint');
           }
 
           const finalMime = detected.mime || contentType || rawBlob.type || 'application/octet-stream';
@@ -365,13 +368,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const detected = await detectBlobMimeType(rawBlob);
 
             if (!detected.isValid) {
-              return {
-                label,
-                url: '',
-                mode: 'google',
-                fileId: fileId ?? undefined,
-                originalUrl: absoluteFallbackUrl
-              };
+              throw new Error('Invalid binary content returned from fallback endpoint');
             }
 
             const finalMime = detected.mime || contentType || rawBlob.type || 'application/octet-stream';
@@ -402,7 +399,7 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
       const mode = getDocumentPreviewMode(absoluteFallbackUrl, fileAsset?.mimeType || '');
       const result: DocumentPreview = {
         label,
-        url: mode === 'pdf' ? '' : absoluteFallbackUrl,
+        url: absoluteFallbackUrl,
         mode,
         fileId: fileId ?? undefined,
         originalUrl: absoluteFallbackUrl

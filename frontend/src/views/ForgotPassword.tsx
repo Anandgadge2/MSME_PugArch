@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect , useRef } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { api } from '../lib/api';
@@ -12,6 +12,7 @@ export default function ForgotPassword() {
   const [newPassword, setNewPassword] = useState('');
   const [sent, setSent] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [enabledFeatures, setEnabledFeatures] = useState<string[]>([]);
   const [cooldown, setCooldown] = useState(0);
 
@@ -44,10 +45,12 @@ export default function ForgotPassword() {
 
   const requestReset = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
     if (!canSubmitIdentifier) {
       toast.error(isMobile ? 'Enter a valid registered Indian mobile number.' : 'Enter a valid registered email address.');
       return;
     }
+    isSubmittingRef.current = true;
     setIsLoading(true);
     try {
       const res = await api.post('/api/auth/forgot-password/send-otp', {
@@ -63,15 +66,20 @@ export default function ForgotPassword() {
       toast.error(err.message || 'Unable to request reset');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
   const verifyResetOtp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
     if (!/^\d{6}$/.test(otp)) {
       toast.error('Please enter a valid 6-digit OTP');
       return;
     }
+    isSubmittingRef.current = true;
     setIsLoading(true);
     try {
       const res = await api.post('/api/auth/forgot-password/verify-otp', {
@@ -87,15 +95,20 @@ export default function ForgotPassword() {
       toast.error(err.message || 'Unable to verify OTP');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
   const resetPassword = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
     if (!newPassword || newPassword.length < 12) {
       toast.error('Password must be at least 12 characters.');
       return;
     }
+    isSubmittingRef.current = true;
     setIsLoading(true);
     try {
       const res = await api.post('/api/auth/reset-password', {
@@ -116,6 +129,9 @@ export default function ForgotPassword() {
       toast.error(err.message || 'Unable to reset password');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 

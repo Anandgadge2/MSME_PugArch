@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback , useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { openFileAsset } from '../lib/files';
@@ -211,6 +211,7 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   const [officeSortKey, setOfficeSortKey] = useState<'name' | 'address' | 'gst'>('name');
   const [bankSortKey, setBankSortKey] = useState<'ifsc' | 'bankName' | 'accountNumber' | 'holderName' | 'pfms' | 'primary'>('bankName');
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [isFetching, setIsFetching] = useState(isStale);
   const initialSavedSections = Array.from(new Set([
     ...inferCompletedSellerSections(cachedProfile, orgVerified),
@@ -848,10 +849,12 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   };
 
   const handleSaveSection = async (nextSection?: string | React.MouseEvent) => {
+    if (isSubmittingRef.current || isLoading) return;
     if (isProfileLocked && !isAccountSettings) {
       toast.info(lockToastText);
       return;
     }
+    isSubmittingRef.current = true;
     if (currentSection === 'pan') {
       const panRegex = /^[A-Z]{3}[ABCFGHLJPT][A-Z]\d{4}[A-Z]$/;
       const errors: Record<string, string> = {};
@@ -924,11 +927,14 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       toast.error('Network error');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
   const handleSendOwnershipOtp = async () => {
-    if (isProfileLocked && currentSection !== 'documents' && !isHerShg) return;
+    if (isSendingOwnershipOtp || (isProfileLocked && currentSection !== 'documents' && !isHerShg)) return;
 
     setIsSendingOwnershipOtp(true);
     try {
@@ -953,11 +959,14 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
   };
 
   const handleFinalSubmit = async () => {
+    if (isSubmittingRef.current || isLoading) return;
     if (isProfileLocked && currentSection !== 'documents' && !isHerShg) return;
     if (!/^\d{6}$/.test(ownershipOtp.trim())) {
       toast.error(submissionChannel === 'sms' ? 'Enter the 6-digit OTP sent to your registered mobile.' : 'Enter the 6-digit OTP sent to your login email.');
       return;
     }
+
+    isSubmittingRef.current = true;
 
     setIsLoading(true);
     try {
@@ -987,6 +996,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       toast.error('Network error');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
@@ -1111,6 +1123,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       toast.error(editingOfficeId ? 'Error updating office' : 'Error adding office');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
@@ -1227,6 +1242,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       toast.error('PAN verification or saving failed');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
@@ -1311,6 +1329,9 @@ export default function SellerOnboarding({ initialSection }: { initialSection?: 
       toast.error(editingBankId ? 'Error updating bank account' : 'Error adding bank account');
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 

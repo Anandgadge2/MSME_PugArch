@@ -53,6 +53,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [captchaValue, setCaptchaValue] = useState(generateSecureCaptchaString());
   const [userCaptcha, setUserCaptcha] = useState('');
   const [twoFactorPending, setTwoFactorPending] = useState(false);
@@ -343,6 +344,8 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
+    isSubmittingRef.current = true;
     setIsLoading(true);
     const loadToast = toast.loading('Authenticating credentials...');
 
@@ -371,11 +374,16 @@ export default function Login() {
       toast.error(err?.message || 'Unable to reach the backend API', { id: loadToast });
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 
   const handleTwoFactorSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
+    isSubmittingRef.current = true;
     setIsLoading(true);
     const loadToast = toast.loading('Verifying secure code...');
     try {
@@ -394,6 +402,9 @@ export default function Login() {
       toast.error(err?.message || 'Unable to verify code', { id: loadToast });
     } finally {
       setIsLoading(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 300);
     }
   };
 

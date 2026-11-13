@@ -54,10 +54,19 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         return;
       }
 
-      if (!onClick) return;
-
       // Synchronous ref lock protects against rapid microtask / double clicks
       isExecutingRef.current = true;
+
+      if (!onClick) {
+        if (props.type === 'submit') {
+          setTimeout(() => {
+            isExecutingRef.current = false;
+          }, Math.max(debounceMs, 800));
+        } else {
+          isExecutingRef.current = false;
+        }
+        return;
+      }
 
       try {
         const result: unknown = onClick(e);
@@ -75,7 +84,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           // Synchronous click debounce cooldown
           setTimeout(() => {
             isExecutingRef.current = false;
-          }, debounceMs);
+          }, props.type === 'submit' ? Math.max(debounceMs, 800) : debounceMs);
         }
       } catch (err) {
         isExecutingRef.current = false;

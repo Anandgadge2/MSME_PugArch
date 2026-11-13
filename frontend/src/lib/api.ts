@@ -25,12 +25,13 @@ export const BASE_URL = getBaseUrl().replace(/\/$/, '');
 
 const resolveUrl = (endpoint: string) => {
   if (endpoint.startsWith('http')) return endpoint;
-  if (endpoint.startsWith('/proxy')) return endpoint;
+  // Normalize any duplicate proxy prefixes e.g. /proxy/proxy/api -> /proxy/api
+  const cleanEndpoint = endpoint.replace(/^(\/?proxy)+/i, '/proxy');
+  if (cleanEndpoint.startsWith('/proxy')) return cleanEndpoint;
 
-  // On Vercel, BASE_URL is intentionally empty — all /api/* requests are
-  // same-origin and proxied to the backend via Next.js rewrites.
-  // In local dev, BASE_URL is the backend URL (e.g. http://localhost:5000).
-  return `${BASE_URL}${endpoint}`;
+  // On Vercel or Cloud Run with BACKEND_URL rewrite, BASE_URL is '/proxy' or empty
+  if (BASE_URL && cleanEndpoint.startsWith(BASE_URL)) return cleanEndpoint;
+  return `${BASE_URL}${cleanEndpoint.startsWith('/') ? cleanEndpoint : `/${cleanEndpoint}`}`;
 };
 
 export const resolveMediaUrl = (url: string | null | undefined): string | null => {
@@ -40,17 +41,19 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
     return trimmed;
   }
-  if (trimmed.startsWith('/proxy/') || trimmed === '/proxy') {
-    return trimmed;
+  // Strip any repeating /proxy/proxy/ chains completely
+  const normalized = trimmed.replace(/^(\/?proxy)+/i, '/proxy');
+  if (normalized.startsWith('/proxy/') || normalized === '/proxy') {
+    return normalized;
   }
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
-    const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
-    if (gcsMatch && !trimmed.includes('X-Goog-Algorithm')) {
+  if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+    const gcsMatch = normalized.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
+    if (gcsMatch && !normalized.includes('X-Goog-Algorithm')) {
       return `/api/files/raw/${gcsMatch[1]}`;
     }
-    return trimmed;
+    return normalized;
   }
-  const cleanPath = trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  const cleanPath = normalized.startsWith('/') ? normalized : `/${normalized}`;
   if (cleanPath.startsWith('/categories/')) {
     return `${BASE_URL}/api/files/raw${cleanPath}`;
   }

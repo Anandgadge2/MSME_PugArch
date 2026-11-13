@@ -41,6 +41,7 @@ const normalizeOrganizationType = (value: unknown, fallback: OrganizationType) =
   if (raw.includes('PROPRIET')) return OrganizationType.PROPRIETORSHIP;
   if (raw.includes('STARTUP')) return OrganizationType.STARTUP;
   if (raw.includes('MSME') || raw.includes('MICRO') || raw.includes('SMALL') || raw.includes('MEDIUM')) return OrganizationType.MSME;
+  if (raw.includes('SHG') || raw.includes('SELF_HELP')) return OrganizationType.SHG;
   return fallback;
 };
 
@@ -50,6 +51,18 @@ const organizationNameFor = (user: any) => {
       user.buyerProfile?.organizationName,
       user.registrationDetails?.organizationName,
       user.registrationDetails?.businessName,
+      user.name
+    );
+  }
+  if (user.role === 'shg') {
+    return first(
+      user.shgProfile?.shgName,
+      user.shgProfile?.groupName,
+      user.registrationDetails?.shgName,
+      user.registrationDetails?.businessName,
+      user.registrationDetails?.organizationName,
+      user.sellerProfile?.businessName,
+      user.sellerProfile?.nameAsInPan,
       user.name
     );
   }
@@ -77,6 +90,24 @@ const organizationDataFor = (user: any) => {
       state: first(profile.state) || 'ODISHA',
       pincode: first(profile.pincode) || null,
       website: first(profile.website) || null,
+      verificationStatus: 'VERIFIED' as const,
+      organizationOnboardingStatus: 'approved_for_procurement'
+    };
+  }
+
+  if (user.role === 'shg') {
+    const shgProfile = user.shgProfile || {};
+    const sellerProfile = user.sellerProfile || {};
+    const regDetails = (user.registrationDetails as Record<string, any>) || {};
+    return {
+      organizationName,
+      organizationType: OrganizationType.SHG,
+      addressLine1: first(shgProfile.village, primaryOffice?.address, regDetails.address, regDetails.village) || null,
+      city: first(shgProfile.block, shgProfile.district, primaryOffice?.city, regDetails.city, 'Jharsuguda') || 'Jharsuguda',
+      district: first(shgProfile.district, (primaryOffice as any)?.district, regDetails.district, 'Jharsuguda') || 'Jharsuguda',
+      state: first(shgProfile.state, primaryOffice?.state, regDetails.state, 'ODISHA') || 'ODISHA',
+      pincode: first(shgProfile.pincode, primaryOffice?.pincode, regDetails.pincode) || null,
+      website: first(shgProfile.website, null),
       verificationStatus: 'VERIFIED' as const,
       organizationOnboardingStatus: 'approved_for_procurement'
     };
@@ -112,6 +143,7 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
       where: { id: userId },
       include: {
         buyerProfile: true,
+        shgProfile: true,
         sellerProfile: {
           include: {
             offices: true,
@@ -124,8 +156,8 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
     });
 
     if (!existing) throw new Error('User not found');
-    if (!['buyer', 'seller'].includes(String(existing.role))) {
-      throw new Error('Organization auto-creation is only available for buyer and seller onboarding approvals');
+    if (!['buyer', 'seller', 'shg'].includes(String(existing.role))) {
+      throw new Error('Organization auto-creation is only available for buyer, seller, and SHG onboarding approvals');
     }
 
     const orgData = organizationDataFor(existing);
@@ -212,6 +244,23 @@ export async function approveOnboardingAndEnsureOrganization(userId: number, upd
           verificationStatus: 'VERIFIED'
         }
       });
+    } else if (user.role === 'shg') {
+      if (existing.shgProfile) {
+        await tx.shgProfile.update({
+          where: { id: existing.shgProfile.id },
+          data: {
+            organizationId: organization.id,
+            applicationStatus: 'APPROVED',
+            approvedAt: new Date()
+          }
+        }).catch(() => null);
+      }
+      if (existing.sellerProfile) {
+        await tx.sellerProfile.update({
+          where: { id: existing.sellerProfile.id },
+          data: { organizationId: organization.id, verificationStatusEnum: 'VERIFIED' as any }
+        }).catch(() => null);
+      }
     } else {
       await tx.sellerProfile.updateMany({
         where: { userId },
@@ -251,6 +300,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
       where: { id: userId },
       include: {
         buyerProfile: true,
+        shgProfile: true,
         sellerProfile: {
           include: {
             offices: true,
@@ -261,7 +311,7 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
     });
 
     if (!existing) throw new Error('User not found');
-    if (!['buyer', 'seller'].includes(String(existing.role))) {
+    if (!['buyer', 'seller', 'shg'].includes(String(existing.role))) {
       return null;
     }
 
@@ -338,6 +388,19 @@ export async function createOrUpdatePendingOrganization(userId: number): Promise
           where: { userId },
           data: { organizationId: organization.id }
         });
+      } else if (existing.role === 'shg') {
+        if (existing.shgProfile) {
+          await tx.shgProfile.update({
+            where: { id: existing.shgProfile.id },
+            data: { organizationId: organization.id }
+          }).catch(() => null);
+        }
+        if (existing.sellerProfile) {
+          await tx.sellerProfile.update({
+            where: { id: existing.sellerProfile.id },
+            data: { organizationId: organization.id }
+          }).catch(() => null);
+        }
       } else {
         await tx.sellerProfile.updateMany({
           where: { userId },

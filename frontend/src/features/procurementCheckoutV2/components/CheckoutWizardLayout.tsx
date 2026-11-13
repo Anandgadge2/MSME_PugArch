@@ -91,17 +91,17 @@ export default function CheckoutWizardLayout({
               ) : (
                 <>
                   {!isAdmin && (
-                    <Button type="button" variant="outline" onClick={onSubmitApproval} disabled={isSubmitting}>
+                    <Button type="button" variant="outline" onClick={onSubmitApproval} disabled={isSubmitting} isLoading={isSubmitting} loadingText="Submitting...">
                       <Send className="mr-2 h-4 w-4" /> Submit for Approval
                     </Button>
                   )}
                   {canConvertBid && (
-                    <Button type="button" variant="outline" onClick={onConvertBid} disabled={isSubmitting}>
+                    <Button type="button" variant="outline" onClick={onConvertBid} disabled={isSubmitting} isLoading={isSubmitting} loadingText="Converting...">
                       Convert to Bid/RA
                     </Button>
                   )}
                   {canPlaceOrder && (
-                    <Button type="button" onClick={onPlaceOrder} disabled={isSubmitting} className="bg-[#12335f] hover:bg-[#0e2a4f]">
+                    <Button type="button" onClick={onPlaceOrder} disabled={isSubmitting} isLoading={isSubmitting} loadingText="Placing Order..." className="bg-[#12335f] hover:bg-[#0e2a4f]">
                       Place Order
                     </Button>
                   )}

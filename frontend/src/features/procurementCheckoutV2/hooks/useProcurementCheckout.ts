@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useAuth } from '../../../hooks/useAuth';
@@ -27,7 +27,9 @@ export function useProcurementCheckout() {
   const [evaluation, setEvaluation] = useState<CartEvaluation | null>(null);
   const [requestId, setRequestId] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const isSavingDraftRef = useRef(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
@@ -154,10 +156,12 @@ export function useProcurementCheckout() {
   };
 
   const saveDraft = async () => {
+    if (isSavingDraftRef.current || isSavingDraft) return;
     if (!formData.selectedMethod) {
       toast.info('Select procurement method in Step 4 before saving this checkout as a draft.');
       return;
     }
+    isSavingDraftRef.current = true;
     setIsSavingDraft(true);
     try {
       const id = await ensureRequest();
@@ -167,10 +171,15 @@ export function useProcurementCheckout() {
       toast.error(err?.message || 'Failed to save draft');
     } finally {
       setIsSavingDraft(false);
+      setTimeout(() => {
+        isSavingDraftRef.current = false;
+      }, 200);
     }
   };
 
   const submitForApproval = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       const id = await ensureRequest();
@@ -182,10 +191,15 @@ export function useProcurementCheckout() {
       toast.error(err?.message || 'Submission failed');
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 200);
     }
   };
 
   const placeOrder = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       const id = await ensureRequest();
@@ -197,10 +211,15 @@ export function useProcurementCheckout() {
       toast.error(err?.message || 'Order placement failed');
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 200);
     }
   };
 
   const convertToBid = async () => {
+    if (isSubmittingRef.current || isSubmitting) return;
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     try {
       const id = await ensureRequest();
@@ -211,6 +230,9 @@ export function useProcurementCheckout() {
       toast.error(err?.message || 'Bid conversion failed');
     } finally {
       setIsSubmitting(false);
+      setTimeout(() => {
+        isSubmittingRef.current = false;
+      }, 200);
     }
   };
 

@@ -827,6 +827,12 @@ export const getSignedUrl = async (fileId: number, user: { id: number; role: str
     }
   }
   if (!asset) {
+    const shgDoc = await (prisma as any).shgDocument.findUnique({ where: { id: fileId } }).catch(() => null);
+    if (shgDoc?.fileAssetId) {
+      asset = await prisma.fileAsset.findUnique({ where: { id: shgDoc.fileAssetId } }).catch(() => null);
+    }
+  }
+  if (!asset) {
     const delDoc = await prisma.deliveryDocument.findUnique({ where: { id: fileId } }).catch(() => null);
     if (delDoc?.fileAssetId) {
       asset = await prisma.fileAsset.findUnique({ where: { id: delDoc.fileAssetId } }).catch(() => null);

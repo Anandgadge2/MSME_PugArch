@@ -163,6 +163,7 @@ export default function OrganizationManagement() {
     catalog: false
   });
   const [savingAction, setSavingAction] = useState(false);
+  const isSavingActionRef = useRef(false);
 
   // Modal refs & wheel delegation for Detail Modal
   const detailModalContainerRef = useRef<HTMLDivElement>(null);
@@ -331,7 +332,8 @@ export default function OrganizationManagement() {
   };
 
   const handleSaveFeatures = async () => {
-    if (!selectedOrg) return;
+    if (!selectedOrg || isSavingActionRef.current || savingAction) return;
+    isSavingActionRef.current = true;
     setSavingAction(true);
     try {
       const res = await api.put(`/api/admin/organizations/${selectedOrg.id}/features`, featuresState, authHeaders);
@@ -347,6 +349,9 @@ export default function OrganizationManagement() {
       toast.error('Error communicating with organization features server.');
     } finally {
       setSavingAction(false);
+      setTimeout(() => {
+        isSavingActionRef.current = false;
+      }, 300);
     }
   };
 
@@ -357,7 +362,8 @@ export default function OrganizationManagement() {
   };
 
   const handleSaveVerifyStatus = async () => {
-    if (!selectedOrg) return;
+    if (!selectedOrg || isSavingActionRef.current || savingAction) return;
+    isSavingActionRef.current = true;
     setSavingAction(true);
     try {
       const res = await api.put(`/api/admin/organizations/${selectedOrg.id}`, {
@@ -375,6 +381,9 @@ export default function OrganizationManagement() {
       toast.error('Verification update request error.');
     } finally {
       setSavingAction(false);
+      setTimeout(() => {
+        isSavingActionRef.current = false;
+      }, 300);
     }
   };
 
@@ -385,11 +394,12 @@ export default function OrganizationManagement() {
   };
 
   const handleSaveBlacklist = async (isBlacklisting: boolean) => {
-    if (!selectedOrg || savingAction) return;
+    if (!selectedOrg || isSavingActionRef.current || savingAction) return;
     if (isBlacklisting && blacklistReason.trim().length < 5) {
       toast.error('Suspension reason must be at least 5 characters.');
       return;
     }
+    isSavingActionRef.current = true;
     setSavingAction(true);
     try {
       const res = await api.put(`/api/admin/organizations/${selectedOrg.id}`, {
@@ -409,6 +419,9 @@ export default function OrganizationManagement() {
       toast.error(err?.message || 'Restriction toggling request error.');
     } finally {
       setSavingAction(false);
+      setTimeout(() => {
+        isSavingActionRef.current = false;
+      }, 300);
     }
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { api, unwrapApiData, readJsonResponse } from '../lib/api';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useAuth } from '../hooks/useAuth';
@@ -398,6 +398,7 @@ export default function BuyerOnboarding() {
 
   const [isUploading, setIsUploading] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [isFetching, setIsFetching] = useState(isStale);
   const [isProfileLocked, setIsProfileLocked] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<DocumentPreview | null>(null);
@@ -1341,7 +1342,7 @@ export default function BuyerOnboarding() {
   };
 
   const handleSendBuyerSubmissionOtp = async () => {
-    if (isProfileLocked) return;
+    if (isSendingBuyerSubmissionOtp || isProfileLocked) return;
     if (!formData.declaration || !formData.agreeTerms) {
       toast.error('Please accept both declarations before requesting OTP.');
       return;
@@ -1437,6 +1438,8 @@ export default function BuyerOnboarding() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSubmittingRef.current || isLoading) return;
+    isSubmittingRef.current = true;
     setSubmitAttempted(true);
 
     if (activeSection === 'docs' && isResubmissionActive) {
@@ -1514,8 +1517,12 @@ export default function BuyerOnboarding() {
         toast.error(err?.message || 'Network error');
       } finally {
         setIsLoading(false);
+        setTimeout(() => {
+          isSubmittingRef.current = false;
+        }, 200);
       }
     } else {
+      isSubmittingRef.current = false;
       // Move to next sidebar section
       const currentIndex = SIDEBAR_SECTIONS.findIndex(s => s.id === activeSection);
       const result = validateSection(activeSection);

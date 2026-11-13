@@ -1481,18 +1481,30 @@ export const catalogueImportService = {
 
   async confirmImport(actor: WorkflowActor, batchId: number, publish = false) {
     await assertApprovedSeller(actor);
+    
+    // Atomically transition status from PREVIEWED/FAILED to PROCESSING to prevent concurrent execution
+    const lockResult = await db.catalogueImportBatch.updateMany({
+      where: {
+        id: batchId,
+        sellerId: actor.id,
+        status: { in: ["PREVIEWED", "FAILED"] },
+      },
+      data: { status: "PROCESSING" },
+    });
+
+    if (lockResult.count === 0) {
+      throw new ApiError(
+        409,
+        "Import batch is already being processed or has already completed.",
+        "BATCH_ALREADY_PROCESSED",
+      );
+    }
+
     const batch = await db.catalogueImportBatch.findFirst({
       where: { id: batchId, sellerId: actor.id },
     });
     if (!batch)
       throw new ApiError(404, "Import batch not found", "BATCH_NOT_FOUND");
-    if (batch.status !== "PREVIEWED" && batch.status !== "FAILED") {
-      throw new ApiError(
-        400,
-        "Import batch already processed",
-        "BATCH_ALREADY_PROCESSED",
-      );
-    }
 
     const rows = Array.isArray(batch.previewData)
       ? (batch.previewData as Record<string, unknown>[])

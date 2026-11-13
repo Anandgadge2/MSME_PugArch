@@ -242,6 +242,22 @@ router.post(
         const createdOrders: any[] = [];
 
         await prisma.$transaction(async (tx) => {
+            // Atomically lock and convert the cart to prevent duplicate order placement
+            const lockedCart = await tx.cart.updateMany({
+                where: {
+                    id: cart.id,
+                    status: 'ACTIVE'
+                },
+                data: {
+                    status: 'CONVERTED_TO_ORDER',
+                    convertedAt: new Date()
+                }
+            });
+
+            if (lockedCart.count === 0) {
+                throw new ApiError(409, 'Order is already being processed or cart has already been converted.', 'CART_ALREADY_CONVERTED');
+            }
+
             for (const [sellerIdStr, items] of Object.entries(itemsBySeller)) {
                 const sellerId = parseInt(sellerIdStr, 10);
                 let totalAmount = 0;
@@ -395,15 +411,6 @@ router.post(
                     // non-fatal
                 }
             }
-
-            // Update cart status to CONVERTED_TO_ORDER
-            await tx.cart.update({
-                where: { id: cart.id },
-                data: {
-                    status: 'CONVERTED_TO_ORDER',
-                    convertedAt: new Date()
-                }
-            });
         }, { timeout: 30000 });
 
         // Dispatch email notifications with official Purchase Order PDF attached to both Seller and Buyer

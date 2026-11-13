@@ -22,6 +22,7 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
+  const isActionBusyRef = useRef(false);
 
   React.useEffect(() => {
     if (!open) return;
@@ -49,10 +50,12 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
   };
 
   const handleValidate = async () => {
+    if (isActionBusyRef.current || loading) return;
     if (!file) {
       toast.error('Select an Excel (.xlsx) file first');
       return;
     }
+    isActionBusyRef.current = true;
     setLoading(true);
     try {
       const result = selectedKind === 'product'
@@ -68,11 +71,15 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
       toast.error(err instanceof Error ? err.message : 'Validation failed');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isActionBusyRef.current = false;
+      }, 200);
     }
   };
 
   const handleConfirm = async (publish: boolean) => {
-    if (!preview?.batchId) return;
+    if (isActionBusyRef.current || loading || !preview?.batchId) return;
+    isActionBusyRef.current = true;
     setLoading(true);
     try {
       await catalogueApi.confirmImport(preview.batchId, publish);
@@ -84,6 +91,9 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
       toast.error(err instanceof Error ? err.message : 'Import failed');
     } finally {
       setLoading(false);
+      setTimeout(() => {
+        isActionBusyRef.current = false;
+      }, 200);
     }
   };
 
@@ -465,6 +475,8 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                 <Button
                   type="button"
                   disabled={loading || preview.validRows === 0}
+                  isLoading={loading}
+                  loadingText="Importing Drafts..."
                   onClick={() => handleConfirm(false)}
                   className="h-9 rounded-xl bg-slate-900 text-xs font-bold text-white hover:bg-slate-800 cursor-pointer shadow-xs px-4"
                 >
@@ -473,6 +485,8 @@ export function CatalogueImportModal({ kind: initialKind, open, onClose, onCompl
                 <Button
                   type="button"
                   disabled={loading || preview.validRows === 0}
+                  isLoading={loading}
+                  loadingText="Publishing Rows..."
                   onClick={() => handleConfirm(true)}
                   className={cn(
                     "h-9 rounded-xl text-xs font-bold text-white cursor-pointer shadow-xs px-4",

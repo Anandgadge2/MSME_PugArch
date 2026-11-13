@@ -862,6 +862,7 @@ export default function PurchaseOrders() {
   const [rejectingOrder, setRejectingOrder] = useState<PurchaseOrderDto | null>(null);
   const [rejectionReason, setRejectionReason] = useState<string>('');
   const [isSubmittingReject, setIsSubmittingReject] = useState<boolean>(false);
+  const isOrderActionBusyRef = useRef(false);
   const [recallingOrder, setRecallingOrder] = useState<PurchaseOrderDto | null>(null);
   const [recallReason, setRecallReason] = useState<string>('');
   const [isSubmittingRecall, setIsSubmittingRecall] = useState<boolean>(false);
@@ -1208,6 +1209,8 @@ export default function PurchaseOrders() {
   };
 
   const handleAcceptOrder = async (order: PurchaseOrderDto) => {
+    if (isOrderActionBusyRef.current) return;
+    isOrderActionBusyRef.current = true;
     try {
       const endpoint = `/api/purchase-orders/${order.id}/acknowledge`;
       const updated = await postApi<PurchaseOrderDto>(endpoint, {});
@@ -1224,6 +1227,10 @@ export default function PurchaseOrders() {
       }
     } catch (err: any) {
       toast.error(err?.message || 'Unable to accept purchase order');
+    } finally {
+      setTimeout(() => {
+        isOrderActionBusyRef.current = false;
+      }, 300);
     }
   };
 
@@ -1233,7 +1240,8 @@ export default function PurchaseOrders() {
   };
 
   const confirmRejectOrder = async () => {
-    if (!rejectingOrder) return;
+    if (!rejectingOrder || isOrderActionBusyRef.current || isSubmittingReject) return;
+    isOrderActionBusyRef.current = true;
     setIsSubmittingReject(true);
     try {
       const endpoint = `/api/purchase-orders/${rejectingOrder.id}/reject`;
@@ -1253,6 +1261,9 @@ export default function PurchaseOrders() {
       toast.error(err?.message || 'Unable to reject purchase order');
     } finally {
       setIsSubmittingReject(false);
+      setTimeout(() => {
+        isOrderActionBusyRef.current = false;
+      }, 300);
     }
   };
 
@@ -1262,7 +1273,8 @@ export default function PurchaseOrders() {
   };
 
   const confirmRecallPo = async () => {
-    if (!recallingOrder) return;
+    if (!recallingOrder || isOrderActionBusyRef.current || isSubmittingRecall) return;
+    isOrderActionBusyRef.current = true;
     setIsSubmittingRecall(true);
     try {
       const endpoint = `/api/purchase-orders/${recallingOrder.id}/recall`;
@@ -1286,6 +1298,9 @@ export default function PurchaseOrders() {
       toast.error(err?.message || 'Unable to recall purchase order to draft');
     } finally {
       setIsSubmittingRecall(false);
+      setTimeout(() => {
+        isOrderActionBusyRef.current = false;
+      }, 300);
     }
   };
 

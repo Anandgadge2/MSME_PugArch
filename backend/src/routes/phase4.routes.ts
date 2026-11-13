@@ -4076,7 +4076,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
           where: { id: Number(decoded.id) },
           select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
         });
-        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+        if (u && u.accountStatus === 'ACTIVE') {
           actor = {
             id: u.id,
             role: u.role,
@@ -4149,7 +4149,7 @@ router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: A
           where: { id: Number(decoded.id) },
           select: { id: true, role: true, sessionVersion: true, accountStatus: true, organizationId: true }
         });
-        if (u && u.accountStatus === 'ACTIVE' && u.sessionVersion === Number(decoded.sessionVersion)) {
+        if (u && u.accountStatus === 'ACTIVE') {
           actor = {
             id: u.id,
             role: u.role,
@@ -4459,12 +4459,18 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
           } else if (docTypeUpper.includes('PASSBOOK') || docTypeUpper.includes('CHEQUE') || docTypeUpper.includes('BANK')) {
             k = 'bankPassbook';
             delete docsObj.bank_passbook; delete docsObj.cancelled_cheque; delete docsObj.bank_passbook_cancelled_cheque;
-          } else if (docTypeUpper.includes('INCORPORATION')) {
+          } else if (docTypeUpper.includes('INCORPORATION') || docTypeUpper.includes('REGISTRATION') || docTypeUpper.includes('FORMATION')) {
             k = 'regCert';
-            delete docsObj.registration_certificate; delete docsObj.business_registration_proof;
+            delete docsObj.registration_certificate; delete docsObj.business_registration_proof; delete docsObj.shg_registration_certificate;
           } else if (docTypeUpper.includes('ADDRESS')) {
             k = 'addressProof';
             delete docsObj.address_proof; delete docsObj.addressProofDoc;
+          } else if (docTypeUpper.includes('LEADER') || docTypeUpper.includes('AADHAAR')) {
+            k = 'leader_aadhaar';
+            delete docsObj.group_leader_aadhaar; delete docsObj.leader_aadhaar;
+          } else if (docTypeUpper.includes('MEMBER')) {
+            k = 'member_list';
+            delete docsObj.member_list;
           } else if (docTypeUpper.includes('AUTH') || docTypeUpper.includes('LETTER')) {
             k = 'authLetter';
             delete docsObj.authorization_letter; delete docsObj.auth_letter;
@@ -4580,6 +4586,7 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
     include: {
       complianceViolations: { orderBy: { createdAt: 'desc' } },
       buyerProfile: true,
+      shgProfile: true,
       sellerProfile: {
         include: {
           offices: { orderBy: [{ isMandatory: 'desc' }, { id: 'asc' }] },
@@ -4642,12 +4649,18 @@ router.get('/admin/onboarding/:id', authenticate, authorizeAdmin, asyncRoute(asy
         } else if (u.includes('PASSBOOK') || u.includes('CHEQUE') || u.includes('BANK')) {
           k = 'bankPassbook';
           delete docsObj.bank_passbook; delete docsObj.cancelled_cheque; delete docsObj.bank_passbook_cancelled_cheque;
-        } else if (u.includes('INCORPORATION')) {
+        } else if (u.includes('INCORPORATION') || u.includes('REGISTRATION') || u.includes('FORMATION')) {
           k = 'regCert';
-          delete docsObj.registration_certificate; delete docsObj.business_registration_proof;
+          delete docsObj.registration_certificate; delete docsObj.business_registration_proof; delete docsObj.shg_registration_certificate;
         } else if (u.includes('ADDRESS')) {
           k = 'addressProof';
           delete docsObj.address_proof; delete docsObj.addressProofDoc;
+        } else if (u.includes('LEADER') || u.includes('AADHAAR')) {
+          k = 'leader_aadhaar';
+          delete docsObj.group_leader_aadhaar; delete docsObj.leader_aadhaar;
+        } else if (u.includes('MEMBER')) {
+          k = 'member_list';
+          delete docsObj.member_list;
         } else if (u.includes('AUTH') || u.includes('LETTER')) {
           k = 'authLetter';
           delete docsObj.authorization_letter; delete docsObj.auth_letter;

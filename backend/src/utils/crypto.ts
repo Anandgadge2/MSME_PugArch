@@ -110,7 +110,7 @@ export const decryptField = (encryptedValue: string | null | undefined, customKe
     }
   }
 
-  console.error('[DecryptionError] Authentication tag verification failed or invalid key.');
+  // Graceful fallback for legacy unencrypted or stale-key fields without flooding logs
   return text;
 };
 

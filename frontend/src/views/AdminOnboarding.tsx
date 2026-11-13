@@ -118,14 +118,17 @@ const DOCUMENT_LABELS: Record<string, string> = {
   pan_copy: "PAN_COPY",
   panCopy: "PAN_COPY",
   PAN_COPY: "PAN_COPY",
+  pan_card_group_representative: "PAN_COPY",
   regCert: "REGISTRATION_CERTIFICATE",
   registration_certificate: "REGISTRATION_CERTIFICATE",
   registrationCertificate: "REGISTRATION_CERTIFICATE",
   business_registration_proof: "REGISTRATION_CERTIFICATE",
+  shg_registration_certificate: "SHG_REGISTRATION_CERTIFICATE",
   gstCert: "GST_CERTIFICATE",
   gst_certificate: "GST_CERTIFICATE",
   gstCertificate: "GST_CERTIFICATE",
   gst: "GST_CERTIFICATE",
+  GST_CERTIFICATE: "GST_CERTIFICATE",
   addressProof: "ADDRESS_PROOF",
   address_proof: "ADDRESS_PROOF",
   addressProofDoc: "ADDRESS_PROOF",
@@ -140,20 +143,33 @@ const DOCUMENT_LABELS: Record<string, string> = {
   bank_passbook: "BANK_PASSBOOK",
   cancelled_cheque: "BANK_PASSBOOK",
   cancelledCheque: "BANK_PASSBOOK",
+  bank_passbook_cancelled_cheque: "BANK_PASSBOOK",
+  BANK_PASSBOOK: "BANK_PASSBOOK",
   authLetter: "AUTHORIZATION_LETTER",
   auth_letter: "AUTHORIZATION_LETTER",
+  authorization_letter: "AUTHORIZATION_LETTER",
   uploaded_files: "UPLOADED_FILES",
   leader_aadhaar: "GROUP_LEADER_AADHAAR_CARD",
   group_leader_aadhaar: "GROUP_LEADER_AADHAAR_CARD",
   member_list: "MEMBER_LIST",
   training_certificate: "TRAINING_SKILL_CERTIFICATE",
+  training_skill_certificates: "TRAINING_SKILL_CERTIFICATE",
+  skill_training_certificate: "TRAINING_SKILL_CERTIFICATE",
   product_photos: "PRODUCT_PHOTOS_CATALOGUE",
+  product_images: "PRODUCT_PHOTOS_CATALOGUE",
+  product_catalogue: "PRODUCT_PHOTOS_CATALOGUE",
   iso: "ISO_CERTIFICATE",
   iso_certificate: "ISO_CERTIFICATE",
   iso_certified: "ISO_CERTIFICATE",
   nsic_certificate: "NSIC_CERTIFICATE",
   dipp_certificate: "DIPP_CERTIFICATE",
-  itr_3_years: "ITR_3_YEARS"
+  itr_3_years: "ITR_3_YEARS",
+  nrlm_mission_certificate: "NRLM_MISSION_CERTIFICATE",
+  produce_details: "PRODUCE_CROP_DETAILS",
+  dairy_linkage_details: "DAIRY_SOCIETY_LINKAGE",
+  business_activity_proof: "BUSINESS_ACTIVITY_PROOF",
+  activity_details: "ACTIVITY_DETAILS",
+  activity_specific_supporting_documents: "SUPPORTING_DOCUMENTS"
 };
 
 const getCanonicalDocCategory = (typeOrKey: unknown): string => {
@@ -166,16 +182,20 @@ const getCanonicalDocCategory = (typeOrKey: unknown): string => {
   if (s.includes("gst")) return "gst";
   if (s.includes("address")) return "address";
   if (s.includes("bank") || s.includes("passbook") || s.includes("cheque")) return "bank";
-  if (s.includes("incorporation") || s.includes("regcert") || s.includes("registration")) return "reg_cert";
+  if (s.includes("incorporation") || s.includes("regcert") || s.includes("registration") || s.includes("formation")) return "reg_cert";
   if (s.includes("auth")) return "auth_letter";
   if (s.includes("leader") || s.includes("aadhaar")) return "leader_aadhaar";
   if (s.includes("member")) return "member_list";
   if (s.includes("training") || s.includes("skill")) return "training_certificate";
-  if (s.includes("photo") || s.includes("catalogue")) return "product_photos";
+  if (s.includes("photo") || s.includes("catalogue") || s.includes("image")) return "product_photos";
   if (s.includes("iso")) return "iso";
   if (s.includes("nsic")) return "nsic";
   if (s.includes("dipp")) return "dipp";
   if (s.includes("itr")) return "itr";
+  if (s.includes("nrlm")) return "nrlm";
+  if (s.includes("produce") || s.includes("crop")) return "produce";
+  if (s.includes("dairy")) return "dairy";
+  if (s.includes("activity")) return "activity";
   return s;
 };
 
@@ -191,100 +211,87 @@ const getDocumentUploadedAt = (file: any) =>
 const normalizeDocType = (str: unknown) => String(str || "").toLowerCase().replace(/[\s-]+/g, "_");
 
 const getSellerOnboardingDocuments = (profile: any) => {
+  const sellerDocuments: any[] = [];
+  const seenCategories = new Set<string>();
+  const seenFileIds = new Set<string>();
+  const seenUrls = new Set<string>();
+  const seenFileNames = new Set<string>();
+
+  // 1. Relational sellerDocuments from Prisma
   const rawSellerDocs = Array.isArray(profile?.sellerDocuments)
-    ? profile.sellerDocuments.filter((doc: any) =>
-      Boolean(doc?.fileAsset),
-    )
+    ? profile.sellerDocuments.filter((doc: any) => Boolean(doc?.fileAsset))
     : [];
 
-  const sellerDocuments: any[] = [];
-  const seenSellerDocIds = new Set<string>();
-  const seenSellerFileIds = new Set<string>();
-  const seenSellerCategories = new Set<string>();
-  const knownUrls = new Set<string>();
-  const knownFileNames = new Set<string>();
-
   for (const doc of rawSellerDocs) {
-    const docId = doc.id ? String(doc.id) : null;
     const file = doc.fileAsset;
-    const fileId = file?.id || file?.fileId ? String(file.id || file.fileId) : null;
+    const fileId = file?.id || doc.fileAssetId || null;
     const cat = getCanonicalDocCategory(doc.documentType);
-
-    if (docId && seenSellerDocIds.has(docId)) continue;
-    if (fileId && seenSellerFileIds.has(fileId)) continue;
-    if (cat && seenSellerCategories.has(cat)) continue;
-
-    if (docId) seenSellerDocIds.add(docId);
-    if (fileId) seenSellerFileIds.add(fileId);
-    if (cat) seenSellerCategories.add(cat);
-    const url = getDocumentUrl(file);
-    if (url) knownUrls.add(String(url).toLowerCase());
+    const url = getDocumentUrl(file) || (fileId ? `/api/files/${fileId}/view` : "");
     const fn = getDocumentFileName(file, "");
-    if (fn) knownFileNames.add(String(fn).toLowerCase());
-    sellerDocuments.push(doc);
+
+    if (fileId && seenFileIds.has(String(fileId))) continue;
+    if (cat && seenCategories.has(cat)) continue;
+    if (url && seenUrls.has(url.toLowerCase())) continue;
+    if (fn && seenFileNames.has(fn.toLowerCase())) continue;
+
+    if (fileId) seenFileIds.add(String(fileId));
+    if (cat) seenCategories.add(cat);
+    if (url) seenUrls.add(url.toLowerCase());
+    if (fn) seenFileNames.add(fn.toLowerCase());
+
+    sellerDocuments.push({
+      ...doc,
+      docType: doc.documentType,
+      label: getDocumentLabel(doc.documentType),
+      fileAssetId: fileId,
+      fileId,
+      url,
+      fileAsset: file
+    });
   }
 
-  const legacyDocuments: [string, any][] = [];
-  const seenLegacyKeys = new Set<string>();
-  // CRITICAL: Initialize seen categories with categories already present in sellerDocuments so duplicate alias keys never get through!
-  const seenLegacyCategories = new Set<string>(seenSellerCategories);
-
+  // 2. Fallback: JSON documents that have not been populated in relational sellerDocuments
   if (profile?.documents && typeof profile.documents === "object" && !Array.isArray(profile.documents)) {
     for (const [key, value] of Object.entries(profile.documents)) {
       const files = getDocumentFiles(value).filter(getDocumentUrl);
       if (files.length === 0) continue;
 
       const cat = getCanonicalDocCategory(key);
+      if (cat && seenCategories.has(cat)) continue;
 
-      // If category is already rendered in relational sellerDocuments or previous legacy entry, skip completely!
-      if (cat && seenLegacyCategories.has(cat)) {
-        continue;
-      }
-
-      // Check if ANY file in this entry was already shown in sellerDocuments
-      const matchesKnownSellerDoc = files.some((file: any) => {
-        const fid = file?.fileId || file?.id || file?.fileAssetId;
-        if (fid && seenSellerFileIds.has(String(fid))) return true;
-        const url = getDocumentUrl(file);
-        if (url && knownUrls.has(String(url).toLowerCase())) return true;
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileId = file?.fileId || file?.id || file?.fileAssetId || null;
+        const url = getDocumentUrl(file) || (fileId ? `/api/files/${fileId}/view` : "");
         const fn = getDocumentFileName(file, "");
-        if (fn && knownFileNames.has(String(fn).toLowerCase())) return true;
-        return false;
-      });
 
-      if (matchesKnownSellerDoc) {
-        continue;
+        if (fileId && seenFileIds.has(String(fileId))) continue;
+        if (url && seenUrls.has(url.toLowerCase())) continue;
+        if (fn && seenFileNames.has(fn.toLowerCase())) continue;
+
+        if (fileId) seenFileIds.add(String(fileId));
+        if (url) seenUrls.add(url.toLowerCase());
+        if (fn) seenFileNames.add(fn.toLowerCase());
+
+        sellerDocuments.push({
+          id: `legacy-${key}-${i}-${fileId || url || fn}`,
+          documentType: key,
+          docType: key,
+          label: getDocumentLabel(key),
+          fileAssetId: fileId,
+          fileId,
+          url,
+          uploadedAt: getDocumentUploadedAt(file),
+          verificationStatus: 'PENDING',
+          fileAsset: file
+        });
       }
 
-      const normKey = (key || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (seenLegacyKeys.has(normKey)) {
-        continue;
-      }
-
-      // Filter duplicate files inside this entry
-      const uniqueFiles = files.filter((file: any) => {
-        const fid = file?.fileId || file?.id || file?.fileAssetId;
-        if (fid && seenSellerFileIds.has(String(fid))) return false;
-        const url = getDocumentUrl(file);
-        if (url && knownUrls.has(String(url).toLowerCase())) return false;
-        const fn = getDocumentFileName(file, "");
-        if (fn && knownFileNames.has(String(fn).toLowerCase())) return false;
-
-        if (fid) seenSellerFileIds.add(String(fid));
-        if (url) knownUrls.add(String(url).toLowerCase());
-        if (fn) knownFileNames.add(String(fn).toLowerCase());
-        return true;
-      });
-
-      if (uniqueFiles.length === 0) continue;
-
-      if (cat) seenLegacyCategories.add(cat);
-      seenLegacyKeys.add(normKey);
-      legacyDocuments.push([key, uniqueFiles]);
+      if (cat) seenCategories.add(cat);
     }
   }
 
-  return { sellerDocuments, legacyDocuments };
+  return { sellerDocuments, legacyDocuments: [] };
 };
 
 const getBuyerOnboardingDocuments = (profile: any): [string, any[]][] => {
@@ -741,6 +748,8 @@ export default function AdminOnboarding() {
   const [isAppRejectModalOpen, setIsAppRejectModalOpen] = useState(false);
   const [appRejectReason, setAppRejectReason] = useState("");
   const [isSubmittingAppReject, setIsSubmittingAppReject] = useState(false);
+  const isSectionActionBusyRef = useRef(false);
+  const isStatusUpdatingRef = useRef(false);
 
   // Override Modal State
   const [isOverrideModalOpen, setIsOverrideModalOpen] = useState(false);
@@ -1034,7 +1043,8 @@ export default function AdminOnboarding() {
     status: string,
     customOverrideReason?: string,
   ) => {
-    if (!selectedItem || selectedItem._id !== userId) return;
+    if (!selectedItem || selectedItem._id !== userId || isStatusUpdatingRef.current) return;
+    isStatusUpdatingRef.current = true;
 
     const selectedFlags = selectedItem.complianceViolations || [];
     let reason = "";
@@ -1188,6 +1198,10 @@ export default function AdminOnboarding() {
       setSelectedItem(previousSelectedItem);
       setSellers(previousSellers);
       setBuyers(previousBuyers);
+    } finally {
+      setTimeout(() => {
+        isStatusUpdatingRef.current = false;
+      }, 300);
     }
   };
 
@@ -1197,7 +1211,8 @@ export default function AdminOnboarding() {
     status: string,
     reason?: string,
   ) => {
-    if (!selectedItem || selectedItem._id !== userId) return;
+    if (!selectedItem || selectedItem._id !== userId || isSectionActionBusyRef.current) return;
+    isSectionActionBusyRef.current = true;
 
     // 1. Keep a backup of the previous state
     const previousSelectedItem = { ...selectedItem };
@@ -1341,6 +1356,10 @@ export default function AdminOnboarding() {
       setSelectedItem(previousSelectedItem);
       setSellers(previousSellers);
       setBuyers(previousBuyers);
+    } finally {
+      setTimeout(() => {
+        isSectionActionBusyRef.current = false;
+      }, 300);
     }
   };
 
@@ -1372,7 +1391,7 @@ export default function AdminOnboarding() {
   };
 
   const handleConfirmDocRequest = async () => {
-    if (!selectedItem || !docRequestTarget) return;
+    if (!selectedItem || !docRequestTarget || isSubmittingDocRequest) return;
     const trimmed = docRequestReason.trim();
     if (!trimmed || trimmed.length < 3) {
       toast.error("Please enter a reason of at least 3 characters.");
@@ -1454,7 +1473,7 @@ export default function AdminOnboarding() {
   };
 
   const handleConfirmCorrection = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem || isSubmittingCorrection) return;
     const trimmed = correctionReason.trim();
     if (!trimmed || trimmed.length < 3) {
       toast.error("Please specify correction instructions of at least 3 characters.");
@@ -1471,7 +1490,7 @@ export default function AdminOnboarding() {
   };
 
   const handleConfirmAppRejection = async () => {
-    if (!selectedItem) return;
+    if (!selectedItem || isSubmittingAppReject) return;
     const trimmed = appRejectReason.trim();
     if (!trimmed || trimmed.length < 3) {
       toast.error("Please specify a rejection reason of at least 3 characters.");
@@ -1488,13 +1507,13 @@ export default function AdminOnboarding() {
   };
 
   const handleViewDocument = async (fileAsset: any, label: string) => {
-    const key = fileAsset?.id || fileAsset?.fileAssetId || fileAsset?.fileId || fileAsset?.url || label;
+    const key = fileAsset?.fileAssetId || fileAsset?.fileId || fileAsset?.id || fileAsset?.url || label;
     try {
       setViewingDocKey(key);
       const fileAssetObj = typeof fileAsset === 'object' && fileAsset !== null
         ? {
             ...fileAsset,
-            fileId: fileAsset.fileAssetId || fileAsset.fileAsset?.id || fileAsset.fileId || fileAsset.id,
+            fileId: fileAsset.fileAssetId || fileAsset.fileAsset?.id || fileAsset.fileId || (fileAsset.fileAsset ? null : fileAsset.id),
             url: fileAsset.url || fileAsset.fileAsset?.url || fileAsset.fileUrl || fileAsset.documentUrl
           }
         : fileAsset;
@@ -4294,17 +4313,17 @@ export default function AdminOnboarding() {
                                       <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between gap-2">
                                         <button
                                           type="button"
-                                          onClick={() => handleViewDocument({ ...doc, ...(file || {}), fileId: file?.id || file?.fileAssetId || file?.fileId || doc?.fileAssetId || doc?.fileId || doc?.id, url: getDocumentUrl(file) || doc?.documentUrl || doc?.url }, doc.documentType)}
-                                          disabled={viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType)}
+                                          onClick={() => handleViewDocument({ ...doc, ...(file || {}), fileAssetId: doc.fileAssetId || file?.id, fileId: doc.fileId || file?.id || doc.fileAssetId, url: doc.url || getDocumentUrl(file) }, doc.label || doc.documentType)}
+                                          disabled={viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType)}
                                           className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors disabled:opacity-60"
-                                          aria-label={`View ${doc.documentType || "document"}`}
+                                          aria-label={`View ${doc.label || doc.documentType || "document"}`}
                                         >
-                                          {viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType) ? (
+                                          {viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType) ? (
                                             <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-[#12335f]" aria-hidden="true" />
                                           ) : (
                                             <Eye className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                                           )}
-                                          <span>{viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType) ? "Opening..." : "View Document"}</span>
+                                          <span>{viewingDocKey === (doc.fileAssetId || doc.fileId || file?.id || doc.url || doc.id || doc.documentType) ? "Opening..." : "View Document"}</span>
                                         </button>
                                         <button
                                           type="button"
