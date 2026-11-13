@@ -4294,7 +4294,7 @@ export default function AdminOnboarding() {
                                       <div className="pt-2.5 border-t border-slate-200/80 mt-3 flex items-center justify-between gap-2">
                                         <button
                                           type="button"
-                                          onClick={() => handleViewDocument(file, doc.documentType)}
+                                          onClick={() => handleViewDocument({ ...doc, ...(file || {}), fileId: file?.id || file?.fileAssetId || file?.fileId || doc?.fileAssetId || doc?.fileId || doc?.id, url: getDocumentUrl(file) || doc?.documentUrl || doc?.url }, doc.documentType)}
                                           disabled={viewingDocKey === (file?.id || file?.fileAssetId || file?.fileId || file?.url || doc.documentType)}
                                           className="text-xs font-bold text-[#12335f] hover:text-[#0d274b] hover:underline inline-flex items-center gap-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#12335f]/30 rounded transition-colors disabled:opacity-60"
                                           aria-label={`View ${doc.documentType || "document"}`}

@@ -3539,7 +3539,7 @@ router.post('/onboarding/submit', authenticate, asyncRoute(async (req, res) => {
 
 router.post('/onboarding/upload-document', authenticate, upload.single('file'), asyncRoute(async (req: AuthRequest & { file?: Express.Multer.File }, res) => {
   if (!req.file) throw new ApiError(400, 'Document file is required', 'DOCUMENT_REQUIRED');
-  if (req.user?.role !== 'seller') throw new ApiError(403, 'Document upload is only available for seller/SHG accounts', 'FORBIDDEN');
+  if (req.user?.role !== 'seller' && req.user?.role !== 'shg') throw new ApiError(403, 'Document upload is only available for seller/SHG accounts', 'FORBIDDEN');
 
   // Upsert sellerProfile — SHG users register as 'seller' role but may not have
   // completed the PAN step yet. We auto-create a minimal profile so they can

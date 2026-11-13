@@ -36,6 +36,42 @@ export const getDocumentPreviewMode = (url: string, contentType = '', extension 
   return 'google';
 };
 
+export const detectBlobMimeType = async (blob: Blob): Promise<{ mime: string; mode: DocumentPreviewMode; isValid: boolean }> => {
+  if (!blob || blob.size === 0) {
+    return { mime: '', mode: 'google', isValid: false };
+  }
+  try {
+    const slice = blob.slice(0, 16);
+    const buffer = await slice.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+
+    // PDF magic bytes: %PDF (0x25, 0x50, 0x44, 0x46)
+    if (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46) {
+      return { mime: 'application/pdf', mode: 'pdf', isValid: true };
+    }
+    // PNG magic bytes: \x89PNG (0x89, 0x50, 0x4E, 0x47)
+    if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4E && bytes[3] === 0x47) {
+      return { mime: 'image/png', mode: 'image', isValid: true };
+    }
+    // JPEG magic bytes: 0xFF 0xD8 0xFF
+    if (bytes[0] === 0xFF && bytes[1] === 0xD8 && bytes[2] === 0xFF) {
+      return { mime: 'image/jpeg', mode: 'image', isValid: true };
+    }
+    // WebP magic bytes: RIFF....WEBP
+    if (bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+        bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50) {
+      return { mime: 'image/webp', mode: 'image', isValid: true };
+    }
+    // Text / HTML / JSON error response (starts with < or { or [)
+    if (bytes[0] === 0x3C || bytes[0] === 0x7B || bytes[0] === 0x5B) {
+      return { mime: 'application/json', mode: 'google', isValid: false };
+    }
+  } catch {
+    // fallback
+  }
+  return { mime: blob.type || 'application/octet-stream', mode: 'google', isValid: true };
+};
+
 interface CachedPreviewEntry {
   preview: DocumentPreview;
   blob?: Blob;
@@ -80,6 +116,10 @@ class SignedUrlCacheManager {
   }
 
   set(fileId: number | string, hasSession: boolean, preview: DocumentPreview, blob?: Blob): void {
+    if (!preview.url || !preview.url.trim()) {
+      return;
+    }
+
     if (this.cache.size >= this.MAX_ENTRIES) {
       const keysToDelete = Array.from(this.cache.keys()).slice(0, 50);
       keysToDelete.forEach((k) => this.cache.delete(k));
@@ -270,16 +310,29 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
           const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
           const rawBlob = await res.blob();
           const fileName = fileAsset?.fileName || label;
-          const isPdf = contentType.toLowerCase().includes('pdf') ||
-            fileName.toLowerCase().endsWith('.pdf') ||
-            rawBlob.type.toLowerCase().includes('pdf');
-          const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
+          const detected = await detectBlobMimeType(rawBlob);
+
+          if (!detected.isValid) {
+            return {
+              label,
+              url: '',
+              mode: 'google',
+              fileId: fileId ?? undefined,
+              originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authQuery}`
+            };
+          }
+
+          const finalMime = detected.mime || contentType || rawBlob.type || 'application/octet-stream';
           const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
           const blobUrl = URL.createObjectURL(blob);
+          const finalMode = (detected.mode === 'image' || detected.mode === 'pdf')
+            ? detected.mode
+            : getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || '');
+
           const result: DocumentPreview = {
             label,
             url: blobUrl,
-            mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
+            mode: finalMode,
             fileId: fileId ?? undefined,
             originalUrl: absoluteFallbackUrl || `/api/files/${fileId}/view${authQuery}`
           };
@@ -309,19 +362,31 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
             const contentType = res.headers.get('content-type') || fileAsset?.mimeType || '';
             const rawBlob = await res.blob();
             const fileName = fileAsset?.fileName || label;
-            const isPdf = contentType.toLowerCase().includes('pdf') ||
-              fileName.toLowerCase().endsWith('.pdf') ||
-              rawBlob.type.toLowerCase().includes('pdf');
-            const finalMime = isPdf ? 'application/pdf' : (contentType || rawBlob.type || 'application/octet-stream');
+            const detected = await detectBlobMimeType(rawBlob);
+
+            if (!detected.isValid) {
+              return {
+                label,
+                url: '',
+                mode: 'google',
+                fileId: fileId ?? undefined,
+                originalUrl: absoluteFallbackUrl
+              };
+            }
+
+            const finalMime = detected.mime || contentType || rawBlob.type || 'application/octet-stream';
             const blob = rawBlob.type === finalMime ? rawBlob : new Blob([rawBlob], { type: finalMime });
             const blobUrl = URL.createObjectURL(blob);
             const authParam = (isRealToken && absoluteFallbackUrl.includes('/api/files/'))
               ? (absoluteFallbackUrl.includes('?') ? `&token=${encodeURIComponent(token!)}` : `?token=${encodeURIComponent(token!)}`)
               : '';
+            const finalMode = (detected.mode === 'image' || detected.mode === 'pdf')
+              ? detected.mode
+              : getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || '');
             const result: DocumentPreview = {
               label,
               url: blobUrl,
-              mode: getDocumentPreviewMode(blobUrl, finalMime, fileName.split('.').pop() || ''),
+              mode: finalMode,
               fileId: fileId ?? undefined,
               originalUrl: `${absoluteFallbackUrl}${authParam}`
             };

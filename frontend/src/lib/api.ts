@@ -40,6 +40,9 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) {
     return trimmed;
   }
+  if (trimmed.startsWith('/proxy/') || trimmed === '/proxy') {
+    return trimmed;
+  }
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
     const gcsMatch = trimmed.match(/^https?:\/\/storage\.googleapis\.com\/[^/]+\/(.+)$/);
     if (gcsMatch && !trimmed.includes('X-Goog-Algorithm')) {
@@ -57,6 +60,9 @@ export const resolveMediaUrl = (url: string | null | undefined): string | null =
     cleanPath.startsWith('/products/') ||
     cleanPath.startsWith('/category-photos/')
   ) {
+    return cleanPath;
+  }
+  if (BASE_URL && cleanPath.startsWith(BASE_URL)) {
     return cleanPath;
   }
   return `${BASE_URL}${cleanPath}`;
