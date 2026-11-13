@@ -299,16 +299,17 @@ export const getFileAssetPreview = async (fileAsset: any, label = 'Document'): P
         let res = await api.fetch(viewEndpointWithAuth, {
           method: 'GET',
           headers: authHeaders,
+          credentials: 'omit',
           skipCache: true
         });
 
-        // In local development, if cross-origin cookie issue occurs, try same-origin rewrite proxy
+        // In local development, if cross-origin issue occurs, try same-origin rewrite proxy
         if (!res.ok && typeof window !== 'undefined' && window.location.origin.includes('localhost:3000')) {
           try {
             res = await fetch(`/proxy${viewEndpointWithAuth}`, {
               method: 'GET',
               headers: authHeaders,
-              credentials: 'include'
+              credentials: 'omit'
             });
           } catch {}
         }

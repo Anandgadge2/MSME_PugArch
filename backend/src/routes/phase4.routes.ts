@@ -4101,7 +4101,10 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
     userAgent: req.headers['user-agent']
   });
 
-  if (signed.signedUrl && (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://'))) {
+  // Only redirect if explicit redirect query param was passed.
+  // Otherwise, stream file buffer directly with inline disposition, robust CSP, and CORS headers
+  // to avoid GCS signed URL expiry and cross-origin iframe sandbox blocks in Edge/Chrome.
+  if (req.query.redirect === 'true' && signed.signedUrl && (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://'))) {
     res.setHeader('Cache-Control', 'private, max-age=300');
     return res.redirect(302, signed.signedUrl);
   }
@@ -4133,7 +4136,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   if (isImage) {
     res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=604800');
   } else {
-    res.setHeader('Cache-Control', req.user ? 'private, no-store' : 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'private, max-age=3600, stale-while-revalidate=86400');
   }
   return res.end(file.buffer);
 }));

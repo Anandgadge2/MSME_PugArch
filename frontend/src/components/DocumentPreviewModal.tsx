@@ -44,13 +44,16 @@ export function DocumentPreviewModal({
   const recoveryAttemptedRef = useRef(false);
   const createdBlobUrlsRef = useRef<string[]>([]);
 
-  // Cleanup created blob URLs on unmount
+  // Cleanup created blob URLs after safe timeout so quick modal re-opens don't hit revoked blob URLs
   useEffect(() => {
     return () => {
-      createdBlobUrlsRef.current.forEach(url => {
-        try { URL.revokeObjectURL(url); } catch {}
-      });
+      const urlsToClean = [...createdBlobUrlsRef.current];
       createdBlobUrlsRef.current = [];
+      setTimeout(() => {
+        urlsToClean.forEach(url => {
+          try { URL.revokeObjectURL(url); } catch {}
+        });
+      }, 60_000);
     };
   }, []);
 
@@ -101,7 +104,7 @@ export function DocumentPreviewModal({
 
       for (const ep of endpointsToTry) {
         try {
-          const res = await api.fetch(ep, { headers: authHeaders, skipCache: true });
+          const res = await api.fetch(ep, { headers: authHeaders, credentials: 'omit', skipCache: true });
           if (res.ok) {
             const rawBlob = await res.blob();
             if (rawBlob.size > 0) {
@@ -160,15 +163,11 @@ export function DocumentPreviewModal({
         setIsImageLoading(false);
         setImageLoadError(false);
 
-        // An iframe can ONLY safely render in-memory blob: URLs!
-        // Never put raw HTTP/HTTPS URLs into iframe src directly.
-        if (url && (url.startsWith('blob:') || url.startsWith('data:'))) {
+        if (url) {
           setResolvedPdfSrc(url);
           setIsPdfLoading(false);
           setPdfLoadError(false);
         } else {
-          // If url is not an in-memory blob URL, do not mount raw HTTP URL into iframe.
-          // Start background blob resolution immediately to prevent "localhost refused to connect".
           setResolvedPdfSrc(null);
           setIsPdfLoading(true);
           setPdfLoadError(false);
@@ -490,14 +489,22 @@ export function DocumentPreviewModal({
                     </div>
                   </div>
                 ) : (
-                  <iframe
+                  <object
                     key={`${resolvedPdfSrc}-${previewDocument.fileId || previewDocument.label}`}
-                    src={resolvedPdfSrc}
-                    title={previewDocument.label || 'PDF Preview'}
+                    data={resolvedPdfSrc}
+                    type="application/pdf"
                     className="h-full w-full border-0"
                     onLoad={() => setIsPdfLoading(false)}
                     onError={handlePdfError}
-                  />
+                  >
+                    <iframe
+                      src={resolvedPdfSrc}
+                      title={previewDocument.label || 'PDF Preview'}
+                      className="h-full w-full border-0"
+                      onLoad={() => setIsPdfLoading(false)}
+                      onError={handlePdfError}
+                    />
+                  </object>
                 )}
               </div>
             )}
