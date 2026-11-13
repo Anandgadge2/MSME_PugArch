@@ -1,25 +1,13 @@
-steps:
-  # 1. Build Backend Container Image
-  - name: 'gcr.io/cloud-builders/docker'
-    args:
-      - 'build'
-      - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:$SHORT_SHA'
-      - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
-      - '-f'
-      - 'Dockerfile.backend'
-      - '.'
-    id: 'build-backend'
 
-  # 2. Build Frontend Container Image
+steps:
+  # 1. Build Frontend Container Image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$SHORT_SHA'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$SHORT_SHA'
       - '-t'
-      - '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
       - '--build-arg'
       - 'NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL'
       - '--build-arg'
@@ -29,65 +17,54 @@ steps:
       - '.'
     id: 'build-frontend'
 
-
-  # 3. Push Backend Images to Artifact Registry
+  # 2. Push Frontend Images to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend']
-    id: 'push-backend'
+    args:
+      - 'push'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$SHORT_SHA'
+    id: 'push-frontend-sha'
 
-  # 4. Push Frontend Images to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['push', '--all-tags', '$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend']
-    id: 'push-frontend'
+    args:
+      - 'push'
+      - '$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
+    id: 'push-frontend-latest'
 
-  # 5. Deploy Backend to Cloud Run
+  # 3. Deploy Frontend to Cloud Run Singapore
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: gcloud
     args:
       - 'run'
       - 'deploy'
-      - 'msme-backend'
-      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/backend:latest'
-      - '--region=$_LOCATION'
-      - '--platform=managed'
-      - '--allow-unauthenticated'
-      - '--port=8080'
-      - '--cpu=2'
-      - '--memory=2Gi'
-      - '--set-env-vars=NODE_ENV=production,STORAGE_PROVIDER=gcp,GCS_BUCKET_NAME=jsgsmile1,GCP_PROJECT_ID=jharsuguda-mart,CACHE_DRIVER=redis,REDIS_PREFIX=msme:,SMTP_HOST=smtp.gmail.com,SMTP_PORT=587,SMTP_USER=jsgsmileportal@gmail.com,SMS_ENABLED=true,SMS_PROVIDER=msg91,MSG91_SENDER_ID=JSGSMI,MSG91_COMMON_OTP_TEMPLATE_ID=6a43a4ba7ed932eb330a65c3,APISETU_CLIENT_ID=in.pugarch,APISETU_GST_URL=https://apisetu.gov.in/gstn/v2/taxpayers/{gstin},MERIPEHCHAAN_CLIENT_ID=UJ64D4B804,MERIPEHCHAAN_AUTH_URL=https://digilocker.meripehchaan.gov.in/public/oauth2/1/authorize,MERIPEHCHAAN_TOKEN_URL=https://digilocker.meripehchaan.gov.in/public/oauth2/1/token,MERIPEHCHAAN_USERINFO_URL=https://digilocker.meripehchaan.gov.in/public/oauth2/1/user,MERIPEHCHAAN_JWKS_URL=https://digilocker.meripehchaan.gov.in/public/oauth2/jwks,MERIPEHCHAAN_ISSUER=https://digilocker.meripehchaan.gov.in,MERIPEHCHAAN_REDIRECT_URI=https://msme-backend-yvkunmwzya-el.a.run.app/api/kyc/aadhaar/callback,PUSHER_APP_ID=2195857,PUSHER_KEY=68be34fe75cc4145142b,PUSHER_CLUSTER=ap2,FRONTEND_URL=https://www.jsgsmile.in,PRODUCTION_URL=https://www.jsgsmile.in,CORS_ALLOWED_ORIGINS=https://jsgsmile.in;https://www.jsgsmile.in;https://msme-frontend-yvkunmwzya-el.a.run.app;https://msme-pugarch-frontend.vercel.app;https://msme-pug-arch-forked-frontend.vercel.app,AI_PROVIDER_PRIORITY=gemini;nvidia,AI_REQUEST_TIMEOUT_MS=20000,GEMINI_MODEL=gemini-2.5-flash,GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta,NVIDIA_MODEL=meta/llama-3.2-11b-vision-instruct,NVIDIA_BASE_URL=https://integrate.api.nvidia.com/v1'
-      - '--set-secrets=DATABASE_URL=msme-database-url:latest,DIRECT_URL=msme-direct-url:latest,JWT_SECRET=msme-jwt-secret:latest,JWT_ACCESS_SECRET=msme-jwt-access-secret:latest,JWT_REFRESH_SECRET=msme-jwt-refresh-secret:latest,REDIS_URL=msme-redis-url:latest,GCP_SERVICE_ACCOUNT_JSON=msme-gcp-service-account:latest,SMTP_PASS=msme-smtp-pass:latest,APISETU_API_KEY=msme-apisetu-api-key:latest,MSG91_AUTH_KEY=msme-msg91-auth-key:latest,MERIPEHCHAAN_CLIENT_SECRET=msme-meripehchaan-secret:latest,PUSHER_SECRET=msme-pusher-secret:latest,GEMINI_API_KEY=msme-gemini-api-key:latest,NVIDIA_API_KEY=msme-nvidia-api-key:latest,NVIDIA_NIM_API_KEY=msme-nvidia-nim-api-key:latest'
-    id: 'deploy-backend'
-
-
-  # 6. Deploy Frontend to Cloud Run
-  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-    entrypoint: gcloud
-    args:
-      - 'run'
-      - 'deploy'
-      - 'msme-frontend'
-      - '--image=$_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:latest'
-      - '--region=$_LOCATION'
+      - 'jsgsmile-frontend'
+      - '--image=$_AR_LOCATION-docker.pkg.dev/$PROJECT_ID/$_AR_REPO/frontend:$SHORT_SHA'
+      - '--region=$_RUN_REGION'
       - '--platform=managed'
       - '--allow-unauthenticated'
       - '--port=8080'
       - '--cpu=1'
       - '--memory=1Gi'
-      - '--set-env-vars=NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1,BACKEND_URL=$_BACKEND_URL,NEXT_PUBLIC_BACKEND_URL=$_BACKEND_URL,NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL,NEXT_PUBLIC_APP_URL=https://www.jsgsmile.in,NEXT_PUBLIC_ENABLE_PROCUREMENT_DEMO_DATA=false,NEXT_PUBLIC_PUSHER_KEY=68be34fe75cc4145142b,NEXT_PUBLIC_PUSHER_CLUSTER=ap2'
+      - '--update-env-vars=NODE_ENV=production,NEXT_TELEMETRY_DISABLED=1,BACKEND_URL=$_BACKEND_URL,NEXT_PUBLIC_BACKEND_URL=$_BACKEND_URL,NEXT_PUBLIC_API_URL=$_NEXT_PUBLIC_API_URL,NEXT_PUBLIC_APP_URL=$_NEXT_PUBLIC_APP_URL,NEXT_PUBLIC_ENABLE_PROCUREMENT_DEMO_DATA=false,NEXT_PUBLIC_PUSHER_KEY=68be34fe75cc4145142b,NEXT_PUBLIC_PUSHER_CLUSTER=ap2'
     id: 'deploy-frontend'
 
-
-
-
+# Build substitutions
 substitutions:
-  _LOCATION: 'asia-south1'
+  # Existing Artifact Registry location (verify before first build)
+  _AR_LOCATION: 'asia-south1'
+
+  # New Cloud Run deployment location
+  _RUN_REGION: 'asia-southeast1'
+
+  # Existing Artifact Registry repository
   _AR_REPO: 'msme-repo'
-  _TAG: 'latest'
+
+  # Existing Mumbai backend
   _BACKEND_URL: 'https://msme-backend-yvkunmwzya-el.a.run.app'
+
+  # Frontend configuration
   _NEXT_PUBLIC_API_URL: '/proxy'
   _NEXT_PUBLIC_APP_URL: 'https://www.jsgsmile.in'
 
 options:
   logging: CLOUD_LOGGING_ONLY
   substitutionOption: 'ALLOW_LOOSE'
-
