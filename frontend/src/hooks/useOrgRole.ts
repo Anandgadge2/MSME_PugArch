@@ -200,8 +200,11 @@ export function usePermissions() {
         const cached = Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : [];
         const serverPerms = remotePermissions.length > 0 ? remotePermissions : cached;
 
-        // If server or cached permissions exist, respect them strictly
+        // If server or cached permissions exist, ensure standard primary sellers/buyers have essential baseline permissions
         if (serverPerms.length > 0) {
+            if (!user?.isSubUser && (userRole === 'seller' || userRole === 'shg') && !serverPerms.includes('*') && !serverPerms.includes('purchase_order.view')) {
+                return [...serverPerms, 'purchase_order.view'];
+            }
             return serverPerms;
         }
 
@@ -226,8 +229,11 @@ export function usePermissions() {
         if (permissions.includes(upper)) return true;
         const lower = permissionCode.toLowerCase().replace(/_/g, '.');
         if (permissions.includes(lower)) return true;
+        if (permissionCode === 'purchase_order.view' && !user?.isSubUser && ['seller', 'buyer', 'shg'].includes(userRole || '')) {
+            return true;
+        }
         return false;
-    }, [permissions]);
+    }, [permissions, user?.isSubUser, userRole]);
 
     return { permissions, hasPermission, loading, reload: reloadPermissions };
 }

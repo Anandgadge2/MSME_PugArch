@@ -511,6 +511,25 @@ async function seedTestingPortal() {
     });
   }
 
+  // Create OrgMembership for all 3 primary users as ORG_ADMIN
+  await prisma.orgMembership.upsert({
+    where: { userId_organizationId: { userId: trlUser.id, organizationId: trlOrg.id } },
+    update: { orgRole: 'ORG_ADMIN', isActive: true },
+    create: { userId: trlUser.id, organizationId: trlOrg.id, orgRole: 'ORG_ADMIN', isActive: true }
+  });
+
+  await prisma.orgMembership.upsert({
+    where: { userId_organizationId: { userId: fortisUser.id, organizationId: fortisOrg.id } },
+    update: { orgRole: 'ORG_ADMIN', isActive: true },
+    create: { userId: fortisUser.id, organizationId: fortisOrg.id, orgRole: 'ORG_ADMIN', isActive: true }
+  });
+
+  await prisma.orgMembership.upsert({
+    where: { userId_organizationId: { userId: koshalUser.id, organizationId: koshalOrg.id } },
+    update: { orgRole: 'ORG_ADMIN', isActive: true },
+    create: { userId: koshalUser.id, organizationId: koshalOrg.id, orgRole: 'ORG_ADMIN', isActive: true }
+  });
+
   console.log('============================================================');
   console.log('🎉 TESTING PORTAL ORGANIZATIONS & CREDENTIALS CONFIGURED:');
   console.log('============================================================');
