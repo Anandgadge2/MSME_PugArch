@@ -1735,7 +1735,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-[12%]',
+      width: 'w-[11%]',
       cell: (item) => (
         <div className="flex flex-col gap-1 items-start min-w-0">
           <TypeBadge type={item.type} />
@@ -1756,7 +1756,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-[23%]',
+      width: 'w-[20%]',
       cell: (item) => (
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1788,20 +1788,20 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Buyer & Location',
       sortable: true,
       sortKey: 'buyer',
-      width: 'w-[15%]',
+      width: 'w-[20%]',
       cell: (item) => {
         const cleanLoc = formatLocation(item.location || item.deliveryLocation);
         return (
-          <div className="space-y-0.5 min-w-0">
-            <p className="text-xs font-bold text-slate-900 leading-tight truncate" title={item.buyer?.trim()}>
+          <div className="space-y-1 min-w-[170px] max-w-[280px]">
+            <p className="text-xs font-bold text-slate-900 leading-snug break-words" title={item.buyer?.trim()}>
               {item.buyer?.trim() || 'Buyer details controlled'}
             </p>
             <div
-              className="flex items-center gap-1 text-[10px] font-semibold text-slate-500 truncate cursor-default hover:text-slate-800 transition-colors"
+              className="flex items-start gap-1 text-[11px] font-semibold text-slate-500 cursor-default hover:text-slate-800 transition-colors leading-tight"
               title={item.location || item.deliveryLocation || cleanLoc}
             >
-              <MapPin className="h-3 w-3 shrink-0 text-slate-400" aria-hidden="true" />
-              <span className="truncate">{cleanLoc}</span>
+              <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 mt-0.5" aria-hidden="true" />
+              <span className="break-words">{cleanLoc}</span>
             </div>
           </div>
         );

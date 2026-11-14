@@ -35,19 +35,19 @@
 
 :root,
 html {
-  font-size: 16px;
+  font-size: 19px;
 }
 
 html.font-size-small {
-  font-size: 14px !important;
+  font-size: 17px !important;
 }
 
 html.font-size-normal {
-  font-size: 16px !important;
+  font-size: 19px !important;
 }
 
 html.font-size-large {
-  font-size: 18px !important;
+  font-size: 21px !important;
 }
 
 
@@ -434,7 +434,7 @@ input[type="radio"] {
 
 
 
-/* Skeleton shimmer animation - used by components/ui/skeleton.tsx */
+/* Skeleton shimmer animation - us15ped by components/ui/skeleton.tsx */
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
