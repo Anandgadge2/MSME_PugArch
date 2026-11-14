@@ -5463,7 +5463,8 @@ app.get(['/api/sellers', '/api/seller', '/api/vendors'], authenticate, authorize
       include: {
         sellerProfile: {
           include: {
-            offices: true
+            offices: true,
+            organization: true
           }
         }
       }
@@ -5473,19 +5474,28 @@ app.get(['/api/sellers', '/api/seller', '/api/vendors'], authenticate, authorize
       if (safeVendor.sellerProfile) {
         const profileAny = safeVendor.sellerProfile as any;
         const offices = safeVendor.sellerProfile.offices || [];
+        const org = safeVendor.sellerProfile.organization as any;
         const gstOffice = offices.find((o: any) => o.gstNumber);
-        profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
+        profileAny.gst = gstOffice?.gstNumber || org?.gstin || profileAny.gst || null;
 
         if (gstOffice) {
           profileAny.city = profileAny.city || gstOffice.city;
           profileAny.state = profileAny.state || gstOffice.state;
         } else if (offices[0]) {
           profileAny.city = profileAny.city || offices[0].city;
-          profileAny.state = offices[0].state;
+          profileAny.state = profileAny.state || offices[0].state;
+        }
+
+        if (org) {
+          profileAny.city = profileAny.city || org.city || org.district || null;
+          profileAny.state = profileAny.state || org.state || null;
+          if (!profileAny.businessName && org.organizationName) {
+            profileAny.businessName = org.organizationName;
+          }
         }
       }
       return { ...safeVendor, _id: v.id };
-    })));
+    }), { unmaskBusinessDetails: true }));
   } catch (err: any) {
     handleSecureRouteError(res, err);
   }
@@ -5549,8 +5559,9 @@ app.get(['/api/sellers/:id', '/api/seller/:id', '/api/vendors/:id'], authenticat
     if (vendorSafe.sellerProfile) {
       const profileAny = vendorSafe.sellerProfile as any;
       const offices = vendorSafe.sellerProfile.offices || [];
+      const org = vendorSafe.sellerProfile.organization as any;
       const gstOffice = offices.find((o: any) => o.gstNumber);
-      profileAny.gst = gstOffice?.gstNumber || profileAny.gst || null;
+      profileAny.gst = gstOffice?.gstNumber || org?.gstin || profileAny.gst || null;
 
       if (gstOffice) {
         profileAny.city = profileAny.city || gstOffice.city;
@@ -5559,13 +5570,21 @@ app.get(['/api/sellers/:id', '/api/seller/:id', '/api/vendors/:id'], authenticat
         profileAny.city = profileAny.city || offices[0].city;
         profileAny.state = offices[0].state;
       }
+
+      if (org) {
+        profileAny.city = profileAny.city || org.city || org.district || null;
+        profileAny.state = profileAny.state || org.state || null;
+        if (!profileAny.businessName && org.organizationName) {
+          profileAny.businessName = org.organizationName;
+        }
+      }
     }
     res.json(maskSensitive({
       ...vendorSafe,
       _id: vendor.id,
       logoUrl,
       bannerUrl
-    }));
+    }, { unmaskBusinessDetails: true }));
   } catch (err: any) {
     handleSecureRouteError(res, err);
   }

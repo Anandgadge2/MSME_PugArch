@@ -382,12 +382,12 @@ export function DataTable<T>({
 
           {/* Table Header */}
           <thead>
-            <tr className="border-b border-slate-200 bg-slate-50/75">
+            <tr className="border-b border-slate-200/90 bg-slate-100/90 shadow-3xs">
               {showSrNo && (
                 <th
                   scope="col"
                   className={cn(
-                    "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 whitespace-nowrap min-w-[56px]",
+                    "py-3.5 px-3 text-[11px] font-black uppercase tracking-wider text-slate-800 whitespace-nowrap min-w-[56px] select-none",
                     srNoWidth
                   )}
                 >
@@ -417,7 +417,7 @@ export function DataTable<T>({
                     key={col.key}
                     scope="col"
                     className={cn(
-                      "py-3 px-2 sm:px-2.5 text-[10px] font-black uppercase tracking-wider text-slate-700 overflow-hidden text-ellipsis whitespace-nowrap",
+                      "py-3.5 px-3 text-[11px] font-black uppercase tracking-wider text-slate-800 whitespace-nowrap select-none",
                       col.width,
                       col.align === 'right' && 'text-right',
                       col.align === 'center' && 'text-center',

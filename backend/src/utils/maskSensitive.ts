@@ -79,6 +79,9 @@ export interface MaskSensitiveOptions {
   unmaskForAdmin?: boolean;
   unmaskSelf?: boolean;
   unmaskEmails?: boolean;
+  unmaskGst?: boolean;
+  unmaskPan?: boolean;
+  unmaskBusinessDetails?: boolean;
 }
 
 export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T => {
@@ -95,7 +98,9 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
     if (Array.isArray(val)) return val.map(item => mask(item, newStack));
 
     const allowUnmaskedPii = Boolean(options?.unmaskForAdmin || options?.unmaskSelf);
-    const allowUnmaskedEmails = Boolean(allowUnmaskedPii || options?.unmaskEmails);
+    const allowUnmaskedEmails = Boolean(allowUnmaskedPii || options?.unmaskEmails || options?.unmaskBusinessDetails);
+    const allowUnmaskedGst = Boolean(allowUnmaskedPii || options?.unmaskGst || options?.unmaskBusinessDetails);
+    const allowUnmaskedPan = Boolean(allowUnmaskedPii || options?.unmaskPan || options?.unmaskBusinessDetails);
 
     return Object.entries(val).reduce<Record<string, unknown>>((acc, [key, value]) => {
       if (passthroughKeys.has(key)) {
@@ -114,6 +119,10 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
 
       if (/^aadhaar|aadhaarNumber$/i.test(key)) {
         acc[key] = effectiveVal ? maskAadhaar(effectiveVal) : effectiveVal;
+      } else if (allowUnmaskedGst && /^(gst|gstin|gstNumber)$/i.test(key)) {
+        acc[key] = effectiveVal;
+      } else if (allowUnmaskedPan && /^(pan|panNumber|nameAsInPan|panName)$/i.test(key)) {
+        acc[key] = effectiveVal;
       } else if (allowUnmaskedPii && /^(pan|panNumber|gst|gstin|gstNumber|nameAsInPan|panName)$/i.test(key)) {
         acc[key] = effectiveVal;
       } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {

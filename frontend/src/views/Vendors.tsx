@@ -273,17 +273,17 @@ const Vendors = () => {
       header: 'Vendor Identity',
       sortable: true,
       sortKey: 'name',
-      width: 'w-[36%]',
+      width: 'w-[32%]',
       cell: (vendor) => (
         <div className="flex items-center gap-2.5 w-full">
-          <div className="h-8 w-8 rounded bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-xs shrink-0">
-            {vendor.sellerProfile?.businessName?.charAt(0) || 'V'}
+          <div className="h-9 w-9 rounded-lg bg-[#f1f3f5] border border-[#dadce0] flex items-center justify-center text-[#12335f] font-black text-sm shrink-0">
+            {vendor.sellerProfile?.businessName?.charAt(0) || vendor.name?.charAt(0) || 'V'}
           </div>
-          <div>
-            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] text-wrap-anywhere">
+          <div className="min-w-0 flex-1">
+            <p className="font-black text-xs uppercase tracking-tight text-[#1a1c21] truncate" title={vendor.sellerProfile?.businessName || vendor.name}>
               {vendor.sellerProfile?.businessName || vendor.name}
             </p>
-            <div className="mt-1">
+            <div className="mt-0.5">
               <EntityIdLink
                 label={`VND-${String(vendor.id || vendor._id).padStart(5, '0')}`}
                 id={vendor.id || vendor._id}
@@ -291,17 +291,17 @@ const Vendors = () => {
                 onClick={() => handleViewProfile(vendor)}
               />
             </div>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
               <p className="text-[9px] font-bold text-[#12335f] uppercase">
                 {vendor.sellerProfile?.msmeCategory || 'Registered'} Enterprise
               </p>
               {vendor.sellerProfile?.msmeType && (
-                <span className="bg-emerald-50 text-emerald-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                <span className="bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded text-[8px] uppercase font-black border border-emerald-200/60">
                   {vendor.sellerProfile.msmeType.replace(/_/g, ' ')}
                 </span>
               )}
               {vendor.sellerProfile?.vendorType && (
-                <span className="bg-blue-50 text-blue-700 px-1 py-0.2 rounded text-[8px] uppercase font-black">
+                <span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded text-[8px] uppercase font-black border border-blue-200/60">
                   {vendor.sellerProfile.vendorType.replace(/_/g, ' ')}
                 </span>
               )}
@@ -316,44 +316,64 @@ const Vendors = () => {
       sortable: true,
       sortKey: 'region',
       width: 'w-[18%]',
-      cell: (vendor) => (
-        <span className="text-[11px] font-bold text-slate-600 uppercase">
-          {vendor.sellerProfile?.city || 'N/A'}, {vendor.sellerProfile?.state || 'N/A'}
-        </span>
-      )
+      cell: (vendor) => {
+        const city = vendor.sellerProfile?.city || (vendor.sellerProfile as any)?.organization?.city;
+        const state = vendor.sellerProfile?.state || (vendor.sellerProfile as any)?.organization?.state;
+        const hasLocation = city || state;
+        return (
+          <span className="text-[11px] font-bold text-slate-700 uppercase flex items-center gap-1.5">
+            <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+            <span className="truncate">{hasLocation ? `${city || 'N/A'}, ${state || 'N/A'}` : 'Location N/A'}</span>
+          </span>
+        );
+      }
     },
     {
       key: 'gst',
       header: 'Registration (GST)',
       sortable: true,
       sortKey: 'gst',
-      width: 'w-[18%]',
-      cell: (vendor) => (
-        <span className="text-[10px] font-mono font-bold text-slate-600 uppercase bg-[#f1f3f5] border border-[#dadce0] px-2 py-0.5 rounded inline-block">
-          {vendor.sellerProfile?.gst || 'PENDING'}
-        </span>
-      )
+      width: 'w-[20%]',
+      cell: (vendor) => {
+        const gst = vendor.sellerProfile?.gst;
+        if (gst) {
+          return (
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold text-slate-800 uppercase bg-slate-100 border border-slate-300/80 px-2.5 py-1 rounded shadow-3xs tracking-wider">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span>{gst}</span>
+            </span>
+          );
+        }
+        return (
+          <span className="inline-flex items-center text-[10px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded uppercase tracking-wider">
+            UNREGISTERED
+          </span>
+        );
+      }
     },
     {
       key: 'capability',
       header: 'Capability',
       sortable: true,
       sortKey: 'capability',
-      width: 'w-[20%]',
+      width: 'w-[18%]',
       cell: (vendor) => (
         <div className="flex gap-1 flex-wrap">
           {(vendor.sellerProfile?.productCategories || []).slice(0, 2).map((c) => (
-            <span key={c} className="text-[9px] font-bold text-slate-500 border border-[#dadce0] rounded px-1.5 py-0.5 uppercase">
+            <span key={c} className="text-[9px] font-bold text-slate-600 border border-slate-200 bg-slate-50 rounded px-1.5 py-0.5 uppercase tracking-wide">
               {c}
             </span>
           ))}
+          {(!vendor.sellerProfile?.productCategories || vendor.sellerProfile.productCategories.length === 0) && (
+            <span className="text-[9px] font-medium text-slate-400 italic">General Supply</span>
+          )}
         </div>
       )
     },
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-16',
+      width: 'w-24',
       align: 'right',
       cell: (vendor) => {
         const vid = vendor.id || vendor._id;
@@ -750,7 +770,7 @@ const Vendors = () => {
               paginationLabel="vendors"
               showSrNo={true}
               srNoHeader="Sr. No."
-              srNoWidth="w-16"
+              srNoWidth="w-20"
               minWidth="min-w-[1040px] w-full"
             />
           )}
@@ -791,9 +811,30 @@ const Vendors = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 sm:gap-3">
                 <VendorRatingTile sellerId={Number(selectedVendor.id)} />
                 {[
-                  { label: 'City', value: selectedVendor.sellerProfile?.city || selectedVendor.sellerProfile?.offices?.find((o: any) => o.gstNumber)?.city || selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A', icon: MapPin, color: 'text-blue-500' },
-                  { label: 'Established', value: selectedVendor.sellerProfile?.dateOfIncorporation ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).getFullYear() : '2018', icon: Building2, color: 'text-teal-500' },
-                  { label: 'PAN Verified', value: 'Yes', icon: ShieldCheck, color: 'text-emerald-500' }
+                  {
+                    label: 'City',
+                    value: selectedVendor.sellerProfile?.city ||
+                      (selectedVendor.sellerProfile as any)?.organization?.city ||
+                      (selectedVendor.sellerProfile as any)?.organization?.district ||
+                      selectedVendor.sellerProfile?.offices?.find((o: any) => o.gstNumber)?.city ||
+                      selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A',
+                    icon: MapPin,
+                    color: 'text-blue-500'
+                  },
+                  {
+                    label: 'Established',
+                    value: selectedVendor.sellerProfile?.dateOfIncorporation
+                      ? new Date(selectedVendor.sellerProfile.dateOfIncorporation).getFullYear()
+                      : '2018',
+                    icon: Building2,
+                    color: 'text-teal-500'
+                  },
+                  {
+                    label: 'PAN Verified',
+                    value: selectedVendor.sellerProfile?.pan ? 'Yes' : 'No',
+                    icon: ShieldCheck,
+                    color: 'text-emerald-500'
+                  }
                 ].map(stat => (
                   <div key={stat.label} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
                     <div className="flex items-center gap-2 mb-1">
@@ -822,12 +863,42 @@ const Vendors = () => {
                   <h3 className="text-[10px] font-black uppercase text-slate-400 tracking-[0.1em]">Business Details</h3>
                   <div className="space-y-3">
                     {[
-                      { label: 'GST Number', value: selectedVendor.sellerProfile?.gst, icon: FileText },
-                      { label: 'Business PAN', value: selectedVendor.sellerProfile?.pan, icon: Briefcase },
-                      { label: 'Email Address', value: selectedVendor.email, icon: Mail },
-                      { label: 'Incorporation', value: selectedVendor.sellerProfile?.dateOfIncorporation ? formatDate(selectedVendor.sellerProfile.dateOfIncorporation) : 'N/A', icon: Clock },
-                      { label: 'MSME Type', value: selectedVendor.sellerProfile?.msmeType?.replace(/_/g, ' '), icon: Building2 },
-                      { label: 'Vendor Type', value: selectedVendor.sellerProfile?.vendorType?.replace(/_/g, ' '), icon: Briefcase }
+                      {
+                        label: 'GST Number',
+                        value: selectedVendor.sellerProfile?.gst || (selectedVendor.sellerProfile as any)?.organization?.gstin || (selectedVendor.sellerProfile?.offices?.find((o: any) => o.gstNumber)?.gstNumber),
+                        fallback: 'Not Registered / Excluded',
+                        icon: FileText
+                      },
+                      {
+                        label: 'Business PAN',
+                        value: selectedVendor.sellerProfile?.pan,
+                        fallback: 'Not Available',
+                        icon: Briefcase
+                      },
+                      {
+                        label: 'Email Address',
+                        value: selectedVendor.email,
+                        fallback: 'Not Provided',
+                        icon: Mail
+                      },
+                      {
+                        label: 'Incorporation',
+                        value: selectedVendor.sellerProfile?.dateOfIncorporation ? formatDate(selectedVendor.sellerProfile.dateOfIncorporation) : null,
+                        fallback: 'N/A',
+                        icon: Clock
+                      },
+                      {
+                        label: 'MSME Type',
+                        value: selectedVendor.sellerProfile?.msmeType?.replace(/_/g, ' '),
+                        fallback: 'Registered Enterprise',
+                        icon: Building2
+                      },
+                      {
+                        label: 'Vendor Type',
+                        value: selectedVendor.sellerProfile?.vendorType?.replace(/_/g, ' '),
+                        fallback: 'Manufacturer / Supplier',
+                        icon: Briefcase
+                      }
                     ].map(item => (
                       <div key={item.label} className="flex items-center gap-2.5 sm:gap-3 group font-medium">
                         <div className="h-8 w-8 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 group-hover:text-[#12335f] transition-colors">
@@ -835,7 +906,7 @@ const Vendors = () => {
                         </div>
                         <div>
                           <p className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-0.5">{item.label}</p>
-                          <p className="text-xs font-bold text-slate-800">{item.value || 'Verified'}</p>
+                          <p className="text-xs font-bold text-slate-800">{item.value || item.fallback}</p>
                         </div>
                       </div>
                     ))}
@@ -881,9 +952,16 @@ const Vendors = () => {
                           ))}
                         </div>
                       ) : (
-                        <div className="flex items-center gap-2 text-slate-400">
-                          <MapPin className="h-3.5 w-3.5" />
-                          <span className="text-[11px] font-medium">{selectedVendor.sellerProfile?.city || selectedVendor.sellerProfile?.offices?.[0]?.city || 'N/A'}, {selectedVendor.sellerProfile?.state || selectedVendor.sellerProfile?.offices?.[0]?.state || 'N/A'}</span>
+                        <div className="flex items-start gap-2 text-slate-600">
+                          <MapPin className="h-3.5 w-3.5 text-[#12335f] mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-xs font-bold text-slate-800">
+                              {(selectedVendor.sellerProfile as any)?.organization?.organizationName || selectedVendor.sellerProfile?.businessName || selectedVendor.name}
+                            </p>
+                            <p className="text-[10px] text-slate-500">
+                              {[(selectedVendor.sellerProfile as any)?.organization?.addressLine1, (selectedVendor.sellerProfile as any)?.organization?.city || selectedVendor.sellerProfile?.city, (selectedVendor.sellerProfile as any)?.organization?.state || selectedVendor.sellerProfile?.state].filter(Boolean).join(', ') || 'N/A, N/A'}
+                            </p>
+                          </div>
                         </div>
                       )}
                     </div>
