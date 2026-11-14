@@ -148,6 +148,9 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
           const fallbackKeys = FALLBACK_ORG_ROLE_PERMISSIONS[membership.orgRole as keyof typeof FALLBACK_ORG_ROLE_PERMISSIONS];
           orgPermissions.push('dashboard.view', ...expandOrgPermissions(fallbackKeys));
         }
+      } else if (!user.isSubUser) {
+        // Primary user belonging to organization without explicit membership is treated as ORG_ADMIN
+        orgPermissions.push('*', ...expandOrgPermissions(ALL_ORG_PERMISSION_KEYS));
       }
     }
 
@@ -174,6 +177,8 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
           'delivery.create',
           'delivery.update',
           'delivery.dispatch',
+          'purchase_order.view',
+          'purchase_order.approve',
           'grn.view',
           'invoice.view',
           'invoice.approve',
@@ -181,7 +186,12 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
           'escrow.view',
           'dispute.view',
           'reverse_auction.view',
-          'reverse_auction.bid.submit'
+          'reverse_auction.bid.submit',
+          'team.member.view',
+          'team.role.manage',
+          'organization.view',
+          'organization.update',
+          'report.view'
         );
       } else if (user.role === 'buyer') {
         defaults.push(
