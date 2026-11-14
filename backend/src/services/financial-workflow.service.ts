@@ -9,6 +9,7 @@ import { notifyPaymentReceiptEmail, notifyPurchaseOrderCreated } from './invoice
 type Actor = {
   id: number;
   role: string;
+  organizationId?: number;
   ipAddress?: string;
   userAgent?: string;
 };
@@ -113,9 +114,13 @@ const PO_ACCEPT_STATUSES = new Set(['generated', 'issued', 'order_placed', 'pend
 
 export const acceptPurchaseOrderAndCreateDelivery = async (purchaseOrderId: number, actor: Actor) => {
   const result = await prisma.$transaction(async (tx) => {
-    const po = await tx.purchaseOrder.findUnique({ where: { id: purchaseOrderId } });
+    const po = await tx.purchaseOrder.findUnique({
+      where: { id: purchaseOrderId },
+      include: { seller: { select: { organizationId: true } } }
+    });
     if (!po) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
-    if (actor.role !== 'admin' && po.sellerId !== actor.id) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
+    const isSeller = po.sellerId === actor.id || (po.seller?.organizationId && actor.organizationId === po.seller.organizationId);
+    if (actor.role !== 'admin' && !isSeller) throw new ApiError(404, 'Purchase order not found', 'PO_NOT_FOUND');
     if (!PO_ACCEPT_STATUSES.has(po.status)) {
       throw new ApiError(409, 'Purchase order must be in generated status to accept', 'PO_INVALID_STATUS');
     }

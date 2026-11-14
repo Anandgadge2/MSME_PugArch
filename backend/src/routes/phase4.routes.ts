@@ -9939,7 +9939,20 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
   if (isAdmin(req)) {
     where = {};
   } else if (req.user?.role === 'buyer') {
-    where = { buyerId: userId(req) };
+    const buyerIds = [userId(req)];
+    if (req.user?.organizationId) {
+      const orgUsers = await db.user.findMany({
+        where: { organizationId: req.user.organizationId },
+        select: { id: true }
+      });
+      orgUsers.forEach((u: any) => buyerIds.push(u.id));
+    }
+    where = {
+      OR: [
+        { buyerId: { in: Array.from(new Set(buyerIds)) } },
+        ...(req.user?.organizationId ? [{ buyer: { organizationId: req.user.organizationId } }] : [])
+      ]
+    };
   } else {
     const sellerIds = [userId(req)];
     if (req.user?.organizationId || (req.user as any)?.companyId) {
