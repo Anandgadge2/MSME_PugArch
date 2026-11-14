@@ -587,14 +587,25 @@ router.get(
       return ok(res, []);
     }
 
+    const orClauses: any[] = [
+      { organizationName: { contains: q, mode: 'insensitive' } },
+      { gstin: { contains: q, mode: 'insensitive' } },
+      { panNumber: { contains: q, mode: 'insensitive' } },
+      { sellerVendorAliases: { some: { erpVendorCode: { contains: q, mode: 'insensitive' } } } }
+    ];
+
+    const vndMatch = q.match(/^(?:VND-?)0*(\d+)$/i);
+    const vendorIdNum = vndMatch && vndMatch[1] ? parseInt(vndMatch[1], 10) : (/^\d+$/.test(q) ? parseInt(q, 10) : null);
+    if (vendorIdNum && !isNaN(vendorIdNum) && vendorIdNum > 0) {
+      orClauses.push({
+        users: { some: { id: vendorIdNum } }
+      });
+    }
+
     const orgs = await prisma.organization.findMany({
       where: {
         deletedAt: null,
-        OR: [
-          { organizationName: { contains: q, mode: 'insensitive' } },
-          { gstin: { contains: q, mode: 'insensitive' } },
-          { panNumber: { contains: q, mode: 'insensitive' } }
-        ]
+        OR: orClauses
       },
       take: 15,
       select: {
@@ -604,6 +615,10 @@ router.get(
         panNumber: true,
         city: true,
         state: true,
+        sellerVendorAliases: {
+          select: { erpVendorCode: true },
+          take: 1
+        },
         users: {
           where: { role: { in: ['seller', 'shg'] } },
           select: { id: true, name: true, email: true },
@@ -620,7 +635,9 @@ router.get(
       city: org.city,
       state: org.state,
       sellerUserId: org.users[0]?.id || null,
-      sellerUserName: org.users[0]?.name || null
+      sellerUserName: org.users[0]?.name || null,
+      vendorId: org.users[0]?.id ? `VND-${String(org.users[0].id).padStart(5, '0')}` : null,
+      erpVendorCode: org.sellerVendorAliases[0]?.erpVendorCode || null
     }));
 
     ok(res, formatted);

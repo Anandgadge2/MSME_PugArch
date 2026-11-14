@@ -4645,17 +4645,38 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
         : { sellerId: userId };
 
     if (search) {
+      const orConditions: any[] = [
+        { poNumber: { contains: search, mode: 'insensitive' } },
+        { title: { contains: search, mode: 'insensitive' } },
+        { status: { contains: search, mode: 'insensitive' } },
+        { externalPoNumber: { contains: search, mode: 'insensitive' } },
+        { erpVendorCode: { contains: search, mode: 'insensitive' } },
+        { seller: { name: { contains: search, mode: 'insensitive' } } },
+        { seller: { email: { contains: search, mode: 'insensitive' } } },
+        { seller: { sellerProfile: { businessName: { contains: search, mode: 'insensitive' } } } },
+        { seller: { organization: { organizationName: { contains: search, mode: 'insensitive' } } } },
+        { seller: { organization: { gstin: { contains: search, mode: 'insensitive' } } } },
+        { buyer: { name: { contains: search, mode: 'insensitive' } } },
+        { buyer: { organization: { organizationName: { contains: search, mode: 'insensitive' } } } }
+      ];
+
+      // Support searching by Vendor ID e.g. "VND-00340", "VND-340", or numeric "340"
+      const vndMatch = search.match(/^(?:VND-?)0*(\d+)$/i);
+      if (vndMatch && vndMatch[1]) {
+        const vendorNum = parseInt(vndMatch[1], 10);
+        if (!isNaN(vendorNum) && vendorNum > 0) {
+          orConditions.push({ sellerId: vendorNum });
+        }
+      } else if (/^\d+$/.test(search)) {
+        const num = parseInt(search, 10);
+        if (!isNaN(num) && num > 0) {
+          orConditions.push({ sellerId: num });
+        }
+      }
+
       where.AND = [
         ...(where.AND || []),
-        {
-          OR: [
-            { poNumber: { contains: search, mode: 'insensitive' } },
-            { title: { contains: search, mode: 'insensitive' } },
-            { status: { contains: search, mode: 'insensitive' } },
-            { seller: { name: { contains: search, mode: 'insensitive' } } },
-            { buyer: { name: { contains: search, mode: 'insensitive' } } }
-          ]
-        }
+        { OR: orConditions }
       ];
     }
 
@@ -4704,8 +4725,23 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
         deliveryWorkflow: true,
         inspectionRecord: true,
         invoices: { orderBy: { createdAt: 'desc' } },
-        buyer: { select: { id: true, name: true, email: true } },
-        seller: { select: { id: true, name: true, email: true } },
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organization: { select: { organizationName: true, gstin: true } }
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            sellerProfile: { select: { businessName: true } },
+            organization: { select: { organizationName: true, gstin: true } }
+          }
+        },
         grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
       },
       orderBy,

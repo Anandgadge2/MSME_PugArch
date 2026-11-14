@@ -33,8 +33,10 @@ export type PurchaseOrderDto = {
   poStatus?: string;
   buyerId?: number;
   sellerId?: number;
-  seller?: { name?: string; email?: string };
-  buyer?: { name?: string; email?: string };
+  erpVendorCode?: string | null;
+  externalPoNumber?: string | null;
+  seller?: { name?: string; email?: string; sellerProfile?: { businessName?: string }; organization?: { organizationName?: string; gstin?: string } };
+  buyer?: { name?: string; email?: string; organization?: { organizationName?: string; gstin?: string } };
   expectedDelivery?: string;
   deliveryAddress?: string;
   paymentTerms?: string;

@@ -1070,13 +1070,38 @@ export default function PurchaseOrders() {
 
     // 1. Search
     if (debouncedSearch) {
-      const q = debouncedSearch.toLowerCase();
-      result = result.filter(o => 
-        o.poNumber?.toLowerCase().includes(q) || 
-        o.title?.toLowerCase().includes(q) || 
-        o.seller?.name?.toLowerCase().includes(q) || 
-        o.buyer?.name?.toLowerCase().includes(q)
-      );
+      const q = debouncedSearch.toLowerCase().trim();
+      result = result.filter(o => {
+        const vendorId = o.sellerId ? `vnd-${String(o.sellerId).padStart(5, '0')}` : '';
+        const vendorIdRaw = o.sellerId ? `vnd-${o.sellerId}` : '';
+        const sellerIdStr = o.sellerId ? String(o.sellerId) : '';
+        const sellerName = o.seller?.name?.toLowerCase() || '';
+        const sellerEmail = o.seller?.email?.toLowerCase() || '';
+        const sellerBusinessName = (o.seller as any)?.sellerProfile?.businessName?.toLowerCase() || '';
+        const sellerOrgName = (o.seller as any)?.organization?.organizationName?.toLowerCase() || '';
+        const sellerGstin = (o.seller as any)?.organization?.gstin?.toLowerCase() || '';
+        const erpVendorCode = ((o as any).erpVendorCode || (o.metadata as any)?.erpVendorCode || '').toLowerCase();
+        const externalPoNumber = ((o as any).externalPoNumber || (o.metadata as any)?.externalPoNumber || '').toLowerCase();
+        const buyerName = o.buyer?.name?.toLowerCase() || '';
+        const buyerOrgName = (o.buyer as any)?.organization?.organizationName?.toLowerCase() || '';
+
+        return (
+          o.poNumber?.toLowerCase().includes(q) || 
+          o.title?.toLowerCase().includes(q) || 
+          sellerName.includes(q) ||
+          sellerEmail.includes(q) ||
+          sellerBusinessName.includes(q) ||
+          sellerOrgName.includes(q) ||
+          sellerGstin.includes(q) ||
+          buyerName.includes(q) ||
+          buyerOrgName.includes(q) ||
+          erpVendorCode.includes(q) ||
+          externalPoNumber.includes(q) ||
+          vendorId.includes(q) ||
+          vendorIdRaw.includes(q) ||
+          sellerIdStr === q
+        );
+      });
     }
 
     // 2. Tab Filter
@@ -1886,15 +1911,48 @@ export default function PurchaseOrders() {
     },
     {
       key: 'party',
-      header: <SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[14%]',
+      header: <SortHeader label="Party / Vendor" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[16%]',
       cell: (order) => {
-        const partyName = order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`;
+        const isBuyerOrAdmin = !isSeller;
+        const sellerObj = order.seller as any;
+        const partyName = isBuyerOrAdmin
+          ? (sellerObj?.sellerProfile?.businessName || sellerObj?.organization?.organizationName || order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`)
+          : ((order.buyer as any)?.organization?.organizationName || order.buyer?.name || order.buyer?.email || `Buyer #${order.buyerId || '-'}`);
+        
+        const vendorId = order.sellerId ? `VND-${String(order.sellerId).padStart(5, '0')}` : null;
+        const erpCode = order.erpVendorCode || (order.metadata as any)?.erpVendorCode;
+
         return (
-          <div className="min-w-0">
-            <span className="font-medium text-slate-800 text-xs line-clamp-2" title={partyName}>
+          <div className="min-w-0 flex flex-col gap-0.5">
+            <span className="font-bold text-slate-800 text-xs line-clamp-1" title={partyName}>
               {partyName}
             </span>
+            {isBuyerOrAdmin && (vendorId || erpCode) && (
+              <div className="flex flex-wrap items-center gap-1 mt-0.5">
+                {vendorId && (
+                  <EntityIdLink
+                    label={vendorId}
+                    id={order.sellerId}
+                    size="sm"
+                    className="text-[10px] py-0 px-1"
+                    onClick={() => {
+                      if (order.sellerId) {
+                        router.push(`/buyer/sellers?id=${order.sellerId}`);
+                      }
+                    }}
+                  />
+                )}
+                {erpCode && (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200"
+                    title={`ERP Vendor Code: ${erpCode}`}
+                  >
+                    ERP: {erpCode}
+                  </span>
+                )}
+              </div>
+            )}
           </div>
         );
       },
@@ -2193,7 +2251,22 @@ export default function PurchaseOrders() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <InfoTile label="Party" value={order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`} />
+                      <InfoTile
+                        label="Party"
+                        value={
+                          <div className="flex flex-col gap-0.5">
+                            <span className="truncate" title={order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`}>
+                              {(order.seller as any)?.sellerProfile?.businessName || (order.seller as any)?.organization?.organizationName || order.seller?.name || `Seller #${order.sellerId || '-'}`}
+                            </span>
+                            {order.sellerId && (
+                              <span className="font-mono text-[9px] text-slate-500 font-semibold">
+                                VND-{String(order.sellerId).padStart(5, '0')}
+                                {order.erpVendorCode ? ` • ERP: ${order.erpVendorCode}` : ''}
+                              </span>
+                            )}
+                          </div>
+                        }
+                      />
                       <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
                       <InfoTile label="Expected" value={formatDate(order.expectedDelivery)} />
                       <InfoTile label="Created" value={formatDate(order.createdAt)} />
@@ -2878,6 +2951,25 @@ export default function PurchaseOrders() {
                                   <p className="text-[10px] font-medium text-slate-500 font-mono truncate" title={sellerEmail}>{sellerEmail}</p>
                                 ) : null;
                               })()}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                {viewingOrder.sellerId && (
+                                  <EntityIdLink
+                                    label={`VND-${String(viewingOrder.sellerId).padStart(5, '0')}`}
+                                    id={viewingOrder.sellerId}
+                                    size="sm"
+                                    onClick={() => {
+                                      if (isBuyer) {
+                                        router.push(`/buyer/sellers?id=${viewingOrder.sellerId}`);
+                                      }
+                                    }}
+                                  />
+                                )}
+                                {(viewingOrder.erpVendorCode || (viewingOrder.metadata as any)?.erpVendorCode) && (
+                                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200" title="ERP Vendor Code">
+                                    ERP: {viewingOrder.erpVendorCode || (viewingOrder.metadata as any)?.erpVendorCode}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         );
@@ -4220,11 +4312,11 @@ export default function PurchaseOrders() {
 
 
 
-function InfoTile({ label, value }: { label: string; value: string }) {
+function InfoTile({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
       <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{label}</p>
-      <p className="mt-1 break-words text-xs font-bold text-slate-800">{value || '-'}</p>
+      <div className="mt-1 break-words text-xs font-bold text-slate-800">{value || '-'}</div>
     </div>
   );
 }

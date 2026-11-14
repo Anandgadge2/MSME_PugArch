@@ -9976,12 +9976,42 @@ router.get('/purchase-orders', authenticate, asyncRoute(async (req, res) => {
   }
 
   if (query.status) where.status = query.status;
-  if (query.q) where.OR = [
-    { poNumber: { contains: query.q, mode: 'insensitive' } },
-    { title: { contains: query.q, mode: 'insensitive' } },
-    { seller: { name: { contains: query.q, mode: 'insensitive' } } },
-    { buyer: { name: { contains: query.q, mode: 'insensitive' } } }
-  ];
+  const search = String(query.q || (req.query as any).search || '').trim();
+  if (search) {
+    const orClauses: any[] = [
+      { poNumber: { contains: search, mode: 'insensitive' } },
+      { title: { contains: search, mode: 'insensitive' } },
+      { status: { contains: search, mode: 'insensitive' } },
+      { externalPoNumber: { contains: search, mode: 'insensitive' } },
+      { erpVendorCode: { contains: search, mode: 'insensitive' } },
+      { seller: { name: { contains: search, mode: 'insensitive' } } },
+      { seller: { email: { contains: search, mode: 'insensitive' } } },
+      { seller: { sellerProfile: { businessName: { contains: search, mode: 'insensitive' } } } },
+      { seller: { organization: { organizationName: { contains: search, mode: 'insensitive' } } } },
+      { seller: { organization: { gstin: { contains: search, mode: 'insensitive' } } } },
+      { buyer: { name: { contains: search, mode: 'insensitive' } } },
+      { buyer: { email: { contains: search, mode: 'insensitive' } } },
+      { buyer: { organization: { organizationName: { contains: search, mode: 'insensitive' } } } }
+    ];
+
+    const vndMatch = search.match(/^(?:VND-?)0*(\d+)$/i);
+    if (vndMatch && vndMatch[1]) {
+      const vendorNum = parseInt(vndMatch[1], 10);
+      if (!isNaN(vendorNum) && vendorNum > 0) {
+        orClauses.push({ sellerId: vendorNum });
+      }
+    } else if (/^\d+$/.test(search)) {
+      const num = parseInt(search, 10);
+      if (!isNaN(num) && num > 0) {
+        orClauses.push({ sellerId: num });
+      }
+    }
+
+    where.AND = [
+      ...(where.AND || []),
+      { OR: orClauses }
+    ];
+  }
   const window = listWindow(query);
   const [purchaseOrders, total] = await Promise.all([
     db.purchaseOrder.findMany({
@@ -10335,6 +10365,8 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
     paymentTerms: z.string().trim().max(500).optional(),
     deliveryType: z.string().trim().max(200).optional(),
     externalPoNumber: z.string().trim().max(100).optional(),
+    erpVendorCode: z.string().trim().max(100).optional().nullable(),
+    sellerId: z.coerce.number().int().positive().optional(),
     externalPdfFileId: z.coerce.number().int().positive().optional().nullable(),
     items: z.array(poLineItemSchema).min(1, 'At least one line item is required').optional()
   }), req.body);
@@ -10349,6 +10381,13 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
 
   if (body.externalPdfFileId) {
     await assertFileAssetOwnership(body.externalPdfFileId, req);
+  }
+
+  if (body.sellerId !== undefined && body.sellerId !== po.sellerId) {
+    const sellerUser = await db.user.findFirst({
+      where: { id: body.sellerId }
+    });
+    if (!sellerUser) throw new ApiError(404, 'Specified seller not found', 'SELLER_NOT_FOUND');
   }
 
   const statusLower = String(po.status || '').toLowerCase();
@@ -10394,6 +10433,9 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
       });
     }
 
+    const currentMeta = (typeof po.metadata === 'object' && po.metadata ? (po.metadata as Record<string, any>) : {});
+    const updatedMeta = body.erpVendorCode !== undefined ? { ...currentMeta, erpVendorCode: body.erpVendorCode || null } : currentMeta;
+
     return tx.purchaseOrder.update({
       where: { id },
       data: {
@@ -10403,6 +10445,9 @@ router.put('/purchase-orders/:id/draft', authenticate, authorize('buyer', 'admin
         ...(body.paymentTerms !== undefined ? { paymentTerms: body.paymentTerms } : {}),
         ...(body.deliveryType !== undefined ? { deliveryType: body.deliveryType } : {}),
         ...(body.externalPoNumber !== undefined ? { externalPoNumber: body.externalPoNumber } : {}),
+        ...(body.erpVendorCode !== undefined ? { erpVendorCode: body.erpVendorCode || null } : {}),
+        ...(body.sellerId !== undefined ? { sellerId: body.sellerId } : {}),
+        ...(body.erpVendorCode !== undefined ? { metadata: updatedMeta } : {}),
         ...(body.externalPdfFileId !== undefined ? { externalPdfFileId: body.externalPdfFileId } : {}),
         ...(newTotal !== undefined ? { amount: newTotal, totalValue: newTotal } : {})
       },
@@ -10489,6 +10534,7 @@ router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admi
     deliveryAddress: z.string().trim().max(1000).optional(),
     paymentTerms: z.string().trim().max(500).optional(),
     externalPoNumber: z.string().trim().max(100).optional(),
+    erpVendorCode: z.string().trim().max(100).optional().nullable(),
     externalPdfFileId: z.coerce.number().int().positive().optional().nullable(),
     items: z.array(poLineItemSchema).min(1, 'At least one line item is required').optional()
   }), req.body);
@@ -10550,6 +10596,7 @@ router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admi
       ...(body.deliveryAddress !== undefined ? { deliveryAddress: body.deliveryAddress } : {}),
       ...(body.paymentTerms !== undefined ? { paymentTerms: body.paymentTerms } : {}),
       ...(body.externalPoNumber !== undefined ? { externalPoNumber: body.externalPoNumber } : {}),
+      ...(body.erpVendorCode !== undefined ? { erpVendorCode: body.erpVendorCode || null } : {}),
       ...(body.externalPdfFileId !== undefined ? { externalPdfFileId: body.externalPdfFileId } : {}),
       ...(proposedItems ? { items: proposedItems, totalValue: proposedTotalValue, amount: proposedTotalValue } : {})
     },
@@ -10558,6 +10605,7 @@ router.post('/purchase-orders/:id/amend', authenticate, authorize('buyer', 'admi
       deliveryAddress: po.deliveryAddress,
       paymentTerms: po.paymentTerms,
       externalPoNumber: po.externalPoNumber,
+      erpVendorCode: po.erpVendorCode,
       externalPdfFileId: po.externalPdfFileId,
       items: po.items.map((i: any) => ({
         id: i.id,
@@ -10668,6 +10716,9 @@ router.post('/purchase-orders/:id/amendment-decision', authenticate, authorize('
       }
       if (proposed.externalPoNumber !== undefined) {
         updateData.externalPoNumber = proposed.externalPoNumber;
+      }
+      if (proposed.erpVendorCode !== undefined) {
+        updateData.erpVendorCode = proposed.erpVendorCode;
       }
       if (proposed.externalPdfFileId !== undefined) {
         updateData.externalPdfFileId = proposed.externalPdfFileId;
