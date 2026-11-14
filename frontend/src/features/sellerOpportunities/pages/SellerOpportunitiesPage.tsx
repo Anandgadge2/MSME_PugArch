@@ -2132,8 +2132,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         />
       </div>
 
-      {/* ── Opportunity Type Segmented Filter Pills (Wrapping, No Horizontal Scroll) ── */}
-      <div className="flex flex-wrap items-center gap-2 -mt-1" role="tablist" aria-label="Opportunity Types">
+      {/* ── Opportunity Type Segmented Filter Pills (Single Line, No Wrapping) ── */}
+      <div className="flex items-center gap-1.5 sm:gap-2 -mt-1 overflow-x-auto no-scrollbar flex-nowrap pb-1" role="tablist" aria-label="Opportunity Types">
         {opportunityCategories.map(tab => {
           const isActive = (type === tab.typeVal) || (!type && !tab.typeVal);
           const count = typeCounts[tab.countKey] || 0;
@@ -2150,7 +2150,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 setPage(1);
               }}
               className={cn(
-                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer",
+                "inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer shrink-0 whitespace-nowrap",
                 isActive
                   ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
                   : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
