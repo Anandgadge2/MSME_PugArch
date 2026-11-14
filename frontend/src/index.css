@@ -35,19 +35,19 @@
 
 :root,
 html {
-  font-size: 13.2px;
+  font-size: 16px;
 }
 
 html.font-size-small {
-  font-size: 11.5px !important;
+  font-size: 14px !important;
 }
 
 html.font-size-normal {
-  font-size: 13.2px !important;
+  font-size: 16px !important;
 }
 
 html.font-size-large {
-  font-size: 15.5px !important;
+  font-size: 18px !important;
 }
 
 
@@ -212,7 +212,7 @@ input[type="radio"] {
 @media (max-width: 640px) {
   :root,
   html {
-    font-size: 12px !important;
+    font-size: 14px !important;
   }
 
   /* Prevent iOS Safari intrusive auto-zoom on input focus */
@@ -285,21 +285,21 @@ input[type="radio"] {
 @media (min-width: 1024px) {
   :root,
   html {
-    font-size: 14.5px !important;
+    font-size: 16px !important;
   }
 }
 
 @media (min-width: 1280px) {
   :root,
   html {
-    font-size: 15px !important;
+    font-size: 16.5px !important;
   }
 }
 
 @media (min-width: 1600px) {
   :root,
   html {
-    font-size: 15.5px !important;
+    font-size: 17px !important;
   }
   /* Let page containers breathe on ultrawides */
   main .max-w-6xl,
