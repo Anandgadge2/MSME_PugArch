@@ -593,6 +593,7 @@ const sensitiveProfileFields = (payload: {
 const financialActor = (req: AuthRequest) => ({
   id: Number(req.user?.id),
   role: String(req.user?.role),
+  organizationId: req.user?.organizationId ? Number(req.user.organizationId) : undefined,
   ipAddress: req.ip,
   userAgent: req.headers['user-agent']
 });

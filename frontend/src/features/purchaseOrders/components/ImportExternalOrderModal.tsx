@@ -313,7 +313,7 @@ export function ImportExternalOrderModal({
               erpVendorCode: '50034'
             },
             sellerUserId: 105,
-            sellerUser: { id: 105, name: 'HRUSHIKESH ROUT', email: 'hkrout@fortischemicals.com' }
+            sellerUser: { id: 105, name: 'Fortis Chemicals Sales', email: 'fortis@gmail.com' }
           };
         } else if (codeTrim === '50033' || nameLower.includes('koshal') || gstinUpper === '21AABCF3556E1Z5') {
           orgId = 95;
@@ -330,7 +330,7 @@ export function ImportExternalOrderModal({
               erpVendorCode: '50033'
             },
             sellerUserId: 107,
-            sellerUser: { id: 107, name: 'ASIT DAS', email: 'asit.das@koshalceramics.com' }
+            sellerUser: { id: 107, name: 'Koshal Ceramics Sales', email: 'koshal@gmail.com' }
           };
         }
       }
@@ -983,7 +983,7 @@ export function ImportExternalOrderModal({
                                     gstin: '21AAACF9253B1Z6',
                                     panNumber: 'AAACF9253B',
                                     sellerUserId: 105,
-                                    sellerUserName: 'HRUSHIKESH ROUT'
+                                    sellerUserName: 'Fortis Chemicals Sales'
                                   });
                                 } else if (val === 95) {
                                   handleSelectVendor({
@@ -992,7 +992,7 @@ export function ImportExternalOrderModal({
                                     gstin: '21AABCF3556E1Z5',
                                     panNumber: 'AABCF3556E',
                                     sellerUserId: 107,
-                                    sellerUserName: 'ASIT DAS'
+                                    sellerUserName: 'Koshal Ceramics Sales'
                                   });
                                 } else if (val === 96) {
                                   handleSelectVendor({
