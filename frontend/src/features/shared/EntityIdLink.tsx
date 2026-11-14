@@ -49,13 +49,13 @@ export function EntityIdLink({ label, id, size = 'md', className, showIcon = tru
 
     const inner = (
         <>
-            <span className="font-mono font-black uppercase tracking-wide text-wrap-anywhere">{display}</span>
+            <span className="font-mono font-black uppercase tracking-wide truncate max-w-[210px] sm:max-w-[280px]" title={display}>{display}</span>
             {showIcon && <ExternalLink className="h-3 w-3 shrink-0 opacity-60" aria-hidden />}
         </>
     );
 
     const styles = cn(
-        'inline-flex items-center gap-1.5 rounded-md border border-[#12335f]/20 bg-[#12335f]/5 text-[#12335f] transition hover:border-[#12335f] hover:bg-[#12335f]/10 hover:underline',
+        'inline-flex items-center gap-1.5 rounded-md border border-[#12335f]/20 bg-[#12335f]/5 text-[#12335f] transition hover:border-[#12335f] hover:bg-[#12335f]/10 hover:underline max-w-full',
         sizeClass[size],
         className
     );

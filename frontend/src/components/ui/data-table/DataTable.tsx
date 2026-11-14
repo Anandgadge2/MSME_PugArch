@@ -62,6 +62,7 @@ export interface DataTableProps<T> {
   caption?: string;
   footer?: React.ReactNode;
   containerFooter?: React.ReactNode;
+  verticalAlign?: 'top' | 'middle';
   /**
    * Layout presentation on mobile screens (< sm breakpoint).
    * 'scroll' (default): renders standard table with horizontal overflow scrolling.
@@ -103,6 +104,7 @@ export function DataTable<T>({
   caption,
   footer,
   containerFooter,
+  verticalAlign = 'middle',
   mobileLayout = 'scroll',
 }: DataTableProps<T>) {
   const safePageSize = Math.max(1, pageSize || 10);
@@ -458,7 +460,11 @@ export function DataTable<T>({
                   )}
                 >
                   {showSrNo && (
-                    <td className={cn("py-3 px-2 sm:px-2.5 font-mono text-xs text-slate-500", srNoWidth)}>
+                    <td className={cn(
+                      "py-3 px-2 sm:px-2.5 font-mono text-xs text-slate-500",
+                      verticalAlign === 'top' ? 'align-top pt-3.5' : 'align-middle',
+                      srNoWidth
+                    )}>
                       {String(rowIndex).padStart(2, '0')}
                     </td>
                   )}
@@ -466,7 +472,8 @@ export function DataTable<T>({
                     <td
                       key={col.key}
                       className={cn(
-                        "py-3 px-2 sm:px-2.5 align-middle",
+                        "py-3 px-2 sm:px-2.5",
+                        verticalAlign === 'top' ? 'align-top' : 'align-middle',
                         col.width,
                         col.align === 'right' && 'text-right',
                         col.align === 'center' && 'text-center',
