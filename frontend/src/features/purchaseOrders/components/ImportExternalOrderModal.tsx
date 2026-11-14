@@ -277,6 +277,8 @@ export function ImportExternalOrderModal({
       }
       if (extracted.deliveryTerms?.deliveryAddress) {
         setDeliveryAddress(extracted.deliveryTerms.deliveryAddress);
+      } else if (extracted.buyerDetails?.address) {
+        setDeliveryAddress(extracted.buyerDetails.address);
       }
       if (extracted.deliveryTerms?.paymentTerms) {
         setPaymentTerms(extracted.deliveryTerms.paymentTerms);
