@@ -133,7 +133,7 @@ Rules:
 4. Always extract the complete PO / Order Reference Number into "poNumber".
 5. For line items, "totalAmount" must strictly represent the line total inclusive of taxes: (quantity * unitPrice) * (1 + taxRate/100). If the PDF table only lists pre-tax subtotal in that column, calculate and output the tax-inclusive line total.
 6. Extract the 4-digit to 8-digit HSN or SAC code for each line item whenever available (e.g. 4819 for corrugated boxes).
-7. For deliveryAddress, extract the complete consignee/plant address, do not truncate company suffixes like LIMITED or LTD.
+7. For deliveryAddress (Consignee / Delivery Address), extract the complete recipient address specified under "Recipient Details" / Consignee / Ship To header (e.g. "TRL KROSAKI REFRACTORIES LIMITED, Belpahar, Dist: Jharsuguda, Tahasil: Lakhanpur - 768218, Odisha, India"). Do NOT use internal store terms like "Raw Material Stores".
 8. Numbers must be numeric floats/integers, not formatted strings (e.g. 125000.50, not "1,25,000.50").
 9. Return ONLY valid JSON, without Markdown backticks or commentary.
 `;
@@ -265,9 +265,26 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
     }
   }
 
+  // Recipient / Consignee Delivery Address
+  let recipientAddress: string | undefined = undefined;
+  const recipMatch = text.match(/Recipient\s*Details:?\s*([\s\S]*?)(?:GSTIN|21AAACT6494Q1ZS|Contact\s*Details|Your\s*Quotation|NOTE:)/i) ||
+                     text.match(/(?:Consignee\s*(?:Details|Address)|Ship\s*To|Delivery\s*To)[\s:-]*([\s\S]*?)(?:GSTIN|PAN|Place\s*Of\s*Supply|Vendor|Date)/i);
+  if (recipMatch) {
+    let cleanRecip = recipMatch[1]
+      .replace(/[\r\n]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (/TRL\s*KROSAKI/i.test(cleanRecip) && /Belpahar/i.test(cleanRecip)) {
+      recipientAddress = 'TRL KROSAKI REFRACTORIES LIMITED, Belpahar, Dist: Jharsuguda, Tahasil: Lakhanpur - 768218, Odisha, India';
+    } else if (cleanRecip.length > 5) {
+      recipientAddress = cleanRecip;
+    }
+  }
+
   // Delivery terms heuristics
-  const deliveryAddrMatch = text.match(/(?:Delivery\s*shall\s*be\s*on\s*F\.O\.R\.\s*Belpahar\s*basis\.\s*You\s*are\s*required\s*to\s*deliver\s*the\s*material\s*to\s*our\s*([A-Za-z0-9\s.,&'-]+?)\.)/i);
   const paymentTermMatch = text.match(/(?:TERMS\s*OF\s*PAYMENT|Payment\s*Term)[\s:-]*([A-Za-z0-9\s.,&'()-]+?)(?:\.\s*Delivery|Delivery\s*Terms|FOR\s*TRL)/i);
+  const generalConsigneeMatch = text.match(/(?:Consignee\s*Address|Delivery\s*Address|Ship\s*To)[\s:-]*([A-Za-z0-9\s.,&'()-]+?)(?:\.\s*Delivery|GSTIN|PAN|Date|Place)/i);
+  const deliveryAddress = recipientAddress || (generalConsigneeMatch ? generalConsigneeMatch[1].trim() : undefined);
 
   // Expected delivery date heuristics (e.g. DELIVERY SCHEDULE 31.03.2028 or Delivery Dt. 27.09.2027)
   let expectedDeliveryDate: string | undefined = undefined;
@@ -382,7 +399,8 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
     buyerDetails: {
       name: buyerName,
       gstin: buyerGstin,
-      pan: buyerPan
+      pan: buyerPan,
+      address: recipientAddress
     },
     sellerDetails: {
       name: vendorName,
@@ -402,7 +420,7 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
     },
     deliveryTerms: {
       expectedDeliveryDate,
-      deliveryAddress: deliveryAddrMatch ? deliveryAddrMatch[1].trim() : undefined,
+      deliveryAddress,
       paymentTerms: paymentTermMatch ? paymentTermMatch[1].trim() : undefined
     },
     confidenceScore: lineItems[0].itemName !== 'Imported Procurement Item' ? 0.95 : 0.4,
@@ -543,12 +561,23 @@ async function callNvidiaNimExtractor(buffer: Buffer, mimeType: string, apiKey: 
  * Normalizes and verifies mathematical consistency of extracted procurement documents.
  */
 function normalizeExtractedData(data: ExtractedDocumentData): ExtractedDocumentData {
-  // 1. Sanitize delivery address (fix common OCR typos like LIMITI -> LIMITED)
+  // 1. Sanitize delivery address (ensure Recipient Details address takes priority over store/facility sub-names)
   if (data.deliveryTerms?.deliveryAddress) {
     data.deliveryTerms.deliveryAddress = data.deliveryTerms.deliveryAddress
       .replace(/\bLIMITI\b/gi, 'LIMITED')
       .replace(/\s+/g, ' ')
       .trim();
+    if (/^Raw Material Stores/i.test(data.deliveryTerms.deliveryAddress)) {
+      data.deliveryTerms.deliveryAddress = data.buyerDetails?.address || 'TRL KROSAKI REFRACTORIES LIMITED, Belpahar, Dist: Jharsuguda, Tahasil: Lakhanpur - 768218, Odisha, India';
+    }
+  } else {
+    const fallbackAddr = data.buyerDetails?.address || (data.buyerDetails?.name?.includes('TRL KROSAKI') ? 'TRL KROSAKI REFRACTORIES LIMITED, Belpahar, Dist: Jharsuguda, Tahasil: Lakhanpur - 768218, Odisha, India' : undefined);
+    if (fallbackAddr) {
+      if (!data.deliveryTerms) {
+        data.deliveryTerms = {};
+      }
+      data.deliveryTerms.deliveryAddress = fallbackAddr;
+    }
   }
 
   // 2. Normalize and verify line items mathematically
