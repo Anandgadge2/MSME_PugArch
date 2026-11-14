@@ -288,6 +288,10 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
   const poLineMatch = text.match(/POS\s*No\.[\s\S]*?(?:10\s+([0-9]{4,10})\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)\s+([A-Za-z0-9\s().&'-]+?)(?:HSN|CGST|Specification))/i);
   const woLineMatch = text.match(/Posn\s*Line\s*Item[\s\S]*?10\s+10\s+([0-9]{4,10})\s+([A-Za-z0-9\s().&'-]+?)(?:SAC|HSN):?([0-9]{4,8})?\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)/i);
 
+  // Global HSN / SAC match across document text
+  const docHsnMatch = text.match(/(?:HSN\s*(?:NO|CODE)?|SAC\s*(?:NO|CODE)?)[\s:.-]*([0-9]{4,8})/i);
+  const detectedDocHsn = docHsnMatch ? docHsnMatch[1] : undefined;
+
   if (poLineMatch) {
     const code = poLineMatch[1];
     const qty = parseFloat(poLineMatch[2].replace(/,/g, '')) || 1;
@@ -298,7 +302,8 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
     const totalAmount = Math.round(subtotal * 1.18 * 100) / 100;
     lineItems.push({
       itemName: itemName || `Material #${code}`,
-      description: `SAP Material Code: ${code}`,
+      description: `SAP Material Code: ${code}${detectedDocHsn ? ` (HSN: ${detectedDocHsn})` : ''}`,
+      hsnCode: detectedDocHsn,
       quantity: qty,
       uom: uom || 'NOS',
       unitPrice,
@@ -308,7 +313,7 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
   } else if (woLineMatch) {
     const code = woLineMatch[1];
     const itemName = woLineMatch[2].trim().replace(/\s+/g, ' ');
-    const hsnCode = woLineMatch[3];
+    const hsnCode = woLineMatch[3] || detectedDocHsn;
     const qty = parseFloat(woLineMatch[4].replace(/,/g, '')) || 1;
     const uom = woLineMatch[5];
     const unitPrice = parseFloat(woLineMatch[6].replace(/,/g, '')) || 0;
@@ -349,6 +354,26 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
   const calcSub = lineItems.reduce((acc, it) => acc + (it.quantity * it.unitPrice), 0);
   const calcTot = lineItems.reduce((acc, it) => acc + it.totalAmount, 0);
 
+  // Tax breakdown extraction (CGST, SGST, IGST)
+  const cgstMatch = text.match(/(?:TOTAL\s*CGST\s*VALUE|CGST)[\s:(INR)]*([0-9,]+(?:\.[0-9]{2})?)/i);
+  const sgstMatch = text.match(/(?:TOTAL\s*SGST\s*VALUE|SGST)[\s:(INR)]*([0-9,]+(?:\.[0-9]{2})?)/i);
+  const igstMatch = text.match(/(?:TOTAL\s*IGST\s*VALUE|IGST)[\s:(INR)]*([0-9,]+(?:\.[0-9]{2})?)/i);
+
+  const totalTaxCalc = Math.round((calcTot - calcSub) * 100) / 100;
+  let cgstVal = cgstMatch ? parseFloat(cgstMatch[1].replace(/,/g, '')) : undefined;
+  let sgstVal = sgstMatch ? parseFloat(sgstMatch[1].replace(/,/g, '')) : undefined;
+  let igstVal = igstMatch ? parseFloat(igstMatch[1].replace(/,/g, '')) : undefined;
+
+  if (!cgstVal && !sgstVal && !igstVal && totalTaxCalc > 0) {
+    const isSameState = buyerGstin && sellerGstin && buyerGstin.slice(0, 2) === sellerGstin.slice(0, 2);
+    if (isSameState) {
+      cgstVal = Math.round((totalTaxCalc / 2) * 100) / 100;
+      sgstVal = Math.round((totalTaxCalc - cgstVal) * 100) / 100;
+    } else {
+      igstVal = totalTaxCalc;
+    }
+  }
+
   return {
     documentType: (poNumber && poNumber.startsWith('47')) ? 'PURCHASE_ORDER' : 'PURCHASE_ORDER',
     systemDetected,
@@ -368,7 +393,10 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
     lineItems,
     financials: {
       subtotal: Math.round(calcSub * 100) / 100,
-      totalTax: Math.round((calcTot - calcSub) * 100) / 100,
+      cgst: cgstVal,
+      sgst: sgstVal,
+      igst: igstVal,
+      totalTax: totalTaxCalc,
       grandTotal: Math.round(calcTot * 100) / 100,
       currency: 'INR'
     },
