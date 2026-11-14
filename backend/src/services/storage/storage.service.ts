@@ -1002,6 +1002,9 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
   const rawUrl = (assetObj?.url || '').replace(/^(\/)?uploads\//, '');
 
   const localCandidates = [
+    path.resolve('/tmp/uploads', rawKey),
+    path.resolve('/tmp/uploads', cleanKey),
+    path.resolve('/tmp/uploads', baseKey),
     path.resolve(process.cwd(), 'uploads', rawKey),
     path.resolve(process.cwd(), 'uploads', cleanKey),
     path.resolve(process.cwd(), 'uploads', baseKey),
@@ -1014,6 +1017,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
     path.resolve(process.cwd(), rawKey),
     path.resolve(process.cwd(), cleanKey),
     ...(rawUrl ? [
+      path.resolve('/tmp/uploads', rawUrl),
       path.resolve(process.cwd(), 'uploads', rawUrl),
       path.resolve(process.cwd(), 'backend/uploads', rawUrl),
       path.resolve(process.cwd(), '../uploads', rawUrl)

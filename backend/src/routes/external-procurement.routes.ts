@@ -301,6 +301,7 @@ const importExternalPoSchema = z.object({
     z.object({
       itemName: z.string().min(1, 'Item name is required'),
       description: z.string().optional(),
+      hsnCode: z.string().optional(),
       quantity: z.coerce.number().positive(),
       unitOfMeasure: z.string().default('NOS'),
       unitPrice: z.coerce.number().min(0),
@@ -389,7 +390,9 @@ router.post(
           items: {
             create: payload.lineItems.map(item => ({
               itemName: item.itemName,
-              description: item.description || null,
+              description: item.description 
+                ? (item.hsnCode && !item.description.includes(item.hsnCode) ? `${item.description} (HSN/SAC: ${item.hsnCode})` : item.description)
+                : (item.hsnCode ? `HSN/SAC: ${item.hsnCode}` : null),
               quantity: item.quantity,
               unitOfMeasure: item.unitOfMeasure,
               unitPrice: item.unitPrice,

@@ -330,9 +330,11 @@ export class GCPStorageService implements StorageProvider {
 
       // Persist local disk copy for fast retrieval and hybrid local fallback
       try {
-        const localDir = path.resolve(process.cwd(), 'uploads', path.dirname(fullKey));
+        const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+        const baseStorageDir = isServerless ? '/tmp/uploads' : path.resolve(process.cwd(), 'uploads');
+        const localDir = path.resolve(baseStorageDir, path.dirname(fullKey));
         fs.mkdirSync(localDir, { recursive: true });
-        const localFilePath = path.resolve(process.cwd(), 'uploads', fullKey);
+        const localFilePath = path.resolve(baseStorageDir, fullKey);
         fs.writeFileSync(localFilePath, saveBuffer);
       } catch (_diskErr) {
         // Non-fatal local cache mirror write failure
@@ -354,9 +356,11 @@ export class GCPStorageService implements StorageProvider {
       try {
         const folderPrefix = options.folder ? `${options.folder.replace(/\/$/, '')}/` : '';
         const fullKey = key.startsWith(folderPrefix) ? key : `${folderPrefix}${key}`;
-        const localDir = path.resolve(process.cwd(), 'uploads', path.dirname(fullKey));
+        const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
+        const baseStorageDir = isServerless ? '/tmp/uploads' : path.resolve(process.cwd(), 'uploads');
+        const localDir = path.resolve(baseStorageDir, path.dirname(fullKey));
         fs.mkdirSync(localDir, { recursive: true });
-        const localFilePath = path.resolve(process.cwd(), 'uploads', fullKey);
+        const localFilePath = path.resolve(baseStorageDir, fullKey);
 
         const isPrivate = isPrivateDocument(options, fullKey);
         const saveBuffer = isPrivate && !isEnvelopeEncrypted(buffer)
@@ -372,8 +376,28 @@ export class GCPStorageService implements StorageProvider {
           url: `/uploads/${fullKey}`
         };
       } catch (localErr: any) {
-        logger.error({ err: localErr?.message || localErr, gcsError: gcsErrMsg, key }, '[Storage] Local storage fallback failed');
-        throw new ApiError(500, `Storage upload failed: GCS error (${gcsErrMsg}) | Local fallback error (${localErr?.message || 'failed'})`, 'STORAGE_UPLOAD_FAILED');
+        // Fallback attempt: try /tmp directly if not already tried
+        try {
+          const folderPrefix = options.folder ? `${options.folder.replace(/\/$/, '')}/` : '';
+          const fullKey = key.startsWith(folderPrefix) ? key : `${folderPrefix}${key}`;
+          const tmpDir = path.resolve('/tmp/uploads', path.dirname(fullKey));
+          fs.mkdirSync(tmpDir, { recursive: true });
+          const tmpFilePath = path.resolve('/tmp/uploads', fullKey);
+          const isPrivate = isPrivateDocument(options, fullKey);
+          const saveBuffer = isPrivate && !isEnvelopeEncrypted(buffer)
+            ? await encryptBufferEnvelope(buffer)
+            : buffer;
+          fs.writeFileSync(tmpFilePath, saveBuffer);
+          return {
+            provider: 'local',
+            bucket: 'local',
+            key: fullKey,
+            url: `/uploads/${fullKey}`
+          };
+        } catch (_tmpErr) {
+          logger.error({ err: localErr?.message || localErr, gcsError: gcsErrMsg, key }, '[Storage] Local storage fallback failed');
+          throw new ApiError(500, `Storage upload failed: GCS error (${gcsErrMsg}) | Local fallback error (${localErr?.message || 'failed'})`, 'STORAGE_UPLOAD_FAILED');
+        }
       }
     }
   }
