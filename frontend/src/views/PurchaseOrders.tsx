@@ -79,6 +79,43 @@ import { DataTable, type ColumnDef } from '../components/ui/data-table';
 import { FocusTrap } from '../components/ui/FocusTrap';
 
 const readableStatus = (value?: string) => String(value || 'generated').replace(/_/g, ' ').replace(/\b\w/g, char => char.toUpperCase());
+
+export function formatPaymentTerms(terms?: string): { short: string; full: string } {
+  if (!terms) return { short: '', full: '' };
+  const raw = String(terms).trim();
+  const upper = raw.toUpperCase();
+
+  // Pattern detection for credit days clauses (e.g., "PAYMENT AFTER 45 DAYS CREDIT FROM DATE OF ISSUANCE...")
+  const daysCreditMatch = upper.match(/(\d+)\s*DAYS?\s*(?:CREDIT|CREDIT\s*PERIOD)/i)
+    || upper.match(/(?:CREDIT\s*PERIOD\s*(?:OF\s*)?|CREDIT\s*)(\d+)\s*DAYS?/i)
+    || upper.match(/(?:AFTER\s*|WITHIN\s*)(\d+)\s*DAYS?/i)
+    || upper.match(/NET\s*(\d+)/i)
+    || upper.match(/(\d+)\s*DAYS?/i);
+
+  if (daysCreditMatch && daysCreditMatch[1]) {
+    return { short: `${daysCreditMatch[1]} Days Credit`, full: raw };
+  }
+  if (upper.includes('100% ADVANCE') || upper.includes('ADVANCE PAYMENT') || upper === 'ADVANCE') {
+    return { short: 'Advance Payment', full: raw };
+  }
+  if (upper.includes('IMMEDIATE') || upper.includes('CASH ON DELIVERY') || upper === 'COD') {
+    return { short: 'Immediate / COD', full: raw };
+  }
+  if (upper.includes('ESCROW')) {
+    return { short: 'Escrow Held', full: raw };
+  }
+  if (upper.includes('STANDARD_NET_30') || upper === 'NET_30') {
+    return { short: 'Net 30 Days', full: raw };
+  }
+
+  // If short already (e.g. <= 22 chars), make readable
+  if (raw.length <= 22) {
+    return { short: readableStatus(raw), full: raw };
+  }
+
+  // Fallback: truncate nicely with ellipsis
+  return { short: `${raw.slice(0, 20).trim()}…`, full: raw };
+}
 const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval', 'pending_acceptance'];
 const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All') => {
   if (tab === 'Delivered') return 'delivered';
@@ -1774,78 +1811,113 @@ export default function PurchaseOrders() {
     {
       key: 'poNumber',
       header: <SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[15%]',
-      cell: (order) => (
-        <div>
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="font-mono text-xs font-black text-[#12335f] whitespace-nowrap">
+      width: 'w-[17%]',
+      cell: (order) => {
+        const extSystemRaw = String((order as any).externalSystem || (order as any).importSource || 'ERP').toUpperCase();
+        const extSystemLabel = extSystemRaw === 'GENERIC' ? 'ERP' : extSystemRaw;
+
+        return (
+          <div className="space-y-1.5 min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
               <EntityIdLink label={order.poNumber} id={order.id} size="sm" onClick={() => setViewingOrder(order)} />
-            </span>
-            {(order as any).amendmentVersion && (order as any).amendmentVersion > 1 && (
-              <span className="rounded bg-purple-100 text-purple-800 border border-purple-200 px-1 py-0.2 text-[9px] font-bold font-mono">
-                v{(order as any).amendmentVersion}
-              </span>
-            )}
-          </div>
-          {(order as any).externalPoNumber && (
-            <div className="mt-1 flex items-center gap-1 flex-wrap">
-              <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200">
-                {String((order as any).externalSystem || (order as any).importSource || 'SAP').toUpperCase()}: {(order as any).externalPoNumber}
-              </span>
-              {(order as any).erpVendorCode && (
-                <span className="text-[9px] font-mono text-slate-500 font-semibold" title={`ERP Vendor Code: ${(order as any).erpVendorCode}`}>
-                  (V: {(order as any).erpVendorCode})
+              {(order as any).amendmentVersion && (order as any).amendmentVersion > 1 && (
+                <span className="rounded bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.5 text-[9px] font-bold font-mono">
+                  v{(order as any).amendmentVersion}
                 </span>
               )}
             </div>
-          )}
-        </div>
-      ),
+            {(order as any).externalPoNumber && (
+              <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                <span className="font-mono font-bold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200/80">
+                  {extSystemLabel} #{(order as any).externalPoNumber}
+                </span>
+                {(order as any).erpVendorCode && (
+                  <span
+                    className="font-mono text-slate-500 font-semibold"
+                    title={`ERP Vendor Code: ${(order as any).erpVendorCode}`}
+                  >
+                    (V: {(order as any).erpVendorCode})
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      },
     },
     {
       key: 'title',
       header: <SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} />,
       width: 'w-[23%]',
-      cell: (order) => (
-        <div>
-          <p className="font-bold text-slate-900">{order.title}</p>
-          <div className="flex flex-wrap items-center gap-1.5 mt-1">
-            <span className="text-[9px] font-bold text-slate-500">{formatDate(order.createdAt)}</span>
-            {order.paymentTerms && (
-              <span className="text-[9px] font-black text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded uppercase">
-                {readableStatus(order.paymentTerms)}
+      cell: (order) => {
+        const cleanedTitle = String(order.title || '')
+          .replace(/\s*\(\s*/g, ' (')
+          .replace(/\s*\)/g, ')');
+        const paymentInfo = formatPaymentTerms(order.paymentTerms);
+
+        return (
+          <div className="space-y-1.5 min-w-0">
+            <p className="font-bold text-slate-900 text-xs leading-snug line-clamp-2" title={order.title}>
+              {cleanedTitle}
+            </p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-500">
+                <Calendar className="h-3 w-3 shrink-0 text-slate-400" />
+                {formatDate(order.createdAt)}
               </span>
-            )}
-            {order.deliveryType && (
-              <span className="text-[9px] font-black text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded uppercase">
-                {readableStatus(order.deliveryType)}
-              </span>
-            )}
+              {order.paymentTerms && (
+                <span
+                  title={`Payment Terms: ${paymentInfo.full}`}
+                  className="inline-flex items-center gap-1 text-[9px] font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-1.5 py-0.5 rounded cursor-help"
+                >
+                  <CreditCard className="h-2.5 w-2.5 shrink-0 opacity-70" />
+                  <span>{paymentInfo.short}</span>
+                </span>
+              )}
+              {order.deliveryType && (
+                <span className="text-[9px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/70 px-1.5 py-0.5 rounded uppercase">
+                  {readableStatus(order.deliveryType)}
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      ),
+        );
+      },
     },
     {
       key: 'party',
       header: <SortHeader label="Party" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[13%]',
-      cell: (order) => (
-        <span className="text-slate-600">{order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`}</span>
-      ),
+      width: 'w-[14%]',
+      cell: (order) => {
+        const partyName = order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`;
+        return (
+          <div className="min-w-0">
+            <span className="font-medium text-slate-800 text-xs line-clamp-2" title={partyName}>
+              {partyName}
+            </span>
+          </div>
+        );
+      },
     },
     {
       key: 'value',
       header: <SortHeader label="Value" columnKey="value" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[10%]',
+      width: 'w-[12%]',
       cell: (order) => (
-        <span className="font-bold text-slate-900">{formatCurrency(order.amount || order.totalValue)}</span>
+        <span className="font-bold text-slate-900 font-mono text-xs tabular-nums whitespace-nowrap">
+          {formatCurrency(order.amount || order.totalValue)}
+        </span>
       ),
     },
     {
       key: 'expected',
       header: <SortHeader label="Expected" columnKey="expected" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[8%]',
-      cell: (order) => <span className="text-slate-500">{formatDate(order.expectedDelivery)}</span>,
+      width: 'w-[9%]',
+      cell: (order) => (
+        <span className="text-slate-600 font-medium text-xs whitespace-nowrap">
+          {formatDate(order.expectedDelivery)}
+        </span>
+      ),
     },
     {
       key: 'updated',
@@ -1854,8 +1926,8 @@ export default function PurchaseOrders() {
       cell: (order) =>
         order.updatedAt ? (
           <div>
-            <p className="text-slate-700">{formatDate(order.updatedAt)}</p>
-            <p className="text-[9px] font-semibold text-slate-400 mt-0.5">{formatTime(order.updatedAt)}</p>
+            <p className="text-slate-800 text-xs font-semibold whitespace-nowrap">{formatDate(order.updatedAt)}</p>
+            <p className="text-[10px] font-medium text-slate-400 mt-0.5 whitespace-nowrap">{formatTime(order.updatedAt)}</p>
           </div>
         ) : (
           <span className="text-slate-400">—</span>
@@ -1864,13 +1936,13 @@ export default function PurchaseOrders() {
     {
       key: 'status',
       header: <SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[11%]',
+      width: 'w-[9%]',
       cell: (order) => <StatusPill status={order.status} />,
     },
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-[8%]',
+      width: 'w-[5%]',
       align: 'right',
       cellClassName: 'text-right',
       cell: (order) => renderOrderActions(order),
@@ -2129,8 +2201,23 @@ export default function PurchaseOrders() {
 
                     {(order.paymentTerms || order.deliveryType) && (
                       <div className="flex flex-wrap gap-1.5 pt-1">
-                        {order.paymentTerms && <span className="rounded bg-teal-50 px-2 py-0.5 text-[9px] font-black uppercase text-teal-700">{readableStatus(order.paymentTerms)}</span>}
-                        {order.deliveryType && <span className="rounded bg-blue-50 px-2 py-0.5 text-[9px] font-black uppercase text-blue-700">{readableStatus(order.deliveryType)}</span>}
+                        {order.paymentTerms && (() => {
+                          const pt = formatPaymentTerms(order.paymentTerms);
+                          return (
+                            <span
+                              title={`Payment Terms: ${pt.full}`}
+                              className="inline-flex items-center gap-1 rounded bg-emerald-50 border border-emerald-200/70 px-2 py-0.5 text-[9px] font-semibold text-emerald-800"
+                            >
+                              <CreditCard className="h-2.5 w-2.5 shrink-0 opacity-70" />
+                              <span>{pt.short}</span>
+                            </span>
+                          );
+                        })()}
+                        {order.deliveryType && (
+                          <span className="rounded bg-blue-50 border border-blue-200/70 px-2 py-0.5 text-[9px] font-semibold text-blue-800 uppercase">
+                            {readableStatus(order.deliveryType)}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2156,7 +2243,8 @@ export default function PurchaseOrders() {
           onPageSizeChange={setPageSize}
           paginationLabel="orders"
           showSrNo={true}
-          srNoWidth="w-[50px]"
+          srNoWidth="w-[48px]"
+          verticalAlign="top"
           minWidth="min-w-[1120px] w-full"
         />
       )}
@@ -2519,12 +2607,18 @@ export default function PurchaseOrders() {
                       Created: {formatDate(viewingOrder.createdAt)}
                     </span>
 
-                    {viewingOrder.paymentTerms && (
-                      <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
-                        <CreditCard className="h-3 w-3 text-slate-500" />
-                        Payment: {readableStatus(viewingOrder.paymentTerms)}
-                      </span>
-                    )}
+                    {viewingOrder.paymentTerms && (() => {
+                      const pt = formatPaymentTerms(viewingOrder.paymentTerms);
+                      return (
+                        <span
+                          title={`Payment Terms: ${pt.full}`}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 cursor-help"
+                        >
+                          <CreditCard className="h-3 w-3 text-slate-500" />
+                          <span>Payment: {pt.short}</span>
+                        </span>
+                      );
+                    })()}
 
                     {viewingOrder.deliveryType && (
                       <span className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50/70 px-2.5 py-1 text-xs font-semibold text-blue-800">
