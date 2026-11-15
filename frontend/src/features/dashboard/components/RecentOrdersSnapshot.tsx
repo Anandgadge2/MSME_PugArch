@@ -122,7 +122,7 @@ export function RecentOrdersSnapshot() {
       key: 'partyName',
       header: isBuyer ? 'Supplier / MSME Vendor' : 'Buyer Department',
       cell: (order) => (
-        <div className="font-semibold text-slate-800 line-clamp-1 max-w-[180px]">
+        <div className="font-semibold text-slate-800 line-clamp-2 max-w-[220px] break-words leading-snug" title={order.partyName}>
           {order.partyName}
         </div>
       )

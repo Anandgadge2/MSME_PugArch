@@ -1735,7 +1735,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Type',
       sortable: true,
       sortKey: 'type',
-      width: 'w-[11%]',
+      width: 'w-[11%] min-w-[110px]',
       cell: (item) => (
         <div className="flex flex-col gap-1 items-start min-w-0">
           <TypeBadge type={item.type} />
@@ -1756,7 +1756,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Title & Reference',
       sortable: true,
       sortKey: 'title',
-      width: 'w-[20%]',
+      width: 'w-[22%] min-w-[210px]',
       cell: (item) => (
         <div className="space-y-1 min-w-0">
           <div className="flex items-center gap-1.5 flex-wrap">
@@ -1788,16 +1788,16 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
       header: 'Buyer & Location',
       sortable: true,
       sortKey: 'buyer',
-      width: 'w-[20%]',
+      width: 'w-[18%] min-w-[170px]',
       cell: (item) => {
         const cleanLoc = formatLocation(item.location || item.deliveryLocation);
         return (
-          <div className="space-y-1 min-w-[170px] max-w-[280px]">
-            <p className="text-xs font-bold text-slate-900 leading-snug break-words" title={item.buyer?.trim()}>
+          <div className="space-y-1 min-w-0">
+            <p className="text-xs font-bold text-slate-900 leading-snug break-words line-clamp-2" title={item.buyer?.trim()}>
               {item.buyer?.trim() || 'Buyer details controlled'}
             </p>
             <div
-              className="flex items-start gap-1 text-[11px] font-semibold text-slate-500 cursor-default hover:text-slate-800 transition-colors leading-tight"
+              className="flex items-start gap-1 text-[11px] font-semibold text-slate-600 leading-tight break-words line-clamp-2 cursor-default hover:text-slate-900 transition-colors"
               title={item.location || item.deliveryLocation || cleanLoc}
             >
               <MapPin className="h-3.5 w-3.5 shrink-0 text-slate-400 mt-0.5" aria-hidden="true" />
@@ -2132,8 +2132,8 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
         />
       </div>
 
-      {/* ── Opportunity Type Segmented Filter Pills (Single Line, No Wrapping) ── */}
-      <div className="flex items-center gap-1.5 sm:gap-2 -mt-1 overflow-x-auto no-scrollbar flex-nowrap pb-1" role="tablist" aria-label="Opportunity Types">
+      {/* ── Opportunity Type Segmented Filter Pills (Wrapping, No Horizontal Scroll) ── */}
+      <div className="flex flex-wrap items-center gap-2 -mt-1" role="tablist" aria-label="Opportunity Types">
         {opportunityCategories.map(tab => {
           const isActive = (type === tab.typeVal) || (!type && !tab.typeVal);
           const count = typeCounts[tab.countKey] || 0;
@@ -2150,7 +2150,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
                 setPage(1);
               }}
               className={cn(
-                "inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer shrink-0 whitespace-nowrap",
+                "inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer",
                 isActive
                   ? "bg-[#12335f] text-white border-[#12335f] shadow-sm shadow-[#12335f]/20 ring-2 ring-[#12335f]/15"
                   : "bg-white text-slate-700 border-slate-200/90 hover:bg-slate-50 hover:border-slate-300 shadow-2xs"
@@ -2537,7 +2537,7 @@ export default function SellerOpportunitiesPage({ subRouteType = '' }: { subRout
               sortDirection={sortDirection}
               onSort={(field) => handleSort(field as any)}
               paginationLabel="opportunities"
-              minWidth="min-w-[1120px] w-full"
+              minWidth="min-w-[1160px] w-full"
             />
           )}
         </div>

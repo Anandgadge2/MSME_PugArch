@@ -27,58 +27,27 @@
 }
 
 :root {
-  --font-body: var(--font-jakarta), var(--font-inter), "Plus Jakarta Sans", "Inter", "Noto Sans Oriya", "Kalinga", "Noto Sans Devanagari", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-heading: var(--font-jakarta), var(--font-inter), "Plus Jakarta Sans", "Inter", "Noto Sans Oriya", "Kalinga", "Noto Sans Devanagari", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-plus-jakarta: var(--font-body);
   --font-inter: var(--font-body);
 }
 
-body {
-  font-family: var(--font-body);
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Tabular figures for financial and procurement accuracy */
-table,
-.tabular-nums,
-.font-mono,
-[data-tabular-num="true"] {
-  font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1;
-}
-
-/* Elevate sub-10px micro-copy to readable, accessible standard (WCAG 2.2 AA) */
-.text-\[8\.5px\],
-.text-\[8px\],
-.text-\[9px\] {
-  font-size: 10.5px !important;
-}
-
-/* Prevent ink-trapping on micro-badges by normalizing 900 weight */
-.text-\[10px\].font-black,
-.text-\[10\.5px\].font-black,
-.text-\[11px\].font-black,
-.text-xs.font-black {
-  font-weight: 700 !important;
-}
-
 :root,
 html {
-  font-size: 19px;
+  font-size: 14px;
 }
 
 html.font-size-small {
-  font-size: 17px !important;
+  font-size: 12px !important;
 }
 
 html.font-size-normal {
-  font-size: 19px !important;
+  font-size: 14px !important;
 }
 
 html.font-size-large {
-  font-size: 21px !important;
+  font-size: 16px !important;
 }
 
 
@@ -243,7 +212,7 @@ input[type="radio"] {
 @media (max-width: 640px) {
   :root,
   html {
-    font-size: 14px !important;
+    font-size: 12px !important;
   }
 
   /* Prevent iOS Safari intrusive auto-zoom on input focus */
@@ -316,21 +285,21 @@ input[type="radio"] {
 @media (min-width: 1024px) {
   :root,
   html {
-    font-size: 16px !important;
+    font-size: 14.5px !important;
   }
 }
 
 @media (min-width: 1280px) {
   :root,
   html {
-    font-size: 16.5px !important;
+    font-size: 15px !important;
   }
 }
 
 @media (min-width: 1600px) {
   :root,
   html {
-    font-size: 17px !important;
+    font-size: 15.5px !important;
   }
   /* Let page containers breathe on ultrawides */
   main .max-w-6xl,
@@ -465,7 +434,7 @@ input[type="radio"] {
 
 
 
-/* Skeleton shimmer animation - us15ped by components/ui/skeleton.tsx */
+/* Skeleton shimmer animation - used by components/ui/skeleton.tsx */
 @keyframes shimmer {
   0% {
     transform: translateX(-100%);
