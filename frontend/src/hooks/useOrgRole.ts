@@ -229,7 +229,7 @@ export function usePermissions() {
         if (permissions.includes(upper)) return true;
         const lower = permissionCode.toLowerCase().replace(/_/g, '.');
         if (permissions.includes(lower)) return true;
-        if (permissionCode === 'purchase_order.view' && !user?.isSubUser && ['seller', 'buyer', 'shg'].includes(userRole || '')) {
+        if (permissionCode === 'purchase_order.view' && ['seller', 'buyer', 'shg', 'admin', 'master_admin'].includes(userRole || '')) {
             return true;
         }
         return false;

@@ -1209,7 +1209,7 @@ router.get('/dashboard/summary', authenticate, shortCache(60), asyncRoute(async 
                         urgency: 'HIGH',
                         title: `Review Purchase Order #${pendingActionPO.poNumber || pendingActionPO.id}`,
                         subtitle: `Buyer has officially issued an order for ₹${Number(pendingActionPO.amount || 0).toLocaleString('en-IN')}. Please accept or decline to commit fulfillment.`,
-                        actionHref: `/seller/orders?orderId=${pendingActionPO.id}`,
+                        actionHref: `/seller/orders?orderId=${pendingActionPO.id}&open=1`,
                         actionLabel: 'Review & Respond'
                     };
                 } else if (liveReverseAuction) {
