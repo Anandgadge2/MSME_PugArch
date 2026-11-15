@@ -277,7 +277,55 @@ export const findCategorySvgFilename = (name?: string, slug?: string): string =>
     return 'general-industrial-supplier';
 };
 
+export const CUSTOM_CATEGORY_PHOTOS: Record<string, string> = {
+    'cosmetic industry': '/category-photos/custom/cosmetic-industry.jpg',
+    'cosmetic-industry': '/category-photos/custom/cosmetic-industry.jpg',
+    'cosmetics': '/category-photos/custom/cosmetic-industry.jpg',
+    'cosmetic': '/category-photos/custom/cosmetic-industry.jpg',
+    'oil & gas industry': '/category-photos/custom/oil-and-gas-industry.jpg',
+    'oil-and-gas-industry': '/category-photos/custom/oil-and-gas-industry.jpg',
+    'oil and gas industry': '/category-photos/custom/oil-and-gas-industry.jpg',
+    'oil & gas': '/category-photos/custom/oil-and-gas-industry.jpg',
+    'oil-and-gas': '/category-photos/custom/oil-and-gas-industry.jpg',
+    'it & technology services': '/category-photos/custom/it-and-technology-services.jpg',
+    'it-and-technology-services': '/category-photos/custom/it-and-technology-services.jpg',
+    'it and technology services': '/category-photos/custom/it-and-technology-services.jpg',
+    'technology services': '/category-photos/custom/it-and-technology-services.jpg',
+    'it services': '/category-photos/custom/it-and-technology-services.jpg',
+    'logistics & supply chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
+    'logistics-and-supply-chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
+    'logistics and supply chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
+    'supply chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
+};
+
+export const getCustomCategoryPhotoUrl = (name?: string, slug?: string): string | null => {
+    const cleanName = (name || '').toLowerCase().trim();
+    const cleanSlug = (slug || '').toLowerCase().trim().replace(/&/g, 'and').replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+    if (CUSTOM_CATEGORY_PHOTOS[cleanName]) return CUSTOM_CATEGORY_PHOTOS[cleanName];
+    if (CUSTOM_CATEGORY_PHOTOS[cleanSlug]) return CUSTOM_CATEGORY_PHOTOS[cleanSlug];
+
+    if (cleanName.includes('cosmetic') || cleanSlug.includes('cosmetic')) {
+        return '/category-photos/custom/cosmetic-industry.jpg';
+    }
+    if ((cleanName.includes('oil') && cleanName.includes('gas')) || (cleanSlug.includes('oil') && cleanSlug.includes('gas'))) {
+        return '/category-photos/custom/oil-and-gas-industry.jpg';
+    }
+    if ((cleanName.includes('it') && cleanName.includes('tech')) || cleanName.includes('technology services')) {
+        return '/category-photos/custom/it-and-technology-services.jpg';
+    }
+    if (cleanName.includes('logistics') && (cleanName.includes('supply') || cleanName.includes('chain'))) {
+        return '/category-photos/custom/logistics-and-supply-chain.jpg';
+    }
+
+    return null;
+};
+
 export const getBundledPhotoUrl = (name?: string, slug?: string): string => {
+    const customPhoto = getCustomCategoryPhotoUrl(name, slug);
+    if (customPhoto) {
+        return customPhoto;
+    }
     const matchedSlug = findCategorySvgFilename(name, slug);
     return `/category-photos/${BUNDLED_CATEGORY_PHOTO_VERSION}/${matchedSlug}.webp`;
 };
