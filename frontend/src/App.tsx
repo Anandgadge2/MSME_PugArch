@@ -479,9 +479,15 @@ function PermissionRouteGuard({
   children: React.ReactNode;
 }) {
   const { hasPermission, loading } = usePermissions();
+  const { user } = useAuth();
   const router = useRouter();
 
   if (loading) return <RouteFallback />;
+
+  // Fundamental modules like purchase orders must never be blocked for valid enterprise buyers and sellers
+  if (permission === 'purchase_order.view' && ['seller', 'buyer', 'shg', 'admin', 'master_admin'].includes(user?.role || '')) {
+    return <>{children}</>;
+  }
 
   if (!hasPermission(permission)) {
     return (

@@ -654,14 +654,14 @@ export default function SellerAwardPoAlertPopup() {
                           onClick={() => {
                             handleDismissSession();
                             if (po?.id) {
-                              router.push(`/seller/orders?orderId=${po.id}`);
+                              router.push(`/seller/orders?orderId=${po.id}&open=1`);
                             } else {
                               router.push(award.bidId ? `/bids/${award.bidId}` : '/seller/orders');
                             }
                           }}
                           className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-[#0b2447]"
                         >
-                          <span>View</span>
+                          <span>View PO</span>
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                       </div>
@@ -874,20 +874,14 @@ export default function SellerAwardPoAlertPopup() {
                         <button
                           type="button"
                           disabled={isAccepting || isDeclining}
-                          onClick={() => handleAcceptPO(po)}
-                          className="flex-1 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50"
+                          onClick={() => {
+                            handleDismissSession();
+                            router.push(`/seller/orders?orderId=${po.id}&open=1`);
+                          }}
+                          className="flex-1 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
                         >
-                          {isAccepting ? (
-                            <>
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              Accepting PO...
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle2 className="h-4 w-4" />
-                              Accept PO
-                            </>
-                          )}
+                          <CheckCircle2 className="h-4 w-4" />
+                          Accept & Review PO
                         </button>
 
                         <button
@@ -897,7 +891,7 @@ export default function SellerAwardPoAlertPopup() {
                             setDecliningPoId(po.id);
                             setDeclineReason('');
                           }}
-                          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50"
+                          className="inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 text-xs font-bold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 cursor-pointer"
                         >
                           <XCircle className="h-4 w-4" />
                           <span>Decline PO</span>
@@ -907,11 +901,11 @@ export default function SellerAwardPoAlertPopup() {
                           type="button"
                           onClick={() => {
                             handleDismissSession();
-                            router.push(`/seller/orders?orderId=${po.id}`);
+                            router.push(`/seller/orders?orderId=${po.id}&open=1`);
                           }}
-                          className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-[#0b2447]"
+                          className="inline-flex h-10 items-center justify-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 transition hover:bg-slate-100 hover:text-[#0b2447] cursor-pointer"
                         >
-                          <span>View</span>
+                          <span>View PO</span>
                           <ExternalLink className="h-3.5 w-3.5" />
                         </button>
                       </div>

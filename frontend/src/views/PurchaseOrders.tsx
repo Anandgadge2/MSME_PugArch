@@ -1015,7 +1015,11 @@ export default function PurchaseOrders() {
       setSearchTerm(searchParam);
     }
 
-    if (!targetId || targetParamProcessedRef.current === targetId) return;
+    if (!targetId) return;
+
+    if (targetParamProcessedRef.current === targetId && viewingOrder && (viewingOrder.id === Number(targetId) || String(viewingOrder.id) === targetId || viewingOrder.poNumber?.toLowerCase() === targetId.toLowerCase())) {
+      return;
+    }
 
     const numId = Number(targetId);
     const found = allOrders.find(
@@ -1029,23 +1033,29 @@ export default function PurchaseOrders() {
       return;
     }
 
-    if (!loading) {
-      targetParamProcessedRef.current = targetId;
-      let alive = true;
-      api.get(`/api/purchase-orders/${targetId}`)
-        .then(readJsonResponse)
-        .then((body: any) => {
-          const fullData = body?.data || body;
-          if (fullData && fullData.id && alive) {
-            setViewingOrder(fullData);
-            setActiveTab('All');
+    targetParamProcessedRef.current = targetId;
+    let alive = true;
+    api.get(`/api/purchase-orders/${encodeURIComponent(targetId)}`)
+      .then(readJsonResponse)
+      .then((body: any) => {
+        const fullData = body?.data || body?.purchaseOrder || body;
+        if (fullData && (fullData.id || fullData.poNumber) && alive) {
+          setViewingOrder(fullData);
+          setActiveTab('All');
+          if (searchParams?.get('viewPdf') === '1' && (fullData.externalPdfFileId || fullData.pdfFileId)) {
+            const fileId = fullData.externalPdfFileId || fullData.pdfFileId;
+            openFileAsset({
+              id: fileId,
+              fileAssetId: fileId,
+              originalName: fullData.externalPdfFile?.originalName || fullData.pdfFile?.originalName || `Purchase_Order_${fullData.poNumber}.pdf`
+            }, 'Purchase Order PDF').catch(() => undefined);
           }
-        })
-        .catch(() => {
-          // Ignore if order not found
-        });
-      return () => { alive = false; };
-    }
+        }
+      })
+      .catch((err) => {
+        console.warn('[PurchaseOrders] Failed to fetch target order by id:', err);
+      });
+    return () => { alive = false; };
   }, [searchParams, allOrders, loading, searchTerm]);
 
   const uniqueStatuses = useMemo(() => {

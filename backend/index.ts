@@ -4725,6 +4725,9 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
         deliveryWorkflow: true,
         inspectionRecord: true,
         invoices: { orderBy: { createdAt: 'desc' } },
+        items: true,
+        pdfFile: true,
+        externalPdfFile: true,
         buyer: {
           select: {
             id: true,
@@ -4749,6 +4752,67 @@ app.get('/api/purchase-orders', authenticate, authorize('buyer', 'seller', 'admi
       take
     });
     res.json({ success: true, purchaseOrders: maskSensitive(purchaseOrders, { unmaskEmails: true }), total });
+  } catch (err: any) {
+    return handleFinancialRouteError(res, err);
+  }
+});
+
+app.get('/api/purchase-orders/:id', authenticate, authorize('buyer', 'seller', 'admin', 'shg'), async (req: AuthRequest, res) => {
+  try {
+    const idParam = req.params.id;
+    const numId = Number(idParam);
+    const userId = Number(req.user?.id);
+    const userRole = req.user?.role;
+    const orgId = req.user?.organizationId ? Number(req.user.organizationId) : undefined;
+
+    const where: any = isNaN(numId)
+      ? { poNumber: idParam }
+      : { OR: [{ id: numId }, { poNumber: idParam }] };
+
+    const po = await prisma.purchaseOrder.findFirst({
+      where,
+      include: {
+        items: true,
+        tender: { select: { id: true, tenderId: true, title: true, category: true, status: true } },
+        deliveryWorkflow: true,
+        inspectionRecord: true,
+        invoices: { orderBy: { createdAt: 'desc' } },
+        pdfFile: true,
+        externalPdfFile: true,
+        buyer: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            organization: { select: { id: true, organizationName: true, gstin: true } }
+          }
+        },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            sellerProfile: { select: { businessName: true } },
+            organization: { select: { id: true, organizationName: true, gstin: true } }
+          }
+        },
+        grns: { orderBy: { createdAt: 'desc' }, select: { id: true, grnNumber: true, status: true, createdAt: true } }
+      }
+    });
+
+    if (!po) {
+      return res.status(404).json({ success: false, message: 'Purchase order not found' });
+    }
+
+    if (userRole !== 'admin' && userRole !== 'master_admin') {
+      const isBuyerParty = po.buyerId === userId || (orgId && po.buyer?.organization?.id === orgId);
+      const isSellerParty = po.sellerId === userId || (orgId && po.seller?.organization?.id === orgId);
+      if (!isBuyerParty && !isSellerParty) {
+        return res.status(403).json({ success: false, message: 'Access denied to this purchase order' });
+      }
+    }
+
+    return res.json({ success: true, data: maskSensitive(po, { unmaskEmails: true }) });
   } catch (err: any) {
     return handleFinancialRouteError(res, err);
   }
