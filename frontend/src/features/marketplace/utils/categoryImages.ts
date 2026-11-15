@@ -296,6 +296,35 @@ export const CUSTOM_CATEGORY_PHOTOS: Record<string, string> = {
     'logistics-and-supply-chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
     'logistics and supply chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
     'supply chain': '/category-photos/custom/logistics-and-supply-chain.jpg',
+    'handicrafts': '/category-photos/custom/handicrafts-and-artisans.jpg',
+    'handicrafts & artisans': '/category-photos/custom/handicrafts-and-artisans.jpg',
+    'handicrafts-and-artisans': '/category-photos/custom/handicrafts-and-artisans.jpg',
+    'handicrafts and artisans': '/category-photos/custom/handicrafts-and-artisans.jpg',
+    'artisan products': '/category-photos/custom/handicrafts-and-artisans.jpg',
+    'handloom': '/category-photos/custom/handloom-and-textiles.jpg',
+    'handloom & traditional textiles': '/category-photos/custom/handloom-and-textiles.jpg',
+    'handloom-and-traditional-textiles': '/category-photos/custom/handloom-and-textiles.jpg',
+    'handloom & textiles': '/category-photos/custom/handloom-and-textiles.jpg',
+    'handloom-and-textiles': '/category-photos/custom/handloom-and-textiles.jpg',
+    'food processing': '/category-photos/custom/food-processing-and-agro.jpg',
+    'food processing & agro-products': '/category-photos/custom/food-processing-and-agro.jpg',
+    'food-processing-and-agro-products': '/category-photos/custom/food-processing-and-agro.jpg',
+    'food processing and agro products': '/category-photos/custom/food-processing-and-agro.jpg',
+    'agro & food processing': '/category-photos/custom/food-processing-and-agro.jpg',
+    'agro-and-food-processing': '/category-photos/custom/food-processing-and-agro.jpg',
+    'food-processing-and-agro': '/category-photos/custom/food-processing-and-agro.jpg',
+    'leather goods': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'leather & footwear': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'leather-and-footwear': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'leather goods & footwear': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'leather-goods-and-footwear': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'leather goods and footwear': '/category-photos/custom/leather-goods-and-footwear.jpg',
+    'renewable & solar energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
+    'renewable-and-solar-energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
+    'renewable and solar energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
+    'solar energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
+    'solar-energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
+    'solar & clean energy': '/category-photos/custom/renewable-and-solar-energy.jpg',
 };
 
 export const getCustomCategoryPhotoUrl = (name?: string, slug?: string): string | null => {
@@ -316,6 +345,21 @@ export const getCustomCategoryPhotoUrl = (name?: string, slug?: string): string 
     }
     if (cleanName.includes('logistics') && (cleanName.includes('supply') || cleanName.includes('chain'))) {
         return '/category-photos/custom/logistics-and-supply-chain.jpg';
+    }
+    if (cleanName.includes('handicraft') || cleanSlug.includes('handicraft') || cleanName.includes('artisan')) {
+        return '/category-photos/custom/handicrafts-and-artisans.jpg';
+    }
+    if (cleanName.includes('handloom') || cleanSlug.includes('handloom')) {
+        return '/category-photos/custom/handloom-and-textiles.jpg';
+    }
+    if (cleanName.includes('food processing') || cleanSlug.includes('food-processing') || (cleanName.includes('food') && cleanName.includes('agro'))) {
+        return '/category-photos/custom/food-processing-and-agro.jpg';
+    }
+    if (cleanName.includes('leather') || cleanSlug.includes('leather') || cleanName.includes('footwear')) {
+        return '/category-photos/custom/leather-goods-and-footwear.jpg';
+    }
+    if (cleanName.includes('solar') || cleanSlug.includes('solar') || (cleanName.includes('renewable') && cleanName.includes('energy'))) {
+        return '/category-photos/custom/renewable-and-solar-energy.jpg';
     }
 
     return null;
