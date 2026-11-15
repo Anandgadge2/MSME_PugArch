@@ -116,6 +116,47 @@ export function formatPaymentTerms(terms?: string): { short: string; full: strin
   // Fallback: truncate nicely with ellipsis
   return { short: `${raw.slice(0, 20).trim()}…`, full: raw };
 }
+
+const getPartyLocation = (order: PurchaseOrderDto, isSellerUser: boolean): string | null => {
+  if (isSellerUser) {
+    // Current user is Seller, so the other party is Buyer.
+    const buyerObj = order.buyer as any;
+    const org = buyerObj?.organization;
+    const city = org?.city || org?.district || buyerObj?.registrationDetails?.city;
+    const district = org?.district && (!city || org.district.toLowerCase() !== city.toLowerCase()) ? org.district : null;
+    const state = org?.state || buyerObj?.registrationDetails?.state;
+    const locParts = [city, district, state].filter(Boolean);
+    if (locParts.length > 0) {
+      return locParts.join(', ');
+    }
+
+    if (order.deliveryAddress) {
+      const addr = String(order.deliveryAddress).trim();
+      const parts = addr.split(',').map((p: string) => p.trim()).filter(Boolean);
+      const buyerName = String(org?.organizationName || buyerObj?.name || '').toLowerCase();
+      // Filter out any segment that just repeats the organization name
+      const addressSegments = parts.filter(p => !buyerName || !p.toLowerCase().includes(buyerName));
+      if (addressSegments.length > 0) {
+        return addressSegments.slice(0, 3).join(', ');
+      }
+      return addr.length > 45 ? `${addr.slice(0, 42)}…` : addr;
+    }
+    return null;
+  } else {
+    // Current user is Buyer or Admin, so other party is Seller.
+    const sellerObj = order.seller as any;
+    const org = sellerObj?.organization;
+    const city = org?.city || org?.district || sellerObj?.registrationDetails?.city;
+    const district = org?.district && (!city || org.district.toLowerCase() !== city.toLowerCase()) ? org.district : null;
+    const state = org?.state || sellerObj?.registrationDetails?.state;
+    const locParts = [city, district, state].filter(Boolean);
+    if (locParts.length > 0) {
+      return locParts.join(', ');
+    }
+    return null;
+  }
+};
+
 const openStatuses = ['generated', 'accepted', 'in_fulfillment', 'invoice_submitted', 'order_placed', 'issued', 'pending_approval', 'pending_acceptance'];
 const purchaseOrderStatusParam = (tab: 'Open' | 'Delivered' | 'Cancelled' | 'All') => {
   if (tab === 'Delivered') return 'delivered';
@@ -1846,7 +1887,7 @@ export default function PurchaseOrders() {
     {
       key: 'poNumber',
       header: <SortHeader label="PO" columnKey="po" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[17%]',
+      width: 'w-[15%] min-w-[140px]',
       cell: (order) => {
         const extSystemRaw = String((order as any).externalSystem || (order as any).importSource || 'ERP').toUpperCase();
         const extSystemLabel = extSystemRaw === 'GENERIC' ? 'ERP' : extSystemRaw;
@@ -1883,7 +1924,7 @@ export default function PurchaseOrders() {
     {
       key: 'title',
       header: <SortHeader label="Title" columnKey="title" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[23%]',
+      width: 'w-[21%] min-w-[200px]',
       cell: (order) => {
         const cleanedTitle = String(order.title || '')
           .replace(/\s*\(\s*/g, ' (')
@@ -1921,8 +1962,8 @@ export default function PurchaseOrders() {
     },
     {
       key: 'party',
-      header: <SortHeader label="Party / Vendor" columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[16%]',
+      header: <SortHeader label={isSeller ? "Buyer / Location" : "Party / Vendor"} columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
+      width: 'w-[20%] min-w-[200px]',
       cell: (order) => {
         const isBuyerOrAdmin = !isSeller;
         const sellerObj = order.seller as any;
@@ -1932,12 +1973,22 @@ export default function PurchaseOrders() {
         
         const vendorId = order.sellerId ? `VND-${String(order.sellerId).padStart(5, '0')}` : null;
         const erpCode = order.erpVendorCode || (order.metadata as any)?.erpVendorCode;
+        const partyLocation = getPartyLocation(order, isSeller);
 
         return (
-          <div className="min-w-0 flex flex-col gap-0.5">
-            <span className="font-bold text-slate-800 text-xs line-clamp-1" title={partyName}>
+          <div className="min-w-0 flex flex-col gap-1">
+            <span className="font-bold text-slate-800 text-xs leading-snug break-words line-clamp-2" title={partyName}>
               {partyName}
             </span>
+            {partyLocation && (
+              <span
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 leading-tight break-words line-clamp-2"
+                title={`Location: ${partyLocation}`}
+              >
+                <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+                <span>{partyLocation}</span>
+              </span>
+            )}
             {isBuyerOrAdmin && (vendorId || erpCode) && (
               <div className="flex flex-wrap items-center gap-1 mt-0.5">
                 {vendorId && (
@@ -1970,7 +2021,7 @@ export default function PurchaseOrders() {
     {
       key: 'value',
       header: <SortHeader label="Value" columnKey="value" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[12%]',
+      width: 'w-[12%] min-w-[110px]',
       cell: (order) => (
         <span className="font-bold text-slate-900 font-mono text-xs tabular-nums whitespace-nowrap">
           {formatCurrency(order.amount || order.totalValue)}
@@ -1980,7 +2031,7 @@ export default function PurchaseOrders() {
     {
       key: 'expected',
       header: <SortHeader label="Expected" columnKey="expected" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[9%]',
+      width: 'w-[9%] min-w-[90px]',
       cell: (order) => (
         <span className="text-slate-600 font-medium text-xs whitespace-nowrap">
           {formatDate(order.expectedDelivery)}
@@ -1990,7 +2041,7 @@ export default function PurchaseOrders() {
     {
       key: 'updated',
       header: <SortHeader label="Updated At" columnKey="updated" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[11%]',
+      width: 'w-[10%] min-w-[100px]',
       cell: (order) =>
         order.updatedAt ? (
           <div>
@@ -2004,13 +2055,13 @@ export default function PurchaseOrders() {
     {
       key: 'status',
       header: <SortHeader label="Status" columnKey="status" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[9%]',
+      width: 'w-[8%] min-w-[85px]',
       cell: (order) => <StatusPill status={order.status} />,
     },
     {
       key: 'actions',
       header: 'Actions',
-      width: 'w-[5%]',
+      width: 'w-[5%] min-w-[50px]',
       align: 'right',
       cellClassName: 'text-right',
       cell: (order) => renderOrderActions(order),
@@ -2261,22 +2312,42 @@ export default function PurchaseOrders() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-2.5 text-[10px] font-semibold text-slate-500 pt-1">
-                      <InfoTile
-                        label="Party"
-                        value={
-                          <div className="flex flex-col gap-0.5">
-                            <span className="truncate" title={order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`}>
-                              {(order.seller as any)?.sellerProfile?.businessName || (order.seller as any)?.organization?.organizationName || order.seller?.name || `Seller #${order.sellerId || '-'}`}
-                            </span>
-                            {order.sellerId && (
-                              <span className="font-mono text-[9px] text-slate-500 font-semibold">
-                                VND-{String(order.sellerId).padStart(5, '0')}
-                                {order.erpVendorCode ? ` • ERP: ${order.erpVendorCode}` : ''}
-                              </span>
-                            )}
-                          </div>
-                        }
-                      />
+                      {(() => {
+                        const isBuyerOrAdmin = !isSeller;
+                        const sellerObj = order.seller as any;
+                        const cardPartyName = isBuyerOrAdmin
+                          ? (sellerObj?.sellerProfile?.businessName || sellerObj?.organization?.organizationName || order.seller?.name || order.seller?.email || `Seller #${order.sellerId || '-'}`)
+                          : ((order.buyer as any)?.organization?.organizationName || order.buyer?.name || order.buyer?.email || `Buyer #${order.buyerId || '-'}`);
+                        const cardLocation = getPartyLocation(order, isSeller);
+
+                        return (
+                          <InfoTile
+                            label={isSeller ? "Buyer / Location" : "Party / Vendor"}
+                            value={
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                <span className="font-bold text-slate-800 text-xs leading-snug break-words line-clamp-2" title={cardPartyName}>
+                                  {cardPartyName}
+                                </span>
+                                {cardLocation && (
+                                  <span
+                                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 leading-tight break-words line-clamp-2"
+                                    title={`Location: ${cardLocation}`}
+                                  >
+                                    <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
+                                    <span>{cardLocation}</span>
+                                  </span>
+                                )}
+                                {isBuyerOrAdmin && order.sellerId && (
+                                  <span className="font-mono text-[9px] text-slate-500 font-semibold">
+                                    VND-{String(order.sellerId).padStart(5, '0')}
+                                    {order.erpVendorCode ? ` • ERP: ${order.erpVendorCode}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            }
+                          />
+                        );
+                      })()}
                       <InfoTile label="Value" value={formatCurrency(order.amount || order.totalValue)} />
                       <InfoTile label="Expected" value={formatDate(order.expectedDelivery)} />
                       <InfoTile label="Created" value={formatDate(order.createdAt)} />
@@ -2328,7 +2399,7 @@ export default function PurchaseOrders() {
           showSrNo={true}
           srNoWidth="w-[48px]"
           verticalAlign="top"
-          minWidth="min-w-[1120px] w-full"
+          minWidth="min-w-[1180px] w-full"
         />
       )}
 
@@ -2906,11 +2977,22 @@ export default function PurchaseOrders() {
                             )}
                             <div className="min-w-0 flex-1">
                               <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Buyer (Requester)</span>
-                              <p className="text-xs font-bold text-slate-900 truncate">
+                              <p className="text-xs font-bold text-slate-900 break-words line-clamp-2" title={buyerOrgDisplay}>
                                 {buyerOrgDisplay}
                               </p>
+                              {(() => {
+                                const buyerCity = buyerObj.organization?.city || buyerObj.organization?.district || buyerObj.registrationDetails?.city;
+                                const buyerState = buyerObj.organization?.state || buyerObj.registrationDetails?.state;
+                                const buyerLoc = [buyerCity, buyerState].filter(Boolean).join(', ');
+                                return buyerLoc ? (
+                                  <p className="text-[10px] font-medium text-slate-600 flex items-center gap-1 mt-0.5" title={`Location: ${buyerLoc}`}>
+                                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                                    <span>{buyerLoc}</span>
+                                  </p>
+                                ) : null;
+                              })()}
                               {viewingOrder.buyer?.name && viewingOrder.buyer.name !== buyerOrgDisplay && (
-                                <p className="text-[10px] font-medium text-slate-600 truncate">Attn: {viewingOrder.buyer.name}</p>
+                                <p className="text-[10px] font-medium text-slate-600 truncate mt-0.5">Attn: {viewingOrder.buyer.name}</p>
                               )}
                               {(() => {
                                 const buyerEmail = (viewingOrder.buyerId === user?.id && user?.email && !user.email.includes('*'))
@@ -2947,11 +3029,22 @@ export default function PurchaseOrders() {
                             )}
                             <div className="min-w-0 flex-1">
                               <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 block">Seller (Provider)</span>
-                              <p className="text-xs font-bold text-slate-900 truncate">
+                              <p className="text-xs font-bold text-slate-900 break-words line-clamp-2" title={sellerOrgDisplay}>
                                 {sellerOrgDisplay}
                               </p>
+                              {(() => {
+                                const sellerCity = sellerObj.organization?.city || sellerObj.organization?.district || sellerObj.registrationDetails?.city;
+                                const sellerState = sellerObj.organization?.state || sellerObj.registrationDetails?.state;
+                                const sellerLoc = [sellerCity, sellerState].filter(Boolean).join(', ');
+                                return sellerLoc ? (
+                                  <p className="text-[10px] font-medium text-slate-600 flex items-center gap-1 mt-0.5" title={`Location: ${sellerLoc}`}>
+                                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                                    <span>{sellerLoc}</span>
+                                  </p>
+                                ) : null;
+                              })()}
                               {viewingOrder.seller?.name && viewingOrder.seller.name !== sellerOrgDisplay && (
-                                <p className="text-[10px] font-medium text-slate-600 truncate">Contact: {viewingOrder.seller.name}</p>
+                                <p className="text-[10px] font-medium text-slate-600 truncate mt-0.5">Contact: {viewingOrder.seller.name}</p>
                               )}
                               {(() => {
                                 const sellerEmail = (viewingOrder.sellerId === user?.id && user?.email && !user.email.includes('*'))
@@ -3008,7 +3101,7 @@ export default function PurchaseOrders() {
                           <MapPin className="h-4 w-4 text-slate-500 shrink-0 mt-0.5" />
                           <div className="min-w-0">
                             <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500 block">Delivery Address</span>
-                            <p title={viewingOrder.deliveryAddress} className="text-xs font-medium text-slate-700 leading-relaxed line-clamp-2">
+                            <p title={viewingOrder.deliveryAddress} className="text-xs font-medium text-slate-700 leading-relaxed break-words">
                               {viewingOrder.deliveryAddress}
                             </p>
                           </div>
