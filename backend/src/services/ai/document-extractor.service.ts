@@ -302,43 +302,50 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
 
   // Line items extraction
   const lineItems: ExtractedLineItem[] = [];
-  const poLineMatch = text.match(/POS\s*No\.[\s\S]*?(?:10\s+([0-9]{4,10})\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)\s+([A-Za-z0-9\s().&'-]+?)(?:HSN|CGST|Specification))/i);
-  const woLineMatch = text.match(/Posn\s*Line\s*Item[\s\S]*?10\s+10\s+([0-9]{4,10})\s+([A-Za-z0-9\s().&'-]+?)(?:SAC|HSN):?([0-9]{4,8})?\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)/i);
 
   // Global HSN / SAC match across document text
   const docHsnMatch = text.match(/(?:HSN\s*(?:NO|CODE)?|SAC\s*(?:NO|CODE)?)[\s:.-]*([0-9]{4,8})/i);
   const detectedDocHsn = docHsnMatch ? docHsnMatch[1] : undefined;
 
-  if (poLineMatch) {
-    const code = poLineMatch[1];
-    const qty = parseFloat(poLineMatch[2].replace(/,/g, '')) || 1;
-    const uom = poLineMatch[3];
-    const unitPrice = parseFloat(poLineMatch[4].replace(/,/g, '')) || 0;
-    const subtotal = parseFloat(poLineMatch[5].replace(/,/g, '')) || (qty * unitPrice);
-    const itemName = poLineMatch[7].trim().replace(/\s+/g, ' ');
-    const totalAmount = Math.round(subtotal * 1.18 * 100) / 100;
+  // 1. PO multi-item regex pattern
+  // Matches rows like: 10 710123 3,000.000 PCS 99.49 298,470.000 30.11.2026 TRL FRT2-230*115*40. HSN NO:690210
+  const poItemRegex = /\b([0-9]{2,3})\s+([0-9]{4,10})\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+(?:([0-9]{2}[./-][0-9]{2}[./-][0-9]{4})\s+)?([\s\S]*?)(?=(?:HSN\s*(?:NO|CODE)?[\s:.-]*[0-9]{4,8})|CGST|SGST|IGST|\b[0-9]{2,3}\s+[0-9]{4,10}\s+[0-9,]+|\bSpecification:|$)/gi;
+
+  let m: RegExpExecArray | null;
+  while ((m = poItemRegex.exec(text)) !== null) {
+    const pos = m[1];
+    const code = m[2];
+    const qty = parseFloat(m[3].replace(/,/g, '')) || 1;
+    const uom = m[4];
+    const unitPrice = parseFloat(m[5].replace(/,/g, '')) || 0;
+    const subtotal = parseFloat(m[6].replace(/,/g, '')) || (qty * unitPrice);
+    if (!expectedDeliveryDate && m[7]) {
+      const raw = m[7].replace(/[./]/g, '-');
+      const parts = raw.split('-');
+      if (parts[2].length === 4) {
+        expectedDeliveryDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+      } else if (parts[0].length === 4) {
+        expectedDeliveryDate = raw;
+      }
+    }
+    let itemName = m[8].trim().replace(/\s+/g, ' ');
+    itemName = itemName.replace(/^[-–—:.\s]+|[-–—:.\s]+$/g, '');
+
+    const rowWindow = text.slice(m.index, m.index + 350);
+    const rowHsnMatch = rowWindow.match(/(?:HSN|SAC)\s*(?:NO|CODE)?[\s:.-]*([0-9]{4,8})/i);
+    const hsnCode = rowHsnMatch ? rowHsnMatch[1] : detectedDocHsn;
+
+    const rowCgst = rowWindow.match(/CGST[\s:.-]*([0-9,]+(?:\.[0-9]{2})?)/i);
+    const rowSgst = rowWindow.match(/SGST[\s:.-]*([0-9,]+(?:\.[0-9]{2})?)/i);
+    let lineTax = 0;
+    if (rowCgst && rowSgst) {
+      lineTax = (parseFloat(rowCgst[1].replace(/,/g, '')) || 0) + (parseFloat(rowSgst[1].replace(/,/g, '')) || 0);
+    }
+    const totalAmount = lineTax > 0 ? Math.round((subtotal + lineTax) * 100) / 100 : Math.round(subtotal * 1.18 * 100) / 100;
+
     lineItems.push({
       itemName: itemName || `Material #${code}`,
-      description: `SAP Material Code: ${code}${detectedDocHsn ? ` (HSN: ${detectedDocHsn})` : ''}`,
-      hsnCode: detectedDocHsn,
-      quantity: qty,
-      uom: uom || 'NOS',
-      unitPrice,
-      taxRate: 18,
-      totalAmount
-    });
-  } else if (woLineMatch) {
-    const code = woLineMatch[1];
-    const itemName = woLineMatch[2].trim().replace(/\s+/g, ' ');
-    const hsnCode = woLineMatch[3] || detectedDocHsn;
-    const qty = parseFloat(woLineMatch[4].replace(/,/g, '')) || 1;
-    const uom = woLineMatch[5];
-    const unitPrice = parseFloat(woLineMatch[6].replace(/,/g, '')) || 0;
-    const subtotal = parseFloat(woLineMatch[7].replace(/,/g, '')) || (qty * unitPrice);
-    const totalAmount = Math.round(subtotal * 1.18 * 100) / 100;
-    lineItems.push({
-      itemName,
-      description: `SAP Work Order Activity: ${code}${hsnCode ? ` (SAC: ${hsnCode})` : ''}`,
+      description: `SAP Material Code: ${code}${hsnCode ? ` (HSN: ${hsnCode})` : ''}`,
       hsnCode,
       quantity: qty,
       uom: uom || 'NOS',
@@ -346,6 +353,42 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
       taxRate: 18,
       totalAmount
     });
+  }
+
+  // 2. Work Order multi-item pattern
+  if (lineItems.length === 0) {
+    const woItemRegex = /\b([0-9]{2,3})\s+[0-9]{2,3}\s+([0-9]{4,10})\s+([\s\S]*?)(?:SAC|HSN):?([0-9]{4,8})?\s+([0-9,]+(?:\.[0-9]+)?)\s+([A-Za-z]+)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9,]+(?:\.[0-9]+)?)\s+([0-9./-]+)/gi;
+    while ((m = woItemRegex.exec(text)) !== null) {
+      const code = m[2];
+      const itemName = m[3].trim().replace(/\s+/g, ' ');
+      const hsnCode = m[4] || detectedDocHsn;
+      const qty = parseFloat(m[5].replace(/,/g, '')) || 1;
+      const uom = m[6];
+      const unitPrice = parseFloat(m[7].replace(/,/g, '')) || 0;
+      const subtotal = parseFloat(m[8].replace(/,/g, '')) || (qty * unitPrice);
+      const totalAmount = Math.round(subtotal * 1.18 * 100) / 100;
+
+      if (!expectedDeliveryDate && m[9]) {
+        const raw = m[9].replace(/[./]/g, '-');
+        const parts = raw.split('-');
+        if (parts[2].length === 4) {
+          expectedDeliveryDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        } else if (parts[0].length === 4) {
+          expectedDeliveryDate = raw;
+        }
+      }
+
+      lineItems.push({
+        itemName,
+        description: `SAP Work Order Activity: ${code}${hsnCode ? ` (SAC: ${hsnCode})` : ''}`,
+        hsnCode,
+        quantity: qty,
+        uom: uom || 'NOS',
+        unitPrice,
+        taxRate: 18,
+        totalAmount
+      });
+    }
   }
 
   // Amount heuristics fallback
@@ -429,10 +472,10 @@ function extractHeuristicsFromText(text: string): ExtractedDocumentData {
 }
 
 /**
- * Call Google AI Studio (Gemini 2.0 Flash / 1.5 Flash)
+ * Call Google AI Studio (Gemini 2.5 Flash / Pro)
  */
 async function callGeminiExtractor(buffer: Buffer, mimeType: string, apiKey: string): Promise<ExtractedDocumentData> {
-  const models = ['gemini-2.0-flash', 'gemini-1.5-flash'];
+  const models = ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'];
   let lastError: any = null;
 
   for (const model of models) {
@@ -659,7 +702,8 @@ export async function extractProcurementDocument(
 
   // Tier 1: Primary AI Engine (Google AI Studio Gemini Flash)
   const rawGemini = [env.GEMINI_API_KEY, process.env.GEMINI_API_KEY].filter(Boolean) as string[];
-  const geminiKeys = Array.from(new Set(rawGemini.flatMap(k => k.split(/[,;\s]+/)).map(k => k.trim()).filter(Boolean)));
+  const geminiKeys = Array.from(new Set(rawGemini.flatMap(k => k.split(/[,;\s]+/)).map(k => k.trim()).filter(Boolean)))
+    .sort((a, b) => (b.startsWith('AIzaSy') ? 1 : 0) - (a.startsWith('AIzaSy') ? 1 : 0));
 
   for (const geminiKey of geminiKeys) {
     try {
