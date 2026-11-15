@@ -253,6 +253,9 @@ const KEYWORD_PHOTO_RULES: [string[], string][] = [
     [['fmcg', 'daily utility', 'provision', 'grocery'], 'fmcg-and-daily-utility-supply'],
     [['retail', 'commercial', 'store'], 'retail-and-commercial-supply'],
     [['oem', 'manufacturing', 'assembly'], 'oem-manufacturing-vendor'],
+    [['tank', 'water storage', 'septic tank'], 'polymer-and-plastic-products'],
+    [['testing', 'destrut', 'inspection', 'quality control'], 'engineering-consultancy-services'],
+    [['labour', 'manpower', 'workforce', 'staffing'], 'logistics-and-supply-services'],
     [['repair', 'service', 'rebuild'], 'repair-and-service-provider'],
 ];
 
@@ -346,7 +349,7 @@ export const getCustomCategoryPhotoUrl = (name?: string, slug?: string): string 
     if (cleanName.includes('logistics') && (cleanName.includes('supply') || cleanName.includes('chain'))) {
         return '/category-photos/custom/logistics-and-supply-chain.jpg';
     }
-    if (cleanName.includes('handicraft') || cleanSlug.includes('handicraft') || cleanName.includes('artisan')) {
+    if (cleanName.includes('handicraft') || cleanSlug.includes('handicraft') || cleanName.includes('artisan') || cleanName.includes('jewel') || cleanName.includes('jwellery')) {
         return '/category-photos/custom/handicrafts-and-artisans.jpg';
     }
     if (cleanName.includes('handloom') || cleanSlug.includes('handloom')) {
