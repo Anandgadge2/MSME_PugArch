@@ -118,6 +118,7 @@ export function formatPaymentTerms(terms?: string): { short: string; full: strin
 }
 
 const getPartyLocation = (order: PurchaseOrderDto, isSellerUser: boolean): string | null => {
+  if (!order) return null;
   if (isSellerUser) {
     // Current user is Seller, so the other party is Buyer.
     const buyerObj = order.buyer as any;
@@ -1110,8 +1111,12 @@ export default function PurchaseOrders() {
   const uniqueParties = useMemo(() => {
     const parties = new Set<string>();
     allOrders.forEach(o => {
-      if (o.seller?.name) parties.add(o.seller.name);
-      if (o.buyer?.name) parties.add(o.buyer.name);
+      const sellerObj = o.seller as any;
+      const buyerObj = o.buyer as any;
+      const sName = sellerObj?.sellerProfile?.businessName || sellerObj?.organization?.organizationName || o.seller?.name;
+      const bName = buyerObj?.organization?.organizationName || o.buyer?.name;
+      if (sName) parties.add(sName);
+      if (bName) parties.add(bName);
     });
     return Array.from(parties).sort();
   }, [allOrders]);
@@ -1135,6 +1140,8 @@ export default function PurchaseOrders() {
         const externalPoNumber = ((o as any).externalPoNumber || (o.metadata as any)?.externalPoNumber || '').toLowerCase();
         const buyerName = o.buyer?.name?.toLowerCase() || '';
         const buyerOrgName = (o.buyer as any)?.organization?.organizationName?.toLowerCase() || '';
+        const deliveryAddress = String(o.deliveryAddress || '').toLowerCase();
+        const loc = String(getPartyLocation(o, isSeller) || '').toLowerCase();
 
         return (
           o.poNumber?.toLowerCase().includes(q) || 
@@ -1146,6 +1153,8 @@ export default function PurchaseOrders() {
           sellerGstin.includes(q) ||
           buyerName.includes(q) ||
           buyerOrgName.includes(q) ||
+          deliveryAddress.includes(q) ||
+          loc.includes(q) ||
           erpVendorCode.includes(q) ||
           externalPoNumber.includes(q) ||
           vendorId.includes(q) ||
@@ -1167,7 +1176,13 @@ export default function PurchaseOrders() {
 
     // 4. Party Filter
     if (partyFilter && partyFilter !== 'All Parties') {
-      result = result.filter(o => o.seller?.name === partyFilter || o.buyer?.name === partyFilter);
+      result = result.filter(o => {
+        const sellerObj = o.seller as any;
+        const buyerObj = o.buyer as any;
+        const sName = sellerObj?.sellerProfile?.businessName || sellerObj?.organization?.organizationName || o.seller?.name;
+        const bName = buyerObj?.organization?.organizationName || o.buyer?.name;
+        return sName === partyFilter || bName === partyFilter;
+      });
     }
 
     // 5. Value Filter
@@ -1240,8 +1255,18 @@ export default function PurchaseOrders() {
       if (sortBy === 'po_desc') return String(b.poNumber || '').localeCompare(String(a.poNumber || ''));
       if (sortBy === 'title_asc') return String(a.title || '').localeCompare(String(b.title || ''));
       if (sortBy === 'title_desc') return String(b.title || '').localeCompare(String(a.title || ''));
-      if (sortBy === 'party_asc') return String(a.seller?.name || '').localeCompare(String(b.seller?.name || ''));
-      if (sortBy === 'party_desc') return String(b.seller?.name || '').localeCompare(String(a.seller?.name || ''));
+      if (sortBy === 'party_asc' || sortBy === 'party_desc') {
+        const getPartySortKey = (o: PurchaseOrderDto) => {
+          const isBuyerOrAdmin = !isSeller;
+          const sellerObj = o.seller as any;
+          const buyerObj = o.buyer as any;
+          return isBuyerOrAdmin
+            ? (sellerObj?.sellerProfile?.businessName || sellerObj?.organization?.organizationName || o.seller?.name || o.seller?.email || '')
+            : (buyerObj?.organization?.organizationName || o.buyer?.name || o.buyer?.email || '');
+        };
+        const comp = getPartySortKey(a).localeCompare(getPartySortKey(b));
+        return sortBy === 'party_asc' ? comp : -comp;
+      }
       if (sortBy === 'expected_asc') return new Date(a.expectedDelivery || 0).getTime() - new Date(b.expectedDelivery || 0).getTime();
       if (sortBy === 'expected_desc') return new Date(b.expectedDelivery || 0).getTime() - new Date(a.expectedDelivery || 0).getTime();
       if (sortBy === 'updated_asc') return new Date(a.updatedAt || 0).getTime() - new Date(b.updatedAt || 0).getTime();
@@ -1253,7 +1278,7 @@ export default function PurchaseOrders() {
     });
 
     return result;
-  }, [allOrders, activeTab, debouncedSearch, statusFilter, partyFilter, valueFilter, expectedDateFilter, expectedDateCustom, updatedDateFilter, sortBy]);
+  }, [allOrders, activeTab, debouncedSearch, statusFilter, partyFilter, valueFilter, expectedDateFilter, expectedDateCustom, updatedDateFilter, sortBy, isSeller]);
 
   const { page, pageSize, total, pageItems: visibleOrders, setPage, setPageSize } = usePagination(processedOrders, 10);
 
