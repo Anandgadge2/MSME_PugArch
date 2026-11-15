@@ -27,10 +27,41 @@
 }
 
 :root {
-  --font-body: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-heading: "Plus Jakarta Sans", "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-body: var(--font-jakarta), var(--font-inter), "Plus Jakarta Sans", "Inter", "Noto Sans Oriya", "Kalinga", "Noto Sans Devanagari", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-heading: var(--font-jakarta), var(--font-inter), "Plus Jakarta Sans", "Inter", "Noto Sans Oriya", "Kalinga", "Noto Sans Devanagari", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-plus-jakarta: var(--font-body);
   --font-inter: var(--font-body);
+}
+
+body {
+  font-family: var(--font-body);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular figures for financial and procurement accuracy */
+table,
+.tabular-nums,
+.font-mono,
+[data-tabular-num="true"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Elevate sub-10px micro-copy to readable, accessible standard (WCAG 2.2 AA) */
+.text-\[8\.5px\],
+.text-\[8px\],
+.text-\[9px\] {
+  font-size: 10.5px !important;
+}
+
+/* Prevent ink-trapping on micro-badges by normalizing 900 weight */
+.text-\[10px\].font-black,
+.text-\[10\.5px\].font-black,
+.text-\[11px\].font-black,
+.text-xs.font-black {
+  font-weight: 700 !important;
 }
 
 :root,
