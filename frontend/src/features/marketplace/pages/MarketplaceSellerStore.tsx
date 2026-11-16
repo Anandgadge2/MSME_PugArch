@@ -11,8 +11,9 @@ import {
     ArrowLeft, Search, ChevronRight,
     MessageSquare, Loader2, Bookmark, BookmarkCheck,
     SlidersHorizontal, ArrowUpDown, X, User, RotateCcw,
-    ShieldCheck, Mail, Phone, Globe
+    ShieldCheck, Mail, Phone, Globe, ZoomIn, ExternalLink
 } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { MarketplaceItemCard } from '../components/MarketplaceItemCard';
 import { saveSupplier, removeSavedSupplier, isSupplierSaved } from '../utils/savedSuppliers';
@@ -86,6 +87,8 @@ export default function MarketplaceSellerStore() {
     const [minP, setMinP] = useState('');
     const [maxP, setMaxP] = useState('');
     const [isSaved, setIsSaved] = useState(false);
+    const [isWideBanner, setIsWideBanner] = useState<boolean | null>(null);
+    const [previewImage, setPreviewImage] = useState<{ url: string; title: string } | null>(null);
 
     const { data: storeData, isLoading: loading } = useQuery({
         queryKey: ['sellerStore', sellerId],
@@ -293,22 +296,50 @@ export default function MarketplaceSellerStore() {
                 {/* Seller Hero Header */}
                 <section aria-label="Seller Information" className="bg-white border-b border-slate-200 shadow-2xs">
                     {/* Banner Area */}
-                    <div className="w-full h-44 sm:h-56 md:h-64 lg:h-72 relative overflow-hidden bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#173a6b]">
+                    <div className="w-full h-56 sm:h-72 md:h-80 lg:h-96 xl:h-[380px] relative overflow-hidden bg-slate-900 transition-all">
                         {vendor.bannerUrl ? (
                             <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
-                                {/* Ambient backdrop so any aspect ratio fills wide desktop screens */}
+                                {/* Luminous ambient atmospheric backdrop matching the seller banner's actual tones */}
                                 <img
                                     src={resolveMediaUrl(vendor.bannerUrl) || undefined}
                                     alt=""
                                     aria-hidden="true"
-                                    className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60 brightness-75 select-none pointer-events-none"
+                                    className="absolute inset-0 w-full h-full object-cover blur-3xl scale-125 opacity-40 saturate-150 brightness-110 select-none pointer-events-none"
                                 />
-                                {/* Main banner: fully visible, sharp, uncropped */}
-                                <img
-                                    src={resolveMediaUrl(vendor.bannerUrl) || undefined}
-                                    alt={`${name} Store Banner`}
-                                    className="relative z-1 max-h-full max-w-full object-contain object-center drop-shadow-md"
-                                />
+                                <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-[1px] pointer-events-none" />
+
+                                {/* Dynamic banner presentation: full-bleed cover if panoramic, framed showcase if flyer/poster */}
+                                {isWideBanner ? (
+                                    <img
+                                        src={resolveMediaUrl(vendor.bannerUrl) || undefined}
+                                        alt={`${name} Store Banner`}
+                                        onClick={() => setPreviewImage({ url: resolveMediaUrl(vendor.bannerUrl)!, title: `${name} Store Banner` })}
+                                        className="relative z-1 w-full h-full object-cover object-center cursor-pointer"
+                                    />
+                                ) : (
+                                    <div
+                                        className="relative z-1 h-full max-w-full flex items-center justify-center p-2.5 sm:p-5 cursor-pointer group/banner"
+                                        onClick={() => setPreviewImage({ url: resolveMediaUrl(vendor.bannerUrl)!, title: `${name} Store Banner` })}
+                                        title="Click to view full banner / flyer"
+                                    >
+                                        <img
+                                            src={resolveMediaUrl(vendor.bannerUrl) || undefined}
+                                            alt={`${name} Store Banner`}
+                                            onLoad={(e) => {
+                                                const img = e.currentTarget;
+                                                if (img.naturalWidth && img.naturalHeight) {
+                                                    setIsWideBanner(img.naturalWidth / img.naturalHeight >= 2.0);
+                                                }
+                                            }}
+                                            className="max-h-full max-w-full object-contain object-center rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-white/25 transition-transform duration-300 group-hover/banner:scale-[1.01]"
+                                        />
+                                        <div className="absolute bottom-3 right-3 sm:bottom-4 sm:right-4 opacity-0 group-hover/banner:opacity-100 transition-opacity duration-200 pointer-events-none">
+                                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/60 hover:bg-black/80 text-white text-[11px] font-bold backdrop-blur-md border border-white/20 shadow-lg">
+                                                <ZoomIn className="h-3.5 w-3.5" /> View Full Poster
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         ) : (
                             <>
@@ -331,25 +362,35 @@ export default function MarketplaceSellerStore() {
                         </div>
                     </div>
 
-                    {/* Profile Header Details with Overlapping Logo */}
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-4 pt-8 sm:pt-10 md:pt-12 relative">
-                        {/* Logo Box */}
-                        <div className="absolute -top-7 sm:-top-9 md:-top-10 left-4 sm:left-6 w-16 h-16 sm:w-20 sm:h-20 md:w-22 md:h-22 rounded-xl bg-white border-2 border-white shadow-md flex items-center justify-center p-1.5 z-10">
+                    {/* Profile Header Details with Overlapping Prominent Logo */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 pb-4 pt-14 sm:pt-6 md:pt-8 relative">
+                        {/* Prominent Logo Box */}
+                        <div
+                            onClick={() => vendor.logoUrl && setPreviewImage({ url: resolveMediaUrl(vendor.logoUrl)!, title: `${name} Logo` })}
+                            className={cn(
+                                "absolute -top-12 sm:-top-14 md:-top-16 lg:-top-18 left-4 sm:left-6 md:left-8",
+                                "w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 lg:w-36 lg:h-36",
+                                "rounded-2xl sm:rounded-3xl bg-white border-4 border-white shadow-xl ring-1 ring-slate-900/10",
+                                "flex items-center justify-center p-2 sm:p-2.5 z-20 transition-transform duration-300 hover:scale-105",
+                                vendor.logoUrl ? "cursor-pointer group/logo" : ""
+                            )}
+                            title={vendor.logoUrl ? "Click to view full logo" : undefined}
+                        >
                             {vendor.logoUrl ? (
                                 <img
                                     src={resolveMediaUrl(vendor.logoUrl) || undefined}
                                     alt={`${name} Logo`}
-                                    className="w-full h-full object-contain rounded-lg bg-white"
+                                    className="w-full h-full object-contain rounded-xl sm:rounded-2xl bg-white"
                                 />
                             ) : (
-                                <div className="w-full h-full rounded-lg flex items-center justify-center text-2xl sm:text-3xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-blue-100 shadow-inner">
+                                <div className="w-full h-full rounded-xl sm:rounded-2xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-blue-100 shadow-inner">
                                     {initial}
                                 </div>
                             )}
                         </div>
 
                         {/* Content Grid */}
-                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pl-0 sm:pl-24 md:pl-28 pt-1 sm:pt-0">
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pl-0 sm:pl-36 md:pl-42 lg:pl-46 pt-2 sm:pt-0">
                             <div className="min-w-0 space-y-1.5 flex-1">
                                 {/* Badges */}
                                 <div className="flex flex-wrap items-center gap-1.5">
@@ -838,6 +879,47 @@ export default function MarketplaceSellerStore() {
                     )}
                 </div>
             </main>
+
+            {/* Fullscreen Image Preview Lightbox */}
+            {previewImage && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <div
+                        className="relative max-w-5xl max-h-[92vh] w-full flex flex-col items-center bg-slate-900/95 rounded-2xl border border-white/20 p-3 sm:p-5 shadow-2xl overflow-hidden"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="w-full flex items-center justify-between pb-3 px-2 border-b border-white/10 text-white">
+                            <span className="text-xs sm:text-sm font-black truncate pr-4">{previewImage.title}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                                <a
+                                    href={previewImage.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-colors cursor-pointer"
+                                >
+                                    <ExternalLink className="h-3.5 w-3.5" /> Full Resolution
+                                </a>
+                                <button
+                                    onClick={() => setPreviewImage(null)}
+                                    className="p-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+                                    aria-label="Close image preview"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-2 sm:p-4 max-h-[80vh] w-full overflow-auto flex items-center justify-center">
+                            <img
+                                src={previewImage.url}
+                                alt={previewImage.title}
+                                className="max-h-[75vh] max-w-full object-contain rounded-xl shadow-2xl"
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <MarketplaceFooter />
         </div>

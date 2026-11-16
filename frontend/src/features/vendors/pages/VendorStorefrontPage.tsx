@@ -70,7 +70,7 @@ export default function VendorStorefrontPage({ id }: Props) {
             {/* Hero card */}
             <div className="rounded-3xl border border-slate-200/60 shadow-[0_12px_40px_rgba(0,0,0,0.03)] bg-white/95 backdrop-blur-md relative overflow-hidden">
                 {/* Banner Area */}
-                <div className="w-full h-48 md:h-64 relative bg-[#12335f] overflow-hidden">
+                <div className="w-full h-56 sm:h-72 md:h-80 lg:h-96 xl:h-[380px] relative bg-slate-900 overflow-hidden">
                     {v.bannerUrl ? (
                         <div className="relative w-full h-full overflow-hidden flex items-center justify-center">
                             {/* Ambient backdrop so any aspect ratio fills wide screens */}
@@ -78,13 +78,14 @@ export default function VendorStorefrontPage({ id }: Props) {
                                 src={resolveMediaUrl(v.bannerUrl) || undefined}
                                 alt=""
                                 aria-hidden="true"
-                                className="absolute inset-0 w-full h-full object-cover blur-2xl scale-110 opacity-60 brightness-75 select-none pointer-events-none"
+                                className="absolute inset-0 w-full h-full object-cover blur-3xl scale-125 opacity-40 saturate-150 brightness-110 select-none pointer-events-none"
                             />
-                            {/* Main banner: fully visible, sharp, uncropped */}
+                            <div className="absolute inset-0 bg-slate-950/20 backdrop-blur-[1px] pointer-events-none" />
+                            {/* Main banner: fully visible, sharp, uncropped framed card */}
                             <img
                                 src={resolveMediaUrl(v.bannerUrl) || undefined}
                                 alt="Seller Banner"
-                                className="relative z-1 max-h-full max-w-full object-contain object-center drop-shadow-md"
+                                className="relative z-1 max-h-full max-w-full object-contain object-center rounded-xl sm:rounded-2xl shadow-2xl ring-1 ring-white/25 drop-shadow-md"
                             />
                         </div>
                     ) : (
@@ -96,11 +97,11 @@ export default function VendorStorefrontPage({ id }: Props) {
                 {/* Overlapping Info Area */}
                 <div className="relative px-6 pb-6 pt-16 md:px-8">
                     {/* Logo Box */}
-                    <div className="absolute -top-16 left-6 md:left-8 w-28 h-28 rounded-2xl bg-white border border-slate-200/80 shadow-lg flex items-center justify-center p-2.5 z-20 bg-white transition-transform duration-300 hover:scale-105">
+                    <div className="absolute -top-14 sm:-top-16 md:-top-18 left-6 md:left-8 w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-32 lg:w-36 lg:h-36 rounded-2xl sm:rounded-3xl bg-white border-4 border-white shadow-xl ring-1 ring-slate-900/10 flex items-center justify-center p-2 sm:p-2.5 z-20 transition-transform duration-300 hover:scale-105">
                         {v.logoUrl ? (
-                            <img src={resolveMediaUrl(v.logoUrl) || undefined} alt="Seller Logo" className="w-full h-full object-contain rounded-xl bg-white" />
+                            <img src={resolveMediaUrl(v.logoUrl) || undefined} alt="Seller Logo" className="w-full h-full object-contain rounded-xl sm:rounded-2xl bg-white" />
                         ) : (
-                            <div className="w-full h-full rounded-xl flex items-center justify-center text-3xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-indigo-150">
+                            <div className="w-full h-full rounded-xl sm:rounded-2xl flex items-center justify-center text-3xl sm:text-4xl md:text-5xl font-black bg-gradient-to-br from-blue-50 to-indigo-100 text-[#0b2447] border border-indigo-150">
                                 {(v.name || profile.businessName || '?').charAt(0).toUpperCase()}
                             </div>
                         )}

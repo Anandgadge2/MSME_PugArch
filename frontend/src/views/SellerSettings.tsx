@@ -1051,7 +1051,7 @@ export default function SellerSettings() {
                           </Button>
                         ) : (
                           <>
-                            <p className="text-[10px] text-slate-500 font-medium text-center">PNG, JPG, WEBP (Max 2MB)</p>
+                            <p className="text-[10px] text-slate-500 font-medium text-center">Square 1:1 (400×400px), PNG, JPG, WEBP (Max 2MB)</p>
                             <label className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl shadow-md w-full transition-all">
                               <span>Upload Logo</span>
                               <input type="file" onChange={handleLogoUpload} className="hidden" accept="image/png, image/jpeg, image/jpg, image/webp" />
@@ -1071,11 +1071,11 @@ export default function SellerSettings() {
                           <Loader2 className="animate-spin h-8 w-8 text-[#12335f]" />
                         </div>
                       ) : bannerUrl ? (
-                        <div key={bannerUrl} className="h-32 w-full rounded-xl border border-slate-100 bg-white shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
+                        <div key={bannerUrl} className="h-32 w-full rounded-xl border border-slate-100 bg-slate-900/90 shadow-sm flex items-center justify-center overflow-hidden transition-transform hover:scale-102 duration-300">
                           <img
                             src={resolveMediaUrl(bannerUrl) || undefined}
                             alt="Storefront Cover Banner"
-                            className="h-full w-full object-cover"
+                            className="h-full w-full object-contain"
                             onError={(e) => {
                               console.warn('Failed to load banner image:', bannerUrl);
                             }}
@@ -1099,7 +1099,7 @@ export default function SellerSettings() {
                           </Button>
                         ) : (
                           <>
-                            <p className="text-[10px] text-slate-500 font-medium text-center">Recommended aspect ratio: 4:1 (Max 5MB)</p>
+                            <p className="text-[10px] text-slate-500 font-medium text-center">Landscape 3:1 or 4:1 (e.g. 1200×400px), Max 5MB</p>
                             <label className="cursor-pointer inline-flex items-center justify-center bg-[#12335f] hover:bg-slate-800 text-white font-black uppercase text-[10px] tracking-wider h-10 px-6 rounded-xl shadow-md w-full transition-all">
                               <span>Upload Banner</span>
                               <input type="file" onChange={handleBannerUpload} className="hidden" accept="image/png, image/jpeg, image/jpg, image/webp" />
