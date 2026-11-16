@@ -22,7 +22,7 @@ export const Providers = ({ children }: { children: React.ReactNode }) => {
             richColors
             closeButton
             expand={false}
-            visibleToasts={3}
+            visibleToasts={1}
             duration={4000}
           />
           <CookieConsentBanner />

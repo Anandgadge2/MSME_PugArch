@@ -349,6 +349,7 @@ export default function Login() {
     if (isSubmittingRef.current || isLoading) return;
     isSubmittingRef.current = true;
     setIsLoading(true);
+    toast.dismiss();
     const loadToast = toast.loading('Authenticating credentials...');
 
     try {
@@ -394,6 +395,7 @@ export default function Login() {
     if (isSubmittingRef.current || isLoading) return;
     isSubmittingRef.current = true;
     setIsLoading(true);
+    toast.dismiss();
     const loadToast = toast.loading('Verifying secure code...');
     try {
       const res = await api.post('/api/auth/2fa/verify', { email, channel: twoFactorChannel, otp: twoFactorOtp });
@@ -664,6 +666,7 @@ export default function Login() {
                       type="button"
                       onClick={async () => {
                         const newChannel = twoFactorChannel === 'sms' ? 'email' : 'sms';
+                        toast.dismiss();
                         const loadToast = toast.loading(`Sending code to your ${newChannel === 'sms' ? 'mobile' : 'email'}...`);
                         try {
                           const res = await api.post('/api/auth/login', { email, password, channel: newChannel });
