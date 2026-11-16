@@ -43,7 +43,7 @@ test('4. SubmitQuotationPage UploadState records asset ID and local file blob pr
 test('5. DocumentPreviewModal implements resilient authenticated fallback on image errors', () => {
   const modalContent = fs.readFileSync(path.join(frontendSrc, 'components/DocumentPreviewModal.tsx'), 'utf8');
   assert.match(modalContent, /handleImageError/);
-  assert.match(modalContent, /api\.fetch\(targetUrl/);
+  assert.match(modalContent, /api\.fetch\((targetUrl|recoveryUrl)/);
   assert.match(modalContent, /URL\.createObjectURL\(blob\)/);
   assert.match(modalContent, /imageLoadError/);
   assert.match(modalContent, /Direct Image Preview Unavailable/);

@@ -1958,7 +1958,7 @@ export default function PurchaseOrders() {
 
         return (
           <div className="space-y-1.5 min-w-0">
-            <p className="font-bold text-slate-900 text-xs leading-snug line-clamp-2" title={order.title}>
+            <p className="font-bold text-slate-900 text-xs leading-snug break-words whitespace-normal" title={order.title}>
               {cleanedTitle}
             </p>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -1988,7 +1988,7 @@ export default function PurchaseOrders() {
     {
       key: 'party',
       header: <SortHeader label={isSeller ? "Buyer / Location" : "Party / Vendor"} columnKey="party" sortBy={sortBy} onToggleSort={toggleSort} />,
-      width: 'w-[20%] min-w-[200px]',
+      width: 'w-[22%] min-w-[220px]',
       cell: (order) => {
         const isBuyerOrAdmin = !isSeller;
         const sellerObj = order.seller as any;
@@ -2002,12 +2002,12 @@ export default function PurchaseOrders() {
 
         return (
           <div className="min-w-0 flex flex-col gap-1">
-            <span className="font-bold text-slate-800 text-xs leading-snug break-words line-clamp-2" title={partyName}>
+            <span className="font-bold text-slate-800 text-xs leading-snug break-words whitespace-normal" title={partyName}>
               {partyName}
             </span>
             {partyLocation && (
               <span
-                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 leading-tight break-words line-clamp-2"
+                className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 leading-tight break-words whitespace-normal"
                 title={`Location: ${partyLocation}`}
               >
                 <MapPin className="h-3 w-3 shrink-0 text-slate-400" />
@@ -2098,7 +2098,7 @@ export default function PurchaseOrders() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
       {/* Transparent Header */}
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between py-2">
         <div className="min-w-0">
@@ -2350,12 +2350,12 @@ export default function PurchaseOrders() {
                             label={isSeller ? "Buyer / Location" : "Party / Vendor"}
                             value={
                               <div className="flex flex-col gap-0.5 min-w-0">
-                                <span className="font-bold text-slate-800 text-xs leading-snug break-words line-clamp-2" title={cardPartyName}>
+                                <span className="font-bold text-slate-800 text-xs leading-snug break-words whitespace-normal" title={cardPartyName}>
                                   {cardPartyName}
                                 </span>
                                 {cardLocation && (
                                   <span
-                                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 leading-tight break-words line-clamp-2"
+                                    className="inline-flex items-center gap-1 text-[10px] font-medium text-slate-600 leading-tight break-words whitespace-normal"
                                     title={`Location: ${cardLocation}`}
                                   >
                                     <MapPin className="h-3 w-3 shrink-0 text-slate-400" />

@@ -11,6 +11,7 @@ export interface ProductValidationInput {
   splitTaxRate?: string;
   igstTaxRate?: string;
   imagesCount?: number;
+  isShg?: boolean;
 }
 
 export interface ServiceValidationInput {
@@ -26,18 +27,24 @@ export interface ServiceValidationInput {
   splitTaxRate?: string;
   igstTaxRate?: string;
   imagesCount?: number;
+  isShg?: boolean;
 }
 
 export const validateProduct = (input: ProductValidationInput) => {
-  const isPriceValid = input.price !== undefined && input.price !== null && input.price !== '' && positiveNumber(input.price);
-  const isTaxValid = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
+  const isShg = Boolean(input.isShg);
+  const isPriceProvided = input.price !== undefined && input.price !== null && input.price !== '';
+  const isPriceValid = isShg ? (!isPriceProvided || positiveNumber(input.price)) : (isPriceProvided && positiveNumber(input.price));
+  const isTaxProvided = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
+  const isTaxValid = isShg ? true : isTaxProvided;
+  const isHsnValid = isShg ? true : Boolean(requiredText(input.hsnCode));
+
   return {
     name: requiredText(input.name),
     category: Boolean(input.categoryId),
     description: requiredText(input.description),
     unitOfMeasure: requiredText(input.unitOfMeasure),
     itemCondition: requiredText(input.itemCondition),
-    hsnCode: requiredText(input.hsnCode),
+    hsnCode: isHsnValid,
     price: isPriceValid,
     tax: isTaxValid,
     images: (input.imagesCount || 0) >= 1,
@@ -47,7 +54,7 @@ export const validateProduct = (input: ProductValidationInput) => {
       requiredText(input.description) &&
       requiredText(input.unitOfMeasure) &&
       requiredText(input.itemCondition) &&
-      requiredText(input.hsnCode) &&
+      isHsnValid &&
       isPriceValid &&
       isTaxValid &&
       (input.imagesCount || 0) >= 1
@@ -55,8 +62,12 @@ export const validateProduct = (input: ProductValidationInput) => {
 };
 
 export const validateService = (input: ServiceValidationInput) => {
-  const isPriceValid = input.basePrice !== undefined && input.basePrice !== null && input.basePrice !== '' && positiveNumber(input.basePrice);
-  const isTaxValid = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
+  const isShg = Boolean(input.isShg);
+  const isPriceProvided = input.basePrice !== undefined && input.basePrice !== null && input.basePrice !== '';
+  const isPriceValid = isShg ? (!isPriceProvided || positiveNumber(input.basePrice)) : (isPriceProvided && positiveNumber(input.basePrice));
+  const isTaxProvided = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
+  const isTaxValid = isShg ? true : isTaxProvided;
+
   return {
     name: requiredText(input.name),
     category: Boolean(input.categoryId),

@@ -2527,13 +2527,24 @@ router.post(
             (user.registrationDetails as any)?.constitutionOfBusiness
         ].filter(Boolean).map(t => String(t).toUpperCase());
 
-        const isEligible = rawTypes.some(t =>
-            t.includes('PROPRIETOR') ||
-            t.includes('PARTNERSHIP')
-        );
+        const isEligible =
+            user.role === 'shg' ||
+            user.role === 'seller' ||
+            user.role === 'buyer' ||
+            rawTypes.some(t =>
+                t.includes('SHG') ||
+                t.includes('HER_SHG') ||
+                t.includes('SELF_HELP') ||
+                t.includes('PROPRIETOR') ||
+                t.includes('PARTNERSHIP') ||
+                t.includes('INDIVIDUAL') ||
+                t.includes('SOCIETY') ||
+                t.includes('TRUST') ||
+                t.includes('ENTERPRISE')
+            );
 
         if (!isEligible) {
-            throw new ApiError(403, 'Display name update is only permitted for Sole Proprietorships and Partnership firms. Incorporated entities (Pvt Ltd, Ltd, LLP) are bound to their statutory registration name.');
+            throw new ApiError(403, 'Display name update is only permitted for authorized Sellers, Buyers, SHGs, and registered enterprises.');
         }
 
         if (!user.email) {
@@ -2632,13 +2643,24 @@ router.post(
             (user.registrationDetails as any)?.constitutionOfBusiness
         ].filter(Boolean).map(t => String(t).toUpperCase());
 
-        const isEligible = rawTypes.some(t =>
-            t.includes('PROPRIETOR') ||
-            t.includes('PARTNERSHIP')
-        );
+        const isEligible =
+            user.role === 'shg' ||
+            user.role === 'seller' ||
+            user.role === 'buyer' ||
+            rawTypes.some(t =>
+                t.includes('SHG') ||
+                t.includes('HER_SHG') ||
+                t.includes('SELF_HELP') ||
+                t.includes('PROPRIETOR') ||
+                t.includes('PARTNERSHIP') ||
+                t.includes('INDIVIDUAL') ||
+                t.includes('SOCIETY') ||
+                t.includes('TRUST') ||
+                t.includes('ENTERPRISE')
+            );
 
         if (!isEligible) {
-            throw new ApiError(403, 'Display name update is only permitted for Sole Proprietorships and Partnership firms.');
+            throw new ApiError(403, 'Display name update is only permitted for authorized Sellers, Buyers, SHGs, and registered enterprises.');
         }
 
         // Entity impersonation and duplicate name collision check (BUG-003)
@@ -2688,6 +2710,14 @@ router.post(
                 where: { id: user.buyerProfile.id },
                 data: { organizationName: trimmedName }
             });
+        }
+
+        // 3b. Update ShgProfile if present
+        if ((user as any).shgProfile) {
+            await (prisma as any).shgProfile.update({
+                where: { id: (user as any).shgProfile.id },
+                data: { shgName: trimmedName, groupName: trimmedName }
+            }).catch(() => undefined);
         }
 
         // 4. Update User registrationDetails

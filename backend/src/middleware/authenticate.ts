@@ -207,6 +207,8 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
     }
 
     if (cachedUser.lockedUntil && new Date(cachedUser.lockedUntil) > new Date()) {
+      const msLeft = new Date(cachedUser.lockedUntil).getTime() - Date.now();
+      const minutesLeft = Math.max(1, Math.ceil(msLeft / 60000));
       void auditLog({
         actorUserId: cachedUser.id,
         actorRole: cachedUser.role,
@@ -215,9 +217,9 @@ export const authenticate = async (req: Request, res: Response, next: NextFuncti
         entityId: cachedUser.id,
         ipAddress: req.ip,
         userAgent: req.headers['user-agent'],
-        metadata: { path: req.originalUrl, method: req.method, lockedUntil: cachedUser.lockedUntil }
+        metadata: { path: req.originalUrl, method: req.method, lockedUntil: cachedUser.lockedUntil, minutesRemaining: minutesLeft }
       });
-      return apiResponse.error(res, 423, 'Account is temporarily locked', 'ACCOUNT_LOCKED');
+      return apiResponse.error(res, 423, `Account is temporarily locked for another ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}.`, 'ACCOUNT_LOCKED');
     }
 
     if (cachedUser.accountStatus !== 'ACTIVE') {
