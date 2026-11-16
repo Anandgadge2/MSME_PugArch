@@ -340,13 +340,8 @@ export function EditPurchaseOrderModal({
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      setError('File size must be less than 15MB.');
-      return;
-    }
-
-    if (file.size > 4.5 * 1024 * 1024) {
-      setError('File size exceeds serverless upload limit (max 4.5MB). Please upload a compressed or smaller PDF.');
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File size must be less than 10MB. Please upload a compressed or smaller PDF.');
       return;
     }
 
