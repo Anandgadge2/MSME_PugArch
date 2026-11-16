@@ -23,6 +23,7 @@ import type { CatalogueItemDto, CategoryDto } from '../../shared/types';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 import { catalogueApi, downloadCatalogueFile } from '../api';
 import { getFileAssetPreview, type DocumentPreview, openFileAsset } from '../../../lib/files';
+import { isShgUser } from '../../../lib/shg';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
 import { api, BASE_URL } from '../../../lib/api';
@@ -485,6 +486,7 @@ function CatalogueRowActionMenu({
 
 export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode }) {
   const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg';
   const router = useRouter();
   const [products, setProducts] = useState<CatalogueRecord[]>([]);
   const [services, setServices] = useState<CatalogueRecord[]>([]);
@@ -1448,7 +1450,11 @@ export default function CataloguePage({ mode = 'buyer' }: { mode?: CatalogueMode
                             )}
                           </td>
                           <td className="px-3 py-3 text-right whitespace-nowrap align-top">
-                            <p className="text-sm font-black text-emerald-700">{formatCurrency(value)}</p>
+                            {value > 0 ? (
+                              <p className="text-sm font-black text-emerald-700">{formatCurrency(value)}</p>
+                            ) : (
+                              <p className="text-xs font-semibold text-slate-500 italic">Price on Request</p>
+                            )}
                             {item.itemKind === 'product' && item.unitOfMeasure && (
                               <p className="text-[10px] font-bold text-slate-400">/{item.unitOfMeasure}</p>
                             )}
@@ -1690,6 +1696,8 @@ function CatalogueForm({
   onChange: (field: keyof typeof blankForm, value: string) => void;
   onPreviewDocument: (preview: DocumentPreview) => void;
 }) {
+  const { user } = useAuth();
+  const isShg = isShgUser(user) || user?.role === 'shg';
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
@@ -1714,13 +1722,12 @@ function CatalogueForm({
       Boolean(form.description.trim()) &&
       Boolean(form.unitOfMeasure.trim()) &&
       Boolean(form.itemCondition.trim()) &&
-      Boolean(form.hsnCode.trim()) &&
-      form.price !== '' &&
-      toNumber(form.price) > 0 &&
-      ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0)) &&
+      (isShg || Boolean(form.hsnCode.trim())) &&
+      (isShg || (form.price !== '' && toNumber(form.price) > 0)) &&
+      (isShg || ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0))) &&
       uploadedImages.length >= 1
     );
-  }, [form.name, form.categoryId, form.description, form.unitOfMeasure, form.itemCondition, form.hsnCode, form.price, form.splitTaxRate, form.igstTaxRate, uploadedImages.length]);
+  }, [form.name, form.categoryId, form.description, form.unitOfMeasure, form.itemCondition, form.hsnCode, form.price, form.splitTaxRate, form.igstTaxRate, uploadedImages.length, isShg]);
 
   const isServiceValid = useMemo(() => {
     return (
@@ -1729,12 +1736,11 @@ function CatalogueForm({
       Boolean(form.description.trim()) &&
       Boolean(form.serviceArea.trim()) &&
       Boolean(form.pricingModel.trim()) &&
-      form.basePrice !== '' &&
-      toNumber(form.basePrice) > 0 &&
-      ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0)) &&
+      (isShg || (form.basePrice !== '' && toNumber(form.basePrice) > 0)) &&
+      (isShg || ((form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0))) &&
       uploadedImages.length >= 1
     );
-  }, [form.name, form.categoryId, form.description, form.serviceArea, form.pricingModel, form.basePrice, form.splitTaxRate, form.igstTaxRate, uploadedImages.length]);
+  }, [form.name, form.categoryId, form.description, form.serviceArea, form.pricingModel, form.basePrice, form.splitTaxRate, form.igstTaxRate, uploadedImages.length, isShg]);
 
   const isFormValid = kind === 'product' ? isProductValid : isServiceValid;
 
@@ -1751,17 +1757,17 @@ function CatalogueForm({
       case 'itemCondition':
         return kind === 'product' && !form.itemCondition.trim();
       case 'hsnCode':
-        return kind === 'product' && !form.hsnCode.trim();
+        return kind === 'product' && !isShg && !form.hsnCode.trim();
       case 'serviceArea':
         return kind === 'service' && !form.serviceArea.trim();
       case 'pricingModel':
         return kind === 'service' && !form.pricingModel.trim();
       case 'price':
-        return kind === 'product' && (form.price === '' || toNumber(form.price) <= 0);
+        return kind === 'product' && !isShg && (form.price === '' || toNumber(form.price) <= 0);
       case 'basePrice':
-        return kind === 'service' && (form.basePrice === '' || toNumber(form.basePrice) <= 0);
+        return kind === 'service' && !isShg && (form.basePrice === '' || toNumber(form.basePrice) <= 0);
       case 'taxRate':
-        return form.splitTaxRate === '' && form.igstTaxRate === '';
+        return !isShg && form.splitTaxRate === '' && form.igstTaxRate === '';
       case 'images':
         return uploadedImages.length < 1;
       default:
@@ -1867,16 +1873,16 @@ function CatalogueForm({
             {kind === 'product' ? (
               <>
                 <Input
-                  label="Price (INR)"
+                  label={isShg ? "Price (INR) (Optional for SHGs)" : "Price (INR)"}
                   type="number"
-                  min="0.01"
+                  min="0"
                   step="0.01"
                   value={form.price}
                   onChange={event => { onChange('price', event.target.value); markTouched('price'); }}
                   onBlur={() => markTouched('price')}
                   error={getFieldError('price')}
-                  required
-                  placeholder="0.00"
+                  required={!isShg}
+                  placeholder={isShg ? "0.00 (Optional)" : "0.00"}
                   className="bg-white"
                 />
                 <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00 (Optional)" className="bg-white" />
@@ -1905,29 +1911,29 @@ function CatalogueForm({
                   {ITEM_CONDITIONS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </Select>
                 <Input
-                  label="HSN Code"
+                  label={isShg ? "HSN Code (Optional for SHGs)" : "HSN Code"}
                   value={form.hsnCode}
                   onChange={event => { onChange('hsnCode', event.target.value); markTouched('hsnCode'); }}
                   onBlur={() => markTouched('hsnCode')}
                   error={getFieldError('hsnCode')}
-                  required
-                  placeholder="8-digit HSN code"
+                  required={!isShg}
+                  placeholder={isShg ? "Optional (e.g. 8-digit HSN)" : "8-digit HSN code"}
                   className="bg-white"
                 />
               </>
             ) : (
               <>
                 <Input
-                  label="Base Price (INR)"
+                  label={isShg ? "Base Price (INR) (Optional for SHGs)" : "Base Price (INR)"}
                   type="number"
-                  min="0.01"
+                  min="0"
                   step="0.01"
                   value={form.basePrice}
                   onChange={event => { onChange('basePrice', event.target.value); markTouched('basePrice'); }}
                   onBlur={() => markTouched('basePrice')}
                   error={getFieldError('basePrice')}
-                  required
-                  placeholder="0.00"
+                  required={!isShg}
+                  placeholder={isShg ? "0.00 (Optional)" : "0.00"}
                   className="bg-white"
                 />
                 <Input label="Discount (%)" type="number" min="0" max="100" step="0.01" value={form.discount} onChange={event => onChange('discount', event.target.value)} placeholder="0.00 (Optional)" className="bg-white" />

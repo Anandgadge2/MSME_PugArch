@@ -204,9 +204,10 @@ const ensureOrganizationForDualRole = async (user: any, targetRole: 'buyer' | 's
   const orgName = firstValue(
     user.buyerProfile?.organizationName,
     user.sellerProfile?.businessName,
-    user.sellerProfile?.nameAsInPan,
+    registration.tradeName,
     registration.businessName,
     registration.accountName,
+    user.sellerProfile?.nameAsInPan,
     user.name,
     'Organization'
   );
@@ -943,6 +944,8 @@ export const authController = {
       }
 
       if (user.lockedUntil && user.lockedUntil > new Date()) {
+        const msLeft = user.lockedUntil.getTime() - Date.now();
+        const minutesLeft = Math.max(1, Math.ceil(msLeft / 60000));
         await recordLoginEvent({ req, userId: user.id, success: false, reason: 'account_locked' });
         await auditLog({
           actorUserId: user.id,
@@ -951,10 +954,20 @@ export const authController = {
           entityType: 'user',
           entityId: user.id,
           ipAddress: req.ip,
-          userAgent: req.headers['user-agent']
+          userAgent: req.headers['user-agent'],
+          metadata: { minutesRemaining: minutesLeft }
         });
-        return res.status(423).json({ message: 'Account is temporarily locked. Please try again later.' });
+        return res.status(423).json({
+          message: `Account is temporarily locked. Please try again in ${minutesLeft} minute${minutesLeft === 1 ? '' : 's'}, or reset your password using 'Forgot Password' to unlock immediately.`,
+          isLocked: true,
+          lockedUntil: user.lockedUntil,
+          minutesRemaining: minutesLeft
+        });
       }
+
+      // If a previous lockout timer has expired, give the user a fresh slate so a single typo does not re-lock them
+      const isLockoutExpired = Boolean(user.lockedUntil && user.lockedUntil <= new Date());
+      const effectiveFailedCount = isLockoutExpired ? 0 : (user.failedLoginCount || 0);
 
       if (user.accountStatus !== 'ACTIVE') {
         await recordLoginEvent({ req, userId: user.id, success: false, reason: 'account_disabled' });
@@ -974,7 +987,7 @@ export const authController = {
 
       const isMatch = await verifyPassword(String(password || ''), user.password);
       if (!isMatch) {
-        const nextFailedCount = user.failedLoginCount + 1;
+        const nextFailedCount = effectiveFailedCount + 1;
         const shouldLock = nextFailedCount >= env.FAILED_LOGIN_LOCK_THRESHOLD;
         const lockedUntil = shouldLock
           ? new Date(Date.now() + env.FAILED_LOGIN_LOCK_MINUTES * 60 * 1000)
@@ -983,7 +996,7 @@ export const authController = {
           where: { id: user.id },
           data: {
             failedLoginCount: nextFailedCount,
-            ...(lockedUntil ? { lockedUntil } : {})
+            lockedUntil: shouldLock ? lockedUntil : (isLockoutExpired ? null : undefined)
           }
         });
         await recordLoginEvent({ req, userId: user.id, success: false, reason: shouldLock ? 'account_locked' : 'password_mismatch' });
@@ -1014,8 +1027,24 @@ export const authController = {
             userAgent: req.headers['user-agent'],
             metadata: { lockedUntil }
           });
+          return res.status(423).json({
+            message: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${env.FAILED_LOGIN_LOCK_MINUTES} minutes, or reset your password using 'Forgot Password' to unlock immediately.`,
+            isLocked: true,
+            lockedUntil,
+            minutesRemaining: env.FAILED_LOGIN_LOCK_MINUTES
+          });
         }
-        return res.status(400).json({ message: 'Invalid credentials' });
+
+        const attemptsRemaining = Math.max(0, env.FAILED_LOGIN_LOCK_THRESHOLD - nextFailedCount);
+        const warningMessage = attemptsRemaining <= 2
+          ? `Invalid credentials. ${attemptsRemaining} attempt${attemptsRemaining === 1 ? '' : 's'} remaining before temporary account lockout.`
+          : 'Invalid credentials';
+
+        return res.status(400).json({
+          message: warningMessage,
+          attemptsRemaining,
+          isLocked: false
+        });
       }
 
       // Administrators created before invite-only registration was enforced
@@ -2101,8 +2130,10 @@ export const authController = {
         org.organizationName,
         user.buyerProfile?.organizationName,
         user.sellerProfile?.businessName,
-        user.sellerProfile?.nameAsInPan,
+        registration.tradeName,
         registration.businessName,
+        registration.accountName,
+        user.sellerProfile?.nameAsInPan,
         user.name
       );
       let createdProfile = false;

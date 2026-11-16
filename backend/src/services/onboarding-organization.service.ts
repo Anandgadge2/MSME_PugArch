@@ -53,10 +53,11 @@ const organizationNameFor = (user: any) => {
     user.shgProfile?.shgName,
     user.shgProfile?.groupName,
     user.sellerProfile?.businessName,
-    user.sellerProfile?.nameAsInPan,
-    user.registrationDetails?.shgName,
+    user.registrationDetails?.tradeName,
     user.registrationDetails?.businessName,
     user.registrationDetails?.organizationName,
+    user.registrationDetails?.shgName,
+    user.sellerProfile?.nameAsInPan,
     user.name,
     user.email ? user.email.split('@')[0] : '',
     'Enterprise'

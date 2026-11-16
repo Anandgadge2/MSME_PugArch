@@ -13501,6 +13501,24 @@ router.put('/admin/organizations/:id', authenticate, authorizeAdmin, asyncRoute(
   });
   await auditWrite(req, 'organization.updated', 'organization', id, body);
 
+  if (updateData.organizationName) {
+    await db.sellerProfile.updateMany({
+      where: { organizationId: id },
+      data: { businessName: updateData.organizationName }
+    }).catch(() => undefined);
+    await db.buyerProfile.updateMany({
+      where: { organizationId: id },
+      data: { organizationName: updateData.organizationName }
+    }).catch(() => undefined);
+    try {
+      const { invalidateByPattern } = await import('../services/cache.service.js');
+      await invalidateByPattern('cache:marketplace:*');
+      await invalidateByPattern('cache:vendor_search:*');
+    } catch {
+      // ignore
+    }
+  }
+
   // Notify org users about status changes
   if (updateData.verificationStatus || body.isBlacklisted !== undefined) {
     const orgUsers = await db.user.findMany({ where: { organizationId: id }, select: { id: true } });

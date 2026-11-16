@@ -17,6 +17,22 @@ export default function ForgotPassword() {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const queryId = params.get('identifier') || params.get('email');
+      if (queryId) {
+        const clean = queryId.trim();
+        setIdentifier(clean);
+        if (/^\d{10}$/.test(clean.replace(/\D/g, '').slice(-10))) {
+          setChannel('sms');
+        } else {
+          setChannel('email');
+        }
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     api.get('/api/auth/features')
       .then(res => res.json())
       .then(data => {

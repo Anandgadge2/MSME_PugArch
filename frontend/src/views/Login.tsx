@@ -61,6 +61,8 @@ export default function Login() {
   const [twoFactorChannel, setTwoFactorChannel] = useState<'email' | 'sms'>('email');
   const [canSms, setCanSms] = useState(false);
   const [activeFeatureIndex, setActiveFeatureIndex] = useState(0);
+  const [isAccountLocked, setIsAccountLocked] = useState(false);
+  const [lockoutMessage, setLockoutMessage] = useState('');
 
   // 3D Tilt Card State for Logo
   const [cardTilt, setCardTilt] = useState({ rotateX: 0, rotateY: 0, glareX: 50, glareY: 50 });
@@ -367,7 +369,14 @@ export default function Login() {
         toast.success(`Welcome back, ${data.user.name}!`, { id: loadToast });
         login(data.accessToken || data.token, data.user, data.refreshToken, destination);
       } else {
-        toast.error(data.message || 'Login failed', { id: loadToast });
+        if (res.status === 423 || data.isLocked) {
+          setIsAccountLocked(true);
+          setLockoutMessage(data.message || 'Account is temporarily locked. Please try again later.');
+          toast.error(data.message || 'Account is temporarily locked. Please try again later.', { id: loadToast, duration: 8000 });
+        } else {
+          setIsAccountLocked(false);
+          toast.error(data.message || 'Login failed', { id: loadToast });
+        }
         generateCaptcha();
       }
     } catch (err: any) {
@@ -738,6 +747,24 @@ export default function Login() {
                   </div>
                 </div>
               </>
+            )}
+
+            {isAccountLocked && (
+              <div className="rounded-2xl border border-red-500/30 bg-red-500/10 p-3.5 text-xs shadow-sm space-y-2.5 animate-in fade-in duration-200">
+                <div className="flex items-start gap-2.5 text-red-700">
+                  <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-600" />
+                  <p className="font-semibold leading-relaxed">{lockoutMessage}</p>
+                </div>
+                <div className="pt-0.5">
+                  <Link
+                    href={`/forgot-password?identifier=${encodeURIComponent(email.trim())}`}
+                    className="inline-flex items-center gap-1.5 font-black text-[#0b2447] bg-[#c8a45c]/25 hover:bg-[#c8a45c]/35 border border-[#c8a45c]/50 rounded-xl px-3 py-1.5 transition-all text-[11px] uppercase tracking-wider"
+                  >
+                    <Lock className="h-3 w-3 text-[#c8a45c]" />
+                    Reset Password to Unlock Now &rarr;
+                  </Link>
+                </div>
+              </div>
             )}
 
             {/* Shimmer Submit Button with Light Ray */}
