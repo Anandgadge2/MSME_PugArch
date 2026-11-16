@@ -17,6 +17,60 @@ import { useQuery } from '@tanstack/react-query';
 import { MarketplaceItemCard } from '../components/MarketplaceItemCard';
 import { saveSupplier, removeSavedSupplier, isSupplierSaved } from '../utils/savedSuppliers';
 
+const MSME_CATEGORY_LABELS: Record<string, string> = {
+    LOCAL_MSME: 'Local MSME',
+    MSME: 'MSME',
+    NON_MSME: 'Non-MSME',
+    ANCILLARY_UNIT: 'Ancillary Unit',
+    STARTUP_MSME: 'Startup MSME',
+    MICRO: 'Micro',
+    SMALL: 'Small',
+    MEDIUM: 'Medium',
+    NOT_APPLICABLE: 'Not Applicable',
+};
+
+function formatMsmeCategory(val?: string | null): string {
+    if (!val) return '—';
+    const key = String(val).trim().toUpperCase();
+    if (MSME_CATEGORY_LABELS[key]) return MSME_CATEGORY_LABELS[key];
+    return String(val)
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .replace(/\bMsme\b/gi, 'MSME');
+}
+
+const VENDOR_TYPE_LABELS: Record<string, string> = {
+    MANUFACTURER: 'Manufacturer',
+    TRADER: 'Trader',
+    DISTRIBUTOR: 'Distributor',
+    DEALER: 'Dealer',
+    SERVICE_PROVIDER: 'Service Provider',
+    CONTRACTOR: 'Contractor',
+    OEM: 'OEM',
+    RETAIL_SUPPLIER: 'Retail Supplier',
+    WHOLESALER: 'Wholesaler',
+};
+
+function formatVendorType(val?: string | null): string {
+    if (!val) return '—';
+    const key = String(val).trim().toUpperCase();
+    if (VENDOR_TYPE_LABELS[key]) return VENDOR_TYPE_LABELS[key];
+    return String(val)
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, c => c.toUpperCase())
+        .replace(/\bOem\b/gi, 'OEM');
+}
+
+function formatTitleCase(val?: string | null): string {
+    if (!val) return '—';
+    return String(val)
+        .replace(/_/g, ' ')
+        .toLowerCase()
+        .replace(/\b\w/g, c => c.toUpperCase());
+}
+
 export default function MarketplaceSellerStore() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
@@ -77,6 +131,10 @@ export default function MarketplaceSellerStore() {
     const name = profile.businessName || vendor?.name || 'Seller';
     const initial = name.charAt(0).toUpperCase();
     const sellerUserId = Number(vendor?.sellerUserId || 0);
+
+    const sellerEmail = vendor?.email || profile?.email || null;
+    const sellerPhone = vendor?.contactNumber || vendor?.mobile || office?.contactNumber || profile?.mobile || profile?.contactNumber || null;
+    const msmeDisplay = formatMsmeCategory(profile.msmeCategory || profile.msmeType);
 
     // Extract unique categories from products
     const availableCategories = useMemo(() => {
@@ -309,9 +367,9 @@ export default function MarketplaceSellerStore() {
                                             <BadgeCheck className="h-3 w-3 text-emerald-600" /> Udyam Certified
                                         </span>
                                     )}
-                                    {profile.msmeCategory && (
+                                    {(profile.msmeCategory || profile.msmeType) && (
                                         <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-100 px-2 py-0.5 text-[9.5px] font-bold text-slate-700">
-                                            MSME: {profile.msmeCategory}
+                                            MSME: {msmeDisplay}
                                         </span>
                                     )}
                                 </div>
@@ -336,7 +394,7 @@ export default function MarketplaceSellerStore() {
                                     {profile.organizationType && (
                                         <span className="inline-flex items-center gap-1 bg-slate-100/90 px-2 py-0.5 rounded-md border border-slate-200/80 text-[11px]">
                                             <Building2 className="h-3 w-3 text-slate-500" />
-                                            {profile.organizationType.replace(/_/g, ' ')}
+                                            {formatTitleCase(profile.organizationType)}
                                         </span>
                                     )}
                                 </div>
@@ -685,10 +743,10 @@ export default function MarketplaceSellerStore() {
                                 <div className="grid sm:grid-cols-2 gap-4">
                                     {[
                                         ['Business Name', name],
-                                        ['Organization Type', profile.organizationType ? profile.organizationType.replace(/_/g, ' ') : '—'],
-                                        ['MSME Category', profile.msmeCategory || profile.msmeType || '—'],
-                                        ['Vendor Type', profile.vendorType || '—'],
-                                        ['Verification Status', vendor.verificationStatus || 'REGISTERED'],
+                                        ['Organization Type', formatTitleCase(profile.organizationType || vendor.organizationType)],
+                                        ['MSME Category', msmeDisplay],
+                                        ['Vendor Type', formatVendorType(profile.vendorType)],
+                                        ['Verification Status', formatTitleCase(vendor.verificationStatus || 'REGISTERED')],
                                         ['Udyam Certified', profile.isUdyamCertified ? 'Yes (Verified)' : 'No'],
                                     ].map(([label, value]) => (
                                         <div key={label} className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-100 space-y-1">
@@ -746,6 +804,34 @@ export default function MarketplaceSellerStore() {
                                             <p className="text-xs font-bold text-slate-800">{vendor.sellerName}</p>
                                         </div>
                                     )}
+                                    <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-100 space-y-1">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Address</p>
+                                        {sellerEmail ? (
+                                            <a
+                                                href={`mailto:${sellerEmail}`}
+                                                className="text-xs font-bold text-blue-600 hover:underline inline-flex items-center gap-1.5 truncate max-w-full"
+                                            >
+                                                <Mail className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                                                <span className="truncate">{sellerEmail}</span>
+                                            </a>
+                                        ) : (
+                                            <p className="text-xs font-bold text-slate-400">—</p>
+                                        )}
+                                    </div>
+                                    <div className="p-3.5 bg-slate-50/70 rounded-xl border border-slate-100 space-y-1">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Contact Number</p>
+                                        {sellerPhone ? (
+                                            <a
+                                                href={`tel:${sellerPhone}`}
+                                                className="text-xs font-bold text-slate-800 hover:text-blue-600 inline-flex items-center gap-1.5"
+                                            >
+                                                <Phone className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                                                <span>{sellerPhone}</span>
+                                            </a>
+                                        ) : (
+                                            <p className="text-xs font-bold text-slate-400">—</p>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         </div>

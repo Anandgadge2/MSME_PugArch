@@ -2565,7 +2565,15 @@ router.get('/marketplace/sellers/:id', async (req: Request, res: Response) => {
                 buyerProfiles: { select: { logoUrl: true, bannerUrl: true } },
                 sellerProfiles: {
                     include: {
-                        offices: true
+                        offices: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                mobile: true
+                            }
+                        }
                     }
                 },
                 users: {
@@ -2591,7 +2599,15 @@ router.get('/marketplace/sellers/:id', async (req: Request, res: Response) => {
                         buyerProfiles: { select: { logoUrl: true, bannerUrl: true } },
                         sellerProfiles: {
                             include: {
-                                offices: true
+                                offices: true,
+                                user: {
+                                    select: {
+                                        id: true,
+                                        name: true,
+                                        email: true,
+                                        mobile: true
+                                    }
+                                }
                             }
                         },
                         users: {
@@ -2613,17 +2629,23 @@ router.get('/marketplace/sellers/:id', async (req: Request, res: Response) => {
         }
         
         const primaryProfile = org.sellerProfiles?.[0] || {};
-        const sellerUser = org.users?.[0] || {};
+        const sellerUser = primaryProfile.user || org.users?.[0] || {};
+        const sellerEmail = sellerUser.email || org.users?.find((u: any) => u.email)?.email || null;
+        const sellerContactNumber = primaryProfile.offices?.[0]?.contactNumber || primaryProfile.mobile || sellerUser.mobile || org.users?.find((u: any) => u.mobile)?.mobile || null;
+        const sellerName = sellerUser.name || org.users?.find((u: any) => u.name)?.name || null;
         
         const vendor = {
             id: org.id,
             sellerUserId: sellerUser.id || null,
             name: org.organizationName,
-            sellerName: org.users?.map((u: any) => u.name).filter(Boolean).join(', ') || sellerUser.name || null,
+            sellerName: sellerName,
             city: org.city,
             state: org.state,
-            email: org.users?.map((u: any) => u.email).filter(Boolean).join(', ') || sellerUser.email || null,
-            mobile: org.users?.map((u: any) => u.mobile).filter(Boolean).join(', ') || sellerUser.mobile || null,
+            email: sellerEmail,
+            mobile: sellerContactNumber,
+            contactNumber: sellerContactNumber,
+            verificationStatus: org.verificationStatus || primaryProfile.verificationStatus || 'REGISTERED',
+            organizationType: org.organizationType || primaryProfile.organizationType || null,
             logoUrl: org.profile?.logoUrl || org.buyerProfiles?.[0]?.logoUrl || org.logoFile?.url || null,
             bannerUrl: org.profile?.bannerUrl || org.buyerProfiles?.[0]?.bannerUrl || null,
             sellerProfile: {
@@ -2631,7 +2653,10 @@ router.get('/marketplace/sellers/:id', async (req: Request, res: Response) => {
                 businessName: org.organizationName,
                 offices: primaryProfile.offices || [],
                 website: org.website || primaryProfile.website || null,
-                productCategories: primaryProfile.productCategories || []
+                productCategories: primaryProfile.productCategories || [],
+                email: sellerEmail,
+                contactNumber: sellerContactNumber,
+                mobile: sellerContactNumber
             }
         };
 

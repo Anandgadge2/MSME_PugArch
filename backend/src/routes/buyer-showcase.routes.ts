@@ -6,7 +6,7 @@ import prisma from '../lib/prisma.js';
 import { authenticate, authorize, type AuthRequest } from '../middleware/auth.js';
 import { upload } from '../config/storage.js';
 import { ApiError } from '../utils/ApiError.js';
-import { maskSensitive } from '../utils/maskSensitive.js';
+import { maskSensitive, type MaskSensitiveOptions } from '../utils/maskSensitive.js';
 import { notificationService } from '../services/notification.service.js';
 import { generateOtp, storeOtp, verifyOtp, consumeOtp } from '../services/otp.service.js';
 import { sendOtpEmail } from '../services/mail.service.js';
@@ -37,7 +37,8 @@ const normalizeOrgTypeEnum = (val?: unknown): OrganizationType | undefined => {
 };
 
 const clean = (value: unknown) => String(value ?? '').trim();
-const ok = (res: Response, data: unknown, status = 200) => res.status(status).json(maskSensitive({ success: true, data }));
+const ok = (res: Response, data: unknown, status = 200, options?: MaskSensitiveOptions) =>
+  res.status(status).json(maskSensitive({ success: true, data }, options));
 const parse = <T>(schema: z.ZodType<T>, value: unknown) => schema.parse(value);
 const userId = (req: AuthRequest) => {
   if (!req.user?.id) throw new ApiError(401, 'Unauthorized');
@@ -136,7 +137,13 @@ router.get('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       contactPersonEmail: profile.contactPersonEmail || (req.user as any)?.email || profile.email || null,
     };
 
-    ok(res, enriched);
+    ok(res, enriched, 200, {
+      unmaskSelf: true,
+      unmaskEmails: true,
+      unmaskGst: true,
+      unmaskPan: true,
+      unmaskBusinessDetails: true
+    });
   } catch (err) {
     next(err);
   }
@@ -324,7 +331,13 @@ router.put('/profile', authenticate, authorize('buyer'), (async (req: AuthReques
       redirectUrl: '/buyer/profile'
     }).catch(err => console.error('[Notification Failed]', err));
 
-    ok(res, updated);
+    ok(res, updated, 200, {
+      unmaskSelf: true,
+      unmaskEmails: true,
+      unmaskGst: true,
+      unmaskPan: true,
+      unmaskBusinessDetails: true
+    });
   } catch (err) {
     next(err);
   }
@@ -512,7 +525,13 @@ router.put('/items/:id', authenticate, authorize('buyer'), (async (req: AuthRequ
       }
     });
 
-    ok(res, updated);
+    ok(res, updated, 200, {
+      unmaskSelf: true,
+      unmaskEmails: true,
+      unmaskGst: true,
+      unmaskPan: true,
+      unmaskBusinessDetails: true
+    });
   } catch (err) {
     next(err);
   }
@@ -1111,7 +1130,13 @@ router.post('/admin/organizations/:id/status', authenticate, authorize('admin'),
       redirectUrl: '/buyer/profile'
     }).catch(err => console.error('[Notification Failed]', err));
 
-    ok(res, updated);
+    ok(res, updated, 200, {
+      unmaskSelf: true,
+      unmaskEmails: true,
+      unmaskGst: true,
+      unmaskPan: true,
+      unmaskBusinessDetails: true
+    });
   } catch (err) {
     next(err);
   }
@@ -1136,7 +1161,13 @@ router.post('/admin/organizations/:id/visibility', authenticate, authorize('admi
       redirectUrl: '/buyer/profile'
     }).catch(err => console.error('[Notification Failed]', err));
 
-    ok(res, updated);
+    ok(res, updated, 200, {
+      unmaskSelf: true,
+      unmaskEmails: true,
+      unmaskGst: true,
+      unmaskPan: true,
+      unmaskBusinessDetails: true
+    });
   } catch (err) {
     next(err);
   }

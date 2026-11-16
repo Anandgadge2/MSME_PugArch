@@ -47,11 +47,12 @@ export function sanitizeEgressPayload(val: any, depth = 0, options: EgressSaniti
       continue;
     }
 
-    // For authorized admin / master_admin officers performing KYC scrutiny:
-    // Retain cleartext PAN, GSTIN, Bank Accounts, Mobile, and Identity names to allow cross-verification against uploaded proofs
+    // For authorized admin / master_admin officers performing KYC scrutiny, or authenticated users accessing their OWN profile:
+    // Retain cleartext PAN, GSTIN, Bank Accounts, Mobile, Email, and Identity names to allow inspection and editing
     if (options.isScrutinyAdmin || options.isSelfProfile) {
       if (/^(pan|panNumber|gst|gstin|gstNumber|nameAsInPan|panName|dateAsInPan)$/i.test(key) ||
-          /(^|_)(phone|mobile|officialPhone|contactPhone)$/i.test(key) ||
+          /(^|_)(phone|mobile|officialPhone|contactPhone|contactPersonMobile)$/i.test(key) ||
+          /(^|_)(email|officialEmail|contactEmail|contactPersonEmail)$/i.test(key) ||
           (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
         result[key] = effectiveVal;
         continue;
@@ -106,7 +107,19 @@ export const globalEgressSanitizer = (req: Request, res: Response, next: NextFun
         const isAdmin = role === 'admin' || role === 'master_admin';
         const rawPath = req.originalUrl || (req.baseUrl ? `${req.baseUrl}${req.path}` : req.path) || '';
         const path = rawPath.toLowerCase();
-        const isSelfProfile = path.includes('/auth/me') || path.includes('/onboarding/me');
+        const isSelfProfile =
+          path.includes('/auth/me') ||
+          path.includes('/onboarding/me') ||
+          path.includes('/shg/me') ||
+          path.includes('/buyer-showcase/profile') ||
+          path.includes('/buyer/profile') ||
+          path.includes('/seller/settings') ||
+          path.includes('/seller/profile') ||
+          path.includes('/shg/settings') ||
+          path.includes('/shg/profile') ||
+          path.includes('/settings/profile') ||
+          path.includes('/user/profile') ||
+          path.includes('/org/me');
         const isScrutinyRoute = Boolean(res.locals && res.locals.isScrutinyAdmin) || (isAdmin && (
           path.includes('/admin/onboarding') ||
           path.includes('/master-admin/onboarding') ||

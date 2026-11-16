@@ -2747,7 +2747,13 @@ router.get('/onboarding/me', authenticate, asyncRoute(async (req, res) => {
     where: { id: userId(req) },
     include: { buyerProfile: true, sellerProfile: { include: { offices: true, bankAccounts: true, sellerDocuments: { include: { fileAsset: true } } } }, organization: true }
   });
-  ok(res, user);
+  ok(res, user, 200, {
+    unmaskSelf: true,
+    unmaskEmails: true,
+    unmaskGst: true,
+    unmaskPan: true,
+    unmaskBusinessDetails: true
+  });
 }));
 
 router.put('/seller/onboarding', authenticate, requireAccountType('seller', 'shg', 'admin', 'master_admin'), asyncRoute(async (req, res) => {

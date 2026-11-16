@@ -125,7 +125,7 @@ export const maskSensitive = <T>(input: T, options?: MaskSensitiveOptions): T =>
         acc[key] = effectiveVal;
       } else if (allowUnmaskedPii && /^(pan|panNumber|gst|gstin|gstNumber|nameAsInPan|panName)$/i.test(key)) {
         acc[key] = effectiveVal;
-      } else if (options?.unmaskForAdmin && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
+      } else if ((options?.unmaskForAdmin || options?.unmaskSelf) && (key !== 'bankAccounts' && /accountNumber|bankAccount|bankAccountNo/i.test(key))) {
         acc[key] = effectiveVal;
       } else if (allowUnmaskedEmails && /(^|_)(email|officialEmail|contactEmail|complainantEmail|contactPersonEmail|verifyingEmail)$/i.test(key)) {
         acc[key] = effectiveVal;

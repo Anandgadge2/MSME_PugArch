@@ -1,5 +1,5 @@
 import type { Response } from 'express';
-import { maskSensitive } from './maskSensitive.js';
+import { maskSensitive, type MaskSensitiveOptions } from './maskSensitive.js';
 
 const isDatabaseUnavailableError = (err: any) => {
   const message = String(err?.message || '');
@@ -105,8 +105,14 @@ export const handleFinancialRouteError = (res: Response, err: any) => {
   });
 };
 
-export const toSafeUser = (user: any) => {
+export const toSafeUser = (user: any, options?: MaskSensitiveOptions) => {
   if (!user) return null;
   const { password, ...safeUser } = user;
-  return maskSensitive({ ...safeUser, _id: user.id });
+  return maskSensitive({ ...safeUser, _id: user.id }, options ?? {
+    unmaskSelf: true,
+    unmaskEmails: true,
+    unmaskGst: true,
+    unmaskPan: true,
+    unmaskBusinessDetails: true
+  });
 };
