@@ -703,11 +703,11 @@ export function BOQTable({
               <th className="px-3 py-2.5 w-24 text-center" title={isRateContract ? 'Indicative Annual Consumption Volume' : 'Total Quantity'}>
                 {isRateContract ? 'Est. Annual Qty' : 'Qty'}
               </th>
-              <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Legally binding ceiling unit rate for call-offs' : 'Estimated Unit Rate'}>
-                {isRateContract ? 'Ceiling Rate (₹)' : 'Est. Rate (₹)'}
+              <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Legally binding ceiling unit rate for call-offs (Optional)' : 'Estimated Unit Rate / Base Price (Optional)'}>
+                {isRateContract ? 'Ceiling Rate (₹)' : 'Est. Rate (₹) (Opt.)'}
               </th>
               <th className="px-3 py-2.5 w-28 text-center">Tax %</th>
-              <th className="px-3 py-2.5 w-28 text-center">HSN/SAC</th>
+              <th className="px-3 py-2.5 w-28 text-center" title="HSN/SAC Code (Optional)">HSN/SAC (Opt.)</th>
               <th className="px-3 py-2.5 w-36 text-center">Docs (Opt.)</th>
               <th className="px-3 py-2.5 w-28 text-right" title={isRateContract ? 'Estimated Annual Ceiling Expenditure' : 'Total Gross Value'}>
                 {isRateContract ? 'Est. Annual (₹)' : 'Total (Gross)'}

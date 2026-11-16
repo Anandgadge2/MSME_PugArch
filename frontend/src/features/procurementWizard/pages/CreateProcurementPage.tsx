@@ -5115,7 +5115,7 @@ function ItemDrawerOrModal({
               </div>
 
               <div className="sm:col-span-4">
-                <Field label={isService ? "SAC Code" : "HSN Code"}>
+                <Field label={isService ? "SAC Code (Optional)" : "HSN Code (Optional)"}>
                   <input
                     value={formData.hsn_sac_code || ''}
                     onChange={e => {
@@ -5123,7 +5123,7 @@ function ItemDrawerOrModal({
                       if (validationErrors.hsn_sac_code) setValidationErrors(prev => ({ ...prev, hsn_sac_code: '' }));
                     }}
                     className={cn(inputClass, validationErrors.hsn_sac_code && "border-rose-500")}
-                    placeholder={isService ? "e.g. 998713" : "e.g. 847130"}
+                    placeholder={isService ? "e.g. 998713 (Optional)" : "e.g. 847130 (Optional)"}
                     maxLength={10}
                   />
                   {validationErrors.hsn_sac_code && (
@@ -5327,7 +5327,7 @@ function ItemDrawerOrModal({
                   )}
                 </Field>
 
-                <Field label={isRateContract ? "Ceiling Rate (₹)" : (isService ? "Est. Service Fee / Benchmark Budget (₹)" : "Est. Unit Rate (₹)")}>
+                <Field label={isRateContract ? "Ceiling Rate (₹) (Optional)" : (isService ? "Est. Service Fee / Benchmark Budget (₹) (Optional)" : "Est. Unit Rate / Base Price (₹) (Optional)")}>
                   <div className="relative flex items-center">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <span className="text-xs sm:text-sm font-bold text-slate-400 select-none">
@@ -5373,7 +5373,7 @@ function ItemDrawerOrModal({
                   )}
                 </Field>
 
-                <Field label="GST Rate">
+                <Field label="GST Rate / Tax Schedule (Optional)">
                   <SearchableSelect
                     id="line-item-gst-select"
                     aria-label="GST Rate"
@@ -5381,7 +5381,7 @@ function ItemDrawerOrModal({
                     searchPlaceholder="Search GST slab..."
                     value={formData.gst ?? 0}
                     options={[
-                      { value: 0, label: '0% (Exempt)' },
+                      { value: 0, label: '0% (Exempt / Not Applicable)' },
                       { value: 5, label: '5%' },
                       { value: 12, label: '12%' },
                       { value: 18, label: '18% (Standard)' },

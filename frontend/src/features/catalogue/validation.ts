@@ -31,12 +31,11 @@ export interface ServiceValidationInput {
 }
 
 export const validateProduct = (input: ProductValidationInput) => {
-  const isShg = Boolean(input.isShg);
   const isPriceProvided = input.price !== undefined && input.price !== null && input.price !== '';
-  const isPriceValid = isShg ? (!isPriceProvided || positiveNumber(input.price)) : (isPriceProvided && positiveNumber(input.price));
+  const isPriceValid = Boolean(isPriceProvided && positiveNumber(input.price));
   const isTaxProvided = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
-  const isTaxValid = isShg ? true : isTaxProvided;
-  const isHsnValid = isShg ? true : Boolean(requiredText(input.hsnCode));
+  const isTaxValid = Boolean(isTaxProvided);
+  const isHsnValid = Boolean(requiredText(input.hsnCode));
 
   return {
     name: requiredText(input.name),
@@ -62,11 +61,10 @@ export const validateProduct = (input: ProductValidationInput) => {
 };
 
 export const validateService = (input: ServiceValidationInput) => {
-  const isShg = Boolean(input.isShg);
   const isPriceProvided = input.basePrice !== undefined && input.basePrice !== null && input.basePrice !== '';
-  const isPriceValid = isShg ? (!isPriceProvided || positiveNumber(input.basePrice)) : (isPriceProvided && positiveNumber(input.basePrice));
+  const isPriceValid = Boolean(isPriceProvided && positiveNumber(input.basePrice));
   const isTaxProvided = (input.splitTaxRate !== undefined && input.splitTaxRate !== '') || (input.igstTaxRate !== undefined && input.igstTaxRate !== '');
-  const isTaxValid = isShg ? true : isTaxProvided;
+  const isTaxValid = Boolean(isTaxProvided);
 
   return {
     name: requiredText(input.name),

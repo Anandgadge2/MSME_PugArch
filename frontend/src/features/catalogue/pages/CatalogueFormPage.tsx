@@ -48,7 +48,6 @@ import { getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { QUANTITY_UNITS, ITEM_CONDITIONS } from '../../../constants/dropdowns';
 import { api, BASE_URL } from '../../../lib/api';
-import { isShgUser } from '../../../lib/shg';
 import { GstTaxPicker, calculateGstBreakdown } from '../../shared/gstTax';
 
 type ItemKind = 'product' | 'service';
@@ -224,7 +223,6 @@ const catalogueMedia = (item: any) => {
 
 export default function CatalogueFormPage() {
   const { user } = useAuth();
-  const isShg = isShgUser(user) || user?.role === 'shg';
   const router = useRouter();
   const pathname = usePathname() || '';
 
@@ -423,7 +421,7 @@ export default function CatalogueFormPage() {
       return (
         Boolean(form.unitOfMeasure.trim()) &&
         Boolean(form.itemCondition.trim()) &&
-        (isShg || Boolean(form.hsnCode.trim()))
+        Boolean(form.hsnCode.trim())
       );
     }
     return (
@@ -433,19 +431,14 @@ export default function CatalogueFormPage() {
       Boolean(form.scopeOfWork.trim()) &&
       Boolean(form.pricingModel.trim())
     );
-  }, [kind, form.unitOfMeasure, form.itemCondition, form.hsnCode, form.serviceArea, form.duration, form.slaResponseTime, form.scopeOfWork, form.pricingModel, isShg]);
+  }, [kind, form.unitOfMeasure, form.itemCondition, form.hsnCode, form.serviceArea, form.duration, form.slaResponseTime, form.scopeOfWork, form.pricingModel]);
 
   const isStep3Valid = useMemo(() => {
     const priceVal = kind === 'product' ? form.price : form.basePrice;
-    if (isShg) {
-      // For SHGs: Price and GST are optional. If provided, price must be non-negative.
-      const validPrice = priceVal === '' || toNumber(priceVal) >= 0;
-      return validPrice;
-    }
     const hasPrice = priceVal !== '' && toNumber(priceVal) > 0;
     const hasTax = (form.splitTaxRate !== '' && Number(form.splitTaxRate) >= 0) || (form.igstTaxRate !== '' && Number(form.igstTaxRate) >= 0);
     return Boolean(hasPrice && hasTax);
-  }, [kind, form.price, form.basePrice, form.splitTaxRate, form.igstTaxRate, isShg]);
+  }, [kind, form.price, form.basePrice, form.splitTaxRate, form.igstTaxRate]);
 
   const isStep4Valid = useMemo(() => {
     return uploadedImages.length >= 1;
@@ -483,7 +476,7 @@ export default function CatalogueFormPage() {
       case 'itemCondition':
         return kind === 'product' && !form.itemCondition.trim();
       case 'hsnCode':
-        return kind === 'product' && !isShg && !form.hsnCode.trim();
+        return kind === 'product' && !form.hsnCode.trim();
       case 'serviceArea':
         return kind === 'service' && !form.serviceArea.trim();
       case 'duration':
@@ -495,11 +488,11 @@ export default function CatalogueFormPage() {
       case 'pricingModel':
         return kind === 'service' && !form.pricingModel.trim();
       case 'price':
-        return kind === 'product' && !isShg && (form.price === '' || toNumber(form.price) <= 0);
+        return kind === 'product' && (form.price === '' || toNumber(form.price) <= 0);
       case 'basePrice':
-        return kind === 'service' && !isShg && (form.basePrice === '' || toNumber(form.basePrice) <= 0);
+        return kind === 'service' && (form.basePrice === '' || toNumber(form.basePrice) <= 0);
       case 'taxRate':
-        return !isShg && form.splitTaxRate === '' && form.igstTaxRate === '';
+        return form.splitTaxRate === '' && form.igstTaxRate === '';
       case 'images':
         return uploadedImages.length < 1;
       default:
@@ -1033,13 +1026,13 @@ export default function CatalogueFormPage() {
                       </Select>
 
                       <Input
-                        label={isShg ? "HSN / SAC Code (Optional for SHGs)" : "HSN / SAC Code"}
+                        label="HSN / SAC Code"
                         value={form.hsnCode}
                         onChange={event => { updateForm('hsnCode', event.target.value); markTouched('hsnCode'); }}
                         onBlur={() => markTouched('hsnCode')}
                         error={getFieldError('hsnCode')}
-                        required={!isShg}
-                        placeholder={isShg ? "Optional (e.g. 72142090)" : "e.g. 72142090"}
+                        required
+                        placeholder="e.g. 72142090"
                         className="bg-slate-50/50 focus:bg-white text-xs h-10"
                       />
 
@@ -1185,7 +1178,7 @@ export default function CatalogueFormPage() {
                   {/* Pricing Inputs */}
                   <div className="grid gap-4 sm:grid-cols-2">
                     <Input
-                      label={isShg ? `${kind === 'product' ? 'Base Unit Price' : 'Base Service Rate'} (INR) (Optional for SHGs)` : `${kind === 'product' ? 'Base Unit Price' : 'Base Service Rate'} (INR)`}
+                      label={`${kind === 'product' ? 'Base Unit Price' : 'Base Service Rate'} (INR)`}
                       type="number"
                       min="0"
                       step="1"
@@ -1196,8 +1189,8 @@ export default function CatalogueFormPage() {
                       }}
                       onBlur={() => markTouched(kind === 'product' ? 'price' : 'basePrice')}
                       error={getFieldError(kind === 'product' ? 'price' : 'basePrice')}
-                      required={!isShg}
-                      placeholder={isShg ? "0.00 (Optional)" : "0.00"}
+                      required
+                      placeholder="0.00"
                       className="bg-slate-50/50 focus:bg-white text-xs h-10 font-semibold text-slate-900"
                     />
 
@@ -1220,8 +1213,7 @@ export default function CatalogueFormPage() {
                       <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900">
                         <Building2 className="h-4 w-4 text-emerald-600" />
                         <span>GST & Tax Compliance Schedule</span>
-                        {!isShg && <span className="text-red-500 font-bold">*</span>}
-                        {isShg && <span className="text-slate-500 text-[10px] font-normal">(Optional for GST-exempt SHGs)</span>}
+                        <span className="text-red-500 font-bold">*</span>
                       </div>
                       <span className="text-[10px] text-slate-500 font-medium">Standard CGST+SGST or Interstate IGST</span>
                     </div>
