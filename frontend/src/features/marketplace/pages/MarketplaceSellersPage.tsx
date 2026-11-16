@@ -11,7 +11,6 @@ import {
     MapPin,
     Package,
     Search,
-    SlidersHorizontal,
     Sparkles,
     Wrench,
     X,
@@ -23,9 +22,7 @@ import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { marketplaceApi, type MarketplaceSeller } from '../api';
 import { resolveMediaUrl } from '../../../lib/api';
 import { saveSupplier } from '../utils/savedSuppliers';
-import { Button } from '../../../components/ui/button';
 import { ViewModeToggle } from '../../shared/ViewModeToggle';
-import { ResponsiveFilterBar } from '../../../components/ui/ResponsiveFilterBar';
 import { useResponsiveViewMode, usePagination } from '../../shared/hooks';
 import { Pagination } from '../../shared/Pagination';
 import { DataTable, type ColumnDef } from '../../../components/ui/data-table';
@@ -80,21 +77,23 @@ function SellerLogoImage({
                 src={logo}
                 alt={`${name} logo`}
                 onError={() => setImgError(true)}
-                className={`max-h-full max-w-full object-contain drop-shadow-2xs transition-transform duration-300 group-hover:scale-105 ${className}`}
+                className={`h-full w-full object-contain p-0.5 drop-shadow-2xs transition-transform duration-300 group-hover:scale-105 ${className}`}
                 loading="lazy"
             />
         );
     }
 
+    const textSize = size === 'lg' ? 'text-2xl sm:text-3xl' : size === 'md' ? 'text-lg sm:text-xl' : 'text-sm sm:text-base';
+
     return (
-        <span className={`flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br font-black tracking-wider shadow-inner text-white ${initialsBg} ${className}`}>
+        <span className={`flex h-full w-full items-center justify-center rounded-xl bg-gradient-to-br font-black tracking-wider shadow-inner text-white ${textSize} ${initialsBg} ${className}`}>
             {orgInitials}
         </span>
     );
 }
 
 const sellerSkeletonColumns: ColumnDef<any>[] = [
-    { key: 'org', header: 'Seller Organization', width: 'w-[320px] min-w-[280px]', cell: () => null },
+    { key: 'org', header: 'Seller Organization', width: 'w-[360px] min-w-[320px]', cell: () => null },
     { key: 'loc', header: 'Location', width: 'w-[180px] min-w-[160px]', cell: () => null },
     { key: 'cap', header: 'Capabilities', width: 'w-[240px] min-w-[200px]', cell: () => null },
     { key: 'prod', header: 'Products', width: 'w-[100px] min-w-[90px]', cell: () => null },
@@ -112,7 +111,7 @@ function SellersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
                 skeletonRows={6}
                 showSrNo={false}
                 keyExtractor={(_, idx) => idx}
-                minWidth="min-w-[1100px]"
+                minWidth="min-w-[1150px]"
             />
         );
     }
@@ -121,12 +120,12 @@ function SellersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
         <div className="grid gap-4 sm:gap-4.5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {Array.from({ length: 8 }).map((_, idx) => (
                 <div key={idx} className="rounded-2xl border border-slate-200/80 bg-white shadow-xs flex flex-col justify-between overflow-hidden">
-                    <div className="h-16 w-full bg-slate-100 p-3 flex justify-between items-start animate-pulse">
+                    <div className="h-20 sm:h-22 w-full bg-slate-100 p-3 flex justify-between items-start animate-pulse">
                         <Skeleton className="h-4 w-20 rounded-full" />
                         <Skeleton className="h-4 w-16 rounded-full" />
                     </div>
-                    <div className="px-4 -mt-8 flex items-end justify-between">
-                        <Skeleton className="h-16 w-16 rounded-2xl ring-2 ring-white" />
+                    <div className="px-4 -mt-10 sm:-mt-12 flex items-end justify-between">
+                        <Skeleton className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl ring-2 ring-white" />
                         <Skeleton className="h-5 w-24 rounded-lg mb-1" />
                     </div>
                     <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
@@ -139,8 +138,8 @@ function SellersSkeleton({ viewMode }: { viewMode: 'grid' | 'list' }) {
                             <Skeleton className="h-6 w-20 rounded-lg" />
                         </div>
                         <div className="border-t border-slate-100 pt-3 flex items-center justify-between">
-                            <Skeleton className="h-8 flex-1 rounded-xl mr-2" />
-                            <Skeleton className="h-8 w-16 rounded-xl" />
+                            <Skeleton className="h-9.5 flex-1 rounded-xl mr-2" />
+                            <Skeleton className="h-9.5 w-16 rounded-xl" />
                         </div>
                     </div>
                 </div>
@@ -259,34 +258,34 @@ export default function MarketplaceSellersPage() {
         {
             key: 'organization',
             header: 'Seller Organization',
-            width: 'w-[320px] min-w-[280px]',
+            width: 'w-[360px] min-w-[320px]',
             cell: (seller) => {
                 const logo = sellerLogo(seller);
                 const initialsText = initials(seller.organizationName);
                 const initialsBg = getInitialsBg(seller.id);
                 return (
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3.5">
                         <Link href={`/marketplace/sellers/${seller.id}`} className="shrink-0 group/logo">
-                            <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white p-1 shadow-2xs group-hover/logo:border-blue-400 group-hover/logo:shadow-xs transition-all overflow-hidden">
+                            <div className="flex h-16 w-20 sm:h-18 sm:w-22 shrink-0 items-center justify-center rounded-xl border border-slate-200/90 bg-white p-1.5 shadow-2xs group-hover/logo:border-blue-400 group-hover/logo:shadow-xs transition-all overflow-hidden">
                                 <SellerLogoImage
                                     logo={logo}
                                     name={seller.organizationName}
                                     orgInitials={initialsText}
                                     initialsBg={initialsBg}
-                                    size="sm"
+                                    size="md"
                                 />
                             </div>
                         </Link>
                         <div className="flex flex-col min-w-0 flex-1">
-                            <Link href={`/marketplace/sellers/${seller.id}`} className="font-extrabold text-slate-900 hover:text-blue-700 transition-colors text-xs sm:text-sm leading-snug truncate" title={seller.organizationName}>
+                            <Link href={`/marketplace/sellers/${seller.id}`} className="font-extrabold text-slate-900 hover:text-blue-600 transition-colors text-sm sm:text-base leading-snug truncate" title={seller.organizationName}>
                                 {seller.organizationName}
                             </Link>
-                            <div className="flex items-center gap-1.5 mt-1">
-                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[9px] font-bold text-emerald-700">
-                                    <BadgeCheck className="h-3 w-3 text-emerald-500" /> Verified
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                                    <BadgeCheck className="h-3.5 w-3.5 text-emerald-500" /> Verified
                                 </span>
                                 {(seller as any).organizationType && (
-                                    <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider truncate max-w-[120px]">
+                                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate max-w-[130px]">
                                         {String((seller as any).organizationType).replace(/_/g, ' ')}
                                     </span>
                                 )}
@@ -383,7 +382,7 @@ export default function MarketplaceSellersPage() {
                     <div className="flex items-center justify-end gap-2">
                         <Link
                             href={`/marketplace/sellers/${seller.id}`}
-                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] px-3 py-1.5 text-xs font-bold text-white shadow-xs transition-all hover:bg-[#12335f] active:scale-95"
+                            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-1.5 text-xs font-bold shadow-sm shadow-blue-600/20 transition-all active:scale-95"
                         >
                             <Building2 className="h-3.5 w-3.5" /> View Store
                         </Link>
@@ -483,76 +482,96 @@ export default function MarketplaceSellersPage() {
                         </div>
                     </div>
 
-                    {/* ── Search + Filter + View Toggle Toolbar ── */}
-                    <div className="p-3.5 sm:p-4">
-                        <ResponsiveFilterBar
-                            activeFilterCount={(search ? 1 : 0) + (locationFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (sortBy !== 'name' ? 1 : 0)}
-                            searchInput={
-                                <div className="relative w-full">
-                                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                                    <input
-                                        type="text"
-                                        value={search}
-                                        onChange={event => setSearch(event.target.value)}
-                                        placeholder="Search by seller name, category, or location…"
-                                        className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
-                                    />
+                    {/* ── Seamless Unified Single-Row Search + Filter + View Toggle Toolbar ── */}
+                    <div className="p-3 sm:p-3.5 border-t border-slate-100 bg-white">
+                        <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5 w-full">
+                            {/* Search Bar */}
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                                <input
+                                    type="text"
+                                    value={search}
+                                    onChange={event => setSearch(event.target.value)}
+                                    placeholder="Search by seller name, category, or location…"
+                                    className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/60 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-blue-500 focus:bg-white focus:ring-2 focus:ring-blue-500/15"
+                                />
+                                {search && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearch('')}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 rounded-full"
+                                        title="Clear search"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Single-Row Filter Controls + View Toggle */}
+                            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap shrink-0">
+                                {/* Location Filter */}
+                                <div className="flex-1 sm:flex-initial sm:w-40 lg:w-44 min-w-[130px]">
+                                    <select
+                                        value={locationFilter}
+                                        onChange={event => setLocationFilter(event.target.value)}
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs cursor-pointer truncate"
+                                    >
+                                        <option value="">All Locations ({locations.length})</option>
+                                        {locations.map(location => (
+                                            <option key={location} value={location}>{location}</option>
+                                        ))}
+                                    </select>
                                 </div>
-                            }
-                            filters={
-                                <>
-                                    <div className="w-full sm:w-auto sm:min-w-[140px]">
-                                        <select
-                                            value={locationFilter}
-                                            onChange={event => setLocationFilter(event.target.value)}
-                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                                        >
-                                            <option value="">All Locations ({locations.length})</option>
-                                            {locations.map(location => (
-                                                <option key={location} value={location}>{location}</option>
-                                            ))}
-                                        </select>
-                                    </div>
 
-                                    <div className="w-full sm:w-auto sm:min-w-[160px]">
-                                        <select
-                                            value={categoryFilter}
-                                            onChange={event => setCategoryFilter(event.target.value)}
-                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                                        >
-                                            <option value="">All Categories ({categories.length})</option>
-                                            {categories.map(category => (
-                                                <option key={category} value={category}>{category}</option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                {/* Category Filter */}
+                                <div className="flex-1 sm:flex-initial sm:w-44 lg:w-48 min-w-[140px]">
+                                    <select
+                                        value={categoryFilter}
+                                        onChange={event => setCategoryFilter(event.target.value)}
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs cursor-pointer truncate"
+                                    >
+                                        <option value="">All Categories ({categories.length})</option>
+                                        {categories.map(category => (
+                                            <option key={category} value={category}>{category}</option>
+                                        ))}
+                                    </select>
+                                </div>
 
-                                    <div className="w-full sm:w-auto sm:min-w-[130px]">
-                                        <select
-                                            value={sortBy}
-                                            onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')}
-                                            className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
-                                        >
-                                            <option value="name">Sort: A to Z</option>
-                                            <option value="location">Sort: Location</option>
-                                            <option value="latest">Sort: Latest</option>
-                                        </select>
-                                    </div>
+                                {/* Sort Filter */}
+                                <div className="flex-1 sm:flex-initial sm:w-36 lg:w-38 min-w-[120px]">
+                                    <select
+                                        value={sortBy}
+                                        onChange={event => setSortBy(event.target.value as 'name' | 'location' | 'latest')}
+                                        className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/15 transition-colors shadow-2xs cursor-pointer"
+                                    >
+                                        <option value="name">Sort: A to Z</option>
+                                        <option value="location">Sort: Location</option>
+                                        <option value="latest">Sort: Latest</option>
+                                    </select>
+                                </div>
 
-                                    {hasActiveFilters && (
-                                        <Button
-                                            type="button"
-                                            variant="outline"
-                                            onClick={clearFilters}
-                                            className="h-10 rounded-xl border-rose-200 bg-rose-50/60 text-xs font-extrabold text-rose-700 hover:bg-rose-100 min-w-[80px]"
-                                        >
-                                            Reset
-                                        </Button>
-                                    )}
-                                </>
-                            }
-                            endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
-                        />
+                                {/* Reset Filter Button */}
+                                {hasActiveFilters && (
+                                    <button
+                                        type="button"
+                                        onClick={clearFilters}
+                                        className="h-10 inline-flex items-center gap-1 rounded-xl border border-rose-200 bg-rose-50/80 hover:bg-rose-100 text-xs font-extrabold text-rose-700 px-3 transition-colors shadow-2xs active:scale-95 cursor-pointer shrink-0"
+                                        title="Reset filters"
+                                    >
+                                        <X className="h-3.5 w-3.5" />
+                                        <span>Reset</span>
+                                    </button>
+                                )}
+
+                                {/* Divider */}
+                                <div className="hidden sm:block h-6 w-px bg-slate-200 mx-0.5 shrink-0" />
+
+                                {/* View Mode Toggle */}
+                                <div className="shrink-0">
+                                    <ViewModeToggle value={viewMode} onChange={setViewMode} />
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </section>
 
@@ -574,7 +593,7 @@ export default function MarketplaceSellersPage() {
                         <button
                             type="button"
                             onClick={clearFilters}
-                            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-[#0b2447] px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-[#12335f]"
+                            className="mt-3 inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 shadow-sm"
                         >
                             <X className="h-3.5 w-3.5" /> Reset Filters
                         </button>
@@ -586,7 +605,7 @@ export default function MarketplaceSellersPage() {
                                 data={pagedSellers}
                                 columns={sellerColumns}
                                 showSrNo={false}
-                                minWidth="min-w-[1100px]"
+                                minWidth="min-w-[1150px]"
                                 keyExtractor={(seller) => seller.id}
                                 rowClassName="hover:bg-blue-50/40 transition-colors group"
                                 page={page}
@@ -621,7 +640,7 @@ export default function MarketplaceSellersPage() {
                                             className="group relative flex flex-col justify-between rounded-2xl border border-slate-200/90 bg-white shadow-xs hover:shadow-xl hover:border-blue-400/50 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
                                         >
                                             {/* Accent Card Top Header Stripe */}
-                                            <div className="h-16 w-full bg-gradient-to-r from-slate-100 via-blue-50/70 to-indigo-50/60 p-3 flex items-start justify-between relative border-b border-slate-100/80">
+                                            <div className="h-20 sm:h-22 w-full bg-gradient-to-r from-slate-100 via-blue-50/70 to-indigo-50/60 p-3 flex items-start justify-between relative border-b border-slate-100/80">
                                                 <span className="inline-flex items-center rounded-full bg-white/95 backdrop-blur-xs px-2.5 py-0.5 text-[10px] font-bold text-slate-700 uppercase tracking-wider shadow-2xs border border-slate-200/80 truncate max-w-[150px]">
                                                     {(seller as any).organizationType ? String((seller as any).organizationType).replace(/_/g, ' ') : 'SUPPLIER'}
                                                 </span>
@@ -630,10 +649,10 @@ export default function MarketplaceSellersPage() {
                                                 </span>
                                             </div>
 
-                                            {/* Avatar Box & Location Shortcut */}
-                                            <div className="px-4 -mt-8 flex items-end justify-between relative z-10 mb-2">
+                                            {/* Large Prominent Avatar Box & Location Shortcut */}
+                                            <div className="px-4 -mt-10 sm:-mt-12 flex items-end justify-between relative z-10 mb-2">
                                                 <Link href={`/marketplace/sellers/${seller.id}`} className="group/avatar shrink-0 block">
-                                                    <div className="flex h-16 w-16 sm:h-17 sm:w-17 items-center justify-center rounded-2xl bg-white border-2 border-white shadow-md p-1.5 transition-transform duration-300 group-hover:scale-105 group-hover/avatar:shadow-lg overflow-hidden">
+                                                    <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-2xl bg-white border-2 border-white shadow-md p-2 transition-transform duration-300 group-hover:scale-105 group-hover/avatar:shadow-lg overflow-hidden">
                                                         <SellerLogoImage
                                                             logo={logo}
                                                             name={seller.organizationName}
@@ -643,7 +662,7 @@ export default function MarketplaceSellersPage() {
                                                         />
                                                     </div>
                                                 </Link>
-                                                <span className="text-[11px] font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-3xs mb-1">
+                                                <span className="text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200/80 px-2.5 py-1 rounded-lg flex items-center gap-1 shadow-3xs mb-1">
                                                     <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                                                     <span className="truncate max-w-[120px]">{seller.city || profile.city || 'Odisha'}</span>
                                                 </span>
@@ -653,7 +672,7 @@ export default function MarketplaceSellersPage() {
                                             <div className="px-4 flex-1 flex flex-col justify-between">
                                                 <div>
                                                     <Link href={`/marketplace/sellers/${seller.id}`} className="block group/title">
-                                                        <h3 title={seller.organizationName} className="text-base font-extrabold text-[#0b2447] group-hover/title:text-blue-600 transition-colors line-clamp-1 leading-snug">
+                                                        <h3 title={seller.organizationName} className="text-base sm:text-lg font-black text-[#0b2447] group-hover/title:text-blue-600 transition-colors line-clamp-1 leading-snug">
                                                             {seller.organizationName}
                                                         </h3>
                                                     </Link>
@@ -701,14 +720,14 @@ export default function MarketplaceSellersPage() {
                                                     <div className="flex items-center gap-2 pt-0.5 pb-3">
                                                         <Link
                                                             href={`/marketplace/sellers/${seller.id}`}
-                                                            className="flex-1 h-9 inline-flex items-center justify-center gap-1.5 rounded-xl bg-[#0b2447] hover:bg-[#12335f] text-white text-xs font-bold shadow-xs hover:shadow-sm transition-all duration-200 active:scale-95"
+                                                            className="flex-1 h-9.5 inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-sm shadow-blue-600/25 transition-all duration-200 active:scale-95"
                                                         >
-                                                            <Building2 className="h-3.5 w-3.5" /> View Store
+                                                            <Building2 className="h-4 w-4" /> View Store
                                                         </Link>
                                                         {user?.role === 'buyer' ? (
                                                             <Link
                                                                 href={sUserId ? `/buyer/rfq?sellerId=${sUserId}` : `/marketplace/sellers/${seller.id}`}
-                                                                className="h-9 px-3.5 inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-xs font-bold text-orange-700 shadow-2xs transition-all active:scale-95"
+                                                                className="h-9.5 px-3.5 inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 hover:bg-orange-100 text-xs font-bold text-orange-700 shadow-2xs transition-all active:scale-95"
                                                             >
                                                                 Quote
                                                             </Link>
@@ -727,7 +746,7 @@ export default function MarketplaceSellersPage() {
                                                                         source: 'Verified sellers page',
                                                                     });
                                                                 }}
-                                                                className="h-9 px-3.5 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-95 cursor-pointer"
+                                                                className="h-9.5 px-3.5 inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-95 cursor-pointer"
                                                             >
                                                                 <Bookmark className="h-3.5 w-3.5 text-slate-500" />
                                                                 <span>Save</span>
