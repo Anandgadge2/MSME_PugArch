@@ -7,6 +7,7 @@ import {
   FileText,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Loader2,
   Calendar,
   Building2,
@@ -185,15 +186,24 @@ export function ImportExternalOrderModal({
     }
   };
 
+  const MAX_FILE_SIZE_MB = 10;
+  const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+
   const processSelectedFile = async (file: File) => {
     const validTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    if (!validTypes.includes(file.type) && !isPdf) {
       toast.error('Please upload a PDF document or image file (PNG, JPG, WebP).');
       return;
     }
 
-    if (file.size > 25 * 1024 * 1024) {
-      toast.error('File size exceeds 25 MB limit.');
+    if (file.size > MAX_FILE_SIZE_BYTES) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      toast.error(
+        `Selected file (${sizeMb} MB) exceeds the ${MAX_FILE_SIZE_MB} MB limit. For fast and reliable AI extraction, please compress your PDF below ${MAX_FILE_SIZE_MB} MB and re-upload.`,
+        { duration: 8000 }
+      );
+      if (fileInputRef.current) fileInputRef.current.value = '';
       return;
     }
 
@@ -409,22 +419,18 @@ export function ImportExternalOrderModal({
     } catch (err: any) {
       clearTimeout(t1);
       clearTimeout(t2);
-      loggerWarnOrToast(err);
-      // Even on complete network or upload error, allow graceful manual entry
-      setStep('VERIFY');
-      setStatusBanner('Manual Review Mode Active');
-      setExtractionMode('GRACEFUL_FALLBACK');
-      setLineItems([
-        {
-          itemName: 'Procurement Item',
-          description: '',
-          quantity: 1,
-          unitOfMeasure: 'NOS',
-          unitPrice: 0,
-          taxRate: 18,
-          totalAmount: 0
-        }
-      ]);
+      const isLarge = file && file.size > 7 * 1024 * 1024;
+      const sizeMb = file ? (file.size / (1024 * 1024)).toFixed(1) : '0';
+      const errorMsg = isLarge
+        ? `Document extraction failed. The file (${sizeMb} MB) is too large or timed out during server processing. Please compress your PDF below 5–10 MB and try again.`
+        : (err.message || 'Failed to extract document contents. The document may be too large or timed out.');
+
+      toast.error(errorMsg, { duration: 8000 });
+      setStep('DROPZONE');
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      setOriginalName('');
+      if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
 
@@ -635,7 +641,7 @@ export function ImportExternalOrderModal({
                   </span>
                 </h2>
                 <p className="text-[11px] font-medium text-slate-300">
-                  Upload PDF PO or External Contract to automatically extract details and synchronize with local MSMEs.
+                  Upload PDF PO or External Contract (Max 10 MB) to automatically extract details and synchronize with local MSMEs.
                 </p>
               </div>
             </div>
@@ -681,9 +687,21 @@ export function ImportExternalOrderModal({
                   <h3 className="text-base sm:text-lg font-black text-slate-900 mb-1">
                     Drop your Purchase Order or Contract PDF here
                   </h3>
-                  <p className="text-xs text-slate-500 max-w-md mb-6">
-                    Supports official PDF contracts, purchase orders, scanned quotations, or invoice copies (PDF, PNG, JPG up to 25MB).
+                  <p className="text-xs text-slate-500 max-w-md mb-3">
+                    Supports official PDF contracts, purchase orders, scanned quotations, or invoice copies (PDF, PNG, JPG).
                   </p>
+
+                  {/* Prominent File Size Limit & Compression Instructions */}
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-amber-50 border border-amber-300 text-amber-900 text-xs font-semibold mb-5 max-w-lg shadow-2xs">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div className="text-left">
+                      <span className="font-bold">Maximum File Size: 10 MB</span>{' '}
+                      <span className="text-amber-700">(Recommended &lt; 5 MB for instant extraction)</span>
+                      <p className="text-[11px] font-normal text-amber-800 mt-0.5">
+                        For multi-page or scanned PDFs, please compress the file before uploading to avoid server timeouts.
+                      </p>
+                    </div>
+                  </div>
 
                   <div className="flex flex-wrap justify-center gap-2 mb-6">
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-lg">
@@ -764,9 +782,10 @@ export function ImportExternalOrderModal({
                         variant="outline"
                         size="sm"
                         onClick={() => fileInputRef.current?.click()}
-                        className="h-7 text-[10px] bg-slate-700 hover:bg-slate-600 text-white border-slate-600"
+                        className="h-7 text-[10px] bg-slate-700 hover:bg-slate-600 text-white border-slate-600 font-semibold"
+                        title="Upload a new document (Maximum size: 10 MB)"
                       >
-                        Replace File
+                        Replace File (Max 10MB)
                       </Button>
                     </div>
                   </div>

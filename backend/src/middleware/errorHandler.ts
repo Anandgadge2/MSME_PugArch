@@ -6,6 +6,15 @@ import { apiResponse } from '../utils/apiResponse.js';
 export const notFoundHandler: ErrorRequestHandler = (err, _req, _res, next) => next(err);
 
 export const errorHandler: ErrorRequestHandler = (err, req, res, _next) => {
+  if (err?.name === 'MulterError') {
+    const isLimit = err.code === 'LIMIT_FILE_SIZE';
+    const statusCode = isLimit ? 413 : 400;
+    const message = isLimit
+      ? 'The uploaded document exceeds the maximum allowed file size of 10 MB. Please compress your PDF and try again.'
+      : (err.message || 'File upload error');
+    return apiResponse.error(res, statusCode, message, err.code);
+  }
+
   const statusCode = err instanceof ApiError ? err.statusCode : Number(err?.statusCode || 500);
   const message = err instanceof ApiError || statusCode < 500 ? err.message : 'Internal server error';
   const reqId = (req as any)?.id || (req as any)?.requestId || res.getHeader('x-request-id');
