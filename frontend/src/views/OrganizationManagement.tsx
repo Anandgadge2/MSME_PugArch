@@ -46,6 +46,7 @@ import { AppealQueue } from '../features/shared/AppealQueue';
 interface Organization {
   id: number;
   organizationName: string;
+  organizationType?: string;
   gstin?: string;
   panNumber?: string;
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED' | 'SUSPENDED' | 'CLOSED' | 'ARCHIVED' | 'MERGED';
@@ -1463,6 +1464,108 @@ export default function OrganizationManagement() {
           </div>
         </div>
       )}
+
+      {/* Edit Organization Name & Type Modal */}
+      {editingOrg && (
+        <div
+          className="fixed inset-0 bg-neutral-900/45 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Edit Organization Details: ${editingOrg.organizationName}`}
+        >
+          <div className="bg-white rounded-xl border border-slate-200 shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-[#0c2340] border-b-4 border-[#c5a556] p-5 text-white flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-lg flex items-center gap-2">
+                  <Edit3 className="h-5 w-5 text-[#c5a556]" /> Edit Stakeholder Details
+                </h3>
+                <p className="text-xs text-slate-300 mt-1">Admin authority update for organization and trade name.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingOrg(null)}
+                className="text-slate-400 hover:text-white transition-colors p-1"
+                aria-label="Close dialog"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveOrgEdit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Organization / Trade Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editOrgForm.organizationName}
+                  onChange={(e) => setEditOrgForm(prev => ({ ...prev, organizationName: e.target.value }))}
+                  placeholder="e.g. M/s Maa Samaleswari Traders"
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0c2340]"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Changing this will synchronize the primary trade name across linked seller and buyer profiles.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Organization Constitution / Type
+                </label>
+                <select
+                  value={editOrgForm.organizationType}
+                  onChange={(e) => setEditOrgForm(prev => ({ ...prev, organizationType: e.target.value }))}
+                  className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#0c2340]"
+                >
+                  <option value="">Keep Existing</option>
+                  <option value="PROPRIETORSHIP">Proprietorship (Sole Owner)</option>
+                  <option value="PARTNERSHIP">Partnership Firm</option>
+                  <option value="PRIVATE_LIMITED">Private Limited Company (Pvt Ltd)</option>
+                  <option value="PUBLIC_LIMITED">Public Limited Company</option>
+                  <option value="LLP">Limited Liability Partnership (LLP)</option>
+                  <option value="SHG">Self-Help Group (SHG / Women Collective)</option>
+                  <option value="GOVERNMENT">Government Department / PSU</option>
+                  <option value="TRUST">Trust / Society / NGO</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-600 mb-1">
+                  Admin Audit Reason Note <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={editOrgForm.reason}
+                  onChange={(e) => setEditOrgForm(prev => ({ ...prev, reason: e.target.value }))}
+                  placeholder="Mandatory administrative justification (e.g. Updating trade name from PAN proprietor name per Udyam certificate verification)"
+                  className="w-full p-2.5 rounded-lg border border-slate-200 bg-white text-xs font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0c2340]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setEditingOrg(null)}
+                  disabled={isSavingOrgEdit}
+                  className="h-9 px-4 text-xs font-bold"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={isSavingOrgEdit}
+                  className="h-9 px-4 text-xs font-black bg-[#0c2340] hover:bg-[#12335f] text-white"
+                >
+                  {isSavingOrgEdit ? 'Saving...' : 'Save Organization Details'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1811,6 +1914,16 @@ function OrgActionsDropdown({
           >
             <Eye className="h-3.5 w-3.5 text-slate-500" aria-hidden="true" />
             <span>Details</span>
+          </button>
+
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => { onClose(); onOpenEdit(org); }}
+            className="flex items-center gap-2 w-full px-2.5 py-1.5 text-xs font-bold rounded-lg text-blue-700 hover:bg-blue-50 transition-colors text-left"
+          >
+            <Edit3 className="h-3.5 w-3.5 text-blue-600" aria-hidden="true" />
+            <span>Edit Details</span>
           </button>
 
           <button
