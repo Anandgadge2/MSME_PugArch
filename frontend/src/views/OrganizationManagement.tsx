@@ -28,7 +28,8 @@ import {
   LayoutGrid,
   List,
   X,
-  MoreVertical
+  MoreVertical,
+  Edit3
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Button } from '../components/ui/button';
@@ -152,6 +153,58 @@ export default function OrganizationManagement() {
   const [isFeatureModalOpen, setIsFeatureModalOpen] = useState(false);
   const [isVerifyModalOpen, setIsVerifyModalOpen] = useState(false);
   const [isBlacklistModalOpen, setIsBlacklistModalOpen] = useState(false);
+
+  // Edit Organization Modal State
+  const [editingOrg, setEditingOrg] = useState<Organization | null>(null);
+  const [editOrgForm, setEditOrgForm] = useState({
+    organizationName: '',
+    organizationType: '',
+    reason: ''
+  });
+  const [isSavingOrgEdit, setIsSavingOrgEdit] = useState(false);
+
+  const handleOpenEditModal = (org: Organization) => {
+    setEditingOrg(org);
+    setEditOrgForm({
+      organizationName: org.organizationName || '',
+      organizationType: org.organizationType || '',
+      reason: ''
+    });
+  };
+
+  const handleSaveOrgEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingOrg) return;
+    if (!editOrgForm.organizationName.trim()) {
+      toast.error('Organization name is required');
+      return;
+    }
+    if (!editOrgForm.reason.trim()) {
+      toast.error('Reason for updating organization name is required for audit logs');
+      return;
+    }
+
+    setIsSavingOrgEdit(true);
+    try {
+      const res = await api.put(`/api/admin/organizations/${editingOrg.id}`, {
+        organizationName: editOrgForm.organizationName.trim(),
+        organizationType: editOrgForm.organizationType || undefined,
+        reason: editOrgForm.reason.trim()
+      }, authHeaders);
+      if (res.ok) {
+        toast.success('Organization updated successfully');
+        queryClient.invalidateQueries({ queryKey: ['organizations'] });
+        setEditingOrg(null);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        toast.error(data.message || 'Failed to update organization');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to update organization');
+    } finally {
+      setIsSavingOrgEdit(false);
+    }
+  };
 
   // Form states
   const [blacklistReason, setBlacklistReason] = useState('');
@@ -571,6 +624,7 @@ export default function OrganizationManagement() {
           onToggle={() => setOpenActionMenuId(openActionMenuId === org.id ? null : org.id)}
           onClose={() => setOpenActionMenuId(null)}
           onOpenDetails={setDetailOrg}
+          onOpenEdit={handleOpenEditModal}
           onOpenFeatures={handleOpenFeatureModal}
           onOpenVerify={handleOpenVerifyModal}
           onOpenBlacklist={handleOpenBlacklistModal}
@@ -764,6 +818,7 @@ export default function OrganizationManagement() {
                     onToggle={() => setOpenActionMenuId(openActionMenuId === org.id ? null : org.id)}
                     onClose={() => setOpenActionMenuId(null)}
                     onOpenDetails={setDetailOrg}
+                    onOpenEdit={handleOpenEditModal}
                     onOpenFeatures={handleOpenFeatureModal}
                     onOpenVerify={handleOpenVerifyModal}
                     onOpenBlacklist={handleOpenBlacklistModal}
@@ -1576,6 +1631,7 @@ interface OrgActionsDropdownProps {
   onToggle: () => void;
   onClose: () => void;
   onOpenDetails: (org: Organization) => void;
+  onOpenEdit: (org: Organization) => void;
   onOpenFeatures: (org: Organization) => void;
   onOpenVerify: (org: Organization) => void;
   onOpenBlacklist: (org: Organization) => void;
@@ -1589,6 +1645,7 @@ function OrgActionsDropdown({
   onToggle,
   onClose,
   onOpenDetails,
+  onOpenEdit,
   onOpenFeatures,
   onOpenVerify,
   onOpenBlacklist,
