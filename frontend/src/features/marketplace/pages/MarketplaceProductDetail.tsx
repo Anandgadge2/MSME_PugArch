@@ -194,6 +194,16 @@ export default function MarketplaceProductDetail() {
     const imageCandidates = getMarketplaceImageCandidates(product).filter((img) => !failedImages.includes(img));
     const currentImage = imageCandidates[selectedImage] || imageCandidates[0] || resolveMarketplaceImage(product, 'product');
 
+    const formatThumbSrc = (src: string) => {
+        if (!src || src.startsWith('data:') || src.startsWith('blob:') || src.endsWith('.svg')) return src;
+        return `${src}${src.includes('?') ? '&' : '?'}w=160&h=160&q=75&fmt=webp`;
+    };
+
+    const formatMainImageSrc = (src: string) => {
+        if (!src || src.startsWith('data:') || src.startsWith('blob:') || src.endsWith('.svg')) return src;
+        return `${src}${src.includes('?') ? '&' : '?'}w=1000&q=82&fmt=webp`;
+    };
+
     // Extract all uploaded documents & certifications
     const productDocuments = (() => {
         if (!product) return [];
@@ -364,8 +374,10 @@ export default function MarketplaceProductDetail() {
                                                     className={`relative w-16 h-16 md:w-18 md:h-18 rounded-xl border-2 overflow-hidden shrink-0 bg-slate-50 transition-all cursor-pointer ${idx === selectedImage ? 'border-emerald-600 ring-2 ring-emerald-600/20 shadow-xs scale-102' : 'border-slate-200 hover:border-slate-300 opacity-75 hover:opacity-100'}`}
                                                 >
                                                     <img
-                                                        src={img}
+                                                        src={formatThumbSrc(img)}
                                                         alt={`${product.name} thumb ${idx + 1}`}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="w-full h-full object-contain p-1"
                                                         onError={(e) => { e.currentTarget.src = resolveMarketplaceImage(product, 'product'); }}
                                                     />
@@ -384,8 +396,10 @@ export default function MarketplaceProductDetail() {
                                         {currentImage ? (
                                             <>
                                                 <img
-                                                    src={currentImage}
+                                                    src={formatMainImageSrc(currentImage)}
                                                     alt={product.name}
+                                                    loading="eager"
+                                                    fetchPriority="high"
                                                     onError={() => setFailedImages((prev) => prev.includes(currentImage) ? prev : [...prev, currentImage])}
                                                     className="w-full h-full object-contain p-4 transition-transform duration-300 group-hover:scale-105"
                                                 />
@@ -822,8 +836,10 @@ export default function MarketplaceProductDetail() {
                                             <div className="h-36 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden relative">
                                                 {resolveMarketplaceImage(p, 'product') ? (
                                                     <img
-                                                        src={resolveMarketplaceImage(p, 'product')}
+                                                        src={formatThumbSrc(resolveMarketplaceImage(p, 'product'))}
                                                         alt={p.name}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         className="w-full h-full object-contain p-2 group-hover:scale-105 transition"
                                                         onError={(e) => { e.currentTarget.src = resolveMarketplaceImage({}, 'product'); }}
                                                     />

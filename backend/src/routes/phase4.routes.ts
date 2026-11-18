@@ -6,7 +6,13 @@ import { createHash } from 'crypto';
 import https from 'https';
 import { z } from 'zod';
 import prisma from '../lib/prisma.js';
-import { optimizeImageBuffer } from '../utils/imageOptimizer.js';
+import { 
+  optimizeImageBuffer, 
+  buildImageCacheKey, 
+  getImageFromCache, 
+  saveImageToCache, 
+  deduplicateImageTask 
+} from '../utils/imageOptimizer.js';
 import { permanentlyDeleteUser } from './master-admin.routes.js';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
@@ -3976,96 +3982,114 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
 
   const ext = path.extname(decodedKey).toLowerCase();
   let contentType = RAW_MIME_TYPES[ext] || 'application/octet-stream';
-  const cacheControl = decodedKey.startsWith('categories/photos/') && req.query.v
+  const isVersioned = Boolean(req.query.v);
+  const cacheControl = isVersioned
     ? 'public, max-age=31536000, s-maxage=31536000, immutable'
-    : 'public, max-age=86400, s-maxage=604800, stale-while-revalidate=86400';
+    : 'public, max-age=604800, s-maxage=2592000, stale-while-revalidate=86400';
 
-  // 1. Try authenticated GCS client
-  try {
-    const bucket = getGCSBucket();
-    const file = bucket.file(decodedKey);
-    const [exists] = await file.exists();
-    if (exists) {
-      const [buffer] = await file.download();
-      const optimized = await optimizeImageBuffer(buffer, contentType, req.query);
-      res.setHeader('Content-Type', optimized.contentType);
-      res.setHeader('Content-Length', optimized.buffer.length);
-      res.setHeader('Cache-Control', cacheControl);
-      applyCorsHeaders(req, res);
-      return res.end(optimized.buffer);
+  const cacheKey = buildImageCacheKey(decodedKey, req.query);
+
+  // 1. FAST PATH: In-memory LRU Cache Check (< 2ms response)
+  const cached = getImageFromCache(cacheKey);
+  if (cached) {
+    applyCorsHeaders(req, res);
+    if (req.headers['if-none-match'] === cached.etag) {
+      return res.status(304).end();
     }
-  } catch {}
+    res.setHeader('Content-Type', cached.contentType);
+    res.setHeader('Content-Length', cached.buffer.length);
+    res.setHeader('ETag', cached.etag);
+    res.setHeader('Cache-Control', cacheControl);
+    res.setHeader('X-Cache', 'HIT');
+    return res.end(cached.buffer);
+  }
 
-  // 2. Try fetching public storage URL
-  try {
-    const bucketName = getGCSBucketName();
-    const publicUrl = `https://storage.googleapis.com/${bucketName}/${decodedKey}`;
-    const response = await fetch(publicUrl);
-    if (response.ok) {
-      const buffer = Buffer.from(await response.arrayBuffer());
-      const headerContentType = response.headers.get('content-type') || contentType;
-      const optimized = await optimizeImageBuffer(buffer, headerContentType, req.query);
-      res.setHeader('Content-Type', optimized.contentType);
-      res.setHeader('Content-Length', optimized.buffer.length);
-      res.setHeader('Cache-Control', cacheControl);
-      applyCorsHeaders(req, res);
-      return res.end(optimized.buffer);
-    }
-  } catch {}
-
-  // 3. Try local disk storage fallback with verified bounds
-  try {
-    for (const baseDir of baseDirectories) {
-      const localPath = path.resolve(baseDir, decodedKey);
-      const relative = path.relative(baseDir, localPath);
-      if (relative.startsWith('..') || path.isAbsolute(relative) || path.isAbsolute(decodedKey)) {
-        continue;
+  // 2. Coalesced Fetch & Optimize (deduplicates concurrent requests for the same image)
+  const fetchAndOptimize = async (): Promise<{ buffer: Buffer; contentType: string }> => {
+    // 1. Try authenticated GCS client
+    try {
+      const bucket = getGCSBucket();
+      const file = bucket.file(decodedKey);
+      const [exists] = await file.exists();
+      if (exists) {
+        const [buffer] = await file.download();
+        return await optimizeImageBuffer(buffer, contentType, req.query);
       }
-      if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
-        const buffer = await fs.promises.readFile(localPath);
-        const optimized = await optimizeImageBuffer(buffer, contentType, req.query);
-        res.setHeader('Content-Type', optimized.contentType);
-        res.setHeader('Content-Length', optimized.buffer.length);
-        res.setHeader('Cache-Control', cacheControl);
-        applyCorsHeaders(req, res);
-        return res.end(optimized.buffer);
-      }
-    }
-  } catch {}
+    } catch {}
 
-  // 4. Try FileAsset lookup by key or filename
-  try {
-    const cleanKey = decodeURIComponent(decodedKey);
-    const baseName = path.basename(cleanKey);
-    const asset = await db.fileAsset.findFirst({
-      where: {
-        status: 'active',
-        OR: [
-          { key: decodedKey },
-          { key: cleanKey },
-          { url: { endsWith: decodedKey } },
-          { url: { endsWith: cleanKey } },
-          { originalName: baseName }
-        ]
+    // 2. Try fetching public storage URL
+    try {
+      const bucketName = getGCSBucketName();
+      const publicUrl = `https://storage.googleapis.com/${bucketName}/${decodedKey}`;
+      const response = await fetch(publicUrl);
+      if (response.ok) {
+        const buffer = Buffer.from(await response.arrayBuffer());
+        const headerContentType = response.headers.get('content-type') || contentType;
+        return await optimizeImageBuffer(buffer, headerContentType, req.query);
       }
-    });
+    } catch {}
 
-    if (asset) {
-      const publicActor = (await getPublicFileActor(asset.id)) || (req.user ? { id: req.user.id, role: req.user.role } : { id: asset.ownerId, role: asset.ownerRole || 'seller' });
-      const file = await getFileContent(asset.id, publicActor, {
-        ipAddress: req.ip,
-        userAgent: req.headers['user-agent']
+    // 3. Try local disk storage fallback with verified bounds
+    try {
+      for (const baseDir of baseDirectories) {
+        const localPath = path.resolve(baseDir, decodedKey);
+        const relative = path.relative(baseDir, localPath);
+        if (relative.startsWith('..') || path.isAbsolute(relative) || path.isAbsolute(decodedKey)) {
+          continue;
+        }
+        if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
+          const buffer = await fs.promises.readFile(localPath);
+          return await optimizeImageBuffer(buffer, contentType, req.query);
+        }
+      }
+    } catch {}
+
+    // 4. Try FileAsset lookup by key or filename
+    try {
+      const cleanKey = decodeURIComponent(decodedKey);
+      const baseName = path.basename(cleanKey);
+      const asset = await db.fileAsset.findFirst({
+        where: {
+          status: 'active',
+          OR: [
+            { key: decodedKey },
+            { key: cleanKey },
+            { url: { endsWith: decodedKey } },
+            { url: { endsWith: cleanKey } },
+            { originalName: baseName }
+          ]
+        }
       });
-      if (file?.buffer) {
-        const optimized = await optimizeImageBuffer(file.buffer, file.contentType || contentType, req.query);
-        res.setHeader('Content-Type', optimized.contentType);
-        res.setHeader('Content-Length', optimized.buffer.length);
-        res.setHeader('Cache-Control', cacheControl);
-        applyCorsHeaders(req, res);
-        return res.end(optimized.buffer);
+
+      if (asset) {
+        const publicActor = (await getPublicFileActor(asset.id)) || (req.user ? { id: req.user.id, role: req.user.role } : { id: asset.ownerId, role: asset.ownerRole || 'seller' });
+        const file = await getFileContent(asset.id, publicActor, {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent']
+        });
+        if (file?.buffer) {
+          return await optimizeImageBuffer(file.buffer, file.contentType || contentType, req.query);
+        }
       }
-    }
-  } catch {}
+    } catch {}
+
+    throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
+  };
+
+  const optimized = await deduplicateImageTask(cacheKey, fetchAndOptimize);
+  const entry = saveImageToCache(cacheKey, optimized.buffer, optimized.contentType);
+
+  applyCorsHeaders(req, res);
+  if (req.headers['if-none-match'] === entry.etag) {
+    return res.status(304).end();
+  }
+
+  res.setHeader('Content-Type', entry.contentType);
+  res.setHeader('Content-Length', entry.buffer.length);
+  res.setHeader('ETag', entry.etag);
+  res.setHeader('Cache-Control', cacheControl);
+  res.setHeader('X-Cache', 'MISS');
+  return res.end(entry.buffer);
 
   throw new ApiError(404, 'File not found in storage', 'FILE_NOT_FOUND');
 }));

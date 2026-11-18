@@ -48,6 +48,17 @@ export function HeroBanner({ banners }: Props) {
         setCurrentImg(resolved);
     }, [slides, current]);
 
+    // Preload next slide so banner transitions are instantaneous without network lag
+    useEffect(() => {
+        if (typeof window === 'undefined' || slides.length <= 1) return;
+        const nextIdx = (current + 1) % slides.length;
+        const nextUrl = resolveImageSrc(slides[nextIdx]?.imageUrl, nextIdx);
+        if (nextUrl && !nextUrl.startsWith('data:') && !nextUrl.startsWith('blob:')) {
+            const preloader = new Image();
+            preloader.src = `${nextUrl}${nextUrl.includes('?') ? '&' : '?'}w=1400&q=82&fmt=webp`;
+        }
+    }, [current, slides]);
+
     const goTo = useCallback((idx: number) => {
         setFading(true);
         setTimeout(() => { setCurrent(idx); setFading(false); }, 220);
@@ -84,6 +95,11 @@ export function HeroBanner({ banners }: Props) {
     const ctaLink = slide?.ctaLink || slide?.targetUrl;
     const ctaText = slide?.ctaText || (ctaLink ? 'View Details' : '');
     const activeImageSrc = currentImg || resolveImageSrc(slide?.imageUrl, current);
+    const optimizedHeroSrc = activeImageSrc
+        ? (activeImageSrc.startsWith('data:') || activeImageSrc.startsWith('blob:') || activeImageSrc.endsWith('.svg')
+            ? activeImageSrc
+            : `${activeImageSrc}${activeImageSrc.includes('?') ? '&' : '?'}w=1400&q=82&fmt=webp`)
+        : '';
 
     const safeRatio = Math.min(Math.max(aspectRatio, 1.25), 2.4);
 
@@ -125,12 +141,12 @@ export function HeroBanner({ banners }: Props) {
         >
             {/* Dual-Plane Adaptive Banner: Ambient full-bleed backdrop + uncropped sharp foreground image */}
             <div className="absolute inset-0 z-0 overflow-hidden bg-slate-950 select-none pointer-events-none">
-                {activeImageSrc ? (
+                {optimizedHeroSrc ? (
                     <>
-                        {/* Plane 0: Atmospheric ambient backdrop (fills 100% of banner, eliminates all black bars/gaps) */}
+                        {/* Plane 0: Atmospheric ambient backdrop (reuses single cached stream, 0 duplicate bytes) */}
                         <img
                             key={`ambient-${slide?.id ?? 'slide'}-${current}`}
-                            src={activeImageSrc}
+                            src={optimizedHeroSrc}
                             alt=""
                             aria-hidden="true"
                             width={1376}
@@ -143,7 +159,7 @@ export function HeroBanner({ banners }: Props) {
                         {/* Plane 1: Featured Sharp Image (100% visible, uncropped, responsive across all screen sizes) */}
                         <img
                             key={`featured-${slide?.id ?? 'slide'}-${current}`}
-                            src={`${activeImageSrc}${activeImageSrc.includes('?') ? '&' : '?'}w=1400&q=82&fmt=webp`}
+                            src={optimizedHeroSrc}
                             alt={slide?.title || 'Marketplace Hero Banner'}
                             width={1376}
                             height={768}

@@ -392,7 +392,7 @@ export function MarketplaceHeader({ user }: Props) {
                     {/* Logo */}
                     <Link href="/" className="flex items-center gap-2.5 shrink-0 group">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200/80 bg-white p-1 shadow-sm transition-all duration-300 group-hover:scale-103 group-hover:border-[#0b2447]/30 group-hover:shadow-md">
-                            <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} className="h-full w-full object-contain" />
+                            <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} loading="eager" fetchPriority="high" className="h-full w-full object-contain" />
                         </div>
                         <div className="min-w-0 leading-tight">
                             <p className="truncate text-base font-black tracking- text-[#0b2447] transition-colors group-hover:text-blue-900">JsgSMILE</p>
@@ -735,7 +735,13 @@ export function MarketplaceHeader({ user }: Props) {
                                                                 >
                                                                     <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-slate-200 bg-white p-0.5">
                                                                         {imgUrl ? (
-                                                                            <img src={imgUrl} alt="" className="h-full w-full object-contain" />
+                                                                            <img 
+                                                                                src={imgUrl.startsWith('data:') || imgUrl.endsWith('.svg') ? imgUrl : `${imgUrl}${imgUrl.includes('?') ? '&' : '?'}w=80&h=80&q=75&fmt=webp`} 
+                                                                                alt="" 
+                                                                                loading="lazy"
+                                                                                decoding="async"
+                                                                                className="h-full w-full object-contain" 
+                                                                            />
                                                                         ) : (
                                                                             <Package className="h-5 w-5 text-slate-300" />
                                                                         )}
@@ -890,7 +896,13 @@ export function MarketplaceHeader({ user }: Props) {
                                                                 >
                                                                     <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-white p-0.5">
                                                                         {logoUrl ? (
-                                                                            <img src={logoUrl} alt="" className="h-full w-full object-contain rounded-lg" />
+                                                                            <img 
+                                                                                src={logoUrl.startsWith('data:') || logoUrl.endsWith('.svg') ? logoUrl : `${logoUrl}${logoUrl.includes('?') ? '&' : '?'}w=80&h=80&q=75&fmt=webp`} 
+                                                                                alt="" 
+                                                                                loading="lazy"
+                                                                                decoding="async"
+                                                                                className="h-full w-full object-contain rounded-lg" 
+                                                                            />
                                                                         ) : (
                                                                             <span className="flex h-full w-full items-center justify-center rounded-lg bg-emerald-100 text-emerald-800 text-xs font-black">
                                                                                 {seller.organizationName[0]?.toUpperCase()}
@@ -1035,7 +1047,7 @@ export function MarketplaceHeader({ user }: Props) {
                         <div className="bg-gradient-to-r from-[#07172e] via-[#0b2447] to-[#12335f] p-4 text-white flex items-center justify-between shadow-md shrink-0 border-b-2 border-amber-400/80">
                             <Link href="/" onClick={() => setMobileMenuOpen(false)} className="flex items-center gap-2.5 min-w-0">
                                 <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white p-1 shadow-sm ring-1 ring-white/20">
-                                    <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} className="h-full w-full object-contain" />
+                                    <img src="/logoo.png" alt="" aria-hidden="true" width={40} height={40} loading="eager" fetchPriority="high" className="h-full w-full object-contain" />
                                 </div>
                                 <div className="min-w-0 leading-tight">
                                     <p className="truncate text-base font-black tracking-tight text-white">JsgSMILE</p>
