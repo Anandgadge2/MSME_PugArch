@@ -84,6 +84,7 @@ export function MarketplaceHeader({ user }: Props) {
     const pathname = usePathname() || '';
     const searchParams = useSearchParams();
     const { count: cartCount } = useMarketplaceCart();
+    const isMarketplacePage = pathname === '/marketplace' || pathname.startsWith('/marketplace');
 
     const [searchQ, setSearchQ] = useState('');
     const [showSignup, setShowSignup] = useState(false);
@@ -163,6 +164,7 @@ export function MarketplaceHeader({ user }: Props) {
 
     // Debounced search autocomplete fetcher
     useEffect(() => {
+        if (isMarketplacePage) return;
         const trimmed = searchQ.trim();
         if (trimmed.length < 2) {
             setSuggestions({ products: [], services: [], sellers: [], categories: [] });
@@ -400,8 +402,68 @@ export function MarketplaceHeader({ user }: Props) {
                         </div>
                     </Link>
 
-                    {/* Search Bar (Desktop - with Live Suggestions & Keyboard Combobox) */}
-                    <div ref={searchContainerRef} className="hidden md:block flex-1 max-w-2xl mx-2 lg:mx-6 relative">
+                    {/* When ON marketplace page: Navigation Links in center */}
+                    {isMarketplacePage ? (
+                        <div className="hidden md:flex items-center gap-1 lg:gap-2">
+                            <Link
+                                href="/marketplace/products"
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    pathname.startsWith('/marketplace/products')
+                                        ? "bg-slate-100 text-[#0b2447] font-black"
+                                        : "text-slate-600 hover:text-[#0b2447] hover:bg-slate-50"
+                                )}
+                            >
+                                Products
+                            </Link>
+                            <Link
+                                href="/marketplace/services"
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    pathname.startsWith('/marketplace/services')
+                                        ? "bg-slate-100 text-[#0b2447] font-black"
+                                        : "text-slate-600 hover:text-[#0b2447] hover:bg-slate-50"
+                                )}
+                            >
+                                Services
+                            </Link>
+                            <Link
+                                href="/marketplace/sellers"
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    pathname.startsWith('/marketplace/sellers')
+                                        ? "bg-slate-100 text-[#0b2447] font-black"
+                                        : "text-slate-600 hover:text-[#0b2447] hover:bg-slate-50"
+                                )}
+                            >
+                                Suppliers
+                            </Link>
+                            <Link
+                                href="/marketplace/buyers"
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    pathname.startsWith('/marketplace/buyers')
+                                        ? "bg-slate-100 text-[#0b2447] font-black"
+                                        : "text-slate-600 hover:text-[#0b2447] hover:bg-slate-50"
+                                )}
+                            >
+                                Buyers
+                            </Link>
+                            <Link
+                                href="/marketplace/requirements"
+                                className={cn(
+                                    "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                                    pathname.startsWith('/marketplace/requirements')
+                                        ? "bg-slate-100 text-[#0b2447] font-black"
+                                        : "text-slate-600 hover:text-[#0b2447] hover:bg-slate-50"
+                                )}
+                            >
+                                Opportunities
+                            </Link>
+                        </div>
+                    ) : (
+                        /* Search Bar (Desktop - with Live Suggestions & Keyboard Combobox) */
+                        <div ref={searchContainerRef} className="hidden md:block flex-1 max-w-2xl mx-2 lg:mx-6 relative">
                         <form
                             role="search"
                             onSubmit={handleSearch}
@@ -974,6 +1036,7 @@ export function MarketplaceHeader({ user }: Props) {
                             </div>
                         )}
                     </div>
+                    )}
 
                     {/* Desktop Action Cluster */}
                     <div className="hidden md:flex items-center gap-2 shrink-0">

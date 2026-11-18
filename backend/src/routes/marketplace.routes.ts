@@ -5041,21 +5041,31 @@ router.get('/marketplace/search', shortCache(15), async (req: Request, res: Resp
                     basePrice: true,
                     currency: true,
                     category: { select: { id: true, name: true } },
-                    organization: { select: { id: true, organizationName: true, verificationStatus: true, city: true, district: true } },
-                    images: {
-                        include: { fileAsset: { select: { id: true, url: true } } },
-                        take: 1
+                    organization: {
+                        select: {
+                            id: true,
+                            organizationName: true,
+                            verificationStatus: true,
+                            city: true,
+                            district: true,
+                            logoFile: { select: organizationLogoSelect },
+                            profile: { select: organizationProfileBrandSelect }
+                        }
                     }
                 }
             }),
             db.organization.findMany({
                 where: {
-                    ...sellerOrganizationWhere,
-                    OR: variants.flatMap(v => [
-                        { organizationName: { contains: v, mode: 'insensitive' } },
-                        { city: { contains: v, mode: 'insensitive' } },
-                        { district: { contains: v, mode: 'insensitive' } }
-                    ])
+                    AND: [
+                        sellerOrganizationWhere,
+                        {
+                            OR: variants.flatMap(v => [
+                                { organizationName: { contains: v, mode: 'insensitive' } },
+                                { city: { contains: v, mode: 'insensitive' } },
+                                { district: { contains: v, mode: 'insensitive' } }
+                            ])
+                        }
+                    ]
                 },
                 take: 5,
                 select: {
