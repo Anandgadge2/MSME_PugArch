@@ -79,7 +79,7 @@ export default function MarketplaceProductDetail() {
     const { user } = useAuth();
     const pathname = usePathname() || '';
     const router = useRouter();
-    const useDashboardShell = pathname.startsWith('/buyer') || pathname.startsWith('/seller');
+    const useDashboardShell = Boolean(user) || pathname.startsWith('/buyer') || pathname.startsWith('/seller');
     const productIdParam = pathname.split('/').pop() || '0';
     const productId = isNaN(Number(productIdParam)) ? 0 : Number(productIdParam);
 
