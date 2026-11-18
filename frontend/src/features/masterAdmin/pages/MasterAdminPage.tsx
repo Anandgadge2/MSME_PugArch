@@ -4306,7 +4306,7 @@ function EntityEditor({
     let preview = html;
     const basePortalUrl = (typeof window !== 'undefined' && window.location.origin && !window.location.origin.includes('localhost'))
       ? window.location.origin
-      : (process.env.NEXT_PUBLIC_APP_URL || 'https://msme-pugarch-frontend.vercel.app');
+      : (process.env.NEXT_PUBLIC_APP_URL || 'https://jsgsmile.in');
 
     const mockVars: Record<string, string> = {
       userName: 'Sri Alok Sharma',

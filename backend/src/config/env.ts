@@ -349,7 +349,7 @@ kycConfigReport();
  * Resolves the official, public-facing portal frontend URL.
  * Strictly guarantees that links sent to external email recipients NEVER point to 'localhost', '127.0.0.1',
  * or the backend API service (e.g. 'msme-pugarch-backend.vercel.app'),
- * falling back to the live production deployment URL: 'https://msme-pugarch-frontend.vercel.app'.
+ * falling back to the live official production domain: 'https://jsgsmile.in'.
  */
 export const getPublicPortalUrl = (): string => {
   const isInvalidPortalUrl = (u: string): boolean => {
@@ -368,9 +368,9 @@ export const getPublicPortalUrl = (): string => {
     let trimmed = c.trim().replace(/\/+$/, '');
     if (!trimmed) return null;
 
-    // If an environment variable accidentally provided the backend Vercel URL, rewrite to frontend sibling
-    if (trimmed.includes('msme-pugarch-backend.vercel.app')) {
-      trimmed = trimmed.replace('msme-pugarch-backend.vercel.app', 'msme-pugarch-frontend.vercel.app');
+    // If an environment variable accidentally provided legacy vercel domains, rewrite to official domain
+    if (trimmed.includes('msme-pugarch-backend.vercel.app') || trimmed.includes('msme-pugarch-frontend.vercel.app')) {
+      trimmed = trimmed.replace(/https?:\/\/msme-pugarch-(backend|frontend)\.vercel\.app/i, 'https://jsgsmile.in');
     } else if (trimmed.includes('-backend.vercel.app')) {
       trimmed = trimmed.replace('-backend.vercel.app', '-frontend.vercel.app');
     }
@@ -404,6 +404,6 @@ export const getPublicPortalUrl = (): string => {
     }
   }
 
-  // Live production default
-  return 'https://msme-pugarch-frontend.vercel.app';
+  // Official live production default
+  return 'https://jsgsmile.in';
 };

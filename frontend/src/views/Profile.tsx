@@ -177,9 +177,23 @@ export default function Profile() {
                 <div className="p-2 bg-slate-50 rounded-lg text-slate-400 shrink-0">
                   <Mail className="w-4 h-4" />
                 </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Email Address</p>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Email Address</p>
+                    {user.emailVerified ? (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                        <CheckCircle2 className="w-2.5 h-2.5" /> Verified
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                        Pending Verification
+                      </span>
+                    )}
+                  </div>
                   <p title={user.email} className="text-sm font-semibold text-slate-900 truncate">{user.email}</p>
+                  <p className="text-[10px] text-slate-500 mt-0.5">
+                    Ensure inbox storage has available space to receive critical tender &amp; purchase order notices.
+                  </p>
                 </div>
               </div>
 

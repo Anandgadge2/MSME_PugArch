@@ -3,6 +3,8 @@ import type { NextFunction, Request, Response } from 'express';
 import { env, isProduction } from './env.js';
 
 const staticOrigins = [
+  'https://jsgsmile.in',
+  'https://www.jsgsmile.in',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:3002',
@@ -21,6 +23,8 @@ const staticOrigins = [
 ];
 
 const productionStaticOrigins = [
+  'https://jsgsmile.in',
+  'https://www.jsgsmile.in',
   'https://msme-frontend-27756389580.asia-south1.run.app',
   'https://msme-frontend-yvkunmwzya-el.a.run.app',
   'https://msme-pugarch-frontend.vercel.app',

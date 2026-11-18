@@ -29,6 +29,7 @@ import { SellerRevenueTrendChart } from '../features/dashboard/components/Seller
 import { SuspensionAppealForm } from '../features/shared/SuspensionAppealForm';
 import { NextBestActionBanner } from '../features/dashboard/components/NextBestActionBanner';
 import { FirstTimeUserOnboardingCard } from '../features/dashboard/components/FirstTimeUserOnboardingCard';
+import { EmailHealthAdvisoryBanner } from '../features/dashboard/components/EmailHealthAdvisoryBanner';
 
 const ADMIN_REVIEW_CHECKLIST = [
   'Clear pending stakeholder approvals',
@@ -861,6 +862,9 @@ export default function Dashboard() {
       )}
 
       {(user?.role as string) !== 'admin' && <RoleAwareActionCards />}
+
+      {/* ── Email Delivery Health & Storage Advisory ── */}
+      <EmailHealthAdvisoryBanner email={user?.email} emailVerified={user?.emailVerified} />
 
       {/* ── Dynamic Next Best Action Hero Banner ── */}
       <NextBestActionBanner action={summaryData?.nextBestAction} />

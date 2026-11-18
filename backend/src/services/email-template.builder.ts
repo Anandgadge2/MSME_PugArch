@@ -49,9 +49,10 @@ export const ensurePublicUrl = (targetUrl?: string): string => {
 
   const trimmed = targetUrl.trim();
 
-  // If the target URL contains backend domain or localhost, extract the path and bind to the frontend base
+  // If the target URL contains legacy backend domain, old vercel domain, or localhost, extract the path and bind to the frontend base
   if (
     trimmed.includes('msme-pugarch-backend.vercel.app') ||
+    trimmed.includes('msme-pugarch-frontend.vercel.app') ||
     trimmed.includes('-backend.vercel.app') ||
     /^(https?:\/\/)?(localhost|127\.0\.0\.1)(:\d+)?/i.test(trimmed) ||
     /:\d{4,5}/.test(trimmed)
