@@ -75,7 +75,10 @@ const assertCanInviteScope = async (req: any, scope: RbacScope) => {
   const scopeType = String(scope.scopeType);
   const scopeId = scope.scopeId == null ? null : String(scope.scopeId);
   if (scopeType === 'PLATFORM') {
-    const error = new Error('Only Master Admin can invite platform users.');
+    if (user.role === 'admin' || user.accountType === 'SUPERADMIN') {
+      return;
+    }
+    const error = new Error('Only Master Admin and Admin can invite platform users.');
     (error as any).statusCode = 403;
     (error as any).code = 'PLATFORM_SCOPE_DENIED';
     throw error;
@@ -98,7 +101,7 @@ const assertCanInviteScope = async (req: any, scope: RbacScope) => {
 const roleWhereForUser = (req: any) => {
   if (isMasterAdmin(req.user)) return {};
   if (req.user?.role === 'admin' || req.user?.accountType === 'SUPERADMIN') {
-    return { OR: [{ scopeType: 'DISTRICT', scopeId: '0' }, { scopeType: 'PLATFORM', isDefault: true }] };
+    return { OR: [{ scopeType: 'DISTRICT' }, { scopeType: 'PLATFORM' }] };
   }
   if (req.user?.organizationId) {
     return { OR: [{ scopeType: 'ORGANIZATION', scopeId: String(req.user.organizationId) }, { scopeType: 'PLATFORM', isDefault: true }] };

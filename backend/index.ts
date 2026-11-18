@@ -67,6 +67,7 @@ import {
 import { idempotencyKeyFromRequest, withIdempotency } from './src/services/idempotency.service.js';
 import paymentRoutes from './src/modules/payments/payment.routes.js';
 import { seedBannersIfEmpty } from './src/services/banner-seed.service.js';
+import { syncRbacDefaults } from './src/services/rbac.service.js';
 import {
   approveMilestone,
   completeMilestone,
@@ -7589,6 +7590,9 @@ export async function startServer() {
   if (databaseAvailable) {
     void seedBannersIfEmpty().catch((err: any) => {
       logger.warn({ context: 'BannerSeeder', err: err?.message || err }, 'Banner auto-seed check skipped or failed');
+    });
+    void syncRbacDefaults().catch((err: any) => {
+      logger.warn({ context: 'RbacSyncer', err: err?.message || err }, 'RBAC auto-sync check skipped or failed');
     });
   }
   

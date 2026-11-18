@@ -826,6 +826,31 @@ export default function AdminOnboarding() {
     }
   }, [onboardingData]);
 
+  const serverPermissions = (onboardingData as any)?.summary?.permissions || (onboardingData as any)?.permissions || null;
+  const isMaster = user?.role === 'master_admin';
+  const canVerifyMsme = isMaster || (serverPermissions ? Boolean(serverPermissions.canVerifyMsme) : true);
+  const canVerifyShg = isMaster || (serverPermissions ? Boolean(serverPermissions.canVerifyShg) : true);
+  const canApproveBuyer = isMaster || (serverPermissions ? Boolean(serverPermissions.canApproveBuyer) : true);
+
+  const isSelectedShg = selectedItem ? isShgUser({ ...selectedItem, sellerProfile: selectedItem?.profile }) : false;
+  const canApproveSelectedItem = isMaster || (
+    selectedItem?.role === 'buyer' ? canApproveBuyer :
+    isSelectedShg ? canVerifyShg :
+    canVerifyMsme
+  );
+
+  useEffect(() => {
+    if (!serverPermissions && !isMaster) return;
+    const availableTabs: string[] = [];
+    if (canVerifyMsme) availableTabs.push("sellers");
+    if (canApproveBuyer) availableTabs.push("buyers");
+    if (canVerifyShg) availableTabs.push("shg");
+
+    if (availableTabs.length > 0 && !availableTabs.includes(activeTab)) {
+      handleTabChange(availableTabs[0]);
+    }
+  }, [serverPermissions, isMaster, canVerifyMsme, canApproveBuyer, canVerifyShg, activeTab, handleTabChange]);
+
   useEffect(() => {
     if (selectedItem) {
       const prev = document.body.style.overflow;
@@ -2334,10 +2359,10 @@ export default function AdminOnboarding() {
               <CardHeader className="bg-white p-0 border-b border-slate-100">
                 <Tabs
                   tabs={[
-                    { id: "sellers", label: `Seller Onboarding${statusFilter === 'pending' && pendingSellersCount > 0 ? ` (${pendingSellersCount})` : ''}` },
-                    { id: "buyers", label: `Buyer Onboarding${statusFilter === 'pending' && pendingBuyersCount > 0 ? ` (${pendingBuyersCount})` : ''}` },
-                    { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
-                  ]}
+                    canVerifyMsme && { id: "sellers", label: `MSME Sellers${statusFilter === 'pending' && pendingSellersCount > 0 ? ` (${pendingSellersCount})` : ''}` },
+                    canApproveBuyer && { id: "buyers", label: `Buyer Onboarding${statusFilter === 'pending' && pendingBuyersCount > 0 ? ` (${pendingBuyersCount})` : ''}` },
+                    canVerifyShg && { id: "shg", label: `SHG Onboarding${statusFilter === 'pending' && pendingShgCount > 0 ? ` (${pendingShgCount})` : ''}` },
+                  ].filter(Boolean) as any}
                   activeTab={activeTab}
                   onChange={handleTabChange}
                   className="px-4 pt-3 space-x-6"
@@ -3008,6 +3033,12 @@ export default function AdminOnboarding() {
                     <h3 className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500">
                       Scrutiny Decision Desk
                     </h3>
+                    {!canApproveSelectedItem && (
+                      <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800 flex items-center gap-2">
+                        <Eye className="h-4 w-4 shrink-0 text-amber-600" />
+                        <span>View-Only Audit Mode: You do not have permission to verify or approve {selectedItem?.role === 'buyer' ? 'Buyer organizations' : isSelectedShg ? 'SHG organizations' : 'MSME organizations'}.</span>
+                      </div>
+                    )}
                     <Button
                       onClick={() =>
                         handleUpdateStatus(
@@ -3016,9 +3047,10 @@ export default function AdminOnboarding() {
                         )
                       }
                       disabled={
+                        !canApproveSelectedItem ||
                         selectedItem.onboardingStatus === "approved_for_procurement"
                       }
-                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all shadow-xs"
+                      className="h-12 w-full rounded-md bg-[#12335f] font-bold uppercase tracking-wide text-white hover:bg-[#0b2445] transition-all shadow-xs disabled:opacity-50"
                     >
                       <CheckCircle className="h-5 w-5" />
                       <span>Approve Organization</span>
@@ -3029,8 +3061,8 @@ export default function AdminOnboarding() {
                         setCorrectionReason("");
                         setIsCorrectionModalOpen(true);
                       }}
-                      disabled={selectedItem.onboardingStatus === "resubmission_required"}
-                      className="h-12 w-full rounded-md border-amber-300 bg-white font-bold uppercase tracking-wide text-amber-700 hover:bg-amber-50 transition-all"
+                      disabled={!canApproveSelectedItem || selectedItem.onboardingStatus === "resubmission_required"}
+                      className="h-12 w-full rounded-md border-amber-300 bg-white font-bold uppercase tracking-wide text-amber-700 hover:bg-amber-50 transition-all disabled:opacity-50"
                     >
                       <AlertTriangle className="h-5 w-5" />
                       <span>Request Correction</span>
@@ -3041,8 +3073,8 @@ export default function AdminOnboarding() {
                         setAppRejectReason("");
                         setIsAppRejectModalOpen(true);
                       }}
-                      disabled={selectedItem.onboardingStatus === "rejected"}
-                      className="h-12 w-full rounded-md border-red-300 bg-white font-bold uppercase tracking-wide text-red-700 hover:bg-red-50 transition-all"
+                      disabled={!canApproveSelectedItem || selectedItem.onboardingStatus === "rejected"}
+                      className="h-12 w-full rounded-md border-red-300 bg-white font-bold uppercase tracking-wide text-red-700 hover:bg-red-50 transition-all disabled:opacity-50"
                     >
                       <XCircle className="h-5 w-5" />
                       <span>Reject Application</span>

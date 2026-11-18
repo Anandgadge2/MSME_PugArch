@@ -29,6 +29,7 @@ const wrap = (handler: (req: AuthRequest, res: Response) => Promise<unknown>) =>
   };
 
 const masterOnly = [authenticate, authorize('master_admin')] as const;
+const adminOrMaster = [authenticate, authorize('master_admin', 'admin')] as const;
 
 const companySelect = {
   id: true,
@@ -3134,7 +3135,7 @@ router.post('/master-admin/users/:id/change-organization', ...masterOnly, requir
   jsonOk(res, user, 'User organization changed successfully');
 }));
 
-router.get('/master-admin/procurement', ...masterOnly, wrap(async (req, res) => {
+router.get('/master-admin/procurement', ...adminOrMaster, wrap(async (req, res) => {
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
   const status = textOrNull(req.query.status);
@@ -3195,7 +3196,7 @@ router.get('/master-admin/procurement', ...masterOnly, wrap(async (req, res) => 
   res.json({ items, total, page, pageSize, summary: { totalBids, pendingApprovals, activeBids, technicalEvaluation, financialEvaluation, awardRecommended, participations } });
 }));
 
-router.get('/master-admin/tenders', ...masterOnly, wrap(async (req, res) => {
+router.get('/master-admin/tenders', ...adminOrMaster, wrap(async (req, res) => {
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
   const status = textOrNull(req.query.status);
@@ -3256,7 +3257,7 @@ router.get('/master-admin/tenders', ...masterOnly, wrap(async (req, res) => {
   res.json({ items, total, page, pageSize, summary: { totalTenders, draftTenders, activeTenders, completedTenders } });
 }));
 
-router.get('/master-admin/rfqs', ...masterOnly, wrap(async (req, res) => {
+router.get('/master-admin/rfqs', ...adminOrMaster, wrap(async (req, res) => {
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
   const status = textOrNull(req.query.status);
@@ -3309,7 +3310,7 @@ router.get('/master-admin/rfqs', ...masterOnly, wrap(async (req, res) => {
   res.json({ items, total, page, pageSize, summary: { totalRfqs, pendingRfqs, completedRfqs, responses } });
 }));
 
-router.get('/master-admin/orders', ...masterOnly, wrap(async (req, res) => {
+router.get('/master-admin/orders', ...adminOrMaster, wrap(async (req, res) => {
   const { skip, take, page, pageSize } = getPagination(req.query as Record<string, unknown>);
   const q = textOrNull(req.query.q) || textOrNull(req.query.search);
   const status = textOrNull(req.query.status);
@@ -4933,7 +4934,7 @@ router.get('/master-admin/system-health', ...masterOnly, wrap(async (_req, res) 
   });
 }));
 
-router.get('/master-admin/procurement-overview', ...masterOnly, wrap(async (_req, res) => {
+router.get('/master-admin/procurement-overview', ...adminOrMaster, wrap(async (_req, res) => {
   const [totalBids, pendingApprovals, activeBids, technicalEvaluation, financialEvaluation, awardRecommended, cancelled] = await Promise.all([
     safeCount((prisma as any).procurementBid),
     safeCount((prisma as any).procurementBid, { where: { approvalStatus: 'PENDING' } }),

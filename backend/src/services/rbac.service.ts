@@ -1,5 +1,5 @@
 import prisma from '../lib/prisma.js';
-import { legacyRoleToAccountType } from '../constants/dynamic-rbac.js';
+import { legacyRoleToAccountType, RBAC_PERMISSION_CATALOG, DEFAULT_DYNAMIC_ROLE_TEMPLATES } from '../constants/dynamic-rbac.js';
 
 export type RbacScope = {
   scopeType?: 'PLATFORM' | 'DISTRICT' | 'ORGANIZATION' | 'GLOBAL' | 'COMPANY';
@@ -67,7 +67,7 @@ export const invalidateRoleMembersAuthCache = async (roleId: number) => {
   }
 };
 
-export const getCurrentUserPermissions = async (userId: number, scope?: RbacScope) => {
+export const getCurrentUserPermissions = async (userId: number, scope?: RbacScope, fallbackRole?: string) => {
   const normalized = normalizeScope(scope);
   const now = new Date();
   const scopeFilters: any[] = [{ scopeType: 'PLATFORM', scopeId: null }, { scopeType: 'GLOBAL', scopeId: null }];
@@ -98,17 +98,21 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
         }
       }
     }
-  });
+  }).catch(() => []);
 
   const assigned = assignments.flatMap((assignment: any) => {
     if (!assignment.role || assignment.role.status !== 'ACTIVE') return [];
     return assignment.role.permissions.map((rp: any) => rp.permission?.code).filter(Boolean);
   });
 
-  const user = await prisma.user.findUnique({
+  let user = await prisma.user.findUnique({
     where: { id: userId },
     select: { id: true, role: true, isSubUser: true, organizationId: true }
-  });
+  }).catch(() => null);
+
+  if (!user && fallbackRole) {
+    user = { id: userId, role: fallbackRole as any, isSubUser: false, organizationId: null };
+  }
 
   const orgPermissions: string[] = [];
   const defaults: string[] = [];
@@ -157,7 +161,22 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
     if (user.role === 'master_admin') {
       defaults.push('*');
     } else if (user.role === 'admin') {
-      defaults.push('dashboard.view', 'report.view', 'audit.view', 'payment.view', 'payment.verify', 'grn.view', 'delivery.view');
+      defaults.push('dashboard.view', 'report.view', 'audit.view', 'payment.view', 'payment.verify', 'grn.view', 'delivery.view', 'procurement.audit.view');
+      if (assignments.length === 0) {
+        defaults.push(
+          'onboarding.review',
+          'seller.verify',
+          'buyer.approve',
+          'org.msme.verify',
+          'org.shg.verify',
+          'org.buyer.verify',
+          'shg.verify',
+          'team.member.view',
+          'team.role.view',
+          'team.role.manage',
+          'team.role.assign'
+        );
+      }
     } else if ((!user.organizationId || orgPermissions.length === 0) && !isOrgSubUser) {
       // Standalone single-user buyers/sellers (without organization or pending membership) receive baseline default permissions
       if (user.role === 'seller' || user.role === 'shg') {
@@ -256,7 +275,7 @@ export const userHasPermission = async (
 ) => {
   if (isMasterAdmin(user)) return true;
 
-  const dbPermissions = await getCurrentUserPermissions(user.id, scope);
+  const dbPermissions = await getCurrentUserPermissions(user.id, scope, user.role);
   if (dbPermissions.includes('*') || dbPermissions.includes(permissionCode)) return true;
   const upper = permissionCode.toUpperCase().replace(/\./g, '_');
   if (dbPermissions.includes(upper)) return true;
@@ -298,7 +317,10 @@ export const assertCanManageRole = async (
   const account = getAccountTypeForUser(actor);
 
   if (scope.scopeType === 'PLATFORM') {
-    throw rbacError('Only Master Admin can manage platform roles.', 403, 'PLATFORM_SCOPE_DENIED');
+    if (actor.role === 'admin' || account.accountType === 'SUPERADMIN' || account.accountType === 'MASTER_ADMIN') {
+      return;
+    }
+    throw rbacError('Only Master Admin and Admin can manage platform roles.', 403, 'PLATFORM_SCOPE_DENIED');
   }
 
   if (scope.scopeType === 'DISTRICT') {
@@ -358,4 +380,36 @@ export const assertCanAssignRole = async (
   );
 
   return role;
+};
+
+export const syncRbacDefaults = async () => {
+  try {
+    const permissionRecords = new Map<string, { id: number }>();
+    for (const [code, module, action, resource, description] of RBAC_PERMISSION_CATALOG) {
+      const row = await (prisma as any).permission.upsert({
+        where: { code },
+        update: { module, action, resource, description, isSystem: true },
+        create: { code, module, action, resource, description, isSystem: true },
+        select: { id: true, code: true }
+      });
+      permissionRecords.set(code, row);
+    }
+    for (const template of DEFAULT_DYNAMIC_ROLE_TEMPLATES) {
+      const role = await (prisma as any).rbacRole.upsert({
+        where: { code: template.code },
+        update: { name: template.name, description: template.description, scopeType: 'PLATFORM', scope: 'PLATFORM', isDefault: true, isSystemRole: true, status: 'ACTIVE' },
+        create: { code: template.code, name: template.name, description: template.description, scopeType: 'PLATFORM', scope: 'PLATFORM', isDefault: true, isSystemRole: true, status: 'ACTIVE' },
+        select: { id: true }
+      });
+      const rows = template.permissionCodes
+        .map(code => permissionRecords.get(code))
+        .filter(Boolean)
+        .map(permission => ({ roleId: role.id, permissionId: permission!.id, allowed: true }));
+      if (rows.length) {
+        await (prisma as any).rolePermission.createMany({ data: rows, skipDuplicates: true });
+      }
+    }
+  } catch (err) {
+    console.warn('[syncRbacDefaults] RBAC sync skipped or failed:', err);
+  }
 };

@@ -44,6 +44,11 @@ export const RBAC_PERMISSION_CATALOG = [
   ['onboarding.review', 'Onboarding', 'review', 'onboarding', 'Review onboarding submissions'],
   ['seller.verify', 'Onboarding', 'verify', 'seller', 'Verify sellers'],
   ['buyer.approve', 'Onboarding', 'approve', 'buyer', 'Approve buyers'],
+  ['org.msme.verify', 'Onboarding', 'verify', 'seller.msme', 'Review and verify MSME seller applications'],
+  ['org.shg.verify', 'Onboarding', 'verify', 'seller.shg', 'Review and verify SHG (Self-Help Group) applications'],
+  ['shg.verify', 'Onboarding', 'verify', 'shg', 'Verify SHG (Self-Help Group) organizations'],
+  ['org.buyer.verify', 'Onboarding', 'approve', 'buyer', 'Review and approve Buyer department applications'],
+  ['procurement.audit.view', 'Procurement', 'view', 'procurement.audit', 'View-only access to all procurements, bids, vendor responses and activity'],
   ['catalogue.product.view', 'Catalogue', 'view', 'catalogue.product', 'View catalogue products'],
   ['catalogue.product.create', 'Catalogue', 'create', 'catalogue.product', 'Create catalogue products'],
   ['catalogue.product.update', 'Catalogue', 'update', 'catalogue.product', 'Update catalogue products'],
@@ -117,7 +122,31 @@ export const DEFAULT_DYNAMIC_ROLE_TEMPLATES = [
     code: 'COLLECTOR_ADMINISTRATOR',
     name: 'Collector Administrator',
     description: 'Default template for district and collector office administrators.',
-    permissionCodes: ['dashboard.view', 'user.view', 'team.member.view', 'team.member.invite', 'team.member.disable', 'team.role.view', 'team.role.manage', 'team.role.assign', 'organization.view', 'organization.update', 'onboarding.review', 'seller.verify', 'buyer.approve', 'report.view', 'report.export', 'audit.view']
+    permissionCodes: ['dashboard.view', 'user.view', 'team.member.view', 'team.member.invite', 'team.member.disable', 'team.role.view', 'team.role.manage', 'team.role.assign', 'organization.view', 'organization.update', 'onboarding.review', 'seller.verify', 'buyer.approve', 'org.msme.verify', 'org.shg.verify', 'org.buyer.verify', 'procurement.audit.view', 'report.view', 'report.export', 'audit.view']
+  },
+  {
+    code: 'MSME_VERIFICATION_OFFICER',
+    name: 'MSME Verification Admin',
+    description: 'Can review and verify MSME sellers and view all procurement activities.',
+    permissionCodes: ['dashboard.view', 'organization.view', 'onboarding.review', 'seller.verify', 'org.msme.verify', 'procurement.audit.view', 'report.view']
+  },
+  {
+    code: 'SHG_VERIFICATION_OFFICER',
+    name: 'SHG Verification Admin',
+    description: 'Can review and verify Self-Help Groups (SHGs) and view all procurement activities.',
+    permissionCodes: ['dashboard.view', 'organization.view', 'onboarding.review', 'shg.verify', 'org.shg.verify', 'procurement.audit.view', 'report.view']
+  },
+  {
+    code: 'BUYER_VERIFICATION_OFFICER',
+    name: 'Buyer Verification Admin',
+    description: 'Can review and approve Buyer entities and view all procurement activities.',
+    permissionCodes: ['dashboard.view', 'organization.view', 'onboarding.review', 'buyer.approve', 'org.buyer.verify', 'procurement.audit.view', 'report.view']
+  },
+  {
+    code: 'PROCUREMENT_AUDIT_OFFICER',
+    name: 'Procurement Audit Officer',
+    description: 'Read-only access to inspect all procurements, bids, vendor responses and activity without interference.',
+    permissionCodes: ['dashboard.view', 'procurement.audit.view', 'report.view', 'audit.view']
   },
   {
     code: 'ORGANIZATION_ADMINISTRATOR',

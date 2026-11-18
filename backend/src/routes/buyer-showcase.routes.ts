@@ -13,6 +13,7 @@ import { sendOtpEmail } from '../services/mail.service.js';
 import { smsService } from '../services/sms.service.js';
 import { auditLog } from '../modules/audit/audit.service.js';
 import { sha256 } from '../utils/crypto.js';
+import { isMasterAdmin, userHasPermission } from '../services/rbac.service.js';
 
 const db = prisma as any;
 const router = Router();
@@ -1074,6 +1075,17 @@ router.get('/public/organizations/:id/items', (async (req, res, next) => {
 // Verify/reject buyer organization status manually
 router.post('/admin/organizations/:id/status', authenticate, authorize('admin'), (async (req: AuthRequest, res: Response, next) => {
   try {
+    const caller = req.user;
+    const isMaster = isMasterAdmin(caller) || caller?.role === 'master_admin';
+    const canApproveBuyer = isMaster || await userHasPermission(caller, 'org.buyer.verify') || await userHasPermission(caller, 'buyer.approve');
+    if (!canApproveBuyer) {
+      return res.status(403).json({
+        success: false,
+        message: 'Permission denied: Requires Buyer Verifier role (org.buyer.verify)',
+        errorCode: 'BUYER_VERIFIER_REQUIRED'
+      });
+    }
+
     const id = z.coerce.number().int().parse(req.params.id);
     const { status } = parse(z.object({ status: z.enum(['PENDING', 'VERIFIED', 'REJECTED']) }), req.body);
 

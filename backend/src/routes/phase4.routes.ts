@@ -23,7 +23,7 @@ import { approveOnboardingAndEnsureOrganization, createOrUpdatePendingOrganizati
 import { createComplianceFlag } from '../modules/compliance/compliance.service.js';
 import { paymentRateLimit, verificationRateLimit } from '../middleware/rateLimit.js';
 import { getOrSetCache, deleteCache, invalidateByPattern } from '../services/cache.service.js';
-import { invalidateUserAuthCache, isMasterAdmin } from '../services/rbac.service.js';
+import { invalidateUserAuthCache, isMasterAdmin, userHasPermission } from '../services/rbac.service.js';
 import { notificationService } from '../services/notification.service.js';
 import { broadcastToProcurement } from '../services/websocket.service.js';
 import { notifySellerNewPurchaseOrder, generatePaymentReceiptPdfBuffer, notifyPaymentReceiptEmail, getOrGeneratePurchaseOrderPdfBuffer, getOrGenerateInvoicePdfBuffer } from '../services/invoice-pdf.service.js';
@@ -4213,7 +4213,50 @@ router.get('/files/:id/signed-url', authenticate, asyncRoute(async (req: AuthReq
   });
 }));
 
+export const isShgBusinessType = (value: unknown) => {
+  const normalized = String(value || '').trim().toLowerCase();
+  return [
+    'hershg',
+    'her_shg',
+    'shg',
+    'women shg',
+    'self help group',
+    'women_self_help_group',
+    'women_shg',
+    'women-shg',
+    'farmer_producer_group',
+    'farmer_shg',
+    'artisan_handicraft_shg',
+    'artisan_shg',
+    'dairy_cooperative_shg',
+    'dairy_shg',
+    'livelihood_shg',
+    'tribal_shg',
+    'youth_shg',
+    'other_shg'
+  ].includes(normalized);
+};
+
+export const isShgUserBackend = (user: any) => {
+  if (!user) return false;
+  if (user.role === 'shg') return true;
+  if (user.role !== 'seller') return false;
+  return isShgBusinessType(user?.registrationDetails?.businessType)
+    || isShgBusinessType(user?.registrationDetails?.stakeholderCategory)
+    || isShgBusinessType(user?.registrationDetails?.shgType)
+    || isShgBusinessType(user?.sellerProfile?.organizationType)
+    || isShgBusinessType(user?.organization?.organizationType)
+    || isShgBusinessType(user?.organizationType)
+    || isShgBusinessType(user?.businessType);
+};
+
 router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (req, res) => {
+  const caller = req.user;
+  const isMaster = isMasterAdmin(caller) || caller?.role === 'master_admin';
+  const canVerifyMsme = isMaster || await userHasPermission(caller, 'org.msme.verify') || await userHasPermission(caller, 'seller.verify');
+  const canVerifyShg = isMaster || await userHasPermission(caller, 'org.shg.verify') || await userHasPermission(caller, 'shg.verify');
+  const canApproveBuyer = isMaster || await userHasPermission(caller, 'org.buyer.verify') || await userHasPermission(caller, 'buyer.approve');
+
   const query = parse(paginationQuery, req.query);
   const pendingStatuses = ['pending', 'pending_validation', 'manual_review_required', 'under_compliance_review'];
   const conditions: any[] = [];
@@ -4339,6 +4382,34 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
   const isSpecificRole = role && role !== 'all';
 
   if (isSpecificRole) {
+    if (role === 'buyer' && !canApproveBuyer) {
+      return res.json(maskSensitive({
+        success: true,
+        sellers: [],
+        buyers: [],
+        total: 0,
+        summary: { total: 0, statuses: {}, approvedRoles: {}, flagged: 0, permissions: { canVerifyMsme, canVerifyShg, canApproveBuyer } }
+      }));
+    }
+    if (role === 'shg' && !canVerifyShg) {
+      return res.json(maskSensitive({
+        success: true,
+        sellers: [],
+        buyers: [],
+        total: 0,
+        summary: { total: 0, statuses: {}, approvedRoles: {}, flagged: 0, permissions: { canVerifyMsme, canVerifyShg, canApproveBuyer } }
+      }));
+    }
+    if (role === 'seller' && !canVerifyMsme && !canVerifyShg) {
+      return res.json(maskSensitive({
+        success: true,
+        sellers: [],
+        buyers: [],
+        total: 0,
+        summary: { total: 0, statuses: {}, approvedRoles: {}, flagged: 0, permissions: { canVerifyMsme, canVerifyShg, canApproveBuyer } }
+      }));
+    }
+
     let roleCondition: any;
     if (role === 'buyer') roleCondition = 'buyer';
     else if (role === 'shg') roleCondition = { in: ['shg', 'seller'] };
@@ -4551,15 +4622,23 @@ router.get('/admin/onboarding', authenticate, authorizeAdmin, asyncRoute(async (
         documents: enrichedDocs
       } : rawProfile
     };
-    if (['seller', 'shg'].includes(u.role)) sellers.push(item);
-    else buyers.push(item);
+    if (['seller', 'shg'].includes(u.role)) {
+      const isShg = isShgUserBackend(u);
+      if (isShg && !canVerifyShg) continue;
+      if (!isShg && !canVerifyMsme) continue;
+      sellers.push(item);
+    } else {
+      if (!canApproveBuyer) continue;
+      buyers.push(item);
+    }
   }
 
   const summary = {
-    total,
+    total: sellers.length + buyers.length,
     statuses: Object.fromEntries(statusGroups.map((row: any) => [row.onboardingStatus || 'pending', row._count._all])),
     approvedRoles: Object.fromEntries(approvedRoleGroups.map((row: any) => [row.role, row._count._all])),
-    flagged
+    flagged,
+    permissions: { canVerifyMsme, canVerifyShg, canApproveBuyer }
   };
 
   res.json(maskSensitive({
@@ -4912,16 +4991,34 @@ router.post('/admin/onboarding/:id/section-status', authenticate, authorizeAdmin
 
   const existing = await db.user.findUnique({
     where: { id },
-    select: {
-      id: true,
-      name: true,
-      role: true,
-      sectionStatus: true,
-      sectionRejectionReasons: true,
-      onboardingStatus: true
+    include: {
+      sellerProfile: true,
+      buyerProfile: true,
+      organization: true
     }
   });
   if (!existing) throw new ApiError(404, 'User not found');
+
+  const caller = req.user;
+  const isMaster = isMasterAdmin(caller) || caller?.role === 'master_admin';
+  const isTargetShg = isShgUserBackend(existing);
+
+  if (existing.role === 'buyer') {
+    const allowed = isMaster || await userHasPermission(caller, 'org.buyer.verify') || await userHasPermission(caller, 'buyer.approve');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires Buyer Verifier role (org.buyer.verify) to review Buyer section statuses.', 'BUYER_VERIFIER_REQUIRED');
+    }
+  } else if (isTargetShg) {
+    const allowed = isMaster || await userHasPermission(caller, 'org.shg.verify') || await userHasPermission(caller, 'shg.verify');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires SHG Verifier role (org.shg.verify) to review SHG section statuses.', 'SHG_VERIFIER_REQUIRED');
+    }
+  } else {
+    const allowed = isMaster || await userHasPermission(caller, 'org.msme.verify') || await userHasPermission(caller, 'seller.verify');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires MSME Verifier role (org.msme.verify) to review MSME section statuses.', 'MSME_VERIFIER_REQUIRED');
+    }
+  }
 
   const previousStatus = (existing.sectionStatus as Record<string, unknown>) || {};
   const nextStatus = body.sectionStatus || {};
@@ -5282,8 +5379,36 @@ router.post('/admin/onboarding/:id/status', authenticate, authorizeAdmin, asyncR
   const body = parse(z.object({ onboardingStatus: z.string().trim().min(2), adminFeedback: z.string().trim().max(2000).optional() }), req.body);
 
   // Fetch the existing user to determine role and build correct section statuses
-  const existing = await db.user.findUnique({ where: { id }, select: { role: true } });
+  const existing = await db.user.findUnique({
+    where: { id },
+    include: {
+      sellerProfile: true,
+      buyerProfile: true,
+      organization: true
+    }
+  });
   if (!existing) throw new ApiError(404, 'User not found');
+
+  const caller = req.user;
+  const isMaster = isMasterAdmin(caller) || caller?.role === 'master_admin';
+  const isTargetShg = isShgUserBackend(existing);
+
+  if (existing.role === 'buyer') {
+    const allowed = isMaster || await userHasPermission(caller, 'org.buyer.verify') || await userHasPermission(caller, 'buyer.approve');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires Buyer Verifier role (org.buyer.verify) to approve or reject Buyer organizations.', 'BUYER_VERIFIER_REQUIRED');
+    }
+  } else if (isTargetShg) {
+    const allowed = isMaster || await userHasPermission(caller, 'org.shg.verify') || await userHasPermission(caller, 'shg.verify');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires SHG Verifier role (org.shg.verify) to approve or reject SHG organizations.', 'SHG_VERIFIER_REQUIRED');
+    }
+  } else {
+    const allowed = isMaster || await userHasPermission(caller, 'org.msme.verify') || await userHasPermission(caller, 'seller.verify');
+    if (!allowed) {
+      throw new ApiError(403, 'Permission denied: Requires MSME Verifier role (org.msme.verify) to approve or reject MSME organizations.', 'MSME_VERIFIER_REQUIRED');
+    }
+  }
 
   const updateData: Record<string, unknown> = { ...body };
 
