@@ -19,7 +19,10 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user } = useAuth();
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isAdmin = user?.role === 'admin';
+  const isMaster = (user as any)?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const [cancelModalOpen, setCancelModalOpen] = useState(false);
 
@@ -122,7 +125,7 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
   const rcData: any = contractData || bidData || reqData || initialData || {};
   const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || {};
   const statusUpper = String(rcData.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const canCancel = isBuyer && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleSubmitQuotation = () => {
     if (!user) {
@@ -140,13 +143,13 @@ function RateContractDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeRcId,
     procurementType: 'RATE_CONTRACT',
     procurementLabel: 'Rate Contract',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Rate Contract Opportunities' : undefined,
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rate-contracts' : undefined,
+    backRouteLabel: isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Rate Contract Opportunities' : undefined,
+    backRoute: isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rate-contracts' : undefined,
     onRefresh: async () => {
       await Promise.allSettled([refetchBid(), refetchReq(), refetchContract()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation,
+    onSubmitAction: isAdmin ? undefined : (isBuyerOrAdmin ? () => router.push(`/bids/${rcData?.id || requestId}/results`) : handleSubmitQuotation),
     extraProps: {
       contractId: contractData?.id || (rcData?.contractId ? Number(rcData.contractId) : (contractId || undefined)),
       contractNumber: contractData?.contractNumber || (rcData as any)?.contractNumber || null,

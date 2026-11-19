@@ -108,8 +108,11 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const router = useRouter();
   const pathname = usePathname() || '';
   const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const isMaster = user?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
   const isSeller = user?.role === 'seller' || (!user && pathname.includes('/seller'));
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || user?.role === 'master_admin';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const rolePrefix = pathname.startsWith('/buyer') ? '/buyer' :
                      pathname.startsWith('/admin') ? '/admin' :
                      pathname.startsWith('/shg') ? '/shg' :
@@ -315,7 +318,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   const isAuctionCancelled = status === 'CANCELLED';
 
   const canCancel =
-    isBuyerOrAdmin && !isAuctionCancelled && !['CLOSED', 'AWARDED', 'COMPLETED'].includes(status);
+    isBuyer && !isAuctionCancelled && !['CLOSED', 'AWARDED', 'COMPLETED'].includes(status);
 
   const isAuctionClosed =
     !isAuctionCancelled &&
@@ -914,7 +917,7 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
   ) : null;
 
   // Buyer Action Buttons (Lifecycle Controls)
-  const buyerAuctionActions = isBuyerOrAdmin ? (
+  const buyerAuctionActions = (isBuyerOrAdmin && !isAdmin) ? (
     <div className="flex flex-wrap items-center gap-2">
       {!isAuctionClosed && !isAuctionCancelled && (
         <Button
@@ -1072,8 +1075,8 @@ export default function ReverseAuctionDetailPage({ id }: { id: number | string }
       <ProcurementDetailUnifiedView
         procurementType="REVERSE_AUCTION"
         procurementLabel={effectiveProcurementLabel}
-        backRouteLabel={isBuyerOrAdmin ? 'Reverse Auctions' : isSeller ? 'Opportunities' : undefined}
-        backRoute={isBuyerOrAdmin ? '/buyer/my-procurements' : isSeller ? '/seller/opportunities' : undefined}
+        backRouteLabel={isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'Reverse Auctions' : isSeller ? 'Opportunities' : undefined}
+        backRoute={isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSeller ? '/seller/opportunities' : undefined}
         id={effectiveId}
         displayId={compositeDisplayId}
         subject={resolvedSubject}

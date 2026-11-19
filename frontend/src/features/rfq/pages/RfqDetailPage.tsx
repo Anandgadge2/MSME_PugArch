@@ -116,10 +116,13 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   const rawBid: any = bidData || (reqData as any)?.requirement || (reqData as any)?.data || reqData || initialData || {};
   const reqObj: any = (reqData as any)?.requirement || reqData || {};
 
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isAdmin = user?.role === 'admin';
+  const isMaster = (user as any)?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const statusUpper = String(rawBid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const canCancel = isBuyer && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleConvertToInvoice = useCallback(async () => {
     const idToUse = requestId || effectiveTargetId;
@@ -165,12 +168,15 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
   }, []);
 
   const handleSubmitResultOrQuote = useCallback(() => {
+    if (isAdmin) {
+      return;
+    }
     if (isBuyerOrAdmin) {
       router.push(`/bids/${effectiveTargetId}/results`);
     } else {
       handleSubmitQuotation();
     }
-  }, [isBuyerOrAdmin, router, effectiveTargetId, handleSubmitQuotation]);
+  }, [isAdmin, isBuyerOrAdmin, router, effectiveTargetId, handleSubmitQuotation]);
 
   const invoiceDataPayload = useMemo(() => {
     if (!(user?.role === 'seller' && isCurrentSellerAwarded)) return null;
@@ -193,11 +199,11 @@ function RfqDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeRfqId,
     procurementType: 'RFQ',
     procurementLabel: 'Request for Quotation',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rfqs' : undefined,
+    backRouteLabel: isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
+    backRoute: isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities/rfqs' : undefined,
     onRefresh: handleRefresh,
     onCancel: canCancel ? handleCancelClick : undefined,
-    onSubmitAction: handleSubmitResultOrQuote,
+    onSubmitAction: isAdmin ? undefined : handleSubmitResultOrQuote,
     invoiceStatusData: invoiceDataPayload,
     isConvertingInvoice,
     onConvertToInvoice: invoiceStatusData?.canConvertToInvoice ? handleConvertToInvoiceCallback : undefined,

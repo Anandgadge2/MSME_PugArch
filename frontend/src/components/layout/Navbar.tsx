@@ -515,6 +515,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Master Console', path: '/master-admin', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Organizations', path: '/master-admin/organizations', icon: Store, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Users & Roles', path: '/master-admin/users', icon: UsersRound, roles: ['master_admin'], permission: 'company.manage' },
+    { label: 'Roles & Permissions', path: '/master-admin/rbac', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Procurement Control', path: '/master-admin/procurement', icon: Gavel, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Marketplace Control', path: '/master-admin/marketplace', icon: ShoppingCart, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Orders & Delivery', path: '/master-admin/orders', icon: Truck, roles: ['master_admin'], permission: 'company.manage' },
@@ -526,8 +527,14 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Security & Access', path: '/master-admin/security', icon: ShieldCheck, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Disputes & Grievances', path: '/admin/disputes', icon: AlertTriangle, roles: ['master_admin'], permission: 'company.manage' },
     { label: 'Settings', path: '/master-admin/settings', icon: Settings, roles: ['master_admin'], permission: 'company.manage' },
-    { label: 'Org Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'] }, 
+    { label: 'Org Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'], children: [
+      { label: 'All Approvals', path: '/admin/onboarding', icon: ShieldCheck, roles: ['admin'], permission: 'onboarding.review' },
+      { label: 'MSME Sellers', path: '/admin/onboarding?tab=sellers', icon: Store, roles: ['admin'], permission: 'org.msme.verify' },
+      { label: 'SHG Units', path: '/admin/onboarding?tab=shg', icon: Users, roles: ['admin'], permission: 'org.shg.verify' },
+      { label: 'Buyer Organizations', path: '/admin/onboarding?tab=buyers', icon: Building2, roles: ['admin'], permission: 'org.buyer.verify' },
+    ] }, 
     { label: 'Monitoring', icon: FileSearch, roles: ['admin'], children: [
+      { label: 'Procurements (Audit)', path: '/admin/procurement', icon: Gavel, roles: ['admin'], permission: 'procurement.audit.view' },
       { label: 'Orders & Delivery', path: '/admin/delivery', icon: Truck, roles: ['admin'] },
       { label: 'Payments & Escrow', path: '/payments/transactions', icon: CreditCard, roles: ['admin'] },
       { label: 'Fraud Alerts', path: '/admin/fraud-alerts', icon: AlertTriangle, roles: ['admin'] },
@@ -540,7 +547,7 @@ export default function Sidebar({ isOpen, onClose, isCollapsed, onToggleCollapse
     { label: 'Organizations', icon: Building2, roles: ['admin'], children: [
       { label: 'Users', path: '/admin/users', icon: Users, roles: ['admin'] },
       { label: 'Organizations', path: '/admin/organizations', icon: Building2, roles: ['admin'] },
-      { label: 'Team & RBAC', path: '/admin/rbac', icon: ShieldCheck, roles: ['admin'], featureCode: 'role-management' },
+      { label: 'Roles & Permissions', path: '/admin/rbac', icon: ShieldCheck, roles: ['admin'] },
     ] },
     { label: 'Reports', path: '/admin/reports', icon: BarChart3, roles: ['admin'], featureCode: 'reports-mis' },
     { label: 'Category Volume Analysis', path: '/admin/analytics/category-volume', icon: Layers, roles: ['admin'] },

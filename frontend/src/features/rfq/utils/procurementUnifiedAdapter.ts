@@ -35,7 +35,10 @@ export function adaptProcurementUnifiedProps(
   const bid: any = bidInput || {};
   const reqObj: any = reqInput?.requirement || reqInput?.data?.requirement || reqInput?.data || reqInput || {};
   const user = ctx.user;
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
+  const isMaster = (user as any)?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
 
   const payload = bid.technicalPacket || bid.payload || reqObj.technicalPacket || reqObj.payload || {};
@@ -174,8 +177,8 @@ export function adaptProcurementUnifiedProps(
   return {
     procurementType: ctx.procurementType,
     procurementLabel: ctx.procurementLabel,
-    backRouteLabel: ctx.backRouteLabel ?? (isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined),
-    backRoute: ctx.backRoute ?? (isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined),
+    backRouteLabel: ctx.backRouteLabel ?? (isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined),
+    backRoute: ctx.backRoute ?? (isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined),
     id: targetId,
     displayId: rawDisplayId,
     subject: title,
@@ -266,22 +269,22 @@ export function adaptProcurementUnifiedProps(
 
     // Actions & Handlers
     onBack: (ctx.backRoute || ctx.backRouteLabel)
-      ? () => ctx.router.push(ctx.backRoute || (isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'))
+      ? () => ctx.router.push(ctx.backRoute || (isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : '/seller/opportunities'))
       : undefined,
     onRefresh: ctx.onRefresh,
-    onCancelClick: ctx.onCancel,
-    onEditClick: ctx.onEdit,
+    onCancelClick: isAdmin ? undefined : ctx.onCancel,
+    onEditClick: isAdmin ? undefined : ctx.onEdit,
     publishedAt: bid.publishedAt || reqObj.publishedAt || null,
     postPublishEditCount: Number(bid.postPublishEditCount ?? reqObj.postPublishEditCount ?? 0),
     cancelButtonLabel: status === 'DRAFT' || status === 'SUBMITTED' ? 'Withdraw' : 'Cancel',
-    submitButtonLabel: isBuyerOrAdmin ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Proposal Submitted' : 'Submit Proposal'),
-    onSubmitClick: ctx.onSubmitAction,
+    submitButtonLabel: isAdmin ? undefined : (isBuyerOrAdmin ? 'View Evaluation & Results' : (hasSubmittedProposal ? 'Proposal Submitted' : 'Submit Proposal')),
+    onSubmitClick: isAdmin ? undefined : ctx.onSubmitAction,
     onDownloadClick: ctx.onDownloadPdf,
 
     // Invoicing
     invoiceStatus: ctx.invoiceStatusData,
     isConvertingInvoice: ctx.isConvertingInvoice,
-    onConvertToInvoiceClick: ctx.onConvertToInvoice,
+    onConvertToInvoiceClick: isAdmin ? undefined : ctx.onConvertToInvoice,
 
     ...ctx.extraProps,
   };

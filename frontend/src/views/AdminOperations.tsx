@@ -45,8 +45,8 @@ interface AdminOperationsProps {
 
 const sectionConfig = {
   procurement: {
-    label: 'Procurement & Compliance Desk',
-    description: 'Monitor procurement readiness, risks, reviews, and buyer-seller capacity in one place.',
+    label: 'Procurement Oversight & Audit Desk',
+    description: 'Audit portal-wide public, private, and invited tenders, vendor quotations, and award stages in read-only governance capacity.',
     icon: ClipboardCheck
   },
   compliance: {

@@ -111,10 +111,13 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
 
   const bid: any = bidData || (hasValidInitialData && (initialData.bidNumber || initialData.sourceModel === 'BID') ? initialData : {});
   const reqObj: any = reqData?.requirement || reqData?.data?.requirement || reqData?.data || reqData || (hasValidInitialData && (initialData.requirementNumber || initialData.sourceModel === 'REQUIREMENT') ? (initialData.requirement || initialData) : {});
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isAdmin = user?.role === 'admin';
+  const isMaster = (user as any)?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const statusUpper = String(bid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const canCancel = isBuyer && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleSubmitProposal = () => {
     if (!user) {
@@ -150,13 +153,13 @@ function RfpDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeId,
     procurementType: 'RFP',
     procurementLabel: 'Request for Proposal',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined,
+    backRouteLabel: isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
+    backRoute: isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined,
     onRefresh: async () => {
       await Promise.allSettled([refetchBid(), refetchReq()]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
+    onSubmitAction: isAdmin ? undefined : (isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal),
   });
 
   return (

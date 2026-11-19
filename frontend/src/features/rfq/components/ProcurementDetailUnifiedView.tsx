@@ -11700,6 +11700,15 @@ export function ProcurementDetailUnifiedView(
             </button>
           </div>
 
+          {currentUser?.role === 'admin' && (
+            <div className="flex items-center gap-2.5 px-3.5 py-2 rounded-lg bg-amber-50/90 border border-amber-200/90 text-amber-900 text-xs font-semibold shadow-2xs">
+              <ShieldCheck className="h-4 w-4 text-amber-700 shrink-0" aria-hidden="true" />
+              <span>
+                <strong>Procurement Audit Desk:</strong> You are viewing this procurement record in read-only administrative oversight mode. Direct tender manipulation, proposal submission, and contract actions are restricted.
+              </span>
+            </div>
+          )}
+
           {/* Unified 5-Stage Procurement Lifecycle Progression Bar */}
           <ProcurementLifecycleStepper
             status={props.rawBid?.status || props.status}

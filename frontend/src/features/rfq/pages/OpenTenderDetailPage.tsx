@@ -134,10 +134,13 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
     payload: { ...(reqObj?.payload || {}), ...(tender?.payload || {}), ...(bid?.payload || {}) },
   };
 
-  const isBuyerOrAdmin = user?.role === 'buyer' || user?.role === 'admin' || (user as any)?.role === 'master_admin';
+  const isAdmin = user?.role === 'admin';
+  const isMaster = (user as any)?.role === 'master_admin';
+  const isBuyer = user?.role === 'buyer';
+  const isBuyerOrAdmin = isBuyer || isMaster;
   const isSellerOrShg = user?.role === 'seller' || user?.role === 'shg';
   const statusUpper = String(mergedBid.status || reqObj.status || 'OPEN').toUpperCase();
-  const canCancel = isBuyerOrAdmin && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
+  const canCancel = isBuyer && !['CANCELLED', 'AWARDED', 'COMPLETED', 'CLOSED'].includes(statusUpper);
 
   const handleSubmitProposal = () => {
     if (!user) {
@@ -173,8 +176,8 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
     requestId: activeOpenId,
     procurementType: 'OPEN_TENDER',
     procurementLabel: 'Open Tender',
-    backRouteLabel: isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
-    backRoute: isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined,
+    backRouteLabel: isAdmin ? 'Procurements (Audit)' : isBuyerOrAdmin ? 'My Procurements' : isSellerOrShg ? 'Opportunities' : undefined,
+    backRoute: isAdmin ? '/admin/procurement' : isBuyerOrAdmin ? '/buyer/my-procurements' : isSellerOrShg ? '/seller/opportunities' : undefined,
     onRefresh: async () => {
       await Promise.allSettled([
         procurementBidApi.detail((requestId || activeOpenId)!, true).then((freshBid) => {
@@ -187,7 +190,7 @@ function OpenTenderDetailContent({ initialData }: { initialData?: any }) {
       ]);
     },
     onCancel: canCancel ? () => setCancelModalOpen(true) : undefined,
-    onSubmitAction: isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal,
+    onSubmitAction: isAdmin ? undefined : (isBuyerOrAdmin ? () => router.push(`/bids/${bid.id || requestId}/results`) : handleSubmitProposal),
   });
 
   return (

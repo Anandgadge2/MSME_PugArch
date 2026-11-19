@@ -1270,7 +1270,12 @@ export default function App({
     if (pathname === '/admin/grievances' && roleOk(user.role, ['admin'])) return <Redirect to="/admin/disputes?tab=grievances" />;
     if (pathname === '/admin/payments' && roleOk(user.role, ['admin'])) return <PaymentHistoryPage admin />;
     if (pathname === '/admin/compliance-rules' && roleOk(user.role, ['admin'])) return <ComplianceRulesPage />;
-    if (['/admin/governance', '/admin/procurement', '/admin/compliance'].includes(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding" />;
+    if (['/admin/governance', '/admin/compliance'].includes(pathname) && roleOk(user.role, ['admin'])) return <Redirect to="/admin/onboarding" />;
+    if (pathname === '/admin/procurement' && roleOk(user.role, ['admin', 'master_admin'])) return <AdminOperations section="procurement" />;
+    if (pathname === '/admin/operations' && roleOk(user.role, ['admin', 'master_admin'])) {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('section') : null;
+      return <AdminOperations section={(sp as any) || 'procurement'} />;
+    }
     if (pathname === '/admin/reports' && roleOk(user.role, ['admin'])) return <MISReports />;
     if ((pathname === '/admin/analytics/category-volume' || pathname === '/admin/reports/category-volume') && roleOk(user.role, ['admin'])) return <CategoryVolumeAnalysisPage />;
     if (pathname === '/admin/monthly-rankings' && roleOk(user.role, ['admin'])) return <MonthlyRankingsAdminPage />;

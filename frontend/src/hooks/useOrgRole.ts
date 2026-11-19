@@ -71,6 +71,14 @@ export const DEFAULT_SELLER_PERMISSIONS: string[] = [
     'organization.view', 'organization.update', 'report.view'
 ];
 
+const DEFAULT_ADMIN_PERMISSIONS: string[] = [
+    'dashboard.view', 'user.view', 'team.member.view', 'team.member.invite', 
+    'team.member.disable', 'team.role.view', 'team.role.manage', 'team.role.assign', 
+    'organization.view', 'organization.update', 'onboarding.review', 'seller.verify', 
+    'buyer.approve', 'org.msme.verify', 'org.shg.verify', 'org.buyer.verify', 
+    'procurement.audit.view', 'report.view', 'report.export', 'audit.view'
+];
+
 const PERMISSIONS_CACHE_KEY = 'msme_permissions_cache';
 let inMemoryPermissions: string[] | null = null;
 let permissionsFetchPromise: Promise<string[]> | null = null;
@@ -137,7 +145,7 @@ export function usePermissions() {
             return;
         }
 
-        if (userRole === 'master_admin' || userRole === 'admin') {
+        if (userRole === 'master_admin') {
             setRemotePermissions((prev) => (prev.length === 1 && prev[0] === '*' ? prev : ['*']));
             setLoading(false);
             return;
@@ -194,8 +202,7 @@ export function usePermissions() {
     }, [load]);
 
     const permissions = useMemo(() => {
-        const isMasterOrAdmin = userRole === 'master_admin' || userRole === 'admin';
-        if (isMasterOrAdmin) return ['*'];
+        if (userRole === 'master_admin') return ['*'];
 
         const cached = Array.isArray(user?.permissions) && user.permissions.length > 0 ? user.permissions : [];
         const serverPerms = remotePermissions.length > 0 ? remotePermissions : cached;
@@ -210,6 +217,9 @@ export function usePermissions() {
 
         // For standard primary users (non-subusers), provide immediate default role permissions
         if (!user?.isSubUser) {
+            if (userRole === 'admin') {
+                return DEFAULT_ADMIN_PERMISSIONS;
+            }
             if (userRole === 'buyer') {
                 return DEFAULT_BUYER_PERMISSIONS;
             }
