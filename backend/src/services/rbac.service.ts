@@ -161,22 +161,32 @@ export const getCurrentUserPermissions = async (userId: number, scope?: RbacScop
     if (user.role === 'master_admin') {
       defaults.push('*');
     } else if (user.role === 'admin') {
-      defaults.push('dashboard.view', 'report.view', 'audit.view', 'payment.view', 'payment.verify', 'grn.view', 'delivery.view', 'procurement.audit.view');
-      if (assignments.length === 0) {
-        defaults.push(
-          'onboarding.review',
-          'seller.verify',
-          'buyer.approve',
-          'org.msme.verify',
-          'org.shg.verify',
-          'org.buyer.verify',
-          'shg.verify',
-          'team.member.view',
-          'team.role.view',
-          'team.role.manage',
-          'team.role.assign'
-        );
-      }
+      defaults.push(
+        'dashboard.view',
+        'report.view',
+        'report.export',
+        'audit.view',
+        'payment.view',
+        'payment.verify',
+        'grn.view',
+        'delivery.view',
+        'procurement.audit.view',
+        'onboarding.review',
+        'seller.verify',
+        'buyer.approve',
+        'org.msme.verify',
+        'org.shg.verify',
+        'org.buyer.verify',
+        'shg.verify',
+        'team.member.view',
+        'team.member.invite',
+        'team.member.disable',
+        'team.role.view',
+        'team.role.manage',
+        'team.role.assign',
+        'organization.view',
+        'organization.update'
+      );
     } else if ((!user.organizationId || orgPermissions.length === 0) && !isOrgSubUser) {
       // Standalone single-user buyers/sellers (without organization or pending membership) receive baseline default permissions
       if (user.role === 'seller' || user.role === 'shg') {
@@ -289,8 +299,8 @@ export const ensureAssignablePermissions = async (
   permissionCodes: string[],
   scope?: RbacScope
 ) => {
-  if (isMasterAdmin(actor)) return;
-  const actorPermissions = await getCurrentUserPermissions(actor.id, scope);
+  if (isMasterAdmin(actor) || actor.role === 'admin') return;
+  const actorPermissions = await getCurrentUserPermissions(actor.id, scope, actor.role);
   const missing = permissionCodes.filter(code => !actorPermissions.includes(code));
   if (missing.length > 0) {
     const error = new Error(`You cannot assign permissions you do not have: ${missing.join(', ')}`);
