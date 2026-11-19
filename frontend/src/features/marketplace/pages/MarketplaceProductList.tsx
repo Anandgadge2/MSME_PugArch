@@ -751,7 +751,7 @@ export default function MarketplaceProductList() {
                                 {searchQuery ? (
                                         <span className="flex items-center flex-wrap gap-2">
                                             <span>Results for &quot;{parsedSmartQuery.cleanQuery || searchQuery}&quot;</span>
-                                            {(parsedSmartQuery.minPrice !== undefined || parsedSmartQuery.maxPrice !== undefined) && (
+                                            {canViewPrice && (parsedSmartQuery.minPrice !== undefined || parsedSmartQuery.maxPrice !== undefined) && (
                                                 <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-50 border border-blue-200/90 text-xs font-bold text-[#0b2447]">
                                                     <Sparkles className="h-3.5 w-3.5 text-blue-600" />
                                                     Budget: {parsedSmartQuery.minPrice !== undefined && parsedSmartQuery.maxPrice !== undefined
@@ -1154,7 +1154,7 @@ export default function MarketplaceProductList() {
                                             </span>
                                         );
                                     })}
-                                    {priceFilter && (
+                                    {canViewPrice && priceFilter && (
                                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800 border border-emerald-200">
                                             Price: {priceFilter === 'UNDER_1K' ? 'Under ₹1,000' :
                                                    priceFilter === '1K_5K' ? '₹1,000 – ₹5,000' :

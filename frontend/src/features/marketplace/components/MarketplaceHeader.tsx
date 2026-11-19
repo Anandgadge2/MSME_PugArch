@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
+import { useAuth } from '../../../hooks/useAuth';
 import {
     Search, User, LogIn, Store, Building2, ChevronDown,
     Menu, X, ArrowRight, ShieldCheck, Layers, Briefcase, FileText, ShoppingBag,
@@ -79,7 +80,9 @@ function SignupMenu({ onSelect }: { onSelect: () => void }) {
     );
 }
 
-export function MarketplaceHeader({ user }: Props) {
+export function MarketplaceHeader({ user: propUser }: Props) {
+    const { user: contextUser } = useAuth();
+    const user = propUser || contextUser;
     const router = useRouter();
     const pathname = usePathname() || '';
     const searchParams = useSearchParams();
@@ -824,12 +827,16 @@ export function MarketplaceHeader({ user }: Props) {
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right shrink-0">
-                                                                        {effectivePrice > 0 ? (
-                                                                            <p className="text-xs font-black text-[#0b2447]">
-                                                                                ₹{effectivePrice.toLocaleString('en-IN')}
-                                                                            </p>
+                                                                        {user ? (
+                                                                            effectivePrice > 0 ? (
+                                                                                <p className="text-xs font-black text-[#0b2447]">
+                                                                                    ₹{effectivePrice.toLocaleString('en-IN')}
+                                                                                </p>
+                                                                            ) : (
+                                                                                <p className="text-[10.5px] font-bold text-blue-600">Quote</p>
+                                                                            )
                                                                         ) : (
-                                                                            <p className="text-[10.5px] font-bold text-blue-600">Quote</p>
+                                                                            <span className="text-[9.5px] font-bold text-slate-400">Login for price</span>
                                                                         )}
                                                                     </div>
                                                                 </Link>
@@ -899,12 +906,16 @@ export function MarketplaceHeader({ user }: Props) {
                                                                         </div>
                                                                     </div>
                                                                     <div className="text-right shrink-0">
-                                                                        {basePrice > 0 ? (
-                                                                            <p className="text-xs font-black text-[#0b2447]">
-                                                                                ₹{basePrice.toLocaleString('en-IN')}
-                                                                            </p>
+                                                                        {user ? (
+                                                                            basePrice > 0 ? (
+                                                                                <p className="text-xs font-black text-[#0b2447]">
+                                                                                    ₹{basePrice.toLocaleString('en-IN')}
+                                                                                </p>
+                                                                            ) : (
+                                                                                <p className="text-[10.5px] font-bold text-blue-600">Custom</p>
+                                                                            )
                                                                         ) : (
-                                                                            <p className="text-[10.5px] font-bold text-blue-600">Custom</p>
+                                                                            <span className="text-[9.5px] font-bold text-slate-400">Login for price</span>
                                                                         )}
                                                                     </div>
                                                                 </Link>

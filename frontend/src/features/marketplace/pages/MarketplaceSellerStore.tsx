@@ -573,34 +573,36 @@ export default function MarketplaceSellerStore() {
                                             )}
 
                                             {/* Inline Price Range Inputs */}
-                                            <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 h-9 shrink-0">
-                                                <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Price:</span>
-                                                <div className="relative w-18 sm:w-20">
-                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        value={minP}
-                                                        onChange={e => setMinP(e.target.value)}
-                                                        placeholder="Min"
-                                                        className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                        aria-label="Minimum price in Rupees"
-                                                    />
+                                            {user && (
+                                                <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 h-9 shrink-0">
+                                                    <span className="text-[9.5px] font-black uppercase tracking-wider text-slate-400">Price:</span>
+                                                    <div className="relative w-18 sm:w-20">
+                                                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={minP}
+                                                            onChange={e => setMinP(e.target.value)}
+                                                            placeholder="Min"
+                                                            className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                            aria-label="Minimum price in Rupees"
+                                                        />
+                                                    </div>
+                                                    <span className="text-slate-300 font-bold">-</span>
+                                                    <div className="relative w-18 sm:w-20">
+                                                        <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={maxP}
+                                                            onChange={e => setMaxP(e.target.value)}
+                                                            placeholder="Max"
+                                                            className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                            aria-label="Maximum price in Rupees"
+                                                        />
+                                                    </div>
                                                 </div>
-                                                <span className="text-slate-300 font-bold">-</span>
-                                                <div className="relative w-18 sm:w-20">
-                                                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-slate-400">₹</span>
-                                                    <input
-                                                        type="number"
-                                                        min="0"
-                                                        value={maxP}
-                                                        onChange={e => setMaxP(e.target.value)}
-                                                        placeholder="Max"
-                                                        className="w-full h-7 pl-4 pr-1 text-xs font-semibold bg-white border border-slate-200 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                        aria-label="Maximum price in Rupees"
-                                                    />
-                                                </div>
-                                            </div>
+                                            )}
 
                                             {/* Sort Select */}
                                             <div className="relative min-w-[130px] sm:min-w-[145px] flex-1 sm:flex-initial">
@@ -611,8 +613,12 @@ export default function MarketplaceSellerStore() {
                                                     aria-label="Sort products by"
                                                 >
                                                     <option value="latest">Sort: Latest First</option>
-                                                    <option value="price_asc">Price: Low to High</option>
-                                                    <option value="price_desc">Price: High to Low</option>
+                                                    {user && (
+                                                        <>
+                                                            <option value="price_asc">Price: Low to High</option>
+                                                            <option value="price_desc">Price: High to Low</option>
+                                                        </>
+                                                    )}
                                                     <option value="name">Name: A–Z</option>
                                                     <option value="name_desc">Name: Z–A</option>
                                                 </select>
@@ -643,7 +649,7 @@ export default function MarketplaceSellerStore() {
                                                         </button>
                                                     </span>
                                                 )}
-                                                {(minP || maxP) && (
+                                                {user && (minP || maxP) && (
                                                     <span className="inline-flex items-center gap-1 bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-semibold px-2 py-0.5 rounded">
                                                         <span>Price: ₹{minP || 0} &ndash; ₹{maxP || '∞'}</span>
                                                         <button type="button" onClick={() => { setMinP(''); setMaxP(''); }} className="hover:text-emerald-900 transition ml-0.5">

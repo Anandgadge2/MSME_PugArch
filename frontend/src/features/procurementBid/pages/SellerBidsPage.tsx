@@ -257,6 +257,11 @@ let cachedSellerParticipations: any[] | null = null;
 let lastSellerFetchTime = 0;
 const CACHE_TTL_MS = 60000;
 
+export const clearSellerBidsCache = () => {
+  cachedSellerParticipations = null;
+  lastSellerFetchTime = 0;
+};
+
 export default function SellerBidsPage({ subRouteType = 'all' }: { subRouteType?: BidTypeFilter }) {
   const { user } = useAuth();
   const router = useRouter();

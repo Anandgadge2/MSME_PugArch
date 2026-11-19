@@ -3277,14 +3277,14 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
         similar = similarList.map(decorateRequirement);
         ownResponse = response;
 
-        if (!ownResponse && req.user?.role === 'seller' && targetBidIds.size > 0) {
+        if (!ownResponse && (req.user?.role === 'seller' || req.user?.role === 'shg') && targetBidIds.size > 0) {
             const pbPart = await db.procurementBidParticipation.findFirst({
                 where: {
                     bidId: { in: Array.from(targetBidIds) },
                     sellerId: Number(req.user.id),
-                    submissionStatus: { not: 'DRAFT' },
                     isWithdrawn: false
-                }
+                },
+                orderBy: { updatedAt: 'desc' }
             }).catch(() => null);
 
             if (pbPart) {
@@ -3296,8 +3296,8 @@ router.get('/marketplace/requirements/:id', optionalAuthenticate, shortCache(30)
                     sellerId: pbPart.sellerId,
                     sellerOrganizationId: pbPart.organizationId,
                     organizationId: pbPart.organizationId,
-                    status: pbPart.submissionStatus || 'SUBMITTED',
-                    submissionStatus: pbPart.submissionStatus || 'SUBMITTED',
+                    status: pbPart.submissionStatus || 'DRAFT',
+                    submissionStatus: pbPart.submissionStatus || 'DRAFT',
                     offeredPrice: Number(pbPart.quotedAmount || pbPart.totalAmount || 0),
                     offeredQuantity: pbPart.offeredQuantity || 1,
                     deliveryTimeline: pbPart.deliveryTimeline || 'Standard',

@@ -1589,7 +1589,8 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
   const actorRole = String(actor?.role || '').toLowerCase();
   const isAdmin = actorRole === 'admin' || actorRole === 'master_admin';
   const isBuyerOwner = actorRole === 'buyer' || isAdmin || (!!actor?.id && Number(bid.buyerId) === Number(actor.id));
-  const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner || actorRole === 'buyer';
+  const isSellerOrShg = actorRole === 'seller' || actorRole === 'shg';
+  const canSeeParticipants = options.includeParticipants || isAdmin || isBuyerOwner || actorRole === 'buyer' || isSellerOrShg;
   const canSeeFinancial = options.includeFinancial || isAdmin || (isBuyerOwner && (financialOpenStatuses.includes(bid.status) || bid.status === 'TECHNICAL_EVALUATION_COMPLETED'));
   const packetMeta = bid.technicalPacket && typeof bid.technicalPacket === 'object' ? bid.technicalPacket as any : {};
   const isTwoPacket = String(bid.packetType || packetMeta.packetType || packetMeta.schedule?.packetType || '').toUpperCase().includes('TWO') || Boolean(bid.financialOpeningDate || packetMeta.financialOpeningDate || packetMeta.schedule?.financialOpeningDate);
@@ -1822,14 +1823,14 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
       return subStatus !== 'DRAFT' && !p.isWithdrawn;
     }).length,
-    hasSubmittedProposal: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+    hasSubmittedProposal: isSellerOrShg ? (bid.participations || []).some((p: any) => {
       const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
       const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
       const matchesUser = (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
       const subStatus = String(p.submissionStatus || p.status || '').toUpperCase();
       return matchesUser && subStatus === 'SUBMITTED';
     }) : undefined,
-    myParticipation: actorRole === 'seller' ? (() => {
+    myParticipation: isSellerOrShg ? (() => {
       const found = (bid.participations || []).find((p: any) => {
         const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
         const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
@@ -1837,14 +1838,14 @@ export const serializeBid = (bid: any, options: { actor?: Actor; detail?: boolea
       });
       return found ? serializeParticipation(found, { canSeeFinancial: true, bid, ownView: true }) : undefined;
     })() : undefined,
-    hasParticipated: actorRole === 'seller' ? (bid.participations || []).some((p: any) => {
+    hasParticipated: isSellerOrShg ? (bid.participations || []).some((p: any) => {
       const pSellerId = Number(p.sellerId || p.sellerUserId || p.seller?.id || 0);
       const pOrgId = Number(p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id || 0);
       return (actor?.id && pSellerId === Number(actor.id)) || (actor?.organizationId && pOrgId === Number(actor.organizationId));
     }) : undefined,
     participations: canSeeParticipants ? (bid.participations || []).filter((p: any) => {
       if (isAdmin || isBuyerOwner) return true;
-      if (actorRole === 'seller') {
+      if (isSellerOrShg) {
         const isOwn = (actor?.id && Number(p.sellerId) === Number(actor.id)) || (actor?.organizationId && p.seller?.organizationId === actor.organizationId);
         // During bidding and before financial evaluation, sellers must only see their own participation
         if (!financialOpenStatuses.includes(bid.status)) {

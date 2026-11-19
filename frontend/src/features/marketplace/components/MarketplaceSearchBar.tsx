@@ -18,6 +18,7 @@ import {
     Sparkles
 } from 'lucide-react';
 import { cn } from '../../../lib/utils';
+import { useAuth } from '../../../hooks/useAuth';
 import { marketplaceApi, type MarketplaceSearchResult } from '../api';
 import { resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { parseSmartSearchQuery } from '../utils/smartSearch';
@@ -58,6 +59,7 @@ export function MarketplaceSearchBar({
     onSelectSeller,
     className
 }: MarketplaceSearchBarProps) {
+    const { user } = useAuth();
     const router = useRouter();
     const [query, setQuery] = useState(initialQuery);
     const parsedSmart = React.useMemo(() => parseSmartSearchQuery(query), [query]);
@@ -366,7 +368,7 @@ export function MarketplaceSearchBar({
                     <span className="hidden sm:inline">Search</span>
                 </button>
             </form>
-            {hasPriceConstraint && (
+            {user && hasPriceConstraint && (
                 <div className="mt-1.5 px-3 py-1 bg-blue-50/90 border border-blue-200/80 rounded-xl inline-flex items-center gap-2 text-[11px] text-[#0b2447] shadow-2xs animate-in fade-in duration-150">
                     <Sparkles className="h-3.5 w-3.5 text-blue-600 shrink-0" />
                     <span>Keywords: <strong className="font-bold">{parsedSmart.cleanQuery || 'All items'}</strong></span>
@@ -527,11 +529,13 @@ export function MarketplaceSearchBar({
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {prod.price > 0 && (
-                                                        <div className="text-right shrink-0">
-                                                            <span className="text-xs font-black text-emerald-700">₹{Number(prod.price).toLocaleString('en-IN')}</span>
-                                                        </div>
-                                                    )}
+                                                    <div className="text-right shrink-0">
+                                                        {user ? (
+                                                            prod.price > 0 && <span className="text-xs font-black text-emerald-700">₹{Number(prod.price).toLocaleString('en-IN')}</span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-semibold text-slate-400">Login for price</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             );
                                         })}
@@ -578,11 +582,13 @@ export function MarketplaceSearchBar({
                                                             )}
                                                         </div>
                                                     </div>
-                                                    {serv.basePrice > 0 && (
-                                                        <div className="text-right shrink-0">
-                                                            <span className="text-xs font-black text-emerald-700">₹{Number(serv.basePrice).toLocaleString('en-IN')}</span>
-                                                        </div>
-                                                    )}
+                                                    <div className="text-right shrink-0">
+                                                        {user ? (
+                                                            serv.basePrice > 0 && <span className="text-xs font-black text-emerald-700">₹{Number(serv.basePrice).toLocaleString('en-IN')}</span>
+                                                        ) : (
+                                                            <span className="text-[10px] font-semibold text-slate-400">Login for price</span>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             );
                                         })}

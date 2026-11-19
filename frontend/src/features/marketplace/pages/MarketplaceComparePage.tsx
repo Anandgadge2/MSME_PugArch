@@ -3,6 +3,7 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../../hooks/useAuth';
 import {
   ArrowLeft,
   BadgeCheck,
@@ -306,6 +307,7 @@ function CompareItemImage({
    ------------------------------------------------------------------------- */
 
 export default function MarketplaceComparePage() {
+  const { user } = useAuth();
   const compare = useCompare();
   const { add: addToCart } = useMarketplaceCart();
   const [differencesOnly, setDifferencesOnly] = useState(false);
@@ -391,6 +393,14 @@ export default function MarketplaceComparePage() {
         group: 'Overview & Pricing',
         getRawValue: item => item.price,
         render: (item, _isDiff, isLowestPrice) => {
+          if (!user) {
+            return (
+              <span className="inline-block rounded bg-slate-100 border border-slate-200 px-2 py-0.5 text-xs font-semibold text-slate-500">
+                Login for price
+              </span>
+            );
+          }
+
           const price = Number(item.price || 0);
           const origPrice = Number(item.originalPrice || 0);
           const discountPercent = Number(item.discountPercent || item.discount || 0);
@@ -919,7 +929,7 @@ export default function MarketplaceComparePage() {
           <KpiCard
             icon={ShieldCheck}
             label="Lowest Quoted Price"
-            value={lowestPrice ? formatCurrency(lowestPrice) : 'Quote Based'}
+            value={user ? (lowestPrice ? formatCurrency(lowestPrice) : 'Quote Based') : 'Login for price'}
             subtext="Best competitive listing"
             tone="green"
           />
@@ -978,9 +988,11 @@ export default function MarketplaceComparePage() {
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Commercials</p>
                     <div className="mt-1 flex items-baseline justify-between">
                       <span className="text-base font-black text-slate-900">
-                        {price > 0 ? formatCurrency(price) : 'Quote Based'}
+                        {user ? (price > 0 ? formatCurrency(price) : 'Quote Based') : (
+                          <span className="text-xs font-semibold text-slate-500">Login for price</span>
+                        )}
                       </span>
-                      {item.unit && (
+                      {user && item.unit && (
                         <span className="text-[11px] font-bold text-slate-500">
                           per {item.unit}
                         </span>
@@ -1104,6 +1116,7 @@ export default function MarketplaceComparePage() {
                           {/* Item Value Cells */}
                           {items.map(item => {
                             const isLowestPrice =
+                              Boolean(user) &&
                               row.key === 'price' &&
                               Number(item.price) > 0 &&
                               Number(item.price) === Number(lowestPrice);

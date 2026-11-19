@@ -154,20 +154,9 @@ export default function GuestCartPage() {
 
                                         {/* Far right price column */}
                                         <div className="text-right shrink-0 flex flex-col justify-center items-end">
-                                            {item.price ? (
-                                                <>
-                                                    <p className="text-base font-black text-[#0b2447]">
-                                                        Rs {Number(item.price * item.quantity).toLocaleString('en-IN')}
-                                                    </p>
-                                                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                                                        Rs {Number(item.price).toLocaleString('en-IN')} each
-                                                    </p>
-                                                </>
-                                            ) : (
-                                                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-1 rounded border border-amber-150">
-                                                    Quote Based
-                                                </span>
-                                            )}
+                                            <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
+                                                Login for price
+                                            </span>
                                         </div>
                                     </div>
                                 ))}
@@ -183,22 +172,13 @@ export default function GuestCartPage() {
                                     <div className="space-y-3 text-xs font-medium">
                                         <div className="flex justify-between text-slate-500">
                                             <span>Price ({count} item{count !== 1 ? 's' : ''})</span>
-                                            <span className="font-semibold text-slate-700">
-                                                {hasPrice ? `Rs ${total.toLocaleString('en-IN')}` : 'Quote required'}
+                                            <span className="font-semibold text-slate-500">
+                                                Login to view pricing
                                             </span>
                                         </div>
-                                        {hasPrice && items.some(i => !i.price) && (
-                                            <p className="text-[10px] text-amber-600 italic bg-amber-50/50 p-2 rounded border border-amber-100">+ Additional quote requests required for some items</p>
-                                        )}
                                     </div>
 
                                     <div className="border-t border-slate-100 pt-4 space-y-4">
-                                        {hasPrice && (
-                                            <div className="flex justify-between items-baseline mb-4">
-                                                <span className="text-sm font-bold text-slate-800">Estimated Total</span>
-                                                <span className="text-xl font-black text-[#0b2447]">Rs {total.toLocaleString('en-IN')}</span>
-                                            </div>
-                                        )}
 
                                         {/* Security Banner Box */}
                                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-start gap-2 shadow-sm">
