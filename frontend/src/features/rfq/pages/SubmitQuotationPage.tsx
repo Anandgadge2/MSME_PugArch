@@ -47,6 +47,7 @@ import { DocumentPreviewModal } from '../../../components/DocumentPreviewModal';
 import { getDocumentPreviewMode, getFileAssetPreview, type DocumentPreview } from '../../../lib/files';
 import { parseQuoteRequestItems, cleanItemName, sanitizeUom } from '../utils/quoteItemParser';
 import { formatDate, formatDateTime, formatTime, hasExplicitTime } from '../../shared/format';
+import { clearSellerBidsCache } from '../../procurementBid/pages/SellerBidsPage';
 
 const formatBytes = (bytes?: number): string => {
   if (!bytes || bytes <= 0) return '';
@@ -278,12 +279,39 @@ const normalizeOwnResponse = (raw: any) => {
 };
 
 const findSellerParticipation = (bidData: any, user: any) => {
-  if (!user || (!user.id && !user.organizationId)) return null;
+  if (!bidData) return null;
+  // If backend provided an explicit myParticipation, verify and return it
+  if (bidData.myParticipation) {
+    if (!user || (!user.id && !user.organizationId)) {
+      return { ...bidData.myParticipation, _isFromUserParticipation: true };
+    }
+    const mySellerId = bidData.myParticipation.sellerId || bidData.myParticipation.seller?.id || bidData.myParticipation.sellerUserId;
+    const myOrgId = bidData.myParticipation.organizationId || bidData.myParticipation.sellerOrganizationId || bidData.myParticipation.seller?.organizationId || bidData.myParticipation.seller?.organization?.id;
+    if (!mySellerId && !myOrgId) {
+      return { ...bidData.myParticipation, _isFromUserParticipation: true };
+    }
+    const matchUser = Boolean(user?.id && mySellerId && String(mySellerId) === String(user.id));
+    const matchOrg = Boolean(user?.organizationId && myOrgId && String(myOrgId) === String(user.organizationId));
+    if (matchUser || matchOrg) {
+      return { ...bidData.myParticipation, _isFromUserParticipation: true };
+    }
+  }
+
   const participations = [
+    ...(bidData?.myParticipation ? [bidData.myParticipation] : []),
+    ...(bidData?.ownResponse ? [bidData.ownResponse] : []),
+    ...(bidData?.myResponse ? [bidData.myResponse] : []),
     ...toArray(bidData?.participations),
     ...toArray(bidData?.quoteResponses)
   ];
+
+  if (!user || (!user.id && !user.organizationId)) {
+    const firstP = participations[0];
+    return firstP ? { ...firstP, _isFromUserParticipation: true } : null;
+  }
+
   const found = participations.find((p: any) => {
+    if (!p) return false;
     const sellerId = p.sellerId || p.seller?.id || p.sellerUserId;
     const orgId = p.organizationId || p.sellerOrganizationId || p.seller?.organizationId || p.seller?.organization?.id;
     const matchUser = Boolean(user?.id && sellerId && String(sellerId) === String(user.id));
@@ -1045,7 +1073,34 @@ export default function SubmitQuotationPage() {
         try {
           const bidData = await getApi<any>(`/api/procurement-bids/${encodeURIComponent(String(requirementId))}`);
           if (bidData) {
-            const userParticipation = findSellerParticipation(bidData, user);
+            let userParticipation = findSellerParticipation(bidData, user);
+
+            // Resilient fallback 1: If userParticipation not directly in bidData, query seller bid status
+            if (!userParticipation && user && (user.role === 'seller' || user.role === 'shg')) {
+              try {
+                const targetBidId = bidData.id || requirementId;
+                const statusRes = await getApi<any>(`/api/seller/procurement-bids/${encodeURIComponent(String(targetBidId))}/status`);
+                if (statusRes?.participation) {
+                  userParticipation = { ...statusRes.participation, _isFromUserParticipation: true };
+                }
+              } catch {
+                // Ignore fallback error
+              }
+            }
+
+            // Resilient fallback 2: Check marketplace requirement response
+            if (!userParticipation && user && (user.role === 'seller' || user.role === 'shg')) {
+              try {
+                const targetReqId = bidData.id || requirementId;
+                const reqRes = await getApi<any>(`/api/marketplace/requirements/${encodeURIComponent(String(targetReqId))}`);
+                if (reqRes?.ownResponse) {
+                  userParticipation = { ...reqRes.ownResponse, _isFromUserParticipation: true };
+                }
+              } catch {
+                // Ignore fallback error
+              }
+            }
+
             const ownResponseData = participationToOwnResponse(userParticipation);
 
             bidResult = {
@@ -1122,7 +1177,34 @@ export default function SubmitQuotationPage() {
       if (!bidResult && bidSettled.status === 'fulfilled') {
         const bidData = bidSettled.value;
         if (bidData) {
-          const userParticipation = findSellerParticipation(bidData, user);
+          let userParticipation = findSellerParticipation(bidData, user);
+
+          // Resilient fallback 1: If userParticipation not directly in bidData, query seller bid status
+          if (!userParticipation && user && (user.role === 'seller' || user.role === 'shg')) {
+            try {
+              const targetBidId = bidData.id || requirementId;
+              const statusRes = await getApi<any>(`/api/seller/procurement-bids/${encodeURIComponent(String(targetBidId))}/status`);
+              if (statusRes?.participation) {
+                userParticipation = { ...statusRes.participation, _isFromUserParticipation: true };
+              }
+            } catch {
+              // Ignore fallback error
+            }
+          }
+
+          // Resilient fallback 2: Check marketplace requirement response
+          if (!userParticipation && user && (user.role === 'seller' || user.role === 'shg')) {
+            try {
+              const targetReqId = bidData.id || requirementId;
+              const reqRes = await getApi<any>(`/api/marketplace/requirements/${encodeURIComponent(String(targetReqId))}`);
+              if (reqRes?.ownResponse) {
+                userParticipation = { ...reqRes.ownResponse, _isFromUserParticipation: true };
+              }
+            } catch {
+              // Ignore fallback error
+            }
+          }
+
           const ownResponseData = participationToOwnResponse(userParticipation);
 
           bidResult = {
@@ -1236,7 +1318,8 @@ export default function SubmitQuotationPage() {
     },
     enabled: (isMarketplaceQuoteFlow && !!conversationId) || (!isMarketplaceQuoteFlow && !!requirementId),
     initialData: cachedBidData,
-    staleTime: 60_000,
+    staleTime: 0,
+    refetchOnMount: 'always',
   });
 
   const rfqData: any = queryData?.requirement
@@ -1379,11 +1462,13 @@ export default function SubmitQuotationPage() {
     const targetQty = ownResponse.offeredQuantity ?? ownResponse.responseData?.offeredQuantity;
     const targetTimeline = ownResponse.deliveryTimeline || ownResponse.responseData?.deliveryTimeline;
     const targetTerms = ownResponse.terms || ownResponse.responseData?.terms;
-    const targetMessage = ownResponse.message || ownResponse.responseData?.message || ownResponse.coverNote || ownResponse.responseData?.coverNote;
+    let targetMessage = ownResponse.message || ownResponse.responseData?.message || ownResponse.coverNote || ownResponse.responseData?.coverNote || '';
+    if (targetMessage === 'Draft quotation response') targetMessage = '';
     const targetAttachment = ownResponse.attachmentUrl || ownResponse.responseData?.attachmentUrl;
     const targetMakeBrand = ownResponse.makeBrand || ownResponse.responseData?.makeBrand || ownResponse.acknowledgement?.makeBrand || '';
     const targetModel = ownResponse.model || ownResponse.responseData?.model || ownResponse.acknowledgement?.model || '';
-    const targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
+    let targetTechSpecs = ownResponse.technicalSpecifications || ownResponse.specifications || ownResponse.responseData?.technicalSpecifications || ownResponse.responseData?.specifications || ownResponse.acknowledgement?.technicalSpecifications || ownResponse.offeredItemDescription || ownResponse.responseData?.offeredItemDescription || '';
+    if (targetTechSpecs === 'Draft quotation response' || targetTechSpecs === 'Quotation submitted via marketplace') targetTechSpecs = '';
     const targetCompliance = ownResponse.complianceStatement || ownResponse.responseData?.complianceStatement || ownResponse.acknowledgement?.complianceStatement || 'FULL_COMPLIANCE';
 
     if (ownResponse.responseData?.callOffTurnaroundDays) {
@@ -1480,9 +1565,29 @@ export default function SubmitQuotationPage() {
     setSavingDraft(true);
     try {
       const primaryLineQuote = lineQuotes.find(l => l.unitPrice !== '' || l.makeBrand || l.model) || lineQuotes[0];
+      let pricedCount = 0;
+      let lineTotalSum = 0;
+      let lineQtySum = 0;
+      lineQuotes.forEach(line => {
+        const p = Number(line.unitPrice);
+        const q = Number(line.quantity) || 0;
+        if (line.unitPrice !== '' && Number.isFinite(p) && p >= 0) {
+          pricedCount += 1;
+          const gst = Number(line.gstPercent) || 0;
+          const lTot = isGstIncluded ? p * q : p * q * (1 + gst / 100);
+          lineTotalSum += lTot;
+          lineQtySum += q;
+        }
+      });
+      const calcOfferedPrice = (lineQuotes.length > 0 && pricedCount > 0)
+        ? Math.round(lineTotalSum * 100) / 100
+        : (offeredPrice ? Number(offeredPrice) : undefined);
+      const calcOfferedQuantity = (lineQuotes.length > 0 && pricedCount > 0)
+        ? Math.round(lineQtySum * 100) / 100
+        : (offeredQuantity ? Number(offeredQuantity) : undefined);
       const payload: any = {
-        offeredPrice: offeredPrice ? Number(offeredPrice) : undefined,
-        offeredQuantity: offeredQuantity ? Number(offeredQuantity) : undefined,
+        offeredPrice: calcOfferedPrice,
+        offeredQuantity: calcOfferedQuantity,
         deliveryTimeline: deliveryTimeline.trim() || undefined,
         message: message.trim() || 'Draft quotation response', // default placeholder
         terms: terms.trim() || undefined,
@@ -1501,6 +1606,11 @@ export default function SubmitQuotationPage() {
 
       await postApi(`/api/marketplace/requirements/${resolvedId}/responses`, payload);
       
+      queryClient.invalidateQueries({ queryKey: ['marketplace-requirement-quotation'] });
+      queryClient.invalidateQueries({ queryKey: ['procurement-bid'] });
+      queryClient.invalidateQueries({ queryKey: ['rfq-detail-bid'] });
+      clearSellerBidsCache();
+
       const now = formatTime(new Date());
       setLastSaved(now);
       setDraftSaved(true);
@@ -1516,7 +1626,7 @@ export default function SubmitQuotationPage() {
     } finally {
       setSavingDraft(false);
     }
-  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, offeredMakeBrand, offeredModel, technicalSpecifications, complianceStatement, uploadState, docUploads, lineQuotes]);
+  }, [resolvedId, isMarketplaceQuoteFlow, isReadOnly, isSubmittedQuote, submitted, submitting, savingDraft, offeredPrice, offeredQuantity, deliveryTimeline, terms, message, offeredMakeBrand, offeredModel, technicalSpecifications, complianceStatement, uploadState, docUploads, lineQuotes, isGstIncluded, queryClient]);
 
   const procurementTypeBadgeLabel = isMarketplaceQuoteFlow ? 'Product Quotation'
     : isLimitedTender ? 'Limited Tender'
@@ -2133,14 +2243,11 @@ export default function SubmitQuotationPage() {
 
   React.useEffect(() => {
     if (isSubmittedQuote || lineTotals.priced === 0) return;
-    if (isRateContract) {
-      setOfferedPrice(String(lineTotals.total));
-      setOfferedQuantity(String(lineTotals.qty));
-    } else if (!offeredPrice || Number(offeredPrice) === 0) {
+    if (hasLineItems) {
       setOfferedPrice(String(lineTotals.total));
       setOfferedQuantity(String(lineTotals.qty));
     }
-  }, [isSubmittedQuote, isRateContract, lineTotals.priced, lineTotals.total, lineTotals.qty, offeredPrice]);
+  }, [isSubmittedQuote, hasLineItems, lineTotals.priced, lineTotals.total, lineTotals.qty]);
 
   React.useEffect(() => {
     if (isRateContract && (!deliveryTimeline || deliveryTimeline === '')) {
@@ -2168,16 +2275,18 @@ export default function SubmitQuotationPage() {
         return item;
       });
     const lines = lineQuotes
-      .filter(line => line.unitPrice !== '' && Number.isFinite(Number(line.unitPrice)))
       .map(line => {
         const qty = Number(line.quantity) || 1;
-        const unitPrice = Number(line.unitPrice);
-        const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 0;
-        const lineTotal = isGstIncluded
-          ? unitPrice * qty
-          : unitPrice * qty * (1 + gstPercent / 100);
-        const baseUnitPrice = isGstIncluded && gstPercent > 0
-          ? Math.round((unitPrice / (1 + gstPercent / 100)) * 100) / 100
+        const hasPrice = line.unitPrice !== '' && Number.isFinite(Number(line.unitPrice)) && Number(line.unitPrice) >= 0;
+        const unitPrice = hasPrice ? Number(line.unitPrice) : '';
+        const gstPercent = line.gstPercent !== '' && Number.isFinite(Number(line.gstPercent)) ? Number(line.gstPercent) : 18;
+        const lineTotal = hasPrice
+          ? (isGstIncluded
+              ? Number(unitPrice) * qty
+              : Number(unitPrice) * qty * (1 + gstPercent / 100))
+          : 0;
+        const baseUnitPrice = hasPrice && isGstIncluded && gstPercent > 0
+          ? Math.round((Number(unitPrice) / (1 + gstPercent / 100)) * 100) / 100
           : unitPrice;
         return {
           itemName: line.itemName,
@@ -2188,20 +2297,21 @@ export default function SubmitQuotationPage() {
           baseUnitPrice,
           gstPercent,
           isGstIncluded,
-          makeBrand: line.makeBrand.trim() || null,
+          makeBrand: line.makeBrand?.trim() || null,
           model: (line.model || '').trim() || null,
           specifications: (line.specifications || '').trim() || null,
           complianceStatus: line.complianceStatus || null,
           hsnCode: (line.hsnCode || '').trim() || null,
           brandPolicy: line.brandPolicy || null,
           attachments: Array.isArray(line.attachments) ? line.attachments : [],
-          remarks: line.remarks.trim() || null,
-          lineTotal: Math.round(lineTotal * 100) / 100,
-          totalAmount: Math.round(lineTotal * 100) / 100,
+          remarks: line.remarks?.trim() || null,
+          lineTotal: hasPrice ? Math.round(lineTotal * 100) / 100 : 0,
+          totalAmount: hasPrice ? Math.round(lineTotal * 100) / 100 : 0,
         };
       });
-    const primaryLine = lines[0];
-    const hasAnyContent = docs.length > 0 || lines.length > 0 || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim();
+    const primaryLine = lines.find(l => l.unitPrice !== '' || l.makeBrand || l.model) || lines[0];
+    const hasAnyLineContent = lines.some(l => l.unitPrice !== '' || l.makeBrand || l.model || l.specifications || l.remarks);
+    const hasAnyContent = docs.length > 0 || hasAnyLineContent || offeredMakeBrand.trim() || offeredModel.trim() || technicalSpecifications.trim() || offeredPrice || deliveryTimeline.trim() || message.trim() || terms.trim();
     if (!hasAnyContent) return undefined;
     return {
       documents: docs,
