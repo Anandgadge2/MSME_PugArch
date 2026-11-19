@@ -1814,6 +1814,11 @@ export default function AdminOnboarding() {
   const pendingBuyersCount = buyers.filter((b) => isPendingStatus(b.onboardingStatus)).length;
   const pendingShgCount = shgApplications.filter((s) => isPendingStatus(s.onboardingStatus)).length;
 
+  const totalSellers = sellerApplications.length;
+  const totalBuyers = buyers.length;
+  const totalShg = shgApplications.length;
+  const totalUsersCount = totalSellers + totalBuyers + totalShg;
+
   const pendingTotal = adminStats?.pendingApproval ?? (pendingSellersCount + pendingBuyersCount + pendingShgCount);
 
   const activeSellers = adminStats?.activeSellers ?? sellerApplications.filter(
@@ -2301,8 +2306,16 @@ export default function AdminOnboarding() {
         <div className="grid grid-cols-1 gap-4">
           <div className="min-w-0 space-y-4">
             {/* Stats Section */}
-            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-4 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 lg:grid-cols-5">
               {[
+                {
+                  label: "Total Users",
+                  value: totalUsersCount,
+                  sub: "Sellers, buyers & SHGs",
+                  icon: Users,
+                  target: "network",
+                  tone: "purple" as const,
+                },
                 {
                   label: "Pending Approval",
                   value: pendingTotal,
@@ -2345,11 +2358,11 @@ export default function AdminOnboarding() {
                   tone={stat.tone}
                   onClick={() => handleKpiClick(stat.target)}
                   active={
+                    (stat.target === "network" && statusFilter === "all" && progressFilter === "all" && !searchTerm) ||
                     (stat.target === "pending" && statusFilter === "pending") ||
                     (stat.target === "sellers" && activeTab === "sellers" && statusFilter === "approved") ||
                     (stat.target === "buyers" && activeTab === "buyers" && statusFilter === "approved") ||
-                    (stat.target === "shg" && activeTab === "shg" && statusFilter === "approved") ||
-                    (stat.target === "network" && statusFilter === "all" && progressFilter === "all" && !searchTerm)
+                    (stat.target === "shg" && activeTab === "shg" && statusFilter === "approved")
                   }
                 />
               ))}
@@ -2392,29 +2405,41 @@ export default function AdminOnboarding() {
                   </p>
 
                   {/* ── Search + Filter + View Toggle Toolbar ── */}
-                  <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-sm">
+                  <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-sm">
                     <ResponsiveFilterBar
+                      singleRowDesktop={true}
                       activeFilterCount={[statusFilter !== "all", progressFilter !== "all", sortBy !== "newest"].filter(Boolean).length}
+                      searchWrapperClassName="flex-1 min-w-[200px]"
                       searchInput={
                         <div className="relative w-full">
                           <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                           <input
                             placeholder="Search by company, PAN, GST, state, or applicant name..."
-                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
+                            className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-9 text-xs font-semibold text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             aria-label="Search applications"
                           />
+                          {searchTerm && (
+                            <button
+                              type="button"
+                              onClick={() => setSearchTerm('')}
+                              aria-label="Clear search input"
+                              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          )}
                         </div>
                       }
                       filters={
                         <>
-                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                          <div className="w-full sm:w-auto sm:min-w-[130px] shrink-0">
                             <select
                               value={statusFilter}
                               onChange={(e) => setStatusFilter(e.target.value)}
                               aria-label="Status filter"
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                              className="h-10 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                             >
                               <option value="all">All Status</option>
                               <option value="pending">Pending / Review</option>
@@ -2423,12 +2448,12 @@ export default function AdminOnboarding() {
                               <option value="rejected">Rejected</option>
                             </select>
                           </div>
-                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                          <div className="w-full sm:w-auto sm:min-w-[130px] shrink-0">
                             <select
                               value={progressFilter}
                               onChange={(e) => setProgressFilter(e.target.value)}
                               aria-label="Progress filter"
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                              className="h-10 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                             >
                               <option value="all">All Progress</option>
                               <option value="not_started">0% Verified</option>
@@ -2436,12 +2461,12 @@ export default function AdminOnboarding() {
                               <option value="complete">100% Verified</option>
                             </select>
                           </div>
-                          <div className="w-full sm:w-auto sm:min-w-[130px]">
+                          <div className="w-full sm:w-auto sm:min-w-[130px] shrink-0">
                             <select
                               value={sortBy}
                               onChange={(e) => setSortBy(e.target.value)}
                               aria-label="Sort"
-                              className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                              className="h-10 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
                             >
                               <option value="newest">Newest First</option>
                               <option value="oldest">Oldest First</option>

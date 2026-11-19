@@ -55,6 +55,120 @@ export function ResponsiveFilterBar({
     return filters;
   }, [filters]);
 
+  if (singleRowDesktop) {
+    return (
+      <div className={cn("flex flex-col gap-2.5 w-full min-w-0", className)}>
+        {/* Mobile View: Search + Filters Toggle + View Toggle (1 row on mobile) */}
+        <div className="flex items-center gap-1.5 sm:gap-2 w-full min-w-0 flex-nowrap sm:hidden">
+          <div className="flex-1 min-w-0">
+            {searchInput}
+          </div>
+
+          {showFiltersBtn && (
+            <button
+              type="button"
+              onClick={() => setIsOpen(prev => !prev)}
+              aria-expanded={isOpen}
+              aria-controls="mobile-filters-panel"
+              aria-label="Toggle filter options"
+              className={cn(
+                "inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition-all shadow-2xs cursor-pointer shrink-0",
+                isOpen || activeFilterCount > 0
+                  ? "border-[#12335f] bg-[#12335f]/5 text-[#12335f]"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300"
+              )}
+            >
+              <Filter className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+              <span>Filters</span>
+              {activeFilterCount > 0 && (
+                <span className="flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#12335f] text-white text-[9px] font-black">
+                  {activeFilterCount}
+                </span>
+              )}
+              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200 text-slate-500", isOpen && "rotate-180")} aria-hidden="true" />
+            </button>
+          )}
+
+          {(primaryViewToggle || endContent) && (
+            <div className="shrink-0 flex items-center gap-1.5">
+              {endContent}
+              {primaryViewToggle}
+            </div>
+          )}
+        </div>
+
+        {/* Mobile Expanded Drawer: Only visible on mobile when toggled open */}
+        {isOpen && showFiltersBtn && (
+          <div
+            id="mobile-filters-panel"
+            role="region"
+            aria-label="Filter Options"
+            className="sm:hidden rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 space-y-2.5 animate-in fade-in slide-in-from-top-1"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="h-3.5 w-3.5 text-[#12335f]" aria-hidden="true" />
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-700">
+                  {filterTitle}
+                </span>
+              </div>
+              {onReset && activeFilterCount > 0 && (
+                <button
+                  type="button"
+                  onClick={onReset}
+                  className="text-[11px] font-bold text-rose-600 hover:text-rose-700 hover:underline cursor-pointer"
+                >
+                  {resetLabel}
+                </button>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 [&>div]:!w-full [&>div>select]:w-full [&>select]:w-full [&>label]:w-full">
+              {normalizedFilters}
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Single-Row Layout: All items in a single line on sm: and up */}
+        <div className="hidden sm:flex sm:items-center gap-2 sm:gap-2.5 w-full min-w-0 overflow-x-auto scrollbar-none py-0.5">
+          <div className={cn("flex-1 min-w-[160px]", searchWrapperClassName)}>
+            {searchInput}
+          </div>
+
+          {filters && (
+            <div className={cn(
+              "flex items-center gap-2 shrink-0 flex-nowrap",
+              "[&>div]:!w-auto [&>div]:!shrink-0 [&>select]:!w-auto [&>select]:!shrink-0",
+              filtersClassName
+            )}>
+              {normalizedFilters}
+            </div>
+          )}
+
+          {onReset && activeFilterCount > 0 && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="text-xs font-bold text-rose-600 hover:text-rose-700 hover:underline shrink-0 whitespace-nowrap px-1 cursor-pointer"
+            >
+              {resetLabel}
+            </button>
+          )}
+
+          {(primaryViewToggle || endContent) && (
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {endContent}
+              {primaryViewToggle && (
+                <div className="border-l border-slate-200 pl-2">
+                  {primaryViewToggle}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("flex flex-col gap-3 w-full min-w-0", className)}>
       {/* Tier 1: Search Input & Primary Actions Bar */}

@@ -482,10 +482,13 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
       </div>
 
 
-      <div className="rounded-2xl border border-slate-200/90 bg-white p-3.5 sm:p-4 shadow-sm">
+      <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-3.5 shadow-sm">
         <ResponsiveFilterBar
+          singleRowDesktop={true}
           activeFilterCount={(role ? 1 : 0) + (status ? 1 : 0)}
           onReset={role || status ? () => { setRole(''); setStatus(''); setPage(1); } : undefined}
+          resetLabel="Reset"
+          searchWrapperClassName="flex-1 min-w-[200px]"
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -493,37 +496,48 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
                 placeholder={`Search ${cfg.title.toLowerCase()}...`}
-                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-4 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner text-slate-900 transition-all"
+                className="h-10 w-full rounded-xl border border-slate-200 bg-slate-50/50 pl-10 pr-9 text-xs font-semibold outline-none focus:border-[#12335f] focus:bg-white focus:ring-2 focus:ring-[#12335f]/10 shadow-inner text-slate-900 transition-all"
                 aria-label={`Search ${cfg.title.toLowerCase()}`}
               />
+              {searchInput && (
+                <button
+                  type="button"
+                  onClick={() => setSearchInput('')}
+                  aria-label="Clear search input"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           }
           filters={
             <>
               {/* Role filter */}
-              <div>
-                <label htmlFor="admin-filter-role" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
-                  User Role
-                </label>
-                <select
-                  id="admin-filter-role"
-                  value={role}
-                  onChange={event => setRole(event.target.value)}
-                  disabled={kind !== 'users'}
-                  aria-label="Filter records by role"
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer disabled:bg-slate-50 disabled:text-slate-300 truncate"
-                >
-                  <option value="">All Roles</option>
-                  <option value="admin">Admin</option>
-                  <option value="buyer">Buyer</option>
-                  <option value="seller">Seller</option>
-                  <option value="shg">SHG</option>
-                </select>
-              </div>
+              {kind === 'users' && (
+                <div className="w-full sm:w-auto sm:min-w-[130px] md:min-w-[140px] shrink-0">
+                  <label htmlFor="admin-filter-role" className="block sm:sr-only text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                    User Role
+                  </label>
+                  <select
+                    id="admin-filter-role"
+                    value={role}
+                    onChange={event => setRole(event.target.value)}
+                    aria-label="Filter records by role"
+                    className="h-10 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  >
+                    <option value="">All Roles</option>
+                    <option value="admin">Admin</option>
+                    <option value="buyer">Buyer</option>
+                    <option value="seller">Seller</option>
+                    <option value="shg">SHG</option>
+                  </select>
+                </div>
+              )}
 
               {/* Status filter */}
-              <div>
-                <label htmlFor="admin-filter-status" className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1 block">
+              <div className="w-full sm:w-auto sm:min-w-[140px] md:min-w-[160px] shrink-0">
+                <label htmlFor="admin-filter-status" className="block sm:sr-only text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
                   Account Status
                 </label>
                 <select
@@ -531,7 +545,7 @@ export default function AdminRecordsPage({ kind }: { kind: AdminKind }) {
                   value={status}
                   onChange={event => setStatus(event.target.value)}
                   aria-label="Filter records by status"
-                  className="h-9 w-full rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
+                  className="h-10 w-full sm:w-auto rounded-xl border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 shadow-2xs cursor-pointer truncate"
                 >
                   <option value="">All Statuses</option>
                   <option value="completed">Registration Completed</option>
