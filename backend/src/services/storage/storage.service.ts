@@ -1034,7 +1034,7 @@ export const getFileContent = async (fileId: number, user: { id: number; role: s
 
   if (signed.signedUrl.startsWith('http://') || signed.signedUrl.startsWith('https://')) {
     try {
-      const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(3000) });
+      const response = await fetch(signed.signedUrl, { signal: AbortSignal.timeout(15000) });
       if (response.ok) {
         const rawBuffer = Buffer.from(await response.arrayBuffer());
         const buffer = await decryptBufferEnvelope(rawBuffer);

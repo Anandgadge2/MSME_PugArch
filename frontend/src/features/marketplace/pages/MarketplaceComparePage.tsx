@@ -46,7 +46,7 @@ import { Card, CardContent } from '../../../components/ui/card';
 import { EmptyState, InlineError, LoadingState } from '../../shared/FeatureStates';
 import { KpiCard } from '../../shared/KpiCard';
 import { formatCurrency, formatDate } from '../../shared/format';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, downloadFileAsset } from '../../../lib/files';
 import { marketplaceApi } from '../api';
 import { useCompare } from '../hooks/useCompare';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
@@ -625,14 +625,14 @@ export default function MarketplaceComparePage() {
                       <button
                         type="button"
                         onClick={() =>
-                          openFileAsset(doc.fileAsset, doc.name).catch(err =>
-                            toast.error(err instanceof Error ? err.message : 'Unable to open document')
+                          downloadFileAsset(doc.fileAsset, doc.name).catch(err =>
+                            toast.error(err instanceof Error ? err.message : 'Unable to download document')
                           )
                         }
                         className="inline-flex items-center gap-1 rounded bg-white px-2 py-0.5 text-[10px] font-bold text-[#0b2447] border border-slate-200 hover:bg-slate-100 transition shadow-2xs cursor-pointer"
                         title={`Download ${doc.name}`}
                       >
-                        <Download className="h-2.5 w-2.5" /> View
+                        <Download className="h-2.5 w-2.5" /> Download
                       </button>
                     )}
                   </div>

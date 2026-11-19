@@ -652,7 +652,7 @@ export const openFileAsset = async (fileAsset: any, label = 'Document') => {
 };
 
 const triggerDownloadBlob = (url: string, filename: string) => {
-  triggerBrowserDownload(url, filename);
+  triggerBrowserDownload(url, filename, { skipCooldown: true });
 };
 
 export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document') => {
@@ -664,6 +664,8 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
   } else if (fileAsset && typeof fileAsset === 'object') {
     if (fileAsset.fileAssetId && !isNaN(Number(fileAsset.fileAssetId))) {
       fileId = Number(fileAsset.fileAssetId);
+    } else if (fileAsset.fileAsset?.id && !isNaN(Number(fileAsset.fileAsset.id))) {
+      fileId = Number(fileAsset.fileAsset.id);
     } else if (fileAsset.fileId && !isNaN(Number(fileAsset.fileId))) {
       fileId = Number(fileAsset.fileId);
     } else if (typeof fileAsset.id === 'number' && !isNaN(fileAsset.id)) {
@@ -673,7 +675,33 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
     }
   }
 
-  const fileName = (typeof fileAsset === 'object' && (fileAsset?.originalName || fileAsset?.name || fileAsset?.fileName)) || fallbackName;
+  const fallbackUrl = typeof fileAsset === 'object'
+    ? (fileAsset?.downloadUrl || fileAsset?.viewUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
+    : (typeof fileAsset === 'string' ? fileAsset : null);
+
+  if (!fileId && fallbackUrl) {
+    const match = String(fallbackUrl).match(/\/api\/(?:public\/)?files\/(\d+)/);
+    if (match && match[1]) {
+      const parsed = Number(match[1]);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        fileId = parsed;
+      }
+    }
+  }
+
+  const rawName = (typeof fileAsset === 'object' && (fileAsset?.originalName || fileAsset?.name || fileAsset?.fileName || fileAsset?.title)) || fallbackName || 'document';
+  let fileName = rawName.trim();
+  const mimeType = String((typeof fileAsset === 'object' && (fileAsset?.mimeType || fileAsset?.fileAsset?.mimeType)) || '').toLowerCase();
+  if (!/\.[a-z0-9]{2,5}$/i.test(fileName)) {
+    if (mimeType.includes('pdf')) fileName += '.pdf';
+    else if (mimeType.includes('jpeg') || mimeType.includes('jpg')) fileName += '.jpg';
+    else if (mimeType.includes('png')) fileName += '.png';
+    else if (mimeType.includes('webp')) fileName += '.webp';
+    else if (mimeType.includes('sheet') || mimeType.includes('excel')) fileName += '.xlsx';
+    else if (mimeType.includes('word')) fileName += '.docx';
+    else fileName += '.pdf';
+  }
+
   const lockKey = `file-asset-${fileId || fileName}`;
   if (!canInitiateDownload(lockKey)) {
     return;
@@ -699,10 +727,11 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
     return;
   }
 
-  // 3. If fileId is present, fetch blob via /api/files/:id/download or /api/files/:id/view with auth
+  // 3. If fileId is present, fetch binary blob via download or view endpoints
   if (fileId) {
     const endpoints = [
       `/api/files/${fileId}/download`,
+      `/api/public/files/${fileId}/download`,
       `/api/files/${fileId}/view`,
       `/api/public/files/${fileId}/view`
     ];
@@ -715,23 +744,52 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
           skipCache: true
         });
         if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('text/html') || contentType.includes('application/json')) {
+            const text = await res.clone().text().catch(() => '');
+            if (text.includes('"error"') || text.includes('"success":false') || text.includes('<!DOCTYPE')) {
+              continue;
+            }
+          }
           const blob = await res.blob();
-          const blobUrl = URL.createObjectURL(blob);
-          triggerDownloadBlob(blobUrl, fileName);
-          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-          return;
+          if (blob && blob.size > 0) {
+            const blobUrl = URL.createObjectURL(blob);
+            triggerDownloadBlob(blobUrl, fileName);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+            return;
+          }
         }
       } catch {}
     }
   }
 
-  // 4. Try fallback URL
-  const fallbackUrl = typeof fileAsset === 'object'
-    ? (fileAsset?.downloadUrl || fileAsset?.viewUrl || fileAsset?.fileUrl || fileAsset?.url || fileAsset?.signedUrl || fileAsset?.documentUrl)
-    : (typeof fileAsset === 'string' ? fileAsset : null);
-
+  // 4. Try fallback URL or raw key proxy
   if (fallbackUrl) {
     const absoluteUrl = getAbsoluteApiUrl(fallbackUrl);
+
+    // If it's a GCP URL, extract storage key and fetch through /api/files/raw/:key?download=1
+    // to strictly prevent exposing or navigating to storage.googleapis.com
+    const gcpMatch = absoluteUrl.match(/storage\.googleapis\.com\/[^\/]+\/(.+?)(\?|$)/);
+    if (gcpMatch && gcpMatch[1]) {
+      const rawKey = gcpMatch[1];
+      try {
+        const res = await api.fetch(`/api/files/raw/${encodeURIComponent(rawKey)}?download=1`, {
+          method: 'GET',
+          headers: authHeaders,
+          skipCache: true
+        });
+        if (res.ok) {
+          const blob = await res.blob();
+          if (blob && blob.size > 0) {
+            const blobUrl = URL.createObjectURL(blob);
+            triggerDownloadBlob(blobUrl, fileName);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+            return;
+          }
+        }
+      } catch {}
+    }
+
     try {
       const res = await api.fetch(absoluteUrl, {
         method: 'GET',
@@ -740,20 +798,29 @@ export const downloadFileAsset = async (fileAsset: any, fallbackName = 'document
       });
       if (res.ok) {
         const blob = await res.blob();
-        const blobUrl = URL.createObjectURL(blob);
-        triggerDownloadBlob(blobUrl, fileName);
-        setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
-        return;
+        if (blob && blob.size > 0) {
+          const blobUrl = URL.createObjectURL(blob);
+          triggerDownloadBlob(blobUrl, fileName);
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+          return;
+        }
       }
     } catch {}
 
-    const tokenParam = (token && (absoluteUrl.includes('/api/files/') || absoluteUrl.includes('/api/public/files/')) && !absoluteUrl.includes('token='))
-      ? `${absoluteUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
-      : '';
-    triggerDownloadBlob(`${absoluteUrl}${tokenParam}`, fileName);
-    return;
+    // Only allow same-origin direct download fallback; never trigger raw GCP URL in browser
+    const isSameOrigin = !absoluteUrl.startsWith('http://') && !absoluteUrl.startsWith('https://') ||
+      (typeof window !== 'undefined' && absoluteUrl.startsWith(window.location.origin));
+    const isGcpUrl = absoluteUrl.includes('storage.googleapis.com') || absoluteUrl.includes('GoogleAccessId') || absoluteUrl.includes('X-Goog-');
+
+    if (isSameOrigin && !isGcpUrl) {
+      const tokenParam = (token && (absoluteUrl.includes('/api/files/') || absoluteUrl.includes('/api/public/files/')) && !absoluteUrl.includes('token='))
+        ? `${absoluteUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`
+        : '';
+      triggerDownloadBlob(`${absoluteUrl}${tokenParam}`, fileName);
+      return;
+    }
   }
 
-  throw new Error('Document file is not uploaded on server.');
+  throw new Error('Document could not be downloaded. Please try again.');
 };
 

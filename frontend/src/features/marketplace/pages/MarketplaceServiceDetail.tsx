@@ -14,7 +14,7 @@ import { marketplaceApi, type MarketplaceService } from '../api';
 import { MarketplaceFooter } from '../components/MarketplaceFooter';
 import { toast } from 'sonner';
 import { useMarketplaceCart } from '../hooks/useMarketplaceCart';
-import { openFileAsset } from '../../../lib/files';
+import { openFileAsset, downloadFileAsset } from '../../../lib/files';
 import { getMarketplaceImageCandidates, resolveMarketplaceImage } from '../utils/marketplaceImages';
 import { saveSupplier } from '../utils/savedSuppliers';
 import { formatCatalogueDate } from '../../catalogue/utils/catalogueDetailUtils';
@@ -477,7 +477,7 @@ export default function MarketplaceServiceDetail() {
                                                 {doc.fileAsset && (
                                                     <button
                                                         type="button"
-                                                        onClick={() => openFileAsset(doc.fileAsset, doc.name).catch(err => toast.error(err instanceof Error ? err.message : 'Unable to open document'))}
+                                                        onClick={() => downloadFileAsset(doc.fileAsset, doc.name).catch(err => toast.error(err instanceof Error ? err.message : 'Unable to download document'))}
                                                         className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-2.5 py-1 rounded border border-emerald-200/80 transition cursor-pointer"
                                                     >
                                                         <Download className="h-3 w-3" /> Download

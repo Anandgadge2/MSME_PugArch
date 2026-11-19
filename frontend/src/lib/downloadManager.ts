@@ -64,12 +64,12 @@ export function canInitiateDownload(key: string, cooldownMs = DEFAULT_COOLDOWN_M
 export function triggerBrowserDownload(
   source: Blob | string,
   filename: string,
-  options?: { cooldownMs?: number }
+  options?: { cooldownMs?: number; skipCooldown?: boolean }
 ): boolean {
   if (typeof window === 'undefined') return false;
 
   const safeFilename = filename.trim() || 'document';
-  if (!canInitiateDownload(safeFilename, options?.cooldownMs)) {
+  if (!options?.skipCooldown && !canInitiateDownload(safeFilename, options?.cooldownMs)) {
     return false;
   }
 

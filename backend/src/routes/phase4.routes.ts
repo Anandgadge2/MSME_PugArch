@@ -3734,14 +3734,48 @@ const getPublicFileActor = async (fileId: number): Promise<{ id: number; role: s
       id: fileId,
       status: 'active',
       OR: [
-        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public'] } },
-        { entityType: 'general', mimeType: { startsWith: 'image/' } }
+        { entityType: { in: ['catalogue', 'catalogue_product', 'catalogue_service', 'product', 'service', 'products', 'services', 'product_document', 'service_document', 'banner', 'organization_banner', 'logo', 'organization_logo', 'company_logo', 'public', 'general'] } },
+        { key: { startsWith: 'products/' } },
+        { key: { startsWith: 'catalogue/' } },
+        { key: { startsWith: 'documents/' } }
       ]
     },
     select: { ownerId: true, ownerRole: true }
   });
   if (directCatalogueAsset) {
     return { id: Number(directCatalogueAsset.ownerId), role: String(directCatalogueAsset.ownerRole || 'seller') };
+  }
+
+  const productWithAsset = await db.product.findFirst({
+    where: {
+      status: 'ACTIVE',
+      OR: [
+        { images: { some: { fileAssetId: fileId } } },
+        { certifications: { some: { fileAssetId: fileId } } }
+      ]
+    },
+    select: { sellerId: true }
+  }).catch(() => null);
+  if (productWithAsset?.sellerId) return { id: Number(productWithAsset.sellerId), role: 'seller' };
+
+  const serviceWithAsset = await db.service.findFirst({
+    where: {
+      status: 'ACTIVE',
+      certifications: { some: { fileAssetId: fileId } }
+    },
+    select: { sellerId: true }
+  }).catch(() => null);
+  if (serviceWithAsset?.sellerId) return { id: Number(serviceWithAsset.sellerId), role: 'seller' };
+
+  const entityAsset = await db.fileAsset.findFirst({
+    where: { id: fileId, status: 'active' },
+    select: { ownerId: true, ownerRole: true, entityId: true }
+  }).catch(() => null);
+  if (entityAsset?.entityId) {
+    const p = await db.product.findFirst({ where: { id: entityAsset.entityId, status: 'ACTIVE' }, select: { sellerId: true } }).catch(() => null);
+    if (p?.sellerId) return { id: Number(p.sellerId), role: 'seller' };
+    const s = await db.service.findFirst({ where: { id: entityAsset.entityId, status: 'ACTIVE' }, select: { sellerId: true } }).catch(() => null);
+    if (s?.sellerId) return { id: Number(s.sellerId), role: 'seller' };
   }
 
   const productImage = await db.productImage.findFirst({
@@ -3830,6 +3864,24 @@ router.get('/public/files/:id/view', asyncRoute(async (req: AuthRequest, res) =>
   const { id } = parse(idParams, req.params);
   const publicActor = await getPublicFileActor(id);
   if (!publicActor) throw new ApiError(404, 'Public document not found', 'FILE_NOT_FOUND');
+
+  // If download is requested on public view endpoint, stream buffer directly with attachment header without exposing GCP
+  if (req.query.download) {
+    const file = await getFileContent(id, publicActor, {
+      ipAddress: req.ip,
+      userAgent: req.headers['user-agent']
+    });
+    const rawFilename = (file.asset as any).originalName || (file.asset as any).key || 'document';
+    const cleanFilename = path.basename(rawFilename).replace(/[^\w\.\-\s]/gi, '_');
+    const encodedFilename = encodeURIComponent(cleanFilename);
+
+    res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
+    res.setHeader('Content-Length', file.buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"; filename*=UTF-8''${encodedFilename}`);
+    applyCorsHeaders(req, res);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.end(file.buffer);
+  }
 
   const signed = await getSignedUrl(id, publicActor, {
     ipAddress: req.ip,
@@ -4084,6 +4136,11 @@ router.get('/files/raw/:key(*)', optionalAuthenticate, asyncRoute(async (req: Au
     return res.status(304).end();
   }
 
+  if (req.query.download) {
+    const downloadFilename = path.basename(decodedKey).replace(/[^\w\.\-\s]/gi, '_');
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadFilename}"; filename*=UTF-8''${encodeURIComponent(downloadFilename)}`);
+  }
+
   res.setHeader('Content-Type', entry.contentType);
   res.setHeader('Content-Length', entry.buffer.length);
   res.setHeader('ETag', entry.etag);
@@ -4171,7 +4228,7 @@ router.get('/files/:id/view', optionalAuthenticate, asyncRoute(async (req: AuthR
   return res.end(file.buffer);
 }));
 
-router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
+router.get(['/files/:id/download', '/public/files/:id/download'], optionalAuthenticate, asyncRoute(async (req: AuthRequest, res) => {
   const { id } = parse(idParams, req.params);
   let actor: any = req.user;
   if (!actor && typeof req.query.token === 'string' && req.query.token.trim()) {
@@ -4206,11 +4263,13 @@ router.get('/files/:id/download', optionalAuthenticate, asyncRoute(async (req: A
     ipAddress: req.ip,
     userAgent: req.headers['user-agent']
   });
-  const filename = encodeURIComponent((file.asset as any).originalName || (file.asset as any).key || 'document');
+  const rawFilename = (file.asset as any).originalName || (file.asset as any).key || 'document';
+  const cleanFilename = path.basename(rawFilename).replace(/[^\w\.\-\s]/gi, '_');
+  const encodedFilename = encodeURIComponent(cleanFilename);
 
   res.setHeader('Content-Type', file.contentType || 'application/octet-stream');
   res.setHeader('Content-Length', file.buffer.length);
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"; filename*=UTF-8''${filename}`);
+  res.setHeader('Content-Disposition', `attachment; filename="${cleanFilename}"; filename*=UTF-8''${encodedFilename}`);
   applyCorsHeaders(req, res);
   res.setHeader('Cache-Control', 'private, no-store');
   return res.end(file.buffer);
