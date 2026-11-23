@@ -437,7 +437,7 @@ export default function AdminBannerManagementPage() {
                     <span>Flexible Landscape Banner Specifications</span>
                   </div>
                   <p className="mt-1 text-[11px] font-medium text-slate-600 leading-relaxed">
-                    Recommended resolution: <strong>1920 × 1080 px</strong> (16:9 widescreen). Fully supports standard landscape ratios (16:9, 16:10, 3:2, 4:3, or panoramic; min 800×360 px, up to 10 MB). Text and buttons are completely optional for graphic banners.
+                    Recommended resolution: <strong>1920 × 840 px</strong> (16:7 panoramic) or <strong>1920 × 1080 px</strong> (16:9 widescreen). <em>Important:</em> Keep critical text and logos at least <strong>12–15% away from the bottom edge</strong> so the bottom wave divider and navigation dots do not overlap them. Text and buttons are completely optional.
                   </p>
                 </div>
 
