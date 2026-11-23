@@ -524,23 +524,21 @@ export default function AdminBannerManagementPage() {
                         <span className="text-[10px] text-slate-500">Supports 16:9, 16:10, 3:2, 4:3, or Panoramic (min 800×360 px)</span>
                       </div>
                     )}
-                    {form.imageUrl && (Boolean(form.title?.trim()) || Boolean(form.subtitle?.trim())) && (
+                    {form.imageUrl && form.title?.trim() ? (
                       <div className="absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-r from-black/80 via-black/40 to-transparent p-3.5 pointer-events-none">
                         <span className="self-start mb-1 px-2 py-0.5 rounded-full bg-emerald-500/80 text-[9px] font-black text-white uppercase tracking-wider">
                           Ready for Display
                         </span>
-                        {form.title?.trim() ? (
-                          <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
-                            {form.title}
-                          </h4>
-                        ) : null}
+                        <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
+                          {form.title}
+                        </h4>
                         {form.subtitle?.trim() ? (
                           <p className="mt-0.5 line-clamp-1 max-w-md text-[10px] font-medium text-white/80">
                             {form.subtitle}
                           </p>
                         ) : null}
                       </div>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Upload Button */}

@@ -92,11 +92,14 @@ export function HeroBanner({ banners }: Props) {
     };
 
     const slide = slides[current] || slides[0] || (DEFAULT_MARKETPLACE_BANNERS[0] as unknown as MarketplaceBanner);
-    const ctaLink = slide?.ctaLink || slide?.targetUrl;
-    const ctaText = slide?.ctaText || (ctaLink ? 'View Details' : '');
+    const rawCtaText = slide?.ctaText?.trim();
+    const rawCtaLink = (slide?.ctaLink || slide?.targetUrl)?.trim();
+    const hasCta = Boolean(rawCtaText && rawCtaLink);
+    const ctaText = rawCtaText || '';
+    const ctaLink = rawCtaLink || '';
     const hasHeadline = Boolean(slide?.title?.trim());
     const hasSubtitle = Boolean(hasHeadline && slide?.subtitle?.trim());
-    const hasCta = Boolean(ctaText && ctaLink);
+    const hasContent = Boolean(hasHeadline || hasSubtitle || hasCta);
     const activeImageSrc = currentImg || resolveImageSrc(slide?.imageUrl, current);
     const optimizedHeroSrc = activeImageSrc
         ? (activeImageSrc.startsWith('data:') || activeImageSrc.startsWith('blob:') || activeImageSrc.endsWith('.svg')
@@ -232,79 +235,96 @@ export function HeroBanner({ banners }: Props) {
                 </button>
             </div>
 
-            {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-3 sm:py-8 md:py-10 pb-8 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
-                <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
-                    <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
-                        
-                        {/* Mobile In-flow Quick Action Toolbar */}
-                        <div className="flex sm:hidden items-center gap-2 mb-3 z-20">
-                            <button 
-                                type="button"
-                                onClick={handlePostRequirement} 
-                                className="inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-xs font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
-                            >
-                                <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
-                                <span>Post Requirement</span>
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={handleStartSelling} 
-                                className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-xs font-black active:scale-95 transition-all shadow-md shrink-0"
-                            >
-                                <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
-                                <span>Start Selling</span>
-                            </button>
-                        </div>
+            {/* Mobile Quick Action Toolbar when no banner text/button overlay */}
+            {!hasContent && (
+                <div className="flex sm:hidden absolute top-3 left-3 z-30 items-center gap-2 pointer-events-auto">
+                    <button 
+                        type="button"
+                        onClick={handlePostRequirement} 
+                        className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
+                    >
+                        <FileText className="h-3 w-3 text-[#c8a45c]" aria-hidden="true" />
+                        <span>Post Requirement</span>
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={handleStartSelling} 
+                        className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] font-black active:scale-95 transition-all shadow-md shrink-0"
+                    >
+                        <Store className="h-3 w-3 text-[#0b2447]" aria-hidden="true" />
+                        <span>Start Selling</span>
+                    </button>
+                </div>
+            )}
 
-                        {/* Title: Unobstructed, only rendered when non-empty */}
-                        {hasHeadline ? (
-                            <h1 className="mb-2 sm:mb-3 text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-[2.65rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] max-w-full">
-                                {slide.title.split('\n').map((line, i) => (
-                                    <React.Fragment key={i}>
-                                        {i > 0 && (
-                                            <>
-                                                <span className="sm:hidden"> </span>
-                                                <br className="hidden sm:inline" />
-                                            </>
-                                        )}
-                                        {line}
-                                    </React.Fragment>
-                                ))}
-                            </h1>
-                        ) : null}
-
-                        {/* Subtitle: Only render when there is an active headline and subtitle configured */}
-                        {hasSubtitle ? (
-                            <p className="mb-3.5 sm:mb-5 text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
-                                {slide.subtitle}
-                            </p>
-                        ) : null}
-
-                        {/* Responsive Action Buttons */}
-                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-0.5">
-                            {hasCta && (
-                                <Link
-                                    href={ctaLink!}
-                                    onClick={(e) => handleCtaClick(e, ctaLink!)}
-                                    className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-xs sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
+            {/* Hero Main Content Container: only rendered when headline, subtitle, or CTA is explicitly added in CMS */}
+            {hasContent && (
+                <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-3 sm:py-8 md:py-10 pb-8 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
+                    <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
+                        <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
+                            
+                            {/* Mobile In-flow Quick Action Toolbar */}
+                            <div className="flex sm:hidden items-center gap-2 mb-3 z-20">
+                                <button 
+                                    type="button"
+                                    onClick={handlePostRequirement} 
+                                    className="inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-xs font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
                                 >
-                                    <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
-                                    <span>{ctaText}</span>
-                                    <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1 text-[#c8a45c]" />
-                                </Link>
-                            )}
+                                    <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
+                                    <span>Post Requirement</span>
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={handleStartSelling} 
+                                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-xs font-black active:scale-95 transition-all shadow-md shrink-0"
+                                >
+                                    <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
+                                    <span>Start Selling</span>
+                                </button>
+                            </div>
 
-                            <Link
-                                href="/login"
-                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-xs sm:text-xs md:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#c8a45c] transition-all shadow-lg shrink-0"
-                            >
-                                Login to Portal
-                            </Link>
+                            {/* Title: Unobstructed, only rendered when non-empty */}
+                            {hasHeadline ? (
+                                <h1 className="mb-2 sm:mb-3 text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-[2.65rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] max-w-full">
+                                    {slide.title.split('\n').map((line, i) => (
+                                        <React.Fragment key={i}>
+                                            {i > 0 && (
+                                                <>
+                                                    <span className="sm:hidden"> </span>
+                                                    <br className="hidden sm:inline" />
+                                                </>
+                                            )}
+                                            {line}
+                                        </React.Fragment>
+                                    ))}
+                                </h1>
+                            ) : null}
+
+                            {/* Subtitle: Only render when there is an active headline and subtitle configured */}
+                            {hasSubtitle ? (
+                                <p className="mb-3.5 sm:mb-5 text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
+                                    {slide.subtitle}
+                                </p>
+                            ) : null}
+
+                            {/* Responsive Action Buttons: ONLY rendered when CTA is explicitly added in CMS/admin */}
+                            {hasCta ? (
+                                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-0.5">
+                                    <Link
+                                        href={ctaLink}
+                                        onClick={(e) => handleCtaClick(e, ctaLink)}
+                                        className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-xs sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
+                                    >
+                                        <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
+                                        <span>{ctaText}</span>
+                                        <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1 text-[#c8a45c]" />
+                                    </Link>
+                                </div>
+                            ) : null}
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Floating Carousel Dots Indicator */}
             {slides.length > 1 && (
