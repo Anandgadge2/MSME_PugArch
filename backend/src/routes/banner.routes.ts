@@ -39,7 +39,7 @@ const publicLocationSchema = z.object({
 }).partial();
 
 const bannerFieldsSchema = z.object({
-  title: z.string().trim().min(2).max(160),
+  title: z.string().trim().max(160).optional().default(''),
   subtitle: z.string().trim().max(500).optional(),
   imageUrl: z.string().trim().max(1000).optional().refine(
     val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val) || /^data:image\/.+/.test(val),

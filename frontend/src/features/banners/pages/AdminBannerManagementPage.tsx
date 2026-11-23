@@ -282,10 +282,6 @@ export default function AdminBannerManagementPage() {
   const handleFormSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setValidationError('');
-    if (!form.title.trim()) {
-      setMessage('Headline Title is required.');
-      return;
-    }
     if (!form.imageUrl.trim()) {
       setMessage('Please upload a banner image or provide an image URL.');
       return;
@@ -434,14 +430,14 @@ export default function AdminBannerManagementPage() {
             {/* Scrollable Form Body */}
             <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col overflow-hidden">
               <div className="flex-1 space-y-3.5 overflow-y-auto p-5">
-                {/* Compulsory 16:9 Aspect Ratio Guideline Box */}
+                {/* Flexible Landscape Aspect Ratio Guideline Box */}
                 <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-3 text-xs">
                   <div className="flex items-center gap-1.5 font-black text-[#12335f]">
                     <Sparkles className="h-4 w-4 text-amber-500" />
-                    <span>Compulsory Aspect Ratio: 16:9 (1920 × 1080 px)</span>
+                    <span>Flexible Landscape Banner Specifications</span>
                   </div>
                   <p className="mt-1 text-[11px] font-medium text-slate-600 leading-relaxed">
-                    All marketplace hero banners must strictly have a <strong>16:9 widescreen aspect ratio</strong> (recommended 1920×1080 px, minimum 1280×720 px). Images with other aspect ratios will be blocked to ensure every banner displays at the exact same size.
+                    Recommended resolution: <strong>1920 × 1080 px</strong> (16:9 widescreen). Fully supports standard landscape ratios (16:9, 16:10, 3:2, 4:3, or panoramic; min 800×360 px, up to 10 MB). Text and buttons are completely optional for graphic banners.
                   </p>
                 </div>
 
@@ -502,15 +498,15 @@ export default function AdminBannerManagementPage() {
                   </div>
                   
                   {/* Adaptive Preview Box with Ambient Background */}
-                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-inner">
+                  <div className="relative aspect-[16/9] w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-950 shadow-inner flex items-center justify-center">
                     {form.imageUrl ? (
-                      <div className="relative h-full w-full">
+                      <div className="relative h-full w-full flex items-center justify-center">
                         {/* Ambient blur backdrop to eliminate black borders */}
                         <img
                           src={imageSrc(form.imageUrl)}
                           alt=""
                           aria-hidden="true"
-                          className="absolute inset-0 h-full w-full object-cover blur-xl opacity-45 scale-105 pointer-events-none"
+                          className="absolute inset-0 h-full w-full object-cover blur-xl opacity-40 scale-105 pointer-events-none"
                         />
                         {/* Full sharp preview image without cropping */}
                         <img
@@ -528,17 +524,21 @@ export default function AdminBannerManagementPage() {
                         <span className="text-[10px] text-slate-500">Supports 16:9, 16:10, 3:2, 4:3, or Panoramic (min 800×360 px)</span>
                       </div>
                     )}
-                    {form.imageUrl && (
-                      <div className="absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-r from-black/85 via-black/45 to-transparent p-3.5 pointer-events-none">
+                    {form.imageUrl && (Boolean(form.title?.trim()) || Boolean(form.subtitle?.trim())) && (
+                      <div className="absolute inset-0 z-20 flex flex-col justify-end bg-gradient-to-r from-black/80 via-black/40 to-transparent p-3.5 pointer-events-none">
                         <span className="self-start mb-1 px-2 py-0.5 rounded-full bg-emerald-500/80 text-[9px] font-black text-white uppercase tracking-wider">
                           Ready for Display
                         </span>
-                        <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
-                          {form.title || 'Headline Title Preview'}
-                        </h4>
-                        <p className="mt-0.5 line-clamp-1 max-w-md text-[10px] font-medium text-white/80">
-                          {form.subtitle || 'Subtitle preview will appear here.'}
-                        </p>
+                        {form.title?.trim() ? (
+                          <h4 className="line-clamp-1 max-w-md text-xs font-black leading-tight text-white drop-shadow-sm">
+                            {form.title}
+                          </h4>
+                        ) : null}
+                        {form.subtitle?.trim() ? (
+                          <p className="mt-0.5 line-clamp-1 max-w-md text-[10px] font-medium text-white/80">
+                            {form.subtitle}
+                          </p>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -577,14 +577,13 @@ export default function AdminBannerManagementPage() {
                 {/* Headline Title */}
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Headline Title * <span className="text-slate-400 font-normal">(use Enter for line break)</span>
+                    Headline Title (Optional) <span className="text-slate-400 font-normal">(use Enter for line break)</span>
                   </label>
                   <textarea
                     rows={2}
                     value={form.title}
                     onChange={e => setForm(prev => ({ ...prev, title: e.target.value }))}
-                    placeholder="Steel & Metal Fabrication&#10;Powering Jharsuguda Industry"
-                    required
+                    placeholder="Steel & Metal Fabrication&#10;Powering Jharsuguda Industry (or leave blank for graphic posters)"
                     className="mt-1 w-full rounded-lg border border-slate-200 bg-white p-2.5 text-xs font-bold text-slate-900 outline-none transition focus:ring-2 focus:ring-blue-600/20"
                   />
                 </div>
@@ -592,7 +591,7 @@ export default function AdminBannerManagementPage() {
                 {/* Subtitle */}
                 <div>
                   <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                    Subtitle Description
+                    Subtitle Description (Optional)
                   </label>
                   <textarea
                     rows={2}
@@ -607,7 +606,7 @@ export default function AdminBannerManagementPage() {
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      CTA Button Text
+                      CTA Button Text (Optional)
                     </label>
                     <input
                       type="text"
@@ -619,7 +618,7 @@ export default function AdminBannerManagementPage() {
                   </div>
                   <div>
                     <label className="block text-[10px] font-black uppercase tracking-widest text-slate-500">
-                      CTA Button Link / URL
+                      CTA Button Link / URL (Optional)
                     </label>
                     <input
                       type="text"
@@ -741,35 +740,55 @@ function BannerAdminCard({
     <Card className="overflow-hidden border-slate-200 bg-white shadow-xs transition hover:shadow-md">
       <CardContent className="flex h-full flex-col p-0">
         {/* Banner Visual Header */}
-        <div className="relative min-h-[170px] overflow-hidden bg-slate-900">
+        <div className="relative min-h-[170px] overflow-hidden bg-slate-900 flex items-center justify-center">
           {src && !hasError ? (
-            <img
-              src={src}
-              alt={banner.title}
-              referrerPolicy="no-referrer"
-              onError={() => {
-                setHasError(true);
-                setSrc(imageSrc(fallbackUrl));
-              }}
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-            />
+            <>
+              {/* Ambient blurred backdrop */}
+              <img
+                src={src}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover blur-md opacity-30 select-none pointer-events-none"
+              />
+              {/* Full banner uncropped */}
+              <img
+                src={src}
+                alt={banner.title || 'Banner'}
+                referrerPolicy="no-referrer"
+                onError={() => {
+                  setHasError(true);
+                  setSrc(imageSrc(fallbackUrl));
+                }}
+                className="relative z-10 max-h-[170px] w-full object-contain transition-transform duration-300 hover:scale-105"
+              />
+            </>
           ) : fallbackUrl ? (
-            <img
-              src={imageSrc(fallbackUrl)}
-              alt={banner.title}
-              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 hover:scale-105"
-            />
+            <>
+              <img
+                src={imageSrc(fallbackUrl)}
+                alt=""
+                aria-hidden="true"
+                className="absolute inset-0 h-full w-full object-cover blur-md opacity-30 select-none pointer-events-none"
+              />
+              <img
+                src={imageSrc(fallbackUrl)}
+                alt={banner.title || 'Banner'}
+                className="relative z-10 max-h-[170px] w-full object-contain transition-transform duration-300 hover:scale-105"
+              />
+            </>
           ) : (
             <div className="flex h-full min-h-[170px] items-center justify-center bg-slate-100 text-slate-400">
               <ImagePlus className="h-8 w-8" />
             </div>
           )}
 
-          {/* Dark scrim gradient */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#07172e]/90 via-[#07172e]/40 to-transparent" />
+          {/* Dark scrim gradient - only if text overlay exists */}
+          {(Boolean(banner.title?.trim()) || Boolean(banner.subtitle?.trim())) && (
+            <div className="absolute inset-0 z-15 bg-gradient-to-t from-[#07172e]/90 via-[#07172e]/40 to-transparent" />
+          )}
 
           {/* Top Badges */}
-          <div className="absolute left-3 top-3 flex items-center gap-1.5">
+          <div className="absolute left-3 top-3 z-20 flex items-center gap-1.5">
             <span className={cn('rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-wider backdrop-blur-xs shadow-xs', statusTone(banner.status))}>
               {String(banner.status || 'ACTIVE')}
             </span>
@@ -779,16 +798,20 @@ function BannerAdminCard({
           </div>
 
           {/* Headline on Image */}
-          <div className="relative flex min-h-[170px] flex-col justify-end p-4">
-            <h3 className="whitespace-pre-line text-base font-black leading-tight text-white drop-shadow-sm line-clamp-2">
-              {banner.title}
-            </h3>
-            {banner.subtitle && (
-              <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-normal text-white/80">
-                {banner.subtitle}
-              </p>
-            )}
-          </div>
+          {(Boolean(banner.title?.trim()) || Boolean(banner.subtitle?.trim())) && (
+            <div className="relative z-20 flex min-h-[170px] flex-col justify-end p-4">
+              {banner.title?.trim() ? (
+                <h3 className="whitespace-pre-line text-base font-black leading-tight text-white drop-shadow-sm line-clamp-2">
+                  {banner.title}
+                </h3>
+              ) : null}
+              {banner.subtitle?.trim() ? (
+                <p className="mt-1 line-clamp-2 text-[11px] font-medium leading-normal text-white/80">
+                  {banner.subtitle}
+                </p>
+              ) : null}
+            </div>
+          )}
         </div>
 
         {/* Details & CTA Footer */}

@@ -94,6 +94,8 @@ export function HeroBanner({ banners }: Props) {
     const slide = slides[current] || slides[0] || (DEFAULT_MARKETPLACE_BANNERS[0] as unknown as MarketplaceBanner);
     const ctaLink = slide?.ctaLink || slide?.targetUrl;
     const ctaText = slide?.ctaText || (ctaLink ? 'View Details' : '');
+    const hasTextOverlay = Boolean(slide?.title?.trim() || slide?.subtitle?.trim());
+    const hasCta = Boolean(ctaText && ctaLink);
     const activeImageSrc = currentImg || resolveImageSrc(slide?.imageUrl, current);
     const optimizedHeroSrc = activeImageSrc
         ? (activeImageSrc.startsWith('data:') || activeImageSrc.startsWith('blob:') || activeImageSrc.endsWith('.svg')
@@ -130,9 +132,9 @@ export function HeroBanner({ banners }: Props) {
         <section
             style={{
                 aspectRatio: `${safeRatio}`,
-                maxHeight: 'min(75vh, 640px)',
+                maxHeight: 'min(85vh, 720px)',
             }}
-            className="group/hero relative overflow-hidden bg-slate-950 w-full min-h-[290px] xs:min-h-[310px] sm:min-h-[350px] md:min-h-[400px] transition-[aspect-ratio] duration-500 ease-out"
+            className="group/hero relative overflow-hidden bg-slate-950 w-full min-h-[220px] xs:min-h-[250px] sm:min-h-[300px] md:min-h-[360px] transition-[aspect-ratio] duration-500 ease-out"
             aria-label="Marketplace Featured Hero Banner"
             aria-roledescription="carousel"
             onTouchStart={handleTouchStart}
@@ -182,9 +184,10 @@ export function HeroBanner({ banners }: Props) {
                     </>
                 ) : null}
 
-                {/* Text readability gradients (calibrated for WCAG AA contrast on both mobile & desktop) */}
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/55 to-slate-950/20 md:bg-gradient-to-r md:from-slate-950/95 md:via-slate-950/60 md:to-transparent w-full md:w-[65%] lg:w-[55%] pointer-events-none" />
-                <div className="absolute inset-x-0 bottom-0 h-12 sm:h-16 bg-gradient-to-t from-slate-950/40 to-transparent pointer-events-none" />
+                {/* Text readability gradients: only rendered when headline or subtitle text is present */}
+                {hasTextOverlay && (
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/55 to-slate-950/20 md:bg-gradient-to-r md:from-slate-950/95 md:via-slate-950/60 md:to-transparent w-full md:w-[65%] lg:w-[55%] pointer-events-none" />
+                )}
             </div>
 
             {/* Side Navigation Arrow - Left */}
@@ -207,7 +210,7 @@ export function HeroBanner({ banners }: Props) {
                 <ChevronRight className="h-4 w-4 lg:h-5 lg:w-5 transition-transform duration-200 group-hover/arrow:translate-x-0.5" />
             </button>
 
-            {/* Desktop Floating CTA Overlay (Top Right) - Hidden on mobile to prevent text collisions */}
+            {/* Desktop Floating Quick Actions (Top Right) */}
             <div className="hidden sm:flex absolute sm:top-4 sm:right-5 md:top-5 md:right-6 lg:top-6 lg:right-8 xl:top-7 xl:right-10 z-30 flex-row items-center gap-2 sm:gap-2.5 pointer-events-auto">
                 <button 
                     type="button"
@@ -228,121 +231,118 @@ export function HeroBanner({ banners }: Props) {
                 </button>
             </div>
 
-            {/* Hero Main Content Container */}
-            <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-3 sm:py-8 md:py-10 pb-8 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
-                <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
-                    <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
-                        
-                        {/* Mobile In-flow Quick Action Toolbar (Top row, cleanly spaced, never overlaps title) */}
-                        <div className="flex sm:hidden items-center gap-2 mb-3 z-20">
-                            <button 
-                                type="button"
-                                onClick={handlePostRequirement} 
-                                className="inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-xs font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
-                            >
-                                <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
-                                <span>Post Requirement</span>
-                            </button>
-                            <button 
-                                type="button"
-                                onClick={handleStartSelling} 
-                                className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-xs font-black active:scale-95 transition-all shadow-md shrink-0"
-                            >
-                                <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
-                                <span>Start Selling</span>
-                            </button>
-                        </div>
+            {/* Mobile Quick Action Toolbar when no text overlay */}
+            {!hasTextOverlay && !hasCta && (
+                <div className="flex sm:hidden absolute top-3 left-3 z-30 items-center gap-2 pointer-events-auto">
+                    <button 
+                        type="button"
+                        onClick={handlePostRequirement} 
+                        className="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-[11px] font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
+                    >
+                        <FileText className="h-3 w-3 text-[#c8a45c]" aria-hidden="true" />
+                        <span>Post Requirement</span>
+                    </button>
+                    <button 
+                        type="button"
+                        onClick={handleStartSelling} 
+                        className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-[11px] font-black active:scale-95 transition-all shadow-md shrink-0"
+                    >
+                        <Store className="h-3 w-3 text-[#0b2447]" aria-hidden="true" />
+                        <span>Start Selling</span>
+                    </button>
+                </div>
+            )}
 
-                        {/* Title: Unobstructed, full width on mobile */}
-                        <h1 className="mb-2 sm:mb-3 text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-[2.65rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] max-w-full">
-                            {(slide?.title || 'MSME Marketplace').split('\n').map((line, i) => (
-                                <React.Fragment key={i}>
-                                    {i > 0 && (
-                                        <>
-                                            <span className="sm:hidden"> </span>
-                                            <br className="hidden sm:inline" />
-                                        </>
-                                    )}
-                                    {line}
-                                </React.Fragment>
-                            ))}
-                        </h1>
-
-                        {/* Subtitle */}
-                        {slide.subtitle && (
-                            <p className="mb-3.5 sm:mb-5 text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
-                                {slide.subtitle}
-                            </p>
-                        )}
-
-                        {/* Responsive Action Buttons */}
-                        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-0.5">
-                            {ctaText && ctaLink && (
-                                <Link
-                                    href={ctaLink}
-                                    onClick={(e) => handleCtaClick(e, ctaLink)}
-                                    className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-xs sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
+            {/* Hero Main Content Container: only rendered when headline, subtitle, or CTA is configured */}
+            {(hasTextOverlay || hasCta) && (
+                <div className="relative z-10 mx-auto w-full max-w-[1680px] px-4 sm:px-10 md:px-14 lg:px-16 2xl:px-20 py-3 sm:py-8 md:py-10 pb-8 sm:pb-14 lg:pb-16 flex flex-col justify-center h-full">
+                    <div className="w-full max-w-full sm:max-w-xl lg:max-w-2xl">
+                        <div className={`transition-all duration-300 ${fading ? 'opacity-0 translate-y-2' : 'opacity-100 translate-y-0'}`}>
+                            
+                            {/* Mobile In-flow Quick Action Toolbar */}
+                            <div className="flex sm:hidden items-center gap-2 mb-3 z-20">
+                                <button 
+                                    type="button"
+                                    onClick={handlePostRequirement} 
+                                    className="inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full border border-white/40 bg-black/60 backdrop-blur-md text-white text-xs font-bold hover:bg-white/20 active:scale-95 transition-all shadow-md shrink-0"
                                 >
-                                    <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
-                                    <span>{ctaText}</span>
-                                    <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1 text-[#c8a45c]" />
-                                </Link>
-                            )}
+                                    <FileText className="h-3.5 w-3.5 text-[#c8a45c]" aria-hidden="true" />
+                                    <span>Post Requirement</span>
+                                </button>
+                                <button 
+                                    type="button"
+                                    onClick={handleStartSelling} 
+                                    className="relative overflow-hidden inline-flex items-center justify-center gap-1.5 min-h-[40px] h-10 px-4 rounded-full bg-white hover:bg-slate-100 text-[#0b2447] text-xs font-black active:scale-95 transition-all shadow-md shrink-0"
+                                >
+                                    <Store className="h-3.5 w-3.5 text-[#0b2447]" aria-hidden="true" />
+                                    <span>Start Selling</span>
+                                </button>
+                            </div>
 
-                            <Link
-                                href="/login"
-                                className="inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-3.5 sm:px-5 rounded-full border border-white/40 bg-black/40 backdrop-blur-md text-white text-xs sm:text-xs md:text-sm font-bold hover:bg-white/20 hover:border-[#c8a45c]/60 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#c8a45c] transition-all shadow-lg shrink-0"
-                            >
-                                Login to Portal
-                            </Link>
+                            {/* Title: Unobstructed, only rendered when non-empty */}
+                            {slide?.title?.trim() ? (
+                                <h1 className="mb-2 sm:mb-3 text-xl xs:text-2xl sm:text-3xl md:text-4xl lg:text-[2.65rem] 2xl:text-5xl font-black leading-tight sm:leading-[1.12] tracking-tight text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.9)] max-w-full">
+                                    {slide.title.split('\n').map((line, i) => (
+                                        <React.Fragment key={i}>
+                                            {i > 0 && (
+                                                <>
+                                                    <span className="sm:hidden"> </span>
+                                                    <br className="hidden sm:inline" />
+                                                </>
+                                            )}
+                                            {line}
+                                        </React.Fragment>
+                                    ))}
+                                </h1>
+                            ) : null}
+
+                            {/* Subtitle */}
+                            {slide.subtitle?.trim() ? (
+                                <p className="mb-3.5 sm:mb-5 text-xs sm:text-sm md:text-base leading-relaxed text-slate-100/90 font-medium drop-shadow-[0_1px_4px_rgba(0,0,0,0.9)] max-w-md sm:max-w-xl line-clamp-2 sm:line-clamp-3">
+                                    {slide.subtitle}
+                                </p>
+                            ) : null}
+
+                            {/* Responsive Action Buttons: only rendered when CTA is explicitly configured */}
+                            {hasCta && (
+                                <div className="flex flex-wrap items-center gap-2.5 sm:gap-3 pt-0.5">
+                                    <Link
+                                        href={ctaLink!}
+                                        onClick={(e) => handleCtaClick(e, ctaLink!)}
+                                        className="group relative overflow-hidden inline-flex items-center justify-center gap-1.5 h-8 sm:h-10 md:h-11 px-4 sm:px-6 rounded-full bg-white text-[#0b2447] text-xs sm:text-xs md:text-sm font-black hover:bg-slate-100 active:scale-95 focus-visible:ring-2 focus-visible:ring-[#0b2447] transition-all shadow-xl shadow-black/40 hover:shadow-[0_0_25px_rgba(200,164,92,0.4)] shrink-0"
+                                    >
+                                        <span className="absolute inset-0 -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-[#c8a45c]/20 to-transparent pointer-events-none" />
+                                        <span>{ctaText}</span>
+                                        <ArrowRight className="h-3.5 w-3.5 sm:h-4 sm:w-4 transition-transform duration-200 group-hover:translate-x-1 text-[#c8a45c]" />
+                                    </Link>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
-            </div>
+            )}
 
             {/* Floating Carousel Dots Indicator */}
-            <div className="absolute bottom-2.5 sm:bottom-4 md:bottom-5 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
-                <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full bg-black/30 backdrop-blur-xs border border-white/15">
-                    {slides.map((_, i) => (
-                        <button
-                            key={i}
-                            type="button"
-                            onClick={() => goTo(i)}
-                            className={`rounded-full transition-all duration-300 focus:outline-none cursor-pointer ${
-                                i === current
-                                    ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
-                                    : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
-                            }`}
-                            aria-label={`Go to slide ${i + 1}`}
-                            aria-current={i === current ? 'true' : undefined}
-                        />
-                    ))}
+            {slides.length > 1 && (
+                <div className="absolute bottom-2 sm:bottom-3 left-0 right-0 flex items-center justify-center z-20 pointer-events-auto">
+                    <div className="flex items-center gap-1.5 sm:gap-2 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-xs border border-white/20">
+                        {slides.map((_, i) => (
+                            <button
+                                key={i}
+                                type="button"
+                                onClick={() => goTo(i)}
+                                className={`rounded-full transition-all duration-300 focus:outline-none cursor-pointer ${
+                                    i === current
+                                        ? 'w-5 sm:w-7 h-1.5 bg-[#c8a45c] shadow-[0_0_10px_rgba(200,164,92,0.9)]'
+                                        : 'w-1.5 h-1.5 bg-white/45 hover:bg-white/90 hover:scale-125 shadow-[0_1px_3px_rgba(0,0,0,0.8)]'
+                                }`}
+                                aria-label={`Go to slide ${i + 1}`}
+                                aria-current={i === current ? 'true' : undefined}
+                            />
+                        ))}
+                    </div>
                 </div>
-            </div>
-
-            {/* Multi-layered dynamic curvy wave divider at bottom */}
-            <div className="absolute -bottom-0.5 left-0 right-0 overflow-hidden leading-none pointer-events-none z-10">
-                <svg
-                    className="relative block w-full h-3 sm:h-5 md:h-7 text-[#f6f8fb]"
-                    viewBox="0 0 1440 80"
-                    preserveAspectRatio="none"
-                >
-                    <path
-                        d="M0,30 C320,65 520,5 840,40 C1080,68 1280,20 1440,35 L1440,80 L0,80 Z"
-                        fill="currentColor"
-                        opacity="0.35"
-                    />
-                    <path
-                        d="M0,45 C280,18 560,60 860,30 C1160,5 1320,50 1440,40 L1440,80 L0,80 Z"
-                        fill="currentColor"
-                        opacity="0.55"
-                    />
-                    <path
-                        d="M0,52 C240,75 480,25 720,56 C960,82 1200,35 1440,58 L1440,80 L0,80 Z"
-                        fill="currentColor"
-                    />
-                </svg>
-            </div>
+            )}
         </section>
     );
 }

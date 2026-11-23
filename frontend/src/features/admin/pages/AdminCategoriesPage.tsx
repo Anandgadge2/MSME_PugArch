@@ -709,7 +709,9 @@ export default function AdminCategoriesPage() {
       {/* ── Search & Filter Toolbar ── */}
       <div className="rounded-2xl border border-slate-200/90 bg-white p-3 sm:p-4 shadow-xs">
         <ResponsiveFilterBar
+          singleRowDesktop={true}
           activeFilterCount={activeFilterCount}
+          searchWrapperClassName="flex-1 min-w-[180px]"
           searchInput={
             <div className="relative w-full">
               <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -726,7 +728,7 @@ export default function AdminCategoriesPage() {
                   type="button"
                   onClick={() => setSearchQuery('')}
                   aria-label="Clear search input"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full transition-colors cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -734,16 +736,18 @@ export default function AdminCategoriesPage() {
             </div>
           }
           filters={
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            <>
               {/* Type Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
-                <label htmlFor="category-type-filter" className="sr-only">Filter by Category Type</label>
+              <div className="w-full sm:w-auto sm:min-w-[130px] shrink-0">
+                <label htmlFor="category-type-filter" className="block sm:sr-only text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Type
+                </label>
                 <select
                   id="category-type-filter"
                   aria-label="Filter by Category Type"
                   value={typeFilter}
                   onChange={(e) => setTypeFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full sm:w-[155px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="ALL">All Types</option>
                   <option value="BOTH">Both (Product & Service)</option>
@@ -753,14 +757,16 @@ export default function AdminCategoriesPage() {
               </div>
 
               {/* Status Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[130px]">
-                <label htmlFor="category-status-filter" className="sr-only">Filter by Status</label>
+              <div className="w-full sm:w-auto sm:min-w-[125px] shrink-0">
+                <label htmlFor="category-status-filter" className="block sm:sr-only text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Status
+                </label>
                 <select
                   id="category-status-filter"
                   aria-label="Filter by Status"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full sm:w-[130px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="ALL">All Statuses</option>
                   <option value="ACTIVE">Active Only</option>
@@ -769,14 +775,16 @@ export default function AdminCategoriesPage() {
               </div>
 
               {/* Image Filter */}
-              <div className="w-full sm:w-auto sm:min-w-[140px]">
-                <label htmlFor="category-image-filter" className="sr-only">Filter by Photo Status</label>
+              <div className="w-full sm:w-auto sm:min-w-[130px] shrink-0">
+                <label htmlFor="category-image-filter" className="block sm:sr-only text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1">
+                  Photo
+                </label>
                 <select
                   id="category-image-filter"
                   aria-label="Filter by Photo Status"
                   value={imageFilter}
                   onChange={(e) => setImageFilter(e.target.value)}
-                  className="h-10 w-full rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer"
+                  className="h-10 w-full sm:w-[145px] rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 outline-none hover:border-slate-300 focus:border-[#12335f] focus:ring-2 focus:ring-[#12335f]/10 transition-colors shadow-xs cursor-pointer truncate"
                 >
                   <option value="ALL">All Images</option>
                   <option value="WITH_IMAGE">Has Custom Photo</option>
@@ -789,14 +797,14 @@ export default function AdminCategoriesPage() {
                 <button
                   type="button"
                   onClick={handleResetFilters}
-                  className="h-10 px-3 inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-rose-300 bg-rose-50/70 text-rose-700 hover:bg-rose-100 hover:border-rose-400 text-xs font-bold transition-colors cursor-pointer"
+                  className="h-10 px-3 inline-flex items-center justify-center gap-1.5 rounded-xl border border-dashed border-rose-300 bg-rose-50/70 text-rose-700 hover:bg-rose-100 hover:border-rose-400 text-xs font-bold transition-colors cursor-pointer shrink-0 whitespace-nowrap"
                   title="Clear all active filters"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Reset</span>
                 </button>
               )}
-            </div>
+            </>
           }
           endContent={<ViewModeToggle value={viewMode} onChange={setViewMode} />}
         />
@@ -807,17 +815,16 @@ export default function AdminCategoriesPage() {
         isLoading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="rounded-2xl border border-slate-200 bg-white p-4 animate-pulse">
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="h-14 w-14 rounded-xl bg-slate-100 shrink-0" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3.5 bg-slate-100 rounded w-3/4" />
-                    <div className="h-3 bg-slate-100 rounded w-1/2" />
+              <div key={i} className="rounded-2xl border border-slate-200 bg-white overflow-hidden animate-pulse flex flex-col">
+                <div className="aspect-[4/3] w-full bg-slate-100" />
+                <div className="p-3.5 space-y-2.5 flex-1">
+                  <div className="h-4 bg-slate-100 rounded w-3/4" />
+                  <div className="h-3 bg-slate-100 rounded w-1/2" />
+                  <div className="h-3 bg-slate-100 rounded w-1/3" />
+                  <div className="pt-2 border-t border-slate-100 flex justify-end gap-2">
+                    <div className="h-7 w-14 bg-slate-100 rounded-lg" />
+                    <div className="h-7 w-14 bg-slate-100 rounded-lg" />
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <div className="h-3 bg-slate-100 rounded" />
-                  <div className="h-3 bg-slate-100 rounded w-5/6" />
                 </div>
               </div>
             ))}
@@ -843,29 +850,40 @@ export default function AdminCategoriesPage() {
                     key={cat.id}
                     className="group rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:border-indigo-200 hover:shadow-md flex flex-col overflow-hidden"
                   >
-                    {/* Card Image Header */}
-                    <div className="relative h-32 w-full bg-slate-50 overflow-hidden shrink-0">
+                    {/* Card Image Header - full category image visible properly */}
+                    <div className="relative aspect-[4/3] w-full bg-slate-100/70 overflow-hidden shrink-0 flex items-center justify-center">
+                      {/* Ambient blurred backdrop to seamlessly fill pillarbox/letterbox areas */}
+                      <img
+                        src={displayImg}
+                        alt=""
+                        aria-hidden="true"
+                        className="absolute inset-0 h-full w-full object-cover blur-md scale-110 opacity-25 select-none pointer-events-none"
+                        onError={(e) => {
+                          (e.target as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      {/* Full category image visible properly without cropping */}
                       <img
                         src={displayImg}
                         alt={cat.name}
-                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        className="relative z-1 max-h-full max-w-full object-contain p-2 transition-transform duration-300 group-hover:scale-105 drop-shadow-2xs"
                         onError={(e) => {
                           const target = e.target as HTMLImageElement;
                           target.src = buildCategoryFallbackSvg(cat.name);
                         }}
                       />
                       {/* Type badge overlaid on image */}
-                      <div className="absolute top-2 left-2">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shadow-xs ${
-                          cat.type === 'PRODUCT' ? 'bg-emerald-600 text-white' :
-                          cat.type === 'SERVICE' ? 'bg-purple-600 text-white' :
-                          'bg-indigo-600 text-white'
+                      <div className="absolute top-2.5 left-2.5 z-10">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm backdrop-blur-xs ${
+                          cat.type === 'PRODUCT' ? 'bg-emerald-600/90 text-white' :
+                          cat.type === 'SERVICE' ? 'bg-purple-600/90 text-white' :
+                          'bg-indigo-600/90 text-white'
                         }`}>
                           {cat.type || 'BOTH'}
                         </span>
                       </div>
                       {/* Status badge overlaid on image */}
-                      <div className="absolute top-2 right-2">
+                      <div className="absolute top-2.5 right-2.5 z-10">
                         <button
                           type="button"
                           role="switch"
@@ -874,10 +892,10 @@ export default function AdminCategoriesPage() {
                           disabled={togglingId === cat.id}
                           onClick={(e) => handleToggleStatus(cat, e)}
                           title={`Click to ${cat.isActive !== false ? 'Deactivate' : 'Activate'} "${cat.name}"`}
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider shadow-xs transition-colors cursor-pointer ${
+                          className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider shadow-sm backdrop-blur-xs transition-colors cursor-pointer ${
                             cat.isActive !== false
-                              ? 'bg-emerald-500 text-white hover:bg-emerald-600'
-                              : 'bg-slate-500 text-white hover:bg-slate-600'
+                              ? 'bg-emerald-500/95 text-white hover:bg-emerald-600'
+                              : 'bg-slate-600/95 text-white hover:bg-slate-700'
                           } ${togglingId === cat.id ? 'opacity-60 cursor-wait' : ''}`}
                         >
                           <span className={`h-1.5 w-1.5 rounded-full bg-white ${
