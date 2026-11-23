@@ -40,15 +40,15 @@ const publicLocationSchema = z.object({
 
 const bannerFieldsSchema = z.object({
   title: z.string().trim().max(160).optional().default(''),
-  subtitle: z.string().trim().max(500).optional(),
+  subtitle: z.string().trim().max(500).optional().nullable(),
   imageUrl: z.string().trim().max(1000).optional().refine(
     val => !val || val === '' || /^\//.test(val) || /^https?:\/\/.+/.test(val) || /^data:image\/.+/.test(val),
     { message: 'imageUrl must be a valid absolute URL, relative path, data URI, or empty' }
   ),
-  documentId: z.coerce.number().int().positive().optional(),
-  targetUrl: z.string().trim().max(1000).optional(),
-  ctaText: z.string().trim().max(100).optional(),
-  ctaLink: z.string().trim().max(1000).optional(),
+  documentId: z.coerce.number().int().positive().optional().nullable(),
+  targetUrl: z.string().trim().max(1000).optional().nullable(),
+  ctaText: z.string().trim().max(100).optional().nullable(),
+  ctaLink: z.string().trim().max(1000).optional().nullable(),
   bannerType: z.enum(['DEFAULT_ADMIN', 'TOP_BUYER_PROMOTION', 'TOP_SELLER_PROMOTION', 'TOP_SHG_PROMOTION', 'ANNOUNCEMENT']).default('DEFAULT_ADMIN'),
   status: z.enum(['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'ACTIVE', 'HIDDEN']).optional(),
   startAt: z.coerce.date().optional(),
@@ -56,7 +56,7 @@ const bannerFieldsSchema = z.object({
   durationDays: z.coerce.number().int().min(1).max(365).default(10),
   priority: z.coerce.number().int().min(0).max(100000).default(0),
   displayLocation: z.enum(['HOME_HERO', 'MARKETPLACE_HOME', 'DASHBOARD']).default('HOME_HERO'),
-  remarks: z.string().trim().max(1000).optional()
+  remarks: z.string().trim().max(1000).optional().nullable()
 });
 
 const requireBannerImage = <T extends z.ZodTypeAny>(schema: T) => schema.refine((value: any) => Boolean(value.imageUrl || value.documentId), {
@@ -274,6 +274,10 @@ router.patch('/admin/banners/:id', authenticate, authorize('admin', 'master_admi
     const id = Number(req.params.id);
     const payload = bannerFieldsSchema.partial().parse(req.body);
     const updateData: any = { ...payload };
+    if ('subtitle' in req.body) updateData.subtitle = payload.subtitle ? payload.subtitle : null;
+    if ('ctaText' in req.body) updateData.ctaText = payload.ctaText ? payload.ctaText : null;
+    if ('ctaLink' in req.body) updateData.ctaLink = payload.ctaLink ? payload.ctaLink : null;
+    if ('targetUrl' in req.body) updateData.targetUrl = payload.targetUrl ? payload.targetUrl : null;
     if (payload.ctaLink || payload.targetUrl) updateData.ctaLink = payload.ctaLink || payload.targetUrl;
     if (payload.targetUrl || payload.ctaLink) updateData.targetUrl = payload.targetUrl || payload.ctaLink;
     if (payload.status) updateData.isActive = ['ACTIVE', 'APPROVED'].includes(payload.status);
@@ -294,6 +298,10 @@ router.put('/admin/banners/:id', authenticate, authorize('admin', 'master_admin'
     const id = Number(req.params.id);
     const payload = bannerFieldsSchema.partial().parse(req.body);
     const updateData: any = { ...payload };
+    if ('subtitle' in req.body) updateData.subtitle = payload.subtitle ? payload.subtitle : null;
+    if ('ctaText' in req.body) updateData.ctaText = payload.ctaText ? payload.ctaText : null;
+    if ('ctaLink' in req.body) updateData.ctaLink = payload.ctaLink ? payload.ctaLink : null;
+    if ('targetUrl' in req.body) updateData.targetUrl = payload.targetUrl ? payload.targetUrl : null;
     if (payload.ctaLink || payload.targetUrl) updateData.ctaLink = payload.ctaLink || payload.targetUrl;
     if (payload.targetUrl || payload.ctaLink) updateData.targetUrl = payload.targetUrl || payload.ctaLink;
     if (payload.status) updateData.isActive = ['ACTIVE', 'APPROVED'].includes(payload.status);

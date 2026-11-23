@@ -152,11 +152,11 @@ export default function AdminBannerManagementPage() {
     mutationFn: async (data: FormState) => {
       const payload: Record<string, unknown> = {
         title: data.title.trim(),
-        subtitle: data.subtitle.trim() || undefined,
+        subtitle: data.subtitle.trim() ? data.subtitle.trim() : null,
         imageUrl: data.imageUrl.trim() || undefined,
-        ctaText: data.ctaText.trim() || undefined,
-        ctaLink: (data.ctaLink.trim() || data.targetUrl.trim()) || undefined,
-        targetUrl: (data.targetUrl.trim() || data.ctaLink.trim()) || undefined,
+        ctaText: data.ctaText.trim() ? data.ctaText.trim() : null,
+        ctaLink: (data.ctaLink.trim() || data.targetUrl.trim()) ? (data.ctaLink.trim() || data.targetUrl.trim()) : null,
+        targetUrl: (data.targetUrl.trim() || data.ctaLink.trim()) ? (data.targetUrl.trim() || data.ctaLink.trim()) : null,
         bannerType: data.bannerType,
         displayLocation: data.displayLocation,
         priority: Number(data.priority || 50),
